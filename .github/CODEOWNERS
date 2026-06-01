@@ -1,0 +1,15 @@
+# Cerebro Web: Next.js console for the Cerebro security platform
+
+* @jonathanhaaswriter
+
+# CI/CD workflows
+/.github/workflows/      @jonathanhaaswriter
+/.github/CODEOWNERS      @jonathanhaaswriter
+
+# Renovate / dependency config
+/renovate.json           @jonathanhaaswriter
+/package.json            @jonathanhaaswriter
+/package-lock.json       @jonathanhaaswriter
+
+# Docker / deploy
+/Dockerfile              @jonathanhaaswriter

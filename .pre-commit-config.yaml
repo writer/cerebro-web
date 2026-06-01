@@ -1,0 +1,21 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cerebro-web-leak-check-staged
+        name: cerebro-web leak check (staged)
+        entry: bash scripts/leak_check.sh staged
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: cerebro-web-leak-check-commit-msg
+        name: cerebro-web leak check (commit message)
+        entry: bash scripts/leak_check.sh commit-msg
+        language: system
+        stages: [commit-msg]
+      - id: cerebro-web-leak-check-pre-push
+        name: cerebro-web leak check (pushed refs)
+        entry: bash scripts/leak_check.sh pushed
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        require_serial: true

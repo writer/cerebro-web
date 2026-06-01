@@ -1,0 +1,71 @@
+# Cerebro Web
+
+Cerebro Web is a read-only Next.js console for a Cerebro API. It provides UI surfaces for sources, runtimes, findings, reports, workflow metadata, graph projections, and Ask/LLM-backed graph queries.
+
+## Status
+
+Maintained by WRITER on a best-effort basis. There are no support SLAs.
+
+## Requirements
+
+- Node.js 22+
+- npm
+- A running Cerebro API, defaulting to `http://localhost:8080`
+
+## Configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_CEREBRO_API_BASE` | Browser-visible API base URL. Defaults to `http://localhost:8080`. |
+| `CEREBRO_API_BASE` | Server-side proxy API base URL override. |
+| `CEREBRO_API_KEY`, `CEREBRO_API_TOKEN`, `CEREBRO_X_API_KEY`, `CEREBRO_API_KEYS` | Server-side API key configuration. |
+| `CEREBRO_BEARER_TOKEN` | Server-side bearer token configuration. |
+| `CEREBRO_FORWARD_AUTH_HEADERS` | Set to `true` to forward request auth headers instead of server-side credentials. |
+| `CEREBRO_PROXY_TIMEOUT_MS` | Proxy timeout for long-running requests. |
+| `CEREBRO_PROXY_CACHE_TTL_MS` | Proxy cache TTL; set to `0` to disable local proxy caching. |
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+To point the app at a local Cerebro runtime:
+
+```bash
+npm run dev:local:cerebro
+```
+
+## Validation
+
+```bash
+npm test
+npm run lint
+npm run build
+npm run oss:audit
+npm run audit:high
+```
+
+Optional local end-to-end validation:
+
+```bash
+npm run e2e:grc:local
+```
+
+Optional Ask evaluation checks:
+
+```bash
+npm run eval:ask:local
+npm run eval:ask:adversarial
+```
+
+## Security
+
+Do not open public issues for vulnerabilities. Report suspected security issues privately to security@writer.com.
+
+## License
+
+Licensed under the MIT License. See `LICENSE`.

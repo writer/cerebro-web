@@ -1,0 +1,12 @@
+.dockerignore
+.git
+.github
+.next
+.vercel
+coverage
+Dockerfile
+node_modules
+npm-debug.log*
+out
+*.pem
+.env*

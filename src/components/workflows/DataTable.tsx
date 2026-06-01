@@ -1,0 +1,218 @@
+"use client";
+
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
+
+export type TableColumn = {
+  key: string;
+  label?: string;
+  render?: (value: unknown, row: Record<string, unknown>) => ReactNode;
+};
+
+export const formatValue = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 ? `${value.length} items` : "[]";
+  }
+  if (typeof value === "object") {
+    return "{...}";
+  }
+  return String(value);
+};
+
+const valueText = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+};
+
+export function KeyValueList({
+  data,
+  emptyMessage = "No data available.",
+}: {
+  data?: Record<string, unknown> | null;
+  emptyMessage?: string;
+}) {
+  if (!data || Object.keys(data).length === 0) {
+    return <div className="text-xs text-slate-500">{emptyMessage}</div>;
+  }
+
+  return (
+    <div className="space-y-2 text-xs text-slate-800">
+      {Object.entries(data).map(([key, value]) => (
+        <div key={key} className="flex justify-between gap-4">
+          <span className="text-slate-500">{key}</span>
+          <span className="text-right text-slate-900">
+            {formatValue(value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function DataTable({
+  rows,
+  columns,
+  emptyMessage = "No rows available.",
+  searchPlaceholder = "Filter rows",
+  filterKeys,
+  pageSize = 10,
+  getRowHref,
+}: {
+  rows: Record<string, unknown>[];
+  columns?: TableColumn[];
+  emptyMessage?: string;
+  searchPlaceholder?: string;
+  filterKeys?: string[];
+  pageSize?: number;
+  getRowHref?: (row: Record<string, unknown>) => string | undefined;
+}) {
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const resolvedColumns = useMemo<TableColumn[]>(
+    () => columns ?? Object.keys(rows?.[0] ?? {}).slice(0, 6).map((key) => ({ key })),
+    [columns, rows],
+  );
+  const searchableKeys = useMemo(
+    () => filterKeys ?? resolvedColumns.map((column) => column.key),
+    [filterKeys, resolvedColumns],
+  );
+  const rowSearchText = useMemo(
+    () =>
+      (rows ?? []).map((row) =>
+        searchableKeys.map((key) => valueText(row[key])).join("\n").toLowerCase(),
+      ),
+    [rows, searchableKeys],
+  );
+  const filteredRows = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return rows ?? [];
+    }
+    return (rows ?? []).filter((_row, index) =>
+      rowSearchText[index]?.includes(normalizedQuery),
+    );
+  }, [query, rows, rowSearchText]);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const visibleRows = filteredRows.slice(pageStart, pageStart + pageSize);
+
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setPage(1);
+          }}
+          placeholder={searchPlaceholder}
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 sm:max-w-xs"
+        />
+        <div className="text-xs text-slate-500">
+          Showing {filteredRows.length === 0 ? 0 : pageStart + 1}-
+          {Math.min(pageStart + pageSize, filteredRows.length)} of {filteredRows.length}
+        </div>
+      </div>
+      {filteredRows.length === 0 ? (
+        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+          No rows match the current filter.
+        </div>
+      ) : (
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full text-left text-xs text-slate-800">
+            <thead className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <tr>
+                {resolvedColumns.map((column) => (
+                  <th key={column.key} className="px-3 py-2 font-semibold">
+                    {column.label ?? column.key}
+                  </th>
+                ))}
+                {getRowHref && <th className="px-3 py-2 font-semibold">Link</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row, index) => {
+                const href = getRowHref?.(row);
+                return (
+                  <tr
+                    key={row.id?.toString() ?? `${pageStart}-${index}`}
+                    className="border-b border-slate-100 hover:bg-slate-50/60"
+                  >
+                    {resolvedColumns.map((column) => (
+                      <td key={column.key} className="px-3 py-2">
+                        {column.render
+                          ? column.render(row[column.key], row)
+                          : formatValue(row[column.key])}
+                      </td>
+                    ))}
+                    {getRowHref && (
+                      <td className="px-3 py-2">
+                        {href ? (
+                          <Link className="text-indigo-600 hover:text-indigo-800" href={href}>
+                            Open
+                          </Link>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => setPage(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            className="rounded-md border border-slate-200 px-2 py-1 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-slate-500">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage === totalPages}
+            className="rounded-md border border-slate-200 px-2 py-1 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

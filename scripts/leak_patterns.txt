@@ -1,0 +1,29 @@
+# Generic credential/secret regex denylist for scripts/leak_check.sh.
+# One POSIX-ERE pattern per line. Lines starting with '#' and blank lines are ignored.
+
+# AWS credential prefixes
+(^|[^[:alnum:]_])AKIA[0-9A-Z]{16}([^[:alnum:]_]|$)
+(^|[^[:alnum:]_])ASIA[0-9A-Z]{16}([^[:alnum:]_]|$)
+
+# GitHub token prefixes
+(^|[^[:alnum:]_])gho_[A-Za-z0-9]{20,}([^[:alnum:]_]|$)
+(^|[^[:alnum:]_])ghp_[A-Za-z0-9]{20,}([^[:alnum:]_]|$)
+(^|[^[:alnum:]_])ghs_[A-Za-z0-9]{20,}([^[:alnum:]_]|$)
+(^|[^[:alnum:]_])ghu_[A-Za-z0-9]{20,}([^[:alnum:]_]|$)
+(^|[^[:alnum:]_])ghr_[A-Za-z0-9]{20,}([^[:alnum:]_]|$)
+(^|[^[:alnum:]_])github_pat_[A-Za-z0-9_]{20,}([^[:alnum:]_]|$)
+
+# Slack token prefixes
+(^|[^[:alnum:]_])xox[abprs]-[A-Za-z0-9-]{10,}([^[:alnum:]_]|$)
+
+# OpenAI / Anthropic / generic API key prefixes
+(^|[^[:alnum:]_])sk-(proj-|ant-|live-|test-)?[A-Za-z0-9_-]{20,}([^[:alnum:]_]|$)
+
+# Private key PEM headers
+-----BEGIN ([A-Z]+ )?PRIVATE KEY-----
+
+# Passwords or credentials embedded in URLs
+://[^:/[:space:]]+:[^@[:space:]]+@
+
+# Generic secret-style key/value
+(^|[^[:alnum:]_])([Aa][Ww][Ss]_[Ss][Ee][Cc][Rr][Ee][Tt]_[Aa][Cc][Cc][Ee][Ss][Ss]_[Kk][Ee][Yy]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss][Ss][_-]?[Tt][Oo][Kk][Ee][Nn]|[Bb][Ee][Aa][Rr][Ee][Rr])[[:space:]]*[:=][[:space:]]*['\"][A-Za-z0-9/_+=.\-]{20,}['\"]

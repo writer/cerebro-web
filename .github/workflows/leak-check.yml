@@ -1,0 +1,66 @@
+name: Leak Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  leak-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Resolve range
+        id: range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          zero="0000000000000000000000000000000000000000"
+          case "$EVENT_NAME" in
+            pull_request)
+              range="${BASE_SHA}...${HEAD_SHA}"
+              ;;
+            push)
+              if [ -z "${BEFORE_SHA:-}" ] || [ "${BEFORE_SHA}" = "${zero}" ]; then
+                base="$(git merge-base origin/main "${AFTER_SHA}" 2>/dev/null || true)"
+                if [ -n "$base" ]; then
+                  range="${base}...${AFTER_SHA}"
+                else
+                  range="${AFTER_SHA}~1...${AFTER_SHA}"
+                fi
+              else
+                range="${BEFORE_SHA}...${AFTER_SHA}"
+              fi
+              ;;
+            *)
+              range="origin/main...HEAD"
+              ;;
+          esac
+          echo "range=${range}" >> "$GITHUB_OUTPUT"
+
+      - name: Run leak check
+        env:
+          RANGE: ${{ steps.range.outputs.range }}
+        run: bash scripts/leak_check.sh range "$RANGE"
+
+      - name: Run PR metadata leak check
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash scripts/leak_check.sh pr-body "$PR_TITLE" "$PR_BODY"
