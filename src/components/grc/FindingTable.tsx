@@ -30,13 +30,13 @@ function compareFn(a: GRCFinding, b: GRCFinding, key: SortKey): number {
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) {
     return (
-      <svg className="ml-1 inline h-3 w-3 text-slate-300" viewBox="0 0 16 16" fill="currentColor">
+      <svg className="ml-1 inline h-3 w-3 text-[var(--text-muted)] opacity-50" viewBox="0 0 16 16" fill="currentColor">
         <path d="M8 4l3 4H5l3-4zm0 8l-3-4h6l-3 4z" />
       </svg>
     );
   }
   return (
-    <svg className="ml-1 inline h-3 w-3 text-indigo-500" viewBox="0 0 16 16" fill="currentColor">
+    <svg className="ml-1 inline h-3 w-3 text-[var(--primary)]" viewBox="0 0 16 16" fill="currentColor">
       {dir === "asc" ? <path d="M8 4l4 5H4l4-5z" /> : <path d="M8 12l-4-5h8l-4 5z" />}
     </svg>
   );
@@ -81,25 +81,25 @@ export default function FindingTable({
 
   if (findings.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-[color:var(--border-strong)] p-8 text-[13px] text-[var(--text-muted)]">
         {empty}
       </div>
     );
   }
 
-  const thClass = "px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 select-none";
+  const thClass = "select-none";
   const sortable = (key: SortKey, label: string) => (
-    <button type="button" onClick={() => toggleSort(key)} className="inline-flex items-center hover:text-slate-700">
+    <button type="button" onClick={() => toggleSort(key)} className="inline-flex items-center hover:text-[var(--text-primary)]">
       {label}
       <SortIcon active={sortKey === key} dir={sortDir} />
     </button>
   );
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full text-left text-[13px]">
+    <div className="surface-panel overflow-x-auto">
+      <table className="data-table">
         <thead>
-          <tr className="border-b border-slate-100 bg-slate-50/80">
+          <tr>
             <th className={thClass}>{sortable("title", "Finding")}</th>
             <th className={thClass}>{sortable("risk_score", "Risk")}</th>
             <th className={thClass}>{sortable("severity", "Severity")}</th>
@@ -113,38 +113,38 @@ export default function FindingTable({
         </thead>
         <tbody>
           {visible.map((finding) => (
-            <tr key={finding.id} className="border-b border-slate-50 transition hover:bg-slate-50/60">
-              <td className="max-w-xs px-3 py-3">
-                <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-medium text-slate-900 hover:text-indigo-600">
+            <tr key={finding.id}>
+              <td className="max-w-xs">
+                <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">
                   {finding.title}
                 </Link>
-                <div className="mt-0.5 truncate text-[12px] text-slate-500">
+                <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">
                   {finding.summary || finding.rule_id}
                 </div>
               </td>
-              <td className="px-3 py-3">
+              <td>
                 <RiskBadge score={finding.risk_score} />
               </td>
-              <td className="px-3 py-3">
+              <td>
                 <div className="flex items-center gap-1.5">
                   <SeverityDot severity={finding.severity} />
                   <Badge value={finding.severity} tone="severity" />
                 </div>
               </td>
-              <td className="px-3 py-3">
-                <span className="font-mono text-[12px] text-slate-600">{shortEntity(finding.entity)}</span>
+              <td>
+                <span className="font-mono text-[12px] text-[var(--text-secondary)]">{shortEntity(finding.entity)}</span>
               </td>
-              <td className="px-3 py-3 text-slate-600">{finding.owner || <span className="text-slate-400">--</span>}</td>
-              <td className="px-3 py-3"><Badge value={finding.sla_status} /></td>
-              <td className="px-3 py-3 text-center tabular-nums text-slate-600">{finding.evidence_count}</td>
-              <td className="px-3 py-3 text-slate-500">{displayDate(finding.last_observed_at)}</td>
-              <td className="px-3 py-3">
+              <td>{finding.owner || <span className="text-[var(--text-muted)]">--</span>}</td>
+              <td><Badge value={finding.sla_status} /></td>
+              <td className="text-center tabular-nums">{finding.evidence_count}</td>
+              <td className="text-[var(--text-muted)]">{displayDate(finding.last_observed_at)}</td>
+              <td>
                 <AskAboutLink
                   question={`Why is ${finding.title} risky and what is its blast radius?`}
                   scopeUrn={finding.entity}
                   title="Open in Ask Cerebro"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 text-slate-400 transition hover:text-indigo-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 text-[var(--text-muted)] transition hover:text-[var(--primary)]">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                   </svg>
                 </AskAboutLink>
@@ -154,11 +154,11 @@ export default function FindingTable({
         </tbody>
       </table>
       {hiddenCount > 0 && (
-        <div className="border-t border-slate-100 px-4 py-3">
+        <div className="border-t border-[color:var(--border)] px-4 py-3">
           <button
             type="button"
             onClick={() => setShowAll(true)}
-            className="text-[13px] font-medium text-indigo-600 transition hover:text-indigo-800"
+            className="text-[13px] font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
           >
             Show {hiddenCount} more findings
           </button>

@@ -69,7 +69,7 @@ function EventTimeline({ events }: { events: WorkflowTimelineEvent[] }) {
   if (events.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-xs text-slate-500">
-        No security finding events were returned. The replay endpoint still returns projection counts; this timeline renders decoded canonical security event arrays returned by the timeline API response.
+        No workflow timeline events were returned. The replay endpoint still returns projection counts; this timeline renders any decoded workflow.v1 event array returned by a workflow timeline API response.
       </div>
     );
   }
@@ -123,7 +123,7 @@ function EventTimeline({ events }: { events: WorkflowTimelineEvent[] }) {
                       </div>
                     </div>
                     <div>
-                      <span className="text-slate-400">Event class</span>
+                      <span className="text-slate-400">Workflow kind</span>
                       <div className="font-medium text-slate-800">{event.workflowKind ?? "—"}</div>
                     </div>
                     <div>
@@ -164,7 +164,7 @@ function EventTimeline({ events }: { events: WorkflowTimelineEvent[] }) {
 export default function WorkflowTimelinePage() {
   const { apiKey } = useApiKey();
   const [tenantId, setTenantId] = useState(() => initialQueryParam("tenant_id"));
-  const [kindPrefix, setKindPrefix] = useState(() => initialQueryParam("kind_prefix") || "sec.findings.v1.");
+  const [kindPrefix, setKindPrefix] = useState(() => initialQueryParam("kind_prefix") || "workflow.v1.");
   const [workflowKind, setWorkflowKind] = useState(() => initialQueryParam("workflow_kind"));
   const [findingId, setFindingId] = useState(() => initialQueryParam("finding_id"));
   const [decisionId, setDecisionId] = useState(() => initialQueryParam("decision_id"));
@@ -186,8 +186,8 @@ export default function WorkflowTimelinePage() {
 
   const filters: ReplayFilter[] = [
     { label: "Tenant ID", key: "tenant_id", value: tenantId, setValue: setTenantId, placeholder: "writer" },
-    { label: "Kind prefix", key: "kind_prefix", value: kindPrefix, setValue: setKindPrefix, placeholder: "sec.findings.v1." },
-    { label: "Event class", key: "workflow_kind", value: workflowKind, setValue: setWorkflowKind, placeholder: "finding_status" },
+    { label: "Kind prefix", key: "kind_prefix", value: kindPrefix, setValue: setKindPrefix, placeholder: "workflow.v1." },
+    { label: "Workflow kind", key: "workflow_kind", value: workflowKind, setValue: setWorkflowKind, placeholder: "finding_status" },
     { label: "Finding ID", key: "finding_id", value: findingId, setValue: setFindingId, placeholder: "urn:cerebro:writer:finding:..." },
     { label: "Decision ID", key: "decision_id", value: decisionId, setValue: setDecisionId, placeholder: "urn:cerebro:writer:decision:..." },
     { label: "Action ID", key: "action_id", value: actionId, setValue: setActionId, placeholder: "urn:cerebro:writer:action:..." },
@@ -197,7 +197,7 @@ export default function WorkflowTimelinePage() {
 
   const replayWorkflowEvents = useCallback(async () => {
     if (!tenantId.trim()) {
-      setError("Tenant ID is required for security event replay.");
+      setError("Tenant ID is required for workflow replay.");
       return;
     }
     setLoading(true);
@@ -216,7 +216,7 @@ export default function WorkflowTimelinePage() {
     const parsedLimit = Number(limit);
     const body: Record<string, unknown> = {
       tenant_id: tenantId.trim(),
-      kind_prefix: kindPrefix.trim() || "sec.findings.v1.",
+      kind_prefix: kindPrefix.trim() || "workflow.v1.",
       attribute_equals: attributeEquals,
     };
     if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
@@ -251,14 +251,14 @@ export default function WorkflowTimelinePage() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-xl font-semibold text-slate-900">Security event timeline</div>
+        <div className="text-xl font-semibold text-slate-900">Workflow timeline</div>
         <p className="mt-2 text-[13px] text-slate-500">
-          Replay and inspect canonical security finding event contracts.
+          Replay and inspect workflow.v1 event-registry contracts for decisions, actions, outcomes, and finding lifecycle events.
         </p>
       </div>
 
       <Panel
-        title="Replay security events"
+        title="Replay workflow events"
         subtitle="POST /platform/workflow/replay"
         action={
           <button
@@ -285,7 +285,7 @@ export default function WorkflowTimelinePage() {
           ))}
         </div>
         <div className="mt-4">
-          <WorkflowState loading={loading} error={error} loadingText="Replaying security events..." />
+          <WorkflowState loading={loading} error={error} loadingText="Replaying workflow events..." />
         </div>
         {responseData !== null && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -299,23 +299,23 @@ export default function WorkflowTimelinePage() {
         )}
       </Panel>
 
-      <Panel title="Event-registry contracts" subtitle="sec.findings.v1.* subjects">
+      <Panel title="Event-registry contracts" subtitle="workflow.v1.* subjects">
         <div className="grid gap-2 md:grid-cols-2">
           {workflowEventContracts.map((contract) => (
             <div key={contract.kind} className="rounded-md bg-slate-50 p-4">
               <div className="text-[13px] font-semibold text-slate-900">{contract.label}</div>
               <div className="mt-1 font-mono text-xs text-slate-500">{contract.kind}</div>
-              <div className="mt-1 text-xs text-slate-500">event_class={contract.workflowKind}</div>
+              <div className="mt-1 text-xs text-slate-500">workflow_kind={contract.workflowKind}</div>
             </div>
           ))}
         </div>
       </Panel>
 
-      <Panel title="Decoded event preview" subtitle="Optional: paste a response with events/items/timeline to render canonical security payloads">
+      <Panel title="Decoded event preview" subtitle="Optional: paste a response with events/items/timeline to render workflow.v1 payloads">
         <textarea
           value={previewJson}
           onChange={(event) => setPreviewJson(event.target.value)}
-          placeholder='{"events":[{"kind":"sec.findings.v1.status_changed","attributes":{"workflow_kind":"finding_status"},"payload":{"status":"resolved","finding":{"finding_id":"urn:cerebro:writer:finding:1"}}}]}'
+          placeholder='{"events":[{"kind":"workflow.v1.finding.status_changed","attributes":{"workflow_kind":"finding_status"},"payload":{"status":"resolved","finding":{"finding_id":"urn:cerebro:writer:finding:1"}}}]}'
           className="min-h-32 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 font-mono text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
         />
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -337,7 +337,7 @@ export default function WorkflowTimelinePage() {
 
       <Panel
         title="Timeline"
-        subtitle={`${registryCoverage}/${timelineEvents.length} events matched checked-in security event registry contracts`}
+        subtitle={`${registryCoverage}/${timelineEvents.length} events matched checked-in workflow.v1 registry contracts`}
       >
         <EventTimeline events={timelineEvents} />
       </Panel>

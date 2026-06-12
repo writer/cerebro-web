@@ -1,21 +1,36 @@
 export const workflowEventContracts = [
   {
-    kind: "sec.findings.v1.recorded",
+    kind: "workflow.v1.knowledge.decision_recorded",
+    workflowKind: "knowledge_decision",
+    label: "Decision recorded",
+  },
+  {
+    kind: "workflow.v1.knowledge.action_recorded",
+    workflowKind: "knowledge_action",
+    label: "Action recorded",
+  },
+  {
+    kind: "workflow.v1.knowledge.outcome_recorded",
+    workflowKind: "knowledge_outcome",
+    label: "Outcome recorded",
+  },
+  {
+    kind: "workflow.v1.finding.recorded",
     workflowKind: "finding_record",
     label: "Finding recorded",
   },
   {
-    kind: "sec.findings.v1.note_added",
+    kind: "workflow.v1.finding.note_added",
     workflowKind: "finding_note",
     label: "Finding note added",
   },
   {
-    kind: "sec.findings.v1.ticket_linked",
+    kind: "workflow.v1.finding.ticket_linked",
     workflowKind: "finding_ticket",
     label: "Finding ticket linked",
   },
   {
-    kind: "sec.findings.v1.status_changed",
+    kind: "workflow.v1.finding.status_changed",
     workflowKind: "finding_status",
     label: "Finding status changed",
   },
@@ -207,13 +222,19 @@ const summaryFor = (
   primaryId: string | undefined,
 ): string => {
   switch (kind) {
-    case "sec.findings.v1.recorded":
-      return `Finding ${firstString(finding, ["finding_id", "findingId"]) ?? primaryId ?? "recorded"} entered the security event timeline.`;
-    case "sec.findings.v1.note_added":
+    case "workflow.v1.knowledge.decision_recorded":
+      return `Decision ${firstString(payload, ["decision_id", "decisionId"]) ?? primaryId ?? "recorded"} moved to ${firstString(payload, ["status"]) ?? "unknown status"}.`;
+    case "workflow.v1.knowledge.action_recorded":
+      return `Action ${firstString(payload, ["action_id", "actionId"]) ?? primaryId ?? "recorded"} is ${firstString(payload, ["status"]) ?? "tracked"}.`;
+    case "workflow.v1.knowledge.outcome_recorded":
+      return `Outcome ${firstString(payload, ["outcome_id", "outcomeId"]) ?? primaryId ?? "recorded"} recorded ${firstString(payload, ["verdict"]) ?? "a verdict"}.`;
+    case "workflow.v1.finding.recorded":
+      return `Finding ${firstString(finding, ["finding_id", "findingId"]) ?? primaryId ?? "recorded"} entered the workflow timeline.`;
+    case "workflow.v1.finding.note_added":
       return `Note ${firstString(payload, ["note_id", "noteId"]) ?? "added"} on finding ${firstString(finding, ["finding_id", "findingId"]) ?? "unknown"}.`;
-    case "sec.findings.v1.ticket_linked":
+    case "workflow.v1.finding.ticket_linked":
       return `Ticket ${firstString(payload, ["name", "external_id", "externalId", "url"]) ?? "linked"} to finding ${firstString(finding, ["finding_id", "findingId"]) ?? "unknown"}.`;
-    case "sec.findings.v1.status_changed":
+    case "workflow.v1.finding.status_changed":
       return `Finding ${firstString(finding, ["finding_id", "findingId"]) ?? primaryId ?? "unknown"} changed to ${firstString(payload, ["status"]) ?? "unknown status"}.`;
     default:
       return `${eventLabelFor(kind)} ${primaryId ? `for ${primaryId}` : "recorded"}.`;
@@ -248,7 +269,7 @@ const normalizeWorkflowEvent = (
     firstString(event, ["kind", "event_type", "eventType", "subject", "type"]) ??
     attributes.event_type;
 
-  if (!kind || !kind.startsWith("sec.findings.v1.")) {
+  if (!kind || !kind.startsWith("workflow.v1.")) {
     return null;
   }
 

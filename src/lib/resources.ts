@@ -48,6 +48,11 @@ export const manualOperations: ManualOperation[] = [
   },
   {
     tag: "Source Runtimes",
+    path: "/source-runtimes/health",
+    summary: "List source runtime health, sync, watermark, graph, and finding-evaluation state",
+  },
+  {
+    tag: "Source Runtimes",
     path: "/source-runtimes/:runtimeID",
     summary: "Get source runtime configuration",
     params: ["runtimeID"],

@@ -22,6 +22,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["findings", "risk", "sla", "triage", "owner"],
   },
   {
+    label: "Mission Control",
+    href: "/mission-control",
+    description: "Source runtime coverage, freshness, backfills, and graph assurance readiness.",
+    section: "Operator",
+    keywords: ["runtime", "coverage", "source", "backfill", "graph health", "mission control"],
+  },
+  {
     label: "Ask Cerebro",
     href: "/ask",
     description: "Ask the graph in natural language. Cypher is drafted, validated, run, and cited.",
@@ -81,19 +88,19 @@ export const utilityLinks: NavigationEntry[] = [
     keywords: ["openapi", "status", "developer", "api"],
   },
   {
-    label: "Operations",
+    label: "Legacy Workflows",
     href: "/workflows",
-    description: "Source, runtime, finding, report, and graph workflow explorers.",
+    description: "Legacy source, runtime, finding, report, and graph workflow explorers.",
     section: "Advanced",
-    keywords: ["workflow", "operations", "explorer"],
+    keywords: ["workflow", "legacy", "explorer"],
   },
 ];
 
 export const workflowLinks: NavigationEntry[] = [
   {
-    label: "Security event timeline",
+    label: "Workflow timeline",
     href: "/workflows/timeline",
-    description: "Replay and inspect canonical security finding events.",
+    description: "Replay and inspect workflow.v1 event-registry timelines.",
     section: "Workflow",
     keywords: ["timeline", "events", "workflow", "event registry"],
   },

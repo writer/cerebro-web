@@ -8,11 +8,17 @@ import Panel from "@/components/workflows/Panel";
 import { WorkflowState } from "@/components/workflows/WorkflowState";
 import { asRecord, extractRecords, firstString, initialQueryParam, withQuery } from "@/lib/cerebro-data";
 import { fetchCerebro } from "@/lib/cerebro-client";
+import { normalizeRuntimeFreshness, type RuntimeFreshnessView } from "@/lib/runtime-freshness";
 
 const numberValue = (record: Record<string, unknown> | null, key: string) => {
   const value = record?.[key];
   return typeof value === "number" ? value : 0;
 };
+
+const stringArray = (value: unknown) =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.length > 0)
+    : [];
 
 const entityField = (
   record: Record<string, unknown>,
@@ -31,6 +37,7 @@ const graphHref = (rootUrn: unknown, limit: string, tenantId: string) =>
 export default function GraphWorkflow() {
   const { apiKey } = useApiKey();
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
+  const [runtimeFreshness, setRuntimeFreshness] = useState<RuntimeFreshnessView | null>(null);
   const [runs, setRuns] = useState<Record<string, unknown>[]>([]);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
@@ -47,6 +54,10 @@ export default function GraphWorkflow() {
   const [limit, setLimit] = useState(() => initialQueryParam("limit") || "50");
   const [depth, setDepth] = useState(() => initialQueryParam("depth") || "2");
   const [runId, setRunId] = useState(() => initialQueryParam("run_id"));
+  const [healthRuntimeIds, setHealthRuntimeIds] = useState(() => initialQueryParam("health_runtime_ids"));
+  const [runRuntimeId, setRunRuntimeId] = useState(() => initialQueryParam("runtime_id"));
+  const [runStatus, setRunStatus] = useState(() => initialQueryParam("status"));
+  const [runLimit, setRunLimit] = useState(() => initialQueryParam("run_limit") || "100");
   const [awsAccountId, setAwsAccountId] = useState(() => initialQueryParam("account_id"));
   const [awsRegion, setAwsRegion] = useState(() => initialQueryParam("region"));
   const [awsSearch, setAwsSearch] = useState(() => initialQueryParam("search"));
@@ -78,7 +89,14 @@ export default function GraphWorkflow() {
   const fetchRuns = useCallback(async () => {
     setRunsLoading(true);
     setRunsError(null);
-    const response = await fetchCerebro("/platform/graph/ingest-runs", apiKey);
+    const response = await fetchCerebro(
+      withQuery("/platform/graph/ingest-runs", {
+        runtime_id: runRuntimeId,
+        status: runStatus,
+        limit: runLimit,
+      }),
+      apiKey,
+    );
     if (!response.ok) {
       setRunsError(`Ingest runs failed (${response.status})`);
       setRunsLoading(false);
@@ -86,7 +104,46 @@ export default function GraphWorkflow() {
     }
     setRuns(extractRecords(response.data, ["runs", "items", "results"]));
     setRunsLoading(false);
-  }, [apiKey]);
+  }, [apiKey, runLimit, runRuntimeId, runStatus]);
+
+  const fetchHealth = useCallback(async () => {
+    setHealthLoading(true);
+    setHealthError(null);
+    const freshnessResponse = await fetchCerebro(
+      withQuery("/platform/runtime-freshness", {
+        runtime_ids: healthRuntimeIds,
+      }),
+      apiKey,
+    );
+    let loadedCanonicalFreshness = false;
+    const errors: string[] = [];
+    if (freshnessResponse.ok) {
+      setRuntimeFreshness(normalizeRuntimeFreshness(freshnessResponse.data));
+      loadedCanonicalFreshness = true;
+    } else if (freshnessResponse.status !== 404) {
+      errors.push(`Runtime freshness failed (${freshnessResponse.status})`);
+    }
+
+    const healthResponse = await fetchCerebro(
+      withQuery("/platform/graph/ingest-health", {
+        runtime_ids: healthRuntimeIds,
+      }),
+      apiKey,
+    );
+    if (healthResponse.ok) {
+      const record = asRecord(healthResponse.data) ?? { value: healthResponse.data };
+      setHealth(record);
+      if (!loadedCanonicalFreshness) {
+        setRuntimeFreshness(normalizeRuntimeFreshness(record));
+      }
+    } else {
+      errors.push(`Graph ingest health failed (${healthResponse.status})`);
+    }
+    if (errors.length > 0) {
+      setHealthError(errors.join("; "));
+    }
+    setHealthLoading(false);
+  }, [apiKey, healthRuntimeIds]);
 
   const runImpactQuery = useCallback(
     async (path: string) => {
@@ -124,11 +181,55 @@ export default function GraphWorkflow() {
       runs.map((run) => ({
         id: firstString(run, ["id", "run_id"]),
         runtime_id: firstString(run, ["runtime_id", "runtimeId"]),
+        source_id: firstString(run, ["source_id", "sourceId"]),
+        tenant_id: firstString(run, ["tenant_id", "tenantId"]),
         status: firstString(run, ["status", "state"]),
         started_at: firstString(run, ["started_at", "startedAt"]),
+        finished_at: firstString(run, ["finished_at", "finishedAt"]),
       })),
     [runs],
   );
+  const ingestHealth = asRecord(health?.ingest) ?? {};
+  const missingRuntimeRows = useMemo(
+    () =>
+      stringArray(ingestHealth.missing_runtime_ids).map((runtimeId) => ({
+        runtime_id: runtimeId,
+        state: "missing ingest history",
+      })),
+    [ingestHealth.missing_runtime_ids],
+  );
+  const runtimeFreshnessWorklistRows = useMemo(
+    () =>
+      (runtimeFreshness?.rows ?? [])
+        .filter((row) => row.freshness_state !== "healthy")
+        .map((row) => ({
+          id: row.id || row.runtime_id,
+          runtime_id: row.runtime_id,
+          source_id: row.source_id,
+          state: row.freshness_state,
+          source_sync: row.source_sync_state,
+          graph_ingest: row.graph_ingest_state,
+          action: row.next_action,
+          backfill: row.backfill_eligible ? "yes" : "no",
+          failure: row.failure_class || row.failure_reason,
+          last_synced_at: row.last_synced_at,
+        })),
+    [runtimeFreshness],
+  );
+  const runtimeFreshnessSummaryRows = useMemo(
+    () => runtimeFreshness?.summaries ?? [],
+    [runtimeFreshness],
+  );
+  const freshnessTotals = useMemo(() => {
+    const rows = runtimeFreshness?.rows ?? [];
+    return {
+      total: rows.length || (typeof ingestHealth.declared_runtime_count === "number" ? ingestHealth.declared_runtime_count : 0),
+      healthy: rows.filter((row) => row.freshness_state === "healthy").length,
+      needs_attention: rows.filter((row) => row.freshness_state !== "healthy").length,
+      backfill_eligible: rows.filter((row) => row.backfill_eligible).length,
+    };
+  }, [ingestHealth.declared_runtime_count, runtimeFreshness]);
+  const healthStatus = runtimeFreshness?.status || firstString(health ?? {}, ["status"]) || firstString(ingestHealth, ["status"]);
   const awsCounts = asRecord(awsInsights?.counts);
   const awsCountRows = useMemo(
     () =>
@@ -205,12 +306,12 @@ export default function GraphWorkflow() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel
-          title="Ingest health"
+          title="Graph ingest health"
           subtitle="/platform/graph/ingest-health"
           action={
             <button
               type="button"
-              onClick={() => fetchRecord("/platform/graph/ingest-health", setHealth, setHealthLoading, setHealthError)}
+              onClick={fetchHealth}
               className="rounded-md border border-slate-200 px-3 py-1.5 text-[13px] font-medium text-slate-600 transition hover:border-slate-300"
             >
               Refresh
@@ -218,7 +319,95 @@ export default function GraphWorkflow() {
           }
         >
           <WorkflowState loading={healthLoading} error={healthError} />
-          <KeyValueList data={health} emptyMessage="No health loaded." />
+          <div className="mb-4">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              Runtime IDs
+              <input
+                value={healthRuntimeIds}
+                onChange={(event) => setHealthRuntimeIds(event.target.value)}
+                placeholder="comma-separated runtime IDs"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
+              />
+            </label>
+          </div>
+          <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+            Status:{" "}
+            <span className={healthStatus === "passed" || healthStatus === "healthy" ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+              {healthStatus || "not loaded"}
+            </span>
+          </div>
+          <KeyValueList data={ingestHealth} emptyMessage="No ingest health loaded." />
+          {missingRuntimeRows.length > 0 ? (
+            <div className="mt-4">
+              <DataTable
+                rows={missingRuntimeRows}
+                columns={[{ key: "runtime_id", label: "Missing runtime ID" }]}
+                pageSize={8}
+              />
+            </div>
+          ) : null}
+        </Panel>
+
+        <Panel
+          title="Runtime freshness"
+          subtitle="/platform/runtime-freshness"
+        >
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+            <span>
+              {runtimeFreshness?.source === "canonical"
+                ? "Using canonical runtime freshness data."
+                : runtimeFreshness?.source === "graph-ingest-health"
+                  ? "Using graph ingest health fallback."
+                  : "Refresh to load the runtime freshness worklist."}
+            </span>
+            {runtimeFreshness?.generated_at ? <span>Generated {runtimeFreshness.generated_at}</span> : null}
+          </div>
+          <div className="mb-4 grid gap-3 sm:grid-cols-4">
+            {[
+              ["Runtimes", freshnessTotals.total],
+              ["Healthy", freshnessTotals.healthy],
+              ["Attention", freshnessTotals.needs_attention],
+              ["Backfillable", freshnessTotals.backfill_eligible],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{String(label)}</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{typeof value === "number" ? value : "—"}</div>
+              </div>
+            ))}
+          </div>
+          {runtimeFreshnessSummaryRows.length > 0 ? (
+            <div className="mb-4">
+              <DataTable
+                rows={runtimeFreshnessSummaryRows}
+                columns={[
+                  { key: "source_id", label: "Source" },
+                  { key: "total", label: "Total" },
+                  { key: "needs_attention", label: "Attention" },
+                  { key: "backfill_eligible", label: "Backfill" },
+                  { key: "source_failed", label: "Source failed" },
+                  { key: "graph_missing", label: "Graph missing" },
+                  { key: "graph_failed", label: "Graph failed" },
+                ]}
+                pageSize={5}
+                emptyMessage="No runtime freshness summaries loaded."
+              />
+            </div>
+          ) : null}
+          <DataTable
+            rows={runtimeFreshnessWorklistRows}
+            columns={[
+              { key: "runtime_id", label: "Runtime" },
+              { key: "source_id", label: "Source" },
+              { key: "state", label: "State" },
+              { key: "source_sync", label: "Source sync" },
+              { key: "graph_ingest", label: "Graph ingest" },
+              { key: "backfill", label: "Backfill" },
+              { key: "action", label: "Action" },
+              { key: "failure", label: "Failure" },
+            ]}
+            pageSize={8}
+            emptyMessage="No runtime freshness worklist items loaded."
+          />
         </Panel>
 
         <Panel
@@ -235,13 +424,45 @@ export default function GraphWorkflow() {
           }
         >
           <WorkflowState loading={runsLoading} error={runsError} />
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              Runtime ID
+              <input
+                value={runRuntimeId}
+                onChange={(event) => setRunRuntimeId(event.target.value)}
+                placeholder="optional"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
+              />
+            </label>
+            <label className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              Status
+              <input
+                value={runStatus}
+                onChange={(event) => setRunStatus(event.target.value)}
+                placeholder="completed, failed, running"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
+              />
+            </label>
+            <label className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              Limit
+              <input
+                value={runLimit}
+                onChange={(event) => setRunLimit(event.target.value)}
+                placeholder="100"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
+              />
+            </label>
+          </div>
           <DataTable
             rows={runRows}
             columns={[
               { key: "id", label: "ID" },
               { key: "runtime_id", label: "Runtime" },
+              { key: "source_id", label: "Source" },
+              { key: "tenant_id", label: "Tenant" },
               { key: "status", label: "Status" },
               { key: "started_at", label: "Started" },
+              { key: "finished_at", label: "Finished" },
             ]}
             emptyMessage="No ingest runs loaded."
             searchPlaceholder="Filter ingest runs"

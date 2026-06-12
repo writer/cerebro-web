@@ -3,8 +3,8 @@ import Link from "next/link";
 const workflows = [
   {
     slug: "timeline",
-    name: "Security event timeline",
-    description: "Replay and inspect canonical security finding event contracts.",
+    name: "Workflow timeline",
+    description: "Replay and inspect workflow.v1 event-registry decisions, actions, outcomes, and finding lifecycle events.",
   },
   {
     slug: "sources",

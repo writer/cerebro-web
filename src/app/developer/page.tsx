@@ -9,12 +9,13 @@ import { tagSlug } from "@/lib/openapi";
 import { useOpenApi } from "@/lib/openapi-store";
 
 const workflowLinks = [
+  { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and agent workflows for security producers." },
   { label: "Raindrop Ask Evals", href: "/developer/evals", description: "Local Ask quality evals, rubric outcomes, and Workshop trace links." },
-  { label: "Timeline", href: "/workflows/timeline", description: "Canonical security event replay and timeline inspection." },
+  { label: "Timeline", href: "/workflows/timeline", description: "Workflow.v1 event-registry replay and timeline inspection." },
   { label: "Sources", href: "/workflows/sources", description: "Source catalog and read-only preview helpers." },
   { label: "Runtimes", href: "/workflows/runtimes", description: "Runtime registration and sync state." },
   { label: "Findings", href: "/workflows/findings", description: "Rules, runtime findings, evidence, and evaluation runs." },
-  { label: "Reports", href: "/workflows/reports", description: "Report endpoints and status lookups." },
+  { label: "Reports", href: "/workflows/reports", description: "Legacy report endpoints and status lookups." },
   { label: "Graph", href: "/workflows/graph", description: "Graph health, ingest runs, neighborhoods, and impact queries." },
 ];
 
@@ -37,7 +38,7 @@ export default function DeveloperPage() {
 
       <StatusPanel />
 
-      <Panel title="Operations">
+      <Panel title="Legacy Workflows">
         <div className="grid gap-3 lg:grid-cols-3">
           {workflowLinks.map((w) => (
             <Link key={w.href} href={w.href} className="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">

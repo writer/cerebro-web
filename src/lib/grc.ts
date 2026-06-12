@@ -76,6 +76,10 @@ export type GRCConnector = {
   tenant_id?: string;
   status: string;
   freshness: string;
+  sync_lag_seconds?: number;
+  checkpoint_watermark?: string;
+  watermark_lag_seconds?: number;
+  watermark_freshness?: string;
   last_synced_at?: string;
 };
 
@@ -118,7 +122,27 @@ export type GRCInventoryAsset = {
   scope_state?: "in_scope" | "out_of_scope" | string;
   scope_reason?: string;
   scope_updated_at?: string;
+  asset_report_count?: number;
+  latest_asset_report_status?: string;
+  latest_asset_report_reason?: string;
+  latest_asset_report_updated_at?: string;
   attributes?: Record<string, string>;
+};
+
+export type GRCInventoryAssetReport = {
+  id: string;
+  tenant_id: string;
+  asset_urn: string;
+  source_id?: string;
+  reason: string;
+  reporter?: string;
+  triage_status: "submitted" | "in_triage" | "accepted" | "rejected" | "resolved" | string;
+  triage_reason?: string;
+  triaged_by?: string;
+  triaged_at?: string;
+  attributes?: Record<string, string>;
+  created_at: string;
+  updated_at: string;
 };
 
 export type GRCInventorySummary = {
@@ -187,6 +211,7 @@ export type GRCInventoryAssetDetail = {
   controls: GRCControl[];
   tests: GRCInventoryTest[];
   vulnerabilities: GRCInventoryVulnerability[];
+  asset_reports?: GRCInventoryAssetReport[];
   timeline?: GRCInventoryTimelineEvent[];
   actions?: GRCInventoryAction[];
   generated_at: string;
@@ -286,6 +311,26 @@ export const displayDate = (value?: string) => {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+};
+
+export const displayDurationSeconds = (value?: number) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  const seconds = Math.max(0, value);
+  if (seconds < 60) {
+    return `${Math.round(seconds)}s`;
+  }
+  const minutes = seconds / 60;
+  if (minutes < 60) {
+    return `${Math.round(minutes)}m`;
+  }
+  const hours = minutes / 60;
+  if (hours < 48) {
+    return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)}h`;
+  }
+  const days = hours / 24;
+  return `${days < 10 ? days.toFixed(1) : Math.round(days)}d`;
 };
 
 export const humanize = (value?: string) =>
