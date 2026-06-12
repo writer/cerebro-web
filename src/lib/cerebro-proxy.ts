@@ -127,6 +127,10 @@ export const isCacheableCerebroPath = (path: string) => {
     "grc/controls",
     "grc/findings",
     "grc/evidence",
+    "grc/inventory/categories",
+    "grc/inventory/assets",
+    "grc/inventory/assets/detail",
+    "grc/inventory/resource-scope",
   ].includes(normalized) || normalized.startsWith("grc/entities/") || normalized.startsWith("grc/audit-packets/");
 };
 

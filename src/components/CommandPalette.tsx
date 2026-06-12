@@ -27,6 +27,7 @@ const searchCommands = (query: string): Command[] => {
     { id: "search-risk-inbox", label: `Search Risk Inbox for "${trimmed}"`, href: `/risk-inbox?q=${encoded}`, description: "Filter findings by title, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk"] },
     { id: "open-finding", label: `Open finding "${trimmed}"`, href: `/findings/${encoded}`, description: "Jump to a finding detail page by ID.", section: "Operator", keywords: ["finding", "detail"] },
     { id: "open-impact", label: `Open impact map for "${trimmed}"`, href: `/impact?root_urn=${encoded}`, description: "Use as entity URN or graph root.", section: "Operator", keywords: ["impact", "graph"] },
+    { id: "search-inventory", label: `Search inventory for "${trimmed}"`, href: `/inventory?q=${encoded}`, description: "Filter assets and resources by label, type, owner, or URN.", section: "Operator", keywords: ["inventory", "assets", "resources"] },
     { id: "search-controls", label: `Filter controls by "${trimmed}"`, href: `/controls?control=${encoded}`, description: "Find control IDs and mapped findings.", section: "Operator", keywords: ["controls", "framework"] },
     { id: "open-report", label: `Build audit packet for "${trimmed}"`, href: `/reports?finding_id=${encoded}`, description: "Use as a finding ID for an audit packet.", section: "Operator", keywords: ["reports", "audit"] },
     { id: "open-evidence", label: `Find evidence for "${trimmed}"`, href: `/evidence?finding_id=${encoded}`, description: "Use as a finding ID in the evidence register.", section: "Operator", keywords: ["evidence", "proof"] },
@@ -110,7 +111,7 @@ export default function CommandPalette() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             onKeyDown={onInputKeyDown}
-            placeholder="Search findings, controls, evidence, connectors..."
+            placeholder="Search findings, controls, inventory, evidence, connectors..."
             className="flex-1 border-0 bg-transparent text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
           />
           <kbd className="rounded border border-slate-200 px-1.5 py-0.5 font-mono text-[11px] text-slate-400">ESC</kbd>
