@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApiKey } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
-import { displayDate, GRCDashboard, GRCEvidence, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
+import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 
@@ -211,12 +211,14 @@ export default function Home() {
                   {(data.connectors ?? []).slice(0, 5).map((c) => (
                     <Link
                       key={c.runtime_id}
-                      href={`/connectors?runtime_ids=${encodeURIComponent(c.runtime_id)}`}
+                      href={`/connectors?runtime_id=${encodeURIComponent(c.runtime_id)}`}
                       className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
                     >
                       <div>
                         <div className="text-[13px] font-medium text-slate-900">{c.source_id || shortEntity(c.runtime_id)}</div>
-                        <div className="text-[12px] text-slate-500">synced {displayDate(c.last_synced_at)}</div>
+                        <div className="text-[12px] text-slate-500">
+                          sync {displayDurationSeconds(c.sync_lag_seconds)} ago · data {displayDurationSeconds(c.watermark_lag_seconds)} ago
+                        </div>
                       </div>
                       <Badge value={c.status} />
                     </Link>

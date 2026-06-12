@@ -167,6 +167,37 @@ export async function POST(request: NextRequest, context: RouteContext) {
   });
 }
 
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const params = await context.params;
+  const path = (params.path ?? []).join("/");
+  const url = new URL(request.url);
+  const target = buildCerebroUrl(path, url.search);
+  const body = await request.text();
+  const headers = {
+    ...authHeadersFor(request),
+    "content-type": request.headers.get("content-type") ?? "application/json",
+    accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+  };
+
+  let response: Response;
+  try {
+    response = await fetchCerebro(target, {
+      method: "PATCH",
+      headers,
+      body,
+      cache: "no-store",
+    });
+  } catch (error) {
+    return proxyFetchError(error);
+  }
+
+  const text = await response.text();
+  return new NextResponse(text, {
+    status: response.status,
+    headers: responseHeadersFor(response),
+  });
+}
+
 function normalizeAskRequestBody(body: string): string {
   try {
     const parsed = JSON.parse(body) as Record<string, unknown>;

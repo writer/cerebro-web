@@ -9,6 +9,7 @@ import { operatorNavLinks, utilityLinks } from "@/lib/navigation";
 const icons: Record<string, React.ReactNode> = {
   "/": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />,
   "/risk-inbox": <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />,
+  "/mission-control": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h12A2.25 2.25 0 0 0 20.25 14.25V3m-16.5 0h16.5m-16.5 0A2.25 2.25 0 0 0 1.5 5.25v9A4.5 4.5 0 0 0 6 18.75h12a4.5 4.5 0 0 0 4.5-4.5v-9A2.25 2.25 0 0 0 20.25 3M8.25 21h7.5M12 16.5V21m-3.75-9 2.25-2.25 2.25 2.25 3.75-4.5" />,
   "/ask": <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />,
   "/controls": <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />,
   "/evidence": <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />,
@@ -56,10 +57,10 @@ export default function Sidebar() {
         key={link.href}
         href={link.href}
         title={collapsed ? link.label : undefined}
-        className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition ${
+        className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-[8px] text-[13px] font-medium transition ${
           active
-            ? "bg-indigo-500/15 text-indigo-400"
-            : "text-slate-400 hover:bg-white/[0.06] hover:text-slate-200"
+            ? "bg-[var(--nav-active)] text-[var(--sidebar-active)] shadow-[var(--shadow-sm)] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:rounded-full before:bg-[var(--sidebar-active)]"
+            : "text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)]"
         } ${collapsed ? "justify-center" : ""}`}
       >
         <NavIcon href={link.href} />
@@ -69,12 +70,17 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className={`flex h-screen flex-col bg-sidebar-bg transition-all duration-200 ${collapsed ? "w-[60px]" : "w-[220px]"}`}>
+    <aside className={`flex h-screen flex-col border-r border-[color:var(--border)] bg-[var(--sidebar-bg)] transition-all duration-200 ${collapsed ? "w-[60px]" : "w-[240px]"}`}>
       <div className={`flex items-center pt-5 pb-4 ${collapsed ? "justify-center px-2" : "px-5"}`}>
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500 text-[11px] font-bold text-white">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--text-primary)] text-[11px] font-bold text-[var(--surface)]">
           C
         </div>
-        {!collapsed && <span className="ml-2 text-[15px] font-semibold text-white">Cerebro</span>}
+        {!collapsed && (
+          <div className="ml-2">
+            <span className="block text-[15px] font-semibold text-[var(--text-primary)]">Cerebro</span>
+            <span className="block text-[11px] text-[var(--sidebar-muted)]">GRC control plane</span>
+          </div>
+        )}
       </div>
 
       {!collapsed && (
@@ -82,13 +88,13 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={openCommandPalette}
-            className="flex w-full items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-[7px] text-[13px] text-slate-400 transition hover:bg-white/10 hover:text-slate-300"
+            className="flex w-full items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-[8px] text-[13px] text-[var(--text-muted)] shadow-[var(--shadow-sm)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
             Search...
-            <kbd className="ml-auto rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-slate-500">⌘K</kbd>
+            <kbd className="ml-auto rounded border border-[color:var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">⌘K</kbd>
           </button>
         </div>
       )}
@@ -99,7 +105,7 @@ export default function Sidebar() {
             type="button"
             onClick={openCommandPalette}
             title="Search (⌘K)"
-            className="rounded-md p-2 text-slate-400 transition hover:bg-white/10 hover:text-slate-300"
+            className="rounded-md p-2 text-[var(--sidebar-muted)] transition hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)]"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-[18px] w-[18px]">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -110,23 +116,23 @@ export default function Sidebar() {
 
       <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? "px-1.5" : "px-3"}`}>
         {!collapsed && (
-          <div className="px-2 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">Operator</div>
+          <div className="px-2 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)]">Operator</div>
         )}
         {operatorNavLinks.map(renderLink)}
 
         {!collapsed && (
-          <div className="px-2 pb-1.5 pt-5 text-[11px] font-medium uppercase tracking-wider text-slate-500">Advanced</div>
+          <div className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)]">Advanced</div>
         )}
-        {collapsed && <div className="my-3 border-t border-white/10" />}
+        {collapsed && <div className="my-3 border-t border-[color:var(--border)]" />}
         {utilityLinks.map(renderLink)}
       </nav>
 
-      <div className="flex items-center justify-between border-t border-white/10 px-3 py-2.5">
-        {!collapsed && <div className="text-[11px] text-slate-500">v2.1.86</div>}
+      <div className="flex items-center justify-between border-t border-[color:var(--border)] px-3 py-2.5">
+        {!collapsed && <div className="text-[11px] text-[var(--sidebar-muted)]">v2.1.86</div>}
         <button
           type="button"
           onClick={toggleSidebar}
-          className={`rounded-md p-1.5 text-slate-500 transition hover:bg-white/10 hover:text-slate-300 ${collapsed ? "mx-auto" : ""}`}
+          className={`rounded-md p-1.5 text-[var(--sidebar-muted)] transition hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)] ${collapsed ? "mx-auto" : ""}`}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <CollapseIcon collapsed={collapsed} />

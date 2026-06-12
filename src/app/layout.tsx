@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import CommandPalette from "@/components/CommandPalette";
-import { ApiKeyProvider, CommandPaletteProvider, SidebarProvider } from "@/components/providers";
+import { ApiKeyProvider, CommandPaletteProvider, SidebarProvider, ThemeProvider } from "@/components/providers";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 
@@ -24,21 +24,23 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} bg-white text-slate-900 antialiased`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} bg-[var(--app-bg)] text-[var(--text-primary)] antialiased`}>
         <ApiKeyProvider>
-          <CommandPaletteProvider>
-            <SidebarProvider>
-              <div className="flex h-screen overflow-hidden">
-                <Sidebar />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <Topbar />
-                  <main className="flex-1 overflow-y-auto bg-slate-50/50 px-8 py-6">{children}</main>
+          <ThemeProvider>
+            <CommandPaletteProvider>
+              <SidebarProvider>
+                <div className="flex h-screen overflow-hidden bg-[var(--app-bg)]">
+                  <Sidebar />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <Topbar />
+                    <main className="flex-1 overflow-y-auto bg-[var(--app-bg)] px-8 py-6">{children}</main>
+                  </div>
                 </div>
-              </div>
-              <CommandPalette />
-            </SidebarProvider>
-          </CommandPaletteProvider>
+                <CommandPalette />
+              </SidebarProvider>
+            </CommandPaletteProvider>
+          </ThemeProvider>
         </ApiKeyProvider>
       </body>
     </html>

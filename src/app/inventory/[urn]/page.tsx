@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
+import AssetReportModal from "@/components/grc/AssetReportModal";
 import GraphViewer from "@/components/grc/GraphViewer";
 import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, SeverityDot } from "@/components/grc/Primitives";
 import {
@@ -13,6 +14,7 @@ import {
   GRCInventoryAction,
   GRCInventoryAsset,
   GRCInventoryAssetDetail,
+  GRCInventoryAssetReport,
   GRCInventoryTest,
   GRCInventoryTimelineEvent,
   GRCInventoryVulnerability,
@@ -21,9 +23,9 @@ import {
 } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 
-type Tab = "overview" | "vulnerabilities" | "tests" | "framework" | "timeline";
+type Tab = "overview" | "vulnerabilities" | "tests" | "framework" | "reports" | "timeline";
 
-const inputClass = "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
+const inputClass = "control-input px-3 py-1.5 text-[13px]";
 
 const attr = (asset?: GRCInventoryAsset, ...keys: string[]) => {
   for (const key of keys) {
@@ -39,7 +41,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
       type="button"
       onClick={onClick}
       className={`border-b-2 px-4 py-2 text-[13px] font-medium transition ${
-        active ? "border-indigo-500 text-indigo-600" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+        active ? "border-[var(--primary)] text-[var(--primary)]" : "border-transparent text-[var(--text-muted)] hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]"
       }`}
     >
       {label}
@@ -50,8 +52,8 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2 text-[13px]">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="break-words text-slate-900">{value || "Not set"}</dd>
+      <dt className="text-[var(--text-muted)]">{label}</dt>
+      <dd className="break-words text-[var(--text-primary)]">{value || "Not set"}</dd>
     </div>
   );
 }
@@ -64,72 +66,82 @@ const criticalHighVulnerabilities = (items: GRCInventoryVulnerability[]) =>
 
 const scopeState = (asset: GRCInventoryAsset) => asset.scope_state || "in_scope";
 
-const scopeCopy = (state: string) => state === "out_of_scope" ? "Out of GRC purview" : "In GRC purview";
+const scopeCopy = (state: string) => state === "out_of_scope" ? "Excluded" : "In scope";
+
+const reportStatuses = ["submitted", "in_triage", "accepted", "rejected", "resolved"];
 
 function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab: (tab: Tab) => void }) {
   const failing = failingTests(data.tests);
   const criticalHigh = criticalHighVulnerabilities(data.vulnerabilities);
   const publicState = attr(data.asset, "public", "publicly_accessible", "internet_exposed") === "true";
   const actions = data.actions ?? [];
+  const reportCount = data.asset_reports?.length ?? 0;
   const summary = [
     publicState ? "is publicly accessible" : "is not publicly accessible",
     criticalHigh === 0 ? "has no critical or high vulnerabilities" : `has ${criticalHigh} critical or high vulnerabilities`,
     failing === 0 ? "has no failing tests" : `has ${failing} failing tests`,
-    scopeState(data.asset) === "out_of_scope" ? "is scoped out of GRC purview" : "is in GRC purview",
+    reportCount === 0 ? "has no curation reports" : `has ${reportCount} curation report${reportCount === 1 ? "" : "s"}`,
+    scopeState(data.asset) === "out_of_scope" ? "is excluded from compliance review" : "is in scope",
   ].join(", ");
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-6">
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <section className="surface-panel overflow-hidden">
           <div className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-[16px] font-semibold text-slate-900">Risk-first summary</h2>
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Summary</h2>
               <RiskBadge score={data.asset.risk_score} level={data.asset.risk_level} />
             </div>
-            <p className="mt-6 text-[15px] text-slate-800">This asset {summary}.</p>
+            <p className="mt-6 text-[15px] leading-6 text-[var(--text-secondary)]">This asset {summary}.</p>
             {data.asset.risk_reasons && data.asset.risk_reasons.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {data.asset.risk_reasons.slice(0, 8).map((reason) => <span key={reason} className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{humanize(reason)}</span>)}
+                {data.asset.risk_reasons.slice(0, 8).map((reason) => <span key={reason} className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">{humanize(reason)}</span>)}
               </div>
             )}
-            <div className="mt-6 text-[11px] font-medium uppercase tracking-wider text-slate-500">Recommendation</div>
-            <p className="mt-2 text-[14px] leading-6 text-slate-700">
+            <div className="mt-6 text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Recommendation</div>
+            <p className="mt-2 text-[14px] leading-6 text-[var(--text-secondary)]">
               Review ownership, framework coverage, failing tests, vulnerability posture, and adjacent graph relationships before changing scope or remediation priority.
             </p>
           </div>
-          <div className="border-t border-slate-100 bg-slate-50 px-5 py-3 text-[12px] font-medium text-slate-600">Summarized by Cerebro</div>
+          <div className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-5 py-3 text-[12px] font-medium text-[var(--text-secondary)]">
+            <span className="mr-2 text-[var(--primary)]">✦</span>Summarized by Cerebro
+          </div>
         </section>
 
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <button type="button" onClick={() => setTab("vulnerabilities")} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-3 text-left">
-            <span className="text-[13px] font-medium text-slate-900">{criticalHigh === 0 ? "No critical or high vulnerabilities found" : `${criticalHigh} critical or high vulnerabilities found`}</span>
+        <section className="surface-panel overflow-hidden">
+          <button type="button" onClick={() => setTab("vulnerabilities")} className="flex w-full items-center justify-between border-b border-[color:var(--border)] px-5 py-3 text-left hover:bg-[var(--surface-hover)]">
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">{criticalHigh === 0 ? "No critical or high vulnerabilities found" : `${criticalHigh} critical or high vulnerabilities found`}</span>
             <Badge value={criticalHigh === 0 ? "ok" : "open"} />
           </button>
-          <button type="button" onClick={() => setTab("tests")} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-3 text-left">
+          <button type="button" onClick={() => setTab("tests")} className="flex w-full items-center justify-between border-b border-[color:var(--border)] px-5 py-3 text-left hover:bg-[var(--surface-hover)]">
             <div>
-              <div className="text-[13px] font-medium text-slate-900">{failing === 0 ? "No failing tests" : `${failing} failing compliance tests`}</div>
-              <div className="mt-0.5 text-[12px] text-slate-500">Review these tests to ensure this asset is compliant</div>
+              <div className="text-[13px] font-medium text-[var(--text-primary)]">{failing === 0 ? "No failing tests" : `${failing} failing compliance tests`}</div>
+              <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Review these tests to ensure this asset is compliant</div>
             </div>
             <Badge value={failing === 0 ? "ok" : "overdue"} />
           </button>
           <div className="flex items-center justify-between px-5 py-3">
-            <span className="text-[13px] font-medium text-slate-900">{publicState ? "Public exposure detected" : "Not publicly accessible"}</span>
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">{publicState ? "Public exposure detected" : "Not publicly accessible"}</span>
             <Badge value={publicState ? "open" : "ok"} />
           </div>
-          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
-            <span className="text-[13px] font-medium text-slate-900">{scopeCopy(scopeState(data.asset))}</span>
+          <div className="flex items-center justify-between border-t border-[color:var(--border)] px-5 py-3">
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">{scopeCopy(scopeState(data.asset))}</span>
             <Badge value={scopeState(data.asset)} />
           </div>
+          <button type="button" onClick={() => setTab("reports")} className="flex w-full items-center justify-between border-t border-[color:var(--border)] px-5 py-3 text-left hover:bg-[var(--surface-hover)]">
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">{reportCount === 0 ? "No curation reports" : `${reportCount} curation report${reportCount === 1 ? "" : "s"}`}</span>
+            <Badge value={reportCount === 0 ? "ok" : data.asset_reports?.[0]?.triage_status || "submitted"} />
+          </button>
         </section>
 
         <Panel title="Next best actions">
           <div className="space-y-3">
             {actions.map((action: GRCInventoryAction) => (
-              <div key={`${action.priority}-${action.title}`} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <div key={`${action.priority}-${action.title}`} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[13px] font-semibold text-slate-900">{action.title}</div>
-                    <div className="mt-1 text-[12px] leading-5 text-slate-600">{action.description}</div>
+                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">{action.title}</div>
+                    <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{action.description}</div>
                   </div>
                   <Badge value={action.priority} />
                 </div>
@@ -143,12 +155,12 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
         </Panel>
       </div>
       <aside>
-        <h2 className="mb-3 text-[16px] font-semibold text-slate-900">Details</h2>
+        <h2 className="mb-3 text-[16px] font-semibold text-[var(--text-primary)]">Details</h2>
         <div className="mb-4 grid gap-3">
           <MetricCard label="Risk score" value={data.asset.risk_score ?? 0} detail={humanize(data.asset.risk_level)} intent={(data.asset.risk_score ?? 0) >= 70 ? "danger" : "neutral"} />
-          <MetricCard label="Purview" value={scopeState(data.asset) === "out_of_scope" ? "Out" : "In"} detail={data.asset.scope_reason || "active inventory state"} intent={scopeState(data.asset) === "out_of_scope" ? "warning" : "success"} />
+          <MetricCard label="Scope" value={scopeState(data.asset) === "out_of_scope" ? "Excluded" : "In"} detail={data.asset.scope_reason || "active inventory state"} intent={scopeState(data.asset) === "out_of_scope" ? "warning" : "success"} />
         </div>
-        <dl className="divide-y divide-slate-100">
+        <dl className="divide-y divide-[color:var(--border)]">
           <DetailRow label="Last updated" value={displayDate(attr(data.asset, "updated_at", "last_seen_at", "last_synced_at"))} />
           <DetailRow label="First seen" value={displayDate(attr(data.asset, "created_at", "first_seen_at"))} />
           <DetailRow label="Account" value={attr(data.asset, "account_id", "project_id", "org", "owner_login")} />
@@ -168,25 +180,25 @@ function VulnerabilitiesPane({ vulnerabilities }: { vulnerabilities: GRCInventor
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className={inputClass} />
-        <button type="button" className="text-[13px] font-medium text-slate-600">Source</button>
-        <button type="button" className="text-[13px] font-medium text-slate-600">Severity</button>
+        <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Source</button>
+        <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Severity</button>
       </div>
       {filtered.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center">
-          <div className="text-[14px] font-semibold text-slate-900">Get started with managing vulnerabilities</div>
-          <div className="mt-2 text-[13px] text-slate-500">Connect and sync vulnerability sources to monitor detected security issues for this asset.</div>
+        <div className="surface-panel p-8 text-center">
+          <div className="text-[14px] font-semibold text-[var(--text-primary)]">Get started with managing vulnerabilities</div>
+          <div className="mt-2 text-[13px] text-[var(--text-muted)]">Connect and sync vulnerability sources to monitor detected security issues for this asset.</div>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-left text-[13px]">
-            <thead><tr className="border-b border-slate-100 bg-slate-50/80"><th className="px-4 py-2.5">Vulnerability</th><th className="px-4 py-2.5">Severity</th><th className="px-4 py-2.5">Status</th><th className="px-4 py-2.5">Source</th></tr></thead>
+        <div className="surface-panel overflow-x-auto">
+          <table className="data-table">
+            <thead><tr><th>Vulnerability</th><th>Severity</th><th>Status</th><th>Source</th></tr></thead>
             <tbody>
               {filtered.map((item) => (
-                <tr key={`${item.id}-${item.finding_id}`} className="border-b border-slate-50">
-                  <td className="px-4 py-3">{item.finding_id ? <Link href={`/findings/${encodeURIComponent(item.finding_id)}`} className="font-medium text-indigo-600 hover:text-indigo-800">{item.title}</Link> : item.title}</td>
-                  <td className="px-4 py-3"><span className="inline-flex items-center gap-2"><SeverityDot severity={item.severity} />{item.severity}</span></td>
-                  <td className="px-4 py-3"><Badge value={item.status} /></td>
-                  <td className="px-4 py-3 text-slate-500">{item.source_id || "Not set"}</td>
+                <tr key={`${item.id}-${item.finding_id}`}>
+                  <td>{item.finding_id ? <Link href={`/findings/${encodeURIComponent(item.finding_id)}`} className="font-medium text-[var(--primary)] hover:text-[var(--primary-hover)]">{item.title}</Link> : item.title}</td>
+                  <td><span className="inline-flex items-center gap-2"><SeverityDot severity={item.severity} />{item.severity}</span></td>
+                  <td><Badge value={item.status} /></td>
+                  <td className="text-[var(--text-muted)]">{item.source_id || "Not set"}</td>
                 </tr>
               ))}
             </tbody>
@@ -204,26 +216,26 @@ function TestsPane({ tests }: { tests: GRCInventoryTest[] }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className={inputClass} />
-        <button type="button" className="text-[13px] font-medium text-slate-600">Status</button>
-        <button type="button" className="text-[13px] font-medium text-slate-600">Due date</button>
+        <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Status</button>
+        <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Due date</button>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-left text-[13px]">
+      <div className="surface-panel overflow-x-auto">
+        <table className="data-table">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/80">
-              <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Test name</th>
-              <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Owner</th>
-              <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</th>
-              <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Due date</th>
+            <tr>
+              <th>Test name</th>
+              <th>Owner</th>
+              <th>Status</th>
+              <th>Due date</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((test) => (
-              <tr key={`${test.name}-${test.finding_id}-${test.control_id}`} className="border-b border-slate-50 transition hover:bg-slate-50/60">
-                <td className="px-4 py-3 font-medium text-slate-900">{test.finding_id ? <Link href={`/findings/${encodeURIComponent(test.finding_id)}`} className="hover:text-indigo-700">{test.name}</Link> : test.name}</td>
-                <td className="px-4 py-3 text-slate-600">{test.owner}</td>
-                <td className="px-4 py-3"><Badge value={test.status} /></td>
-                <td className="px-4 py-3 text-slate-500">{displayDate(test.due_at)}</td>
+              <tr key={`${test.name}-${test.finding_id}-${test.control_id}`}>
+                <td className="font-medium text-[var(--text-primary)]">{test.finding_id ? <Link href={`/findings/${encodeURIComponent(test.finding_id)}`} className="hover:text-[var(--primary)]">{test.name}</Link> : test.name}</td>
+                <td>{test.owner}</td>
+                <td><Badge value={test.status} /></td>
+                <td className="text-[var(--text-muted)]">{displayDate(test.due_at)}</td>
               </tr>
             ))}
           </tbody>
@@ -236,22 +248,71 @@ function TestsPane({ tests }: { tests: GRCInventoryTest[] }) {
 
 function FrameworkPane({ data }: { data: GRCInventoryAssetDetail }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full text-left text-[13px]">
-        <thead><tr className="border-b border-slate-100 bg-slate-50/80"><th className="px-4 py-2.5">Framework</th><th className="px-4 py-2.5">Control</th><th className="px-4 py-2.5">Status</th><th className="px-4 py-2.5">Findings</th><th className="px-4 py-2.5">Evidence</th></tr></thead>
+    <div className="surface-panel overflow-x-auto">
+      <table className="data-table">
+        <thead><tr><th>Framework</th><th>Control</th><th>Status</th><th>Findings</th><th>Evidence</th></tr></thead>
         <tbody>
           {data.controls.map((control) => (
-            <tr key={`${control.framework_name}-${control.control_id}`} className="border-b border-slate-50">
-              <td className="px-4 py-3 font-medium text-slate-900">{control.framework_name}</td>
-              <td className="px-4 py-3 text-slate-600">{control.control_id}</td>
-              <td className="px-4 py-3"><Badge value={control.status} /></td>
-              <td className="px-4 py-3 tabular-nums">{control.open_findings}</td>
-              <td className="px-4 py-3 tabular-nums">{control.evidence_items}</td>
+            <tr key={`${control.framework_name}-${control.control_id}`}>
+              <td className="font-medium text-[var(--text-primary)]">{control.framework_name}</td>
+              <td>{control.control_id}</td>
+              <td><Badge value={control.status} /></td>
+              <td className="tabular-nums">{control.open_findings}</td>
+              <td className="tabular-nums">{control.evidence_items}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {data.controls.length === 0 && <div className="p-8"><EmptyBlock label="No framework scope is mapped to this asset." /></div>}
+    </div>
+  );
+}
+
+function ReportsPane({
+  error,
+  onTriage,
+  reports,
+  savingID,
+}: {
+  error?: string | null;
+  onTriage: (report: GRCInventoryAssetReport, status: string) => void;
+  reports: GRCInventoryAssetReport[];
+  savingID?: string | null;
+}) {
+  if (reports.length === 0) {
+    return <EmptyBlock label="No data quality or curation reports have been submitted for this asset." />;
+  }
+  return (
+    <div className="space-y-3">
+      {error && <ErrorBlock error={error} />}
+      {reports.map((report) => (
+        <div key={report.id} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">{report.reason}</div>
+              <div className="mt-1 text-[12px] text-[var(--text-muted)]">
+                Reported {displayDate(report.created_at)}{report.reporter ? ` by ${report.reporter}` : ""}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge value={report.triage_status} />
+              <select
+                value={report.triage_status}
+                onChange={(event) => onTriage(report, event.target.value)}
+                disabled={savingID === report.id}
+                className="control-input px-2 py-1 text-[12px] disabled:opacity-50"
+              >
+                {reportStatuses.map((status) => <option key={status} value={status}>{humanize(status)}</option>)}
+              </select>
+            </div>
+          </div>
+          {(report.triage_reason || report.triaged_by || report.triaged_at) && (
+            <div className="mt-3 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+              {report.triage_reason || "Triaged"}{report.triaged_by ? ` by ${report.triaged_by}` : ""}{report.triaged_at ? ` on ${displayDate(report.triaged_at)}` : ""}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -262,14 +323,14 @@ function TimelinePane({ events }: { events: GRCInventoryTimelineEvent[] }) {
     return <EmptyBlock label="No inventory timeline events are available for this asset." />;
   }
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <div className="divide-y divide-slate-100">
+    <div className="surface-panel">
+      <div className="divide-y divide-[color:var(--border)]">
         {sorted.map((event, index) => (
           <div key={`${event.kind}-${event.title}-${event.at ?? index}`} className="grid gap-3 px-5 py-4 md:grid-cols-[160px_minmax(0,1fr)_120px]">
-            <div className="text-[12px] text-slate-500">{displayDate(event.at)}</div>
+            <div className="text-[12px] text-[var(--text-muted)]">{displayDate(event.at)}</div>
             <div>
-              <div className="text-[13px] font-semibold text-slate-900">{event.title}</div>
-              {event.description && <div className="mt-1 text-[12px] text-slate-500">{event.description}</div>}
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">{event.title}</div>
+              {event.description && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{event.description}</div>}
             </div>
             <div className="flex justify-start md:justify-end"><Badge value={event.status || event.kind} /></div>
           </div>
@@ -285,9 +346,14 @@ export default function InventoryAssetPage() {
   const { apiKey } = useApiKey();
   const urn = useMemo(() => decodeURIComponent(params.urn ?? ""), [params.urn]);
   const initialTab = (searchParams.get("tab") as Tab | null) ?? "overview";
-  const [tab, setTab] = useState<Tab>(["overview", "vulnerabilities", "tests", "framework", "timeline"].includes(initialTab) ? initialTab : "overview");
+  const [tab, setTab] = useState<Tab>(["overview", "vulnerabilities", "tests", "framework", "reports", "timeline"].includes(initialTab) ? initialTab : "overview");
   const [scopeSaving, setScopeSaving] = useState(false);
   const [scopeError, setScopeError] = useState<string | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportSaving, setReportSaving] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [triageSavingID, setTriageSavingID] = useState<string | null>(null);
+  const [triageError, setTriageError] = useState<string | null>(null);
   const { data, error, loading, reload } = useGRCQuery<GRCInventoryAssetDetail>(
     urn ? grcPath("/grc/inventory/assets/detail", { urn, limit: 100 }) : null,
   );
@@ -315,6 +381,50 @@ export default function InventoryAssetPage() {
     }
     void reload();
   };
+  const submitAssetReport = async (reason: string) => {
+    if (!asset) return;
+    setReportSaving(true);
+    setReportError(null);
+    const response = await fetchCerebro<{ report: GRCInventoryAssetReport }>("/grc/inventory/asset-reports", apiKey, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        asset_urn: asset.urn,
+        source_id: asset.source_id,
+        reason,
+        attributes: {
+          label: asset.label,
+          entity_type: asset.entity_type,
+        },
+      }),
+    });
+    setReportSaving(false);
+    if (!response.ok) {
+      setReportError(typeof response.data === "string" ? response.data : `Report failed (${response.status})`);
+      return;
+    }
+    setReportOpen(false);
+    setTab("reports");
+    void reload();
+  };
+  const updateReportTriage = async (report: GRCInventoryAssetReport, status: string) => {
+    setTriageSavingID(report.id);
+    setTriageError(null);
+    const response = await fetchCerebro<{ report: GRCInventoryAssetReport }>(`/grc/inventory/asset-reports/${encodeURIComponent(report.id)}/triage`, apiKey, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        triage_status: status,
+        triage_reason: `Marked ${humanize(status)} from inventory detail`,
+      }),
+    });
+    setTriageSavingID(null);
+    if (!response.ok) {
+      setTriageError(typeof response.data === "string" ? response.data : `Triage update failed (${response.status})`);
+      return;
+    }
+    void reload();
+  };
 
   return (
     <div className="space-y-6">
@@ -323,9 +433,10 @@ export default function InventoryAssetPage() {
         description={`${humanize(asset?.entity_type)}${urn ? ` • ${urn}` : ""}`}
         action={
           <div className="flex items-center gap-2">
-            {externalURL && <a href={externalURL} target="_blank" rel="noreferrer" className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 hover:border-indigo-300">Open source</a>}
-            {asset && <button type="button" onClick={() => void updateScope()} disabled={scopeSaving} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 hover:border-indigo-300 disabled:opacity-50">{scopeSaving ? "Saving" : scopeState(asset) === "out_of_scope" ? "Scope in" : "Scope out"}</button>}
-            <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">Refresh</button>
+            {externalURL && <a href={externalURL} target="_blank" rel="noreferrer" className="secondary-button px-3 py-1.5 text-[13px]">Open source</a>}
+            {asset && <button type="button" onClick={() => { setReportOpen(true); setReportError(null); }} className="secondary-button px-3 py-1.5 text-[13px]">Report issue</button>}
+            {asset && <button type="button" onClick={() => void updateScope()} disabled={scopeSaving} className="secondary-button px-3 py-1.5 text-[13px] disabled:opacity-50">{scopeSaving ? "Saving" : scopeState(asset) === "out_of_scope" ? "Scope in" : "Scope out"}</button>}
+            <button type="button" onClick={() => void reload()} className="primary-button px-3 py-1.5 text-[13px]">Refresh</button>
           </div>
         }
       />
@@ -336,19 +447,35 @@ export default function InventoryAssetPage() {
 
       {data && (
         <>
-          <div className="flex items-center gap-4 border-b border-slate-200">
+          <div className="mb-2 flex flex-wrap items-center gap-4 text-[12px] text-[var(--text-muted)]">
+            <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 font-medium text-[var(--text-secondary)]">{attr(asset, "owner", "owner_email") || "Unassigned"}</span>
+            <span>Last refreshed: {displayDate(attr(asset, "updated_at", "last_seen_at", "last_synced_at"))}</span>
+            <span>{scopeCopy(scopeState(data.asset))}</span>
+          </div>
+          <div className="flex items-center gap-4 border-b border-[color:var(--border)]">
             <TabButton label="Overview" active={tab === "overview"} onClick={() => setTab("overview")} />
             <TabButton label="Vulnerabilities" active={tab === "vulnerabilities"} onClick={() => setTab("vulnerabilities")} />
             <TabButton label={`Tests (${data.tests.length})`} active={tab === "tests"} onClick={() => setTab("tests")} />
             <TabButton label="Framework scope" active={tab === "framework"} onClick={() => setTab("framework")} />
+            <TabButton label={`Reports (${data.asset_reports?.length ?? 0})`} active={tab === "reports"} onClick={() => setTab("reports")} />
             <TabButton label={`Timeline (${data.timeline?.length ?? 0})`} active={tab === "timeline"} onClick={() => setTab("timeline")} />
           </div>
           {tab === "overview" && <OverviewPane data={data} setTab={setTab} />}
           {tab === "vulnerabilities" && <VulnerabilitiesPane vulnerabilities={data.vulnerabilities} />}
           {tab === "tests" && <TestsPane tests={data.tests} />}
           {tab === "framework" && <FrameworkPane data={data} />}
+          {tab === "reports" && <ReportsPane reports={data.asset_reports ?? []} onTriage={(report, status) => void updateReportTriage(report, status)} savingID={triageSavingID} error={triageError} />}
           {tab === "timeline" && <TimelinePane events={data.timeline ?? []} />}
         </>
+      )}
+      {asset && reportOpen && (
+        <AssetReportModal
+          asset={asset}
+          error={reportError}
+          onClose={() => setReportOpen(false)}
+          onSubmit={(reason) => void submitAssetReport(reason)}
+          saving={reportSaving}
+        />
       )}
     </div>
   );

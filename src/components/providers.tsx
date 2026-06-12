@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 type ApiKeyContextValue = {
   apiKey: string;
@@ -18,11 +18,21 @@ type SidebarContextValue = {
   toggleSidebar: () => void;
 };
 
+type ThemeMode = "light" | "dark";
+
+type ThemeContextValue = {
+  theme: ThemeMode;
+  setTheme: (value: ThemeMode) => void;
+  toggleTheme: () => void;
+};
+
 const ApiKeyContext = createContext<ApiKeyContextValue | undefined>(undefined);
 const CommandPaletteContext = createContext<CommandPaletteContextValue | undefined>(undefined);
 const SidebarContext = createContext<SidebarContextValue | undefined>(undefined);
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "cerebro.apiKey";
+const THEME_STORAGE_KEY = "cerebro.theme";
 
 const notifyKeyChange = () => {
   window.dispatchEvent(new Event("cerebro-api-key"));
@@ -94,6 +104,42 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "light";
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("dark", theme === "dark");
+    root.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  const contextValue = useMemo(
+    () => ({
+      theme,
+      setTheme: setThemeState,
+      toggleTheme: () => setThemeState((value) => value === "dark" ? "light" : "dark"),
+    }),
+    [theme],
+  );
+
+  return (
+    <ThemeContext.Provider value={contextValue}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
 export function useSidebar() {
   const context = useContext(SidebarContext);
   if (!context) throw new Error("useSidebar must be used within SidebarProvider");
@@ -112,6 +158,14 @@ export function useCommandPalette() {
   const context = useContext(CommandPaletteContext);
   if (!context) {
     throw new Error("useCommandPalette must be used within CommandPaletteProvider");
+  }
+  return context;
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error("useTheme must be used within ThemeProvider");
   }
   return context;
 }

@@ -31,7 +31,7 @@ export default function AskAboutLink({
   const cls =
     className ?? (variant === "button" ? baseButton : baseLink);
   return (
-    <Link href={href} className={cls} title={title ?? question} prefetch={false}>
+    <Link href={href} className={cls} title={title ?? "Ask Cerebro about this context"} prefetch={false}>
       {children ?? "Ask about this"}
     </Link>
   );
