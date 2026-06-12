@@ -99,6 +99,78 @@ export type GRCGraph = {
   relations?: GRCGraphRelation[];
 };
 
+export type GRCInventoryCategory = {
+  id: string;
+  label: string;
+  entity_types: string[];
+  count: number;
+};
+
+export type GRCInventoryAsset = {
+  urn: string;
+  entity_type: string;
+  label: string;
+  source_id?: string;
+  runtime_id?: string;
+  attributes?: Record<string, string>;
+};
+
+export type GRCInventoryCategoriesResponse = {
+  categories: GRCInventoryCategory[];
+  generated_at: string;
+};
+
+export type GRCInventoryAssetsResponse = {
+  assets: GRCInventoryAsset[];
+  generated_at: string;
+};
+
+export type GRCInventoryTest = {
+  name: string;
+  owner: string;
+  status: string;
+  due_at?: string;
+  control_id?: string;
+  framework?: string;
+  finding_id?: string;
+  finding_title?: string;
+};
+
+export type GRCInventoryVulnerability = {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  source_id?: string;
+  finding_id?: string;
+};
+
+export type GRCInventoryAssetDetail = {
+  asset: GRCInventoryAsset;
+  graph?: GRCGraph;
+  findings: GRCFinding[];
+  evidence: GRCEvidence[];
+  controls: GRCControl[];
+  tests: GRCInventoryTest[];
+  vulnerabilities: GRCInventoryVulnerability[];
+  generated_at: string;
+};
+
+export type GRCResourceScopeRuntime = {
+  runtime_id: string;
+  tenant_id?: string;
+  owner?: string;
+  family?: string;
+  status: string;
+};
+
+export type GRCResourceScopeResponse = {
+  source_id: string;
+  runtimes: GRCResourceScopeRuntime[];
+  resources: GRCInventoryAsset[];
+  generated_at: string;
+};
+
 export type GRCDashboard = {
   summary: GRCSummary;
   findings: GRCFinding[];

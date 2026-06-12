@@ -43,6 +43,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["claims", "events", "proof", "audit"],
   },
   {
+    label: "Inventory",
+    href: "/inventory",
+    description: "Browse assets, owners, scope, tests, vulnerabilities, and graph context.",
+    section: "Operator",
+    keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities"],
+  },
+  {
     label: "Impact map",
     href: "/impact",
     description: "Entity impact graph and related risk blast radius.",
