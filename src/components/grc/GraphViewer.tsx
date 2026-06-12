@@ -1,285 +1,640 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import cytoscape from "cytoscape";
 
-import { GRCGraph, GRCGraphNode, riskLevelFromScore, shortEntity } from "@/lib/grc";
+import { useTheme } from "@/components/providers";
+import { GRCGraph, GRCGraphNode, GRCGraphRelation, riskLevelFromScore, shortEntity } from "@/lib/grc";
 
-type NodeWithPosition = GRCGraphNode & { x: number; y: number; radius: number; ring: number };
+type GraphNodeModel = GRCGraphNode & {
+  isRoot: boolean;
+  risk?: number;
+  typeKey: string;
+};
 
-const TYPE_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
-  finding:  { bg: "#fef2f2", fg: "#991b1b", border: "#fca5a5" },
+type GraphEdgeModel = GRCGraphRelation & {
+  id: string;
+  label: string;
+  risk?: number;
+};
+
+type LayoutMode = "concentric" | "cose" | "breadthfirst" | "circle";
+type RiskLevel = "critical" | "high" | "medium" | "low" | "unknown";
+type RiskFilter = "all" | RiskLevel;
+
+const NODE_LIMIT = 120;
+const EDGE_LABEL_LIMIT = 42;
+const RISK_FILTERS: RiskLevel[] = ["critical", "high", "medium", "low", "unknown"];
+
+const LIGHT_TYPE_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
+  finding: { bg: "#fef2f2", fg: "#991b1b", border: "#fca5a5" },
   identity: { bg: "#eff6ff", fg: "#1e3a5f", border: "#93c5fd" },
-  asset:    { bg: "#ecfdf5", fg: "#064e3b", border: "#6ee7b7" },
-  package:  { bg: "#fffbeb", fg: "#78350f", border: "#fcd34d" },
-  threat:   { bg: "#fdf2f8", fg: "#831843", border: "#f9a8d4" },
-  default:  { bg: "#f8fafc", fg: "#1e293b", border: "#cbd5e1" },
+  asset: { bg: "#ecfdf5", fg: "#064e3b", border: "#6ee7b7" },
+  package: { bg: "#fffbeb", fg: "#78350f", border: "#fcd34d" },
+  threat: { bg: "#fdf2f8", fg: "#831843", border: "#f9a8d4" },
+  default: { bg: "#f8fafc", fg: "#1e293b", border: "#cbd5e1" },
+};
+
+const DARK_TYPE_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
+  finding: { bg: "#3f1218", fg: "#fecdd3", border: "#fb7185" },
+  identity: { bg: "#13253f", fg: "#bfdbfe", border: "#60a5fa" },
+  asset: { bg: "#0f3227", fg: "#a7f3d0", border: "#34d399" },
+  package: { bg: "#3a2a0a", fg: "#fde68a", border: "#f59e0b" },
+  threat: { bg: "#3b1230", fg: "#fbcfe8", border: "#f472b6" },
+  default: { bg: "#1f2937", fg: "#e5e7eb", border: "#64748b" },
+};
+
+const RISK_COLORS: Record<RiskLevel, string> = {
+  critical: "#dc2626",
+  high: "#ea580c",
+  medium: "#d97706",
+  low: "#2563eb",
+  unknown: "#94a3b8",
 };
 
 const resolveTypeKey = (type: string) => {
-  const t = type.toLowerCase();
-  if (t.includes("finding")) return "finding";
-  if (t.includes("user") || t.includes("identity") || t.includes("account") || t.includes("group")) return "identity";
-  if (t.includes("asset") || t.includes("agent") || t.includes("endpoint") || t.includes("device")) return "asset";
-  if (t.includes("package") || t.includes("vuln")) return "package";
-  if (t.includes("threat") || t.includes("malware") || t.includes("infection")) return "threat";
+  const normalized = type.toLowerCase();
+  if (normalized.includes("finding")) return "finding";
+  if (normalized.includes("user") || normalized.includes("identity") || normalized.includes("account") || normalized.includes("group")) return "identity";
+  if (normalized.includes("asset") || normalized.includes("agent") || normalized.includes("endpoint") || normalized.includes("device") || normalized.includes("repository")) return "asset";
+  if (normalized.includes("package") || normalized.includes("vuln") || normalized.includes("cve")) return "package";
+  if (normalized.includes("threat") || normalized.includes("malware") || normalized.includes("infection")) return "threat";
   return "default";
 };
 
-const palette = (type: string, root?: boolean) => {
-  if (root) return { bg: "#4f46e5", fg: "#ffffff", border: "#818cf8" };
-  return TYPE_PALETTE[resolveTypeKey(type)] ?? TYPE_PALETTE.default;
-};
-
-const RISK_COLORS: Record<string, { ring: string; badge: string }> = {
-  critical: { ring: "#dc2626", badge: "#ef4444" },
-  high:     { ring: "#ea580c", badge: "#f97316" },
-  medium:   { ring: "#d97706", badge: "#f59e0b" },
-  low:      { ring: "#2563eb", badge: "#3b82f6" },
-  unknown:  { ring: "#94a3b8", badge: "#94a3b8" },
-};
-
-const riskStyle = (score?: number) => RISK_COLORS[riskLevelFromScore(score)] ?? RISK_COLORS.unknown;
+const typeLabel = (key: string) => key === "default" ? "other" : key;
 
 const parseRisk = (attrs?: Record<string, string>) => {
   const raw = attrs?.risk_score;
   if (!raw) return undefined;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
 };
 
-const truncateLabel = (label: string, max: number) => (label.length > max ? label.slice(0, max - 1) + "\u2026" : label);
+const riskLevel = (score?: number) => riskLevelFromScore(score) as RiskLevel;
 
-const layout = (graph?: GRCGraph) => {
-  const root = graph?.root;
-  const neighbors = (graph?.neighbors ?? []).slice(0, 60);
-  const W = 960;
-  const H = 620;
-  const cx = W / 2;
-  const cy = H / 2;
-  const nodes = new Map<string, NodeWithPosition>();
+const truncateLabel = (label: string, max: number) => label.length > max ? `${label.slice(0, max - 1)}…` : label;
 
-  if (root) nodes.set(root.urn, { ...root, x: cx, y: cy, radius: 38, ring: -1 });
+const humanizeRelation = (value: string) =>
+  value.replace(/[_./-]+/g, " ").replace(/\s+/g, " ").trim() || "related";
 
-  const rings = [
-    { count: Math.min(12, neighbors.length), distance: 160, nodeR: 26 },
-    { count: Math.min(20, Math.max(0, neighbors.length - 12)), distance: 275, nodeR: 22 },
-    { count: Math.max(0, neighbors.length - 32), distance: 380, nodeR: 18 },
-  ];
+const paletteFor = (typeKey: string, isRoot: boolean, theme: "light" | "dark") => {
+  if (isRoot) {
+    return theme === "dark"
+      ? { bg: "#7c3aed", fg: "#ffffff", border: "#a78bfa" }
+      : { bg: "#4f46e5", fg: "#ffffff", border: "#818cf8" };
+  }
+  const palette = theme === "dark" ? DARK_TYPE_PALETTE : LIGHT_TYPE_PALETTE;
+  return palette[typeKey] ?? palette.default;
+};
 
-  let idx = 0;
-  rings.forEach((ring, ringIdx) => {
-    for (let i = 0; i < ring.count; i++) {
-      const node = neighbors[idx];
-      if (!node) break;
-      const angle = -Math.PI / 2 + (2 * Math.PI * i) / ring.count + (ringIdx * Math.PI) / ring.count;
-      nodes.set(node.urn, {
-        ...node,
-        x: cx + Math.cos(angle) * ring.distance,
-        y: cy + Math.sin(angle) * ring.distance,
-        radius: ring.nodeR,
-        ring: ringIdx,
-      });
-      idx++;
-    }
+const fallbackNode = (urn: string): GRCGraphNode => ({
+  urn,
+  entity_type: "entity",
+  label: shortEntity(urn),
+  attributes: {},
+});
+
+const normalizeGraph = (graph?: GRCGraph) => {
+  const nodesById = new Map<string, GraphNodeModel>();
+  const addNode = (node: GRCGraphNode | undefined, isRoot = false) => {
+    if (!node?.urn) return;
+    const current = nodesById.get(node.urn);
+    const nextType = node.entity_type || current?.entity_type || "entity";
+    const nextRisk = parseRisk(node.attributes) ?? current?.risk;
+    nodesById.set(node.urn, {
+      ...current,
+      ...node,
+      entity_type: nextType,
+      label: node.label || current?.label || shortEntity(node.urn),
+      attributes: { ...(current?.attributes ?? {}), ...(node.attributes ?? {}) },
+      isRoot: isRoot || current?.isRoot || false,
+      risk: nextRisk,
+      typeKey: resolveTypeKey(nextType),
+    });
+  };
+
+  addNode(graph?.root, true);
+  (graph?.neighbors ?? []).forEach((node) => addNode(node));
+  (graph?.relations ?? []).forEach((relation) => {
+    if (!nodesById.has(relation.from_urn)) addNode(fallbackNode(relation.from_urn));
+    if (!nodesById.has(relation.to_urn)) addNode(fallbackNode(relation.to_urn));
   });
 
-  return { W, H, nodes };
+  const allNodes = Array.from(nodesById.values()).sort((left, right) => {
+    if (left.isRoot) return -1;
+    if (right.isRoot) return 1;
+    return (right.risk ?? 0) - (left.risk ?? 0) || left.label.localeCompare(right.label);
+  });
+  const nodes = allNodes.slice(0, NODE_LIMIT);
+  const visibleIds = new Set(nodes.map((node) => node.urn));
+
+  const edges = (graph?.relations ?? []).flatMap((relation, index): GraphEdgeModel[] => {
+    if (!visibleIds.has(relation.from_urn) || !visibleIds.has(relation.to_urn)) return [];
+    const relationRisk = parseRisk(relation.attributes);
+    if (relationRisk != null) {
+      const from = nodesById.get(relation.from_urn);
+      const to = nodesById.get(relation.to_urn);
+      if (from) from.risk = Math.max(from.risk ?? 0, relationRisk);
+      if (to) to.risk = Math.max(to.risk ?? 0, relationRisk);
+    }
+    return [{
+      ...relation,
+      id: `${relation.from_urn}:${relation.relation}:${relation.to_urn}:${index}`,
+      label: humanizeRelation(relation.relation),
+      risk: relationRisk,
+    }];
+  });
+
+  if (edges.length === 0 && graph?.root) {
+    nodes
+      .filter((node) => node.urn !== graph.root?.urn)
+      .forEach((node, index) => {
+        edges.push({
+          from_urn: graph.root?.urn ?? "",
+          to_urn: node.urn,
+          relation: "related",
+          id: `${graph.root?.urn}:related:${node.urn}:${index}`,
+          label: "related",
+        });
+      });
+  }
+
+  const typeCounts = nodes.reduce((counts, node) => {
+    counts.set(node.typeKey, (counts.get(node.typeKey) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+
+  return {
+    root: graph?.root ? nodesById.get(graph.root.urn) : undefined,
+    nodes,
+    edges,
+    nodeById: new Map(nodes.map((node) => [node.urn, node])),
+    totalNodes: allNodes.length,
+    totalEdges: graph?.relations?.length ?? edges.length,
+    hiddenNodes: Math.max(0, allNodes.length - nodes.length),
+    hiddenEdges: Math.max(0, (graph?.relations?.length ?? edges.length) - edges.length),
+    typeCounts: Array.from(typeCounts.entries()).sort((left, right) => left[0].localeCompare(right[0])),
+  };
 };
 
-function NodeTooltip({ node, risk, x, y }: { node: NodeWithPosition; risk?: number; x: number; y: number }) {
-  const w = 200;
-  const tx = Math.min(Math.max(x - w / 2, 8), 960 - w - 8);
-  const ty = y - node.radius - 52;
+const graphText = (node: GraphNodeModel) =>
+  [
+    node.urn,
+    node.label,
+    node.entity_type,
+    ...Object.entries(node.attributes ?? {}).flatMap(([key, value]) => [key, value]),
+  ].join(" ").toLowerCase();
+
+const cytoscapeColors = () => {
+  const root = document.documentElement;
+  const css = getComputedStyle(root);
+  const value = (key: string, fallback: string) => css.getPropertyValue(key).trim() || fallback;
+  return {
+    primary: value("--primary", "#4f46e5"),
+    border: value("--border", "#e5e7eb"),
+    borderStrong: value("--border-strong", "#cbd5e1"),
+    surface: value("--surface", "#ffffff"),
+    surfaceMuted: value("--surface-muted", "#f8fafc"),
+    textPrimary: value("--text-primary", "#0f172a"),
+    textMuted: value("--text-muted", "#64748b"),
+  };
+};
+
+const graphStyles = (colors: ReturnType<typeof cytoscapeColors>) => ([
+  {
+    selector: "node",
+    style: {
+      width: "data(size)",
+      height: "data(size)",
+      label: "data(labelShort)",
+      "background-color": "data(bg)",
+      "border-color": "data(borderColor)",
+      "border-width": "data(borderWidth)",
+      color: "data(fg)",
+      "font-size": 10,
+      "font-weight": 700,
+      "text-valign": "center",
+      "text-halign": "center",
+      "text-wrap": "wrap",
+      "text-max-width": 82,
+      "overlay-padding": 8,
+      "transition-property": "background-color, border-color, opacity",
+      "transition-duration": 120,
+    },
+  },
+  {
+    selector: "node:selected",
+    style: {
+      "border-color": colors.primary,
+      "border-width": 5,
+      "shadow-blur": 16,
+      "shadow-color": colors.primary,
+      "shadow-opacity": 0.28,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+      "z-index": 20,
+    },
+  },
+  {
+    selector: "edge",
+    style: {
+      label: "data(labelShort)",
+      width: "data(width)",
+      "line-color": "data(color)",
+      "target-arrow-color": "data(color)",
+      "target-arrow-shape": "triangle",
+      "curve-style": "bezier",
+      opacity: 0.78,
+      "font-size": 9,
+      color: colors.textMuted,
+      "text-background-color": colors.surface,
+      "text-background-opacity": 0.92,
+      "text-background-padding": 2,
+      "text-rotation": "autorotate",
+      "text-margin-y": -6,
+      "overlay-padding": 4,
+    },
+  },
+  {
+    selector: "edge:selected",
+    style: {
+      width: 3,
+      "line-color": colors.primary,
+      "target-arrow-color": colors.primary,
+      opacity: 1,
+      "z-index": 10,
+    },
+  },
+  {
+    selector: ".highlighted",
+    style: {
+      opacity: 1,
+      "z-index": 30,
+    },
+  },
+  {
+    selector: ".faded",
+    style: {
+      opacity: 0.16,
+      "text-opacity": 0.08,
+    },
+  },
+]) as cytoscape.StylesheetJson;
+
+const layoutOptions = (mode: LayoutMode): Record<string, unknown> => {
+  if (mode === "cose") {
+    return {
+      name: "cose",
+      animate: false,
+      fit: true,
+      padding: 52,
+      randomize: false,
+      componentSpacing: 90,
+      nodeRepulsion: 9000,
+      idealEdgeLength: 110,
+      edgeElasticity: 120,
+    };
+  }
+  if (mode === "breadthfirst") {
+    return {
+      name: "breadthfirst",
+      directed: true,
+      animate: false,
+      fit: true,
+      padding: 52,
+      spacingFactor: 1.2,
+    };
+  }
+  if (mode === "circle") {
+    return {
+      name: "circle",
+      animate: false,
+      fit: true,
+      padding: 52,
+    };
+  }
+  return {
+    name: "concentric",
+    animate: false,
+    fit: true,
+    padding: 52,
+    minNodeSpacing: 54,
+    concentric: (node: cytoscape.NodeSingular) => node.data("isRoot") ? 1000 : (node.data("risk") ?? 0) + node.degree() * 6,
+    levelWidth: () => 2,
+  };
+};
+
+function ActionLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <g>
-      <rect x={tx} y={ty} width={w} height={44} rx={6} fill="#0f172a" fillOpacity={0.92} />
-      <text x={tx + 10} y={ty + 16} className="text-[11px] font-semibold" fill="#f8fafc">{truncateLabel(node.label, 28)}</text>
-      <text x={tx + 10} y={ty + 32} className="text-[10px]" fill="#94a3b8">
-        {node.entity_type}{risk != null ? ` · Risk ${risk}` : ""}
-      </text>
-    </g>
+    <Link href={href} className="secondary-button px-2.5 py-1.5 text-[12px]" prefetch={false}>
+      {children}
+    </Link>
   );
 }
 
 export default function GraphViewer({ graph }: { graph?: GRCGraph }) {
-  const model = useMemo(() => layout(graph), [graph]);
-  const nodes = useMemo(() => Array.from(model.nodes.values()), [model.nodes]);
-  const [hoveredURN, setHoveredURN] = useState<string | null>(null);
+  const { theme } = useTheme();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const cyRef = useRef<cytoscape.Core | null>(null);
+  const [selectedURN, setSelectedURN] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
 
-  const relations = useMemo(() => {
-    const ids = new Set(nodes.map((n) => n.urn));
-    return (graph?.relations ?? []).filter((r) => ids.has(r.from_urn) && ids.has(r.to_urn));
-  }, [graph?.relations, nodes]);
+  const model = useMemo(() => normalizeGraph(graph), [graph]);
+  const normalizedQuery = query.trim().toLowerCase();
 
-  const nodeRiskScores = useMemo(() => {
-    const scores = new Map<string, number>();
-    nodes.forEach((n) => {
-      const r = parseRisk(n.attributes);
-      if (r != null) scores.set(n.urn, r);
+  const view = useMemo(() => {
+    const displayNodes = model.nodes.filter((node) => {
+      const isRoot = node.urn === model.root?.urn;
+      const matchesQuery = !normalizedQuery || graphText(node).includes(normalizedQuery);
+      const matchesType = typeFilter === "all" || node.typeKey === typeFilter;
+      const matchesRisk = riskFilter === "all" || riskLevel(node.risk) === riskFilter;
+      return isRoot || (matchesQuery && matchesType && matchesRisk);
     });
-    relations.forEach((r) => {
-      const s = parseRisk(r.attributes);
-      if (s == null) return;
-      scores.set(r.from_urn, Math.max(scores.get(r.from_urn) ?? 0, s));
-      scores.set(r.to_urn, Math.max(scores.get(r.to_urn) ?? 0, s));
+    const displayIds = new Set(displayNodes.map((node) => node.urn));
+    const displayEdges = model.edges.filter((edge) => displayIds.has(edge.from_urn) && displayIds.has(edge.to_urn));
+    const showEdgeLabels = displayEdges.length <= EDGE_LABEL_LIMIT;
+    const nodeElements: cytoscape.ElementDefinition[] = displayNodes.map((node) => {
+      const isRoot = node.urn === model.root?.urn;
+      const typePalette = paletteFor(node.typeKey, isRoot, theme);
+      const risk = node.risk;
+      const level = riskLevel(risk);
+      const riskColor = risk != null ? RISK_COLORS[level] : typePalette.border;
+      return {
+        group: "nodes",
+        data: {
+          id: node.urn,
+          label: node.label,
+          labelShort: truncateLabel(shortEntity(node.label || node.urn), isRoot ? 24 : 18),
+          type: node.entity_type,
+          typeKey: node.typeKey,
+          isRoot,
+          risk,
+          bg: typePalette.bg,
+          fg: typePalette.fg,
+          borderColor: isRoot ? typePalette.border : riskColor,
+          borderWidth: isRoot ? 4 : risk != null ? 3 : 2,
+          size: isRoot ? 62 : risk != null && risk >= 70 ? 46 : 38,
+        },
+        classes: `${isRoot ? "root " : ""}type-${node.typeKey} risk-${level}`,
+      };
     });
-    return scores;
-  }, [nodes, relations]);
+    const edgeElements: cytoscape.ElementDefinition[] = displayEdges.map((edge) => {
+      const level = riskLevel(edge.risk);
+      const color = edge.risk != null ? RISK_COLORS[level] : undefined;
+      return {
+        group: "edges",
+        data: {
+          id: edge.id,
+          source: edge.from_urn,
+          target: edge.to_urn,
+          label: edge.label,
+          labelShort: showEdgeLabels ? truncateLabel(edge.label, 18) : "",
+          risk: edge.risk,
+          color: color ?? undefined,
+          width: edge.risk != null ? 2.4 : 1.3,
+        },
+        classes: `risk-${level}`,
+      };
+    });
+    return {
+      nodes: displayNodes,
+      edges: displayEdges,
+      nodeIds: displayIds,
+      elements: [...nodeElements, ...edgeElements],
+      filteredNodes: Math.max(0, model.nodes.length - displayNodes.length),
+      filteredEdges: Math.max(0, model.edges.length - displayEdges.length),
+    };
+  }, [model, normalizedQuery, riskFilter, theme, typeFilter]);
 
-  const connectedURNs = useMemo(() => {
-    if (!hoveredURN) return null;
-    const s = new Set<string>();
-    relations.forEach((r) => {
-      if (r.from_urn === hoveredURN) s.add(r.to_urn);
-      if (r.to_urn === hoveredURN) s.add(r.from_urn);
+  const activeSelectedURN = selectedURN && view.nodeIds.has(selectedURN)
+    ? selectedURN
+    : model.root?.urn ?? view.nodes[0]?.urn ?? null;
+  const selectedNode = activeSelectedURN ? model.nodeById.get(activeSelectedURN) : undefined;
+  const selectedEdges = selectedNode
+    ? model.edges.filter((edge) => edge.from_urn === selectedNode.urn || edge.to_urn === selectedNode.urn).slice(0, 8)
+    : [];
+  const selectedAttributes = Object.entries(selectedNode?.attributes ?? {}).slice(0, 8);
+  const askHref = selectedNode
+    ? `/ask?${new URLSearchParams({
+      q: `Explain the blast radius and compliance impact of ${selectedNode.urn}.`,
+      scope_urn: selectedNode.urn,
+    }).toString()}`
+    : "/ask";
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || view.elements.length === 0) return;
+
+    const colors = cytoscapeColors();
+    const styledElements = view.elements.map((element) => {
+      if (element.group !== "edges" || element.data?.color) return element;
+      return {
+        ...element,
+        data: {
+          ...element.data,
+          color: colors.borderStrong,
+        },
+      };
     });
-    s.add(hoveredURN);
-    return s;
-  }, [hoveredURN, relations]);
+    const instance = cytoscape({
+      container,
+      elements: styledElements,
+      style: graphStyles(colors),
+      minZoom: 0.18,
+      maxZoom: 3,
+      wheelSensitivity: 0.18,
+      boxSelectionEnabled: true,
+      autoungrabify: false,
+    });
+    cyRef.current = instance;
+
+    const options = layoutOptions(layoutMode);
+    if (layoutMode === "breadthfirst" && model.root?.urn) {
+      options.roots = instance.getElementById(model.root.urn);
+    }
+    instance.layout(options as unknown as cytoscape.LayoutOptions).run();
+    window.requestAnimationFrame(() => instance.fit(undefined, 42));
+
+    const selectNode = (event: cytoscape.EventObject) => {
+      const node = event.target as cytoscape.NodeSingular;
+      setSelectedURN(node.id());
+    };
+    const focusNode = (event: cytoscape.EventObject) => {
+      const node = event.target as cytoscape.NodeSingular;
+      const neighborhood = node.closedNeighborhood();
+      instance.elements().removeClass("highlighted").addClass("faded");
+      neighborhood.removeClass("faded").addClass("highlighted");
+    };
+    const resetFocus = () => {
+      instance.elements().removeClass("faded highlighted");
+    };
+    const selectCanvas = (event: cytoscape.EventObject) => {
+      if (event.target === instance) {
+        setSelectedURN(null);
+      }
+    };
+
+    instance.on("tap", "node", selectNode);
+    instance.on("mouseover", "node", focusNode);
+    instance.on("mouseout", "node", resetFocus);
+    instance.on("tap", selectCanvas);
+
+    return () => {
+      instance.destroy();
+      if (cyRef.current === instance) {
+        cyRef.current = null;
+      }
+    };
+  }, [layoutMode, model.root?.urn, view.elements]);
+
+  useEffect(() => {
+    const instance = cyRef.current;
+    if (!instance) return;
+    instance.nodes().unselect();
+    if (activeSelectedURN) {
+      instance.getElementById(activeSelectedURN).select();
+    }
+  }, [activeSelectedURN, view.elements]);
 
   if (!graph?.root) {
-    return <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-12 text-[13px] text-slate-500">No graph context available.</div>;
+    return (
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-[color:var(--border)] bg-[var(--surface-muted)] p-12 text-[13px] text-[var(--text-muted)]">
+        No graph context available.
+      </div>
+    );
   }
 
-  const hoveredNode = hoveredURN ? model.nodes.get(hoveredURN) : null;
-  const hoveredRisk = hoveredURN ? nodeRiskScores.get(hoveredURN) : undefined;
+  const fitGraph = () => cyRef.current?.fit(undefined, 42);
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 bg-slate-50/80 px-4 py-2.5 text-[12px]">
-        <span className="text-slate-600 font-medium">{nodes.length} nodes</span>
-        <span className="text-slate-300">&middot;</span>
-        <span className="text-slate-600 font-medium">{relations.length} edges</span>
-        <span className="text-slate-300">&middot;</span>
-        <span className="text-slate-500">Root: <span className="font-semibold text-indigo-600">{graph.root.label}</span></span>
-        <div className="ml-auto flex items-center gap-3">
-          {Object.entries(TYPE_PALETTE).filter(([k]) => k !== "default").map(([key, c]) => (
-            <span key={key} className="flex items-center gap-1">
-              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c.border }} />
-              <span className="capitalize text-slate-500">{key}</span>
+    <div className="surface-panel overflow-hidden">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-[12px]">
+        <span className="font-semibold text-[var(--text-primary)]">{view.nodes.length} nodes</span>
+        <span className="text-[var(--text-muted)]">{view.edges.length} edges</span>
+        <span className="text-[var(--text-muted)]">Root: <span className="font-semibold text-[var(--primary)]">{graph.root.label}</span></span>
+        {model.hiddenNodes > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">{model.hiddenNodes} hidden by cap</span>}
+        {(view.filteredNodes > 0 || view.filteredEdges > 0) && <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[var(--text-muted)]">{view.filteredNodes} filtered</span>}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {model.typeCounts.map(([type, count]) => (
+            <span key={type} className="rounded-full border border-[color:var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[var(--text-muted)]">
+              {typeLabel(type)}: {count}
             </span>
           ))}
         </div>
       </div>
-      <svg
-        viewBox={`0 0 ${model.W} ${model.H}`}
-        className="h-[620px] min-w-[900px]"
-        role="img"
-        aria-label="Impact graph"
-        onMouseLeave={() => setHoveredURN(null)}
-      >
-        <defs>
-          <filter id="node-shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.08" />
-          </filter>
-          <filter id="node-glow" x="-30%" y="-30%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#6366f1" floodOpacity="0.3" />
-          </filter>
-        </defs>
 
-        {/* Edges */}
-        {relations.map((r) => {
-          const from = model.nodes.get(r.from_urn);
-          const to = model.nodes.get(r.to_urn);
-          if (!from || !to) return null;
-          const risk = parseRisk(r.attributes);
-          const dimmed = connectedURNs && !connectedURNs.has(r.from_urn) && !connectedURNs.has(r.to_urn);
-          const highlighted = connectedURNs && (r.from_urn === hoveredURN || r.to_urn === hoveredURN);
-          const dx = to.x - from.x;
-          const dy = to.y - from.y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          const x1 = from.x + nx * from.radius;
-          const y1 = from.y + ny * from.radius;
-          const x2 = to.x - nx * (to.radius + 4);
-          const y2 = to.y - ny * (to.radius + 4);
-          return (
-            <line
-              key={`${r.from_urn}-${r.relation}-${r.to_urn}`}
-              x1={x1} y1={y1} x2={x2} y2={y2}
-              stroke={highlighted ? "#6366f1" : risk ? riskStyle(risk).ring : "#e2e8f0"}
-              strokeWidth={highlighted ? 2.5 : risk ? 2 : 1}
-              strokeOpacity={dimmed ? 0.15 : 1}
-              strokeDasharray={risk ? undefined : "4 3"}
+      <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap gap-2 border-b border-[color:var(--border)] px-4 py-3">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search graph"
+              className="control-input min-w-[220px] flex-1 px-3 py-1.5 text-[13px]"
             />
-          );
-        })}
+            <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="control-input px-2.5 py-1.5 text-[13px]">
+              <option value="all">All types</option>
+              {model.typeCounts.map(([type]) => <option key={type} value={type}>{typeLabel(type)}</option>)}
+            </select>
+            <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value as RiskFilter)} className="control-input px-2.5 py-1.5 text-[13px]">
+              <option value="all">All risk</option>
+              {RISK_FILTERS.map((risk) => <option key={risk} value={risk}>{risk}</option>)}
+            </select>
+            <select value={layoutMode} onChange={(event) => setLayoutMode(event.target.value as LayoutMode)} className="control-input px-2.5 py-1.5 text-[13px]">
+              <option value="concentric">Concentric</option>
+              <option value="cose">Force</option>
+              <option value="breadthfirst">Directed</option>
+              <option value="circle">Circle</option>
+            </select>
+            <button type="button" onClick={fitGraph} className="secondary-button px-2.5 py-1.5 text-[13px]">
+              Fit
+            </button>
+            <button type="button" onClick={() => { setQuery(""); setTypeFilter("all"); setRiskFilter("all"); setSelectedURN(null); }} className="secondary-button px-2.5 py-1.5 text-[13px]">
+              Clear
+            </button>
+          </div>
+          <div
+            ref={containerRef}
+            className="h-[640px] min-w-[820px] bg-[var(--surface)]"
+            role="img"
+            aria-label={`Impact graph with ${view.nodes.length} nodes and ${view.edges.length} edges`}
+          />
+        </div>
 
-        {/* Nodes */}
-        {nodes.map((node) => {
-          const isRoot = node.urn === graph.root?.urn;
-          const c = palette(node.entity_type, isRoot);
-          const risk = parseRisk(node.attributes) ?? nodeRiskScores.get(node.urn);
-          const rs = risk != null ? riskStyle(risk) : null;
-          const dimmed = connectedURNs && !connectedURNs.has(node.urn);
-          const isHovered = node.urn === hoveredURN;
-          const r = node.radius;
-          const labelMaxChars = r >= 30 ? 12 : r >= 24 ? 8 : 6;
+        <aside className="border-t border-[color:var(--border)] bg-[var(--surface)] p-4 xl:border-l xl:border-t-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Selected node</div>
+          {selectedNode ? (
+            <div className="mt-3 space-y-4">
+              <div>
+                <div className="break-words text-[14px] font-semibold text-[var(--text-primary)]">{selectedNode.label}</div>
+                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{selectedNode.entity_type}</div>
+                <div className="mt-2 break-all font-mono text-[11px] text-[var(--text-muted)]">{selectedNode.urn}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md bg-[var(--surface-muted)] px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Risk</div>
+                  <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{selectedNode.risk ?? "No score"}</div>
+                </div>
+                <div className="rounded-md bg-[var(--surface-muted)] px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Links</div>
+                  <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{selectedEdges.length}</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <ActionLink href={`/inventory/${encodeURIComponent(selectedNode.urn)}`}>Inventory</ActionLink>
+                <ActionLink href={`/impact?root_urn=${encodeURIComponent(selectedNode.urn)}`}>Impact</ActionLink>
+                <ActionLink href={`/evidence?graph_root_urn=${encodeURIComponent(selectedNode.urn)}`}>Evidence</ActionLink>
+                <ActionLink href={askHref}>Ask</ActionLink>
+              </div>
+              <div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Visible relationships</div>
+                <div className="space-y-2">
+                  {selectedEdges.map((edge) => {
+                    const otherURN = edge.from_urn === selectedNode.urn ? edge.to_urn : edge.from_urn;
+                    const other = model.nodeById.get(otherURN);
+                    return (
+                      <button
+                        key={edge.id}
+                        type="button"
+                        onClick={() => setSelectedURN(otherURN)}
+                        className="block w-full rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-left transition hover:border-[color:var(--border-strong)]"
+                      >
+                        <div className="text-[12px] font-semibold text-[var(--text-primary)]">{edge.label}</div>
+                        <div className="mt-1 truncate text-[11px] text-[var(--text-muted)]">{other?.label ?? shortEntity(otherURN)}</div>
+                      </button>
+                    );
+                  })}
+                  {selectedEdges.length === 0 && <div className="text-[13px] text-[var(--text-muted)]">No visible relationships.</div>}
+                </div>
+              </div>
+              {selectedAttributes.length > 0 && (
+                <div>
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Attributes</div>
+                  <div className="space-y-1.5">
+                    {selectedAttributes.map(([key, value]) => (
+                      <div key={key} className="rounded-md bg-[var(--surface-muted)] px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{key}</div>
+                        <div className="mt-1 break-words text-[12px] text-[var(--text-secondary)]">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-3 text-[13px] text-[var(--text-muted)]">Select a node to inspect relationships and actions.</div>
+          )}
+        </aside>
+      </div>
 
-          return (
-            <g
-              key={node.urn}
-              opacity={dimmed ? 0.2 : 1}
-              style={{ transition: "opacity 0.15s" }}
-              onMouseEnter={() => setHoveredURN(node.urn)}
-              className="cursor-pointer"
-            >
-              {/* Risk ring */}
-              {rs && (
-                <circle cx={node.x} cy={node.y} r={r + 4} fill="none" stroke={rs.ring} strokeWidth={3} strokeOpacity={0.5} />
-              )}
-              {/* Node body */}
-              <circle
-                cx={node.x} cy={node.y} r={r}
-                fill={c.bg}
-                stroke={isHovered ? "#6366f1" : c.border}
-                strokeWidth={isRoot ? 3 : 2}
-                filter={isRoot ? "url(#node-glow)" : "url(#node-shadow)"}
-              />
-              {/* Inner label */}
-              <text
-                x={node.x} y={node.y + (isRoot ? -3 : 1)}
-                textAnchor="middle" dominantBaseline="central"
-                className={`pointer-events-none font-semibold ${isRoot ? "text-[11px]" : r >= 24 ? "text-[10px]" : "text-[9px]"}`}
-                fill={c.fg}
-              >
-                {truncateLabel(shortEntity(node.label), labelMaxChars)}
-              </text>
-              {/* Entity type below label (root only) */}
-              {isRoot && (
-                <text x={node.x} y={node.y + 11} textAnchor="middle" className="pointer-events-none text-[9px]" fill={c.fg} fillOpacity={0.7}>
-                  {node.entity_type}
-                </text>
-              )}
-              {/* Risk badge */}
-              {rs && risk != null && r >= 22 && (
-                <g>
-                  <circle cx={node.x + r * 0.7} cy={node.y - r * 0.7} r={9} fill={rs.badge} stroke="#ffffff" strokeWidth={1.5} />
-                  <text x={node.x + r * 0.7} y={node.y - r * 0.7 + 1} textAnchor="middle" dominantBaseline="central" className="pointer-events-none text-[8px] font-bold" fill="#ffffff">
-                    {risk}
-                  </text>
-                </g>
-              )}
-              {/* External label for non-root large nodes */}
-              {!isRoot && r >= 22 && !dimmed && (
-                <text
-                  x={node.x}
-                  y={node.y + r + 14}
-                  textAnchor="middle"
-                  className="pointer-events-none text-[10px]"
-                  fill="#64748b"
-                >
-                  {node.entity_type}
-                </text>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Tooltip */}
-        {hoveredNode && <NodeTooltip node={hoveredNode} risk={hoveredRisk} x={hoveredNode.x} y={hoveredNode.y} />}
-      </svg>
+      <div className="sr-only" aria-live="polite">
+        Graph contains {view.nodes.length} visible nodes and {view.edges.length} visible edges.
+      </div>
     </div>
   );
 }
