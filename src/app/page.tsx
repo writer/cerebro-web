@@ -211,7 +211,7 @@ export default function Home() {
                   {(data.connectors ?? []).slice(0, 5).map((c) => (
                     <Link
                       key={c.runtime_id}
-                      href={`/connectors?runtime_id=${encodeURIComponent(c.runtime_id)}`}
+                      href={`/connectors?runtime_ids=${encodeURIComponent(c.runtime_id)}`}
                       className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
                     >
                       <div>

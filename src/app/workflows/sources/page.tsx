@@ -6,7 +6,7 @@ import { useApiKey } from "@/components/providers";
 import DataTable, { KeyValueList } from "@/components/workflows/DataTable";
 import Panel from "@/components/workflows/Panel";
 import { WorkflowState } from "@/components/workflows/WorkflowState";
-import { asRecord, extractRecords, firstString, initialQueryParam, withQuery } from "@/lib/cerebro-data";
+import { asRecord, extractRecords, firstString, initialQueryParam } from "@/lib/cerebro-data";
 import { fetchCerebro } from "@/lib/cerebro-client";
 
 export default function SourcesWorkflow() {
@@ -15,7 +15,6 @@ export default function SourcesWorkflow() {
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceId, setSourceId] = useState(() => initialQueryParam("source_id"));
-  const [cursor, setCursor] = useState(() => initialQueryParam("cursor"));
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
@@ -45,10 +44,7 @@ export default function SourcesWorkflow() {
       }
       setResultLoading(true);
       setResultError(null);
-      const path = withQuery(`/sources/${sourceId}/${action}`, {
-        cursor: action === "read" ? cursor : "",
-      });
-      const response = await fetchCerebro(path, apiKey);
+      const response = await fetchCerebro(`/sources/${sourceId}/${action}`, apiKey);
       if (!response.ok) {
         setResultError(`${action} request failed (${response.status})`);
         setResultLoading(false);
@@ -57,7 +53,7 @@ export default function SourcesWorkflow() {
       setResult(asRecord(response.data) ?? { value: response.data });
       setResultLoading(false);
     },
-    [apiKey, cursor, sourceId],
+    [apiKey, sourceId],
   );
 
   const sourceRows = useMemo(
@@ -120,15 +116,6 @@ export default function SourcesWorkflow() {
               value={sourceId}
               onChange={(event) => setSourceId(event.target.value)}
               placeholder="okta"
-              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
-            />
-          </label>
-          <label className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-            Cursor for read
-            <input
-              value={cursor}
-              onChange={(event) => setCursor(event.target.value)}
-              placeholder="optional"
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
             />
           </label>

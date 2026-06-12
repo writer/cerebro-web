@@ -13,13 +13,13 @@ const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-
 
 export default function ConnectorsPage() {
   const [tenantID, setTenantID] = useState("");
-  const [runtimeID, setRuntimeID] = useQueryParamState("runtime_id");
+  const [runtimeIDs, setRuntimeIDs] = useQueryParamState("runtime_ids");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
-  const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
+  const debouncedRuntimeIDs = useDebouncedValue(runtimeIDs.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
   const { data, error, loading, reload } = useGRCQuery<GRCDashboard>(
-    grcPath("/grc/dashboard", { tenant_id: debouncedTenantID, runtime_id: debouncedRuntimeID, source_id: debouncedSourceID, limit: 200 }),
+    grcPath("/grc/dashboard", { tenant_id: debouncedTenantID, runtime_ids: debouncedRuntimeIDs, source_id: debouncedSourceID, limit: 200 }),
   );
   const connectorView = useMemo(() => {
     const connectors = data?.connectors ?? [];
@@ -50,7 +50,7 @@ export default function ConnectorsPage() {
       <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
         <div className="grid gap-3 md:grid-cols-3">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Runtime<input value={runtimeID} onChange={(e) => setRuntimeID(e.target.value)} placeholder="All" className={inputClass} /></label>
+          <label className={labelClass}>Runtimes<input value={runtimeIDs} onChange={(e) => setRuntimeIDs(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(e) => setSourceID(e.target.value)} placeholder="All" className={inputClass} /></label>
         </div>
       </div>
@@ -87,7 +87,7 @@ export default function ConnectorsPage() {
                   <td className="px-4 py-3 text-slate-600">{c.freshness}</td>
                   <td className="px-4 py-3 text-slate-500">{displayDate(c.last_synced_at)}</td>
                   <td className="px-4 py-3">
-                    <Link href={`/risk-inbox?runtime_id=${encodeURIComponent(c.runtime_id)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
+                    <Link href={`/risk-inbox?runtime_ids=${encodeURIComponent(c.runtime_id)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
                       View risk
                     </Link>
                   </td>

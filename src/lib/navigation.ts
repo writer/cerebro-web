@@ -74,19 +74,19 @@ export const utilityLinks: NavigationEntry[] = [
     keywords: ["openapi", "status", "developer", "api"],
   },
   {
-    label: "Legacy Workflows",
+    label: "Operations",
     href: "/workflows",
-    description: "Legacy source, runtime, finding, report, and graph workflow explorers.",
+    description: "Source, runtime, finding, report, and graph workflow explorers.",
     section: "Advanced",
-    keywords: ["workflow", "legacy", "explorer"],
+    keywords: ["workflow", "operations", "explorer"],
   },
 ];
 
 export const workflowLinks: NavigationEntry[] = [
   {
-    label: "Workflow timeline",
+    label: "Security event timeline",
     href: "/workflows/timeline",
-    description: "Replay and inspect workflow.v1 event-registry timelines.",
+    description: "Replay and inspect canonical security finding events.",
     section: "Workflow",
     keywords: ["timeline", "events", "workflow", "event registry"],
   },

@@ -16,25 +16,25 @@ const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-
 
 export default function RiskInboxPage() {
   const [tenantID, setTenantID] = useState("");
-  const [runtimeID, setRuntimeID] = useQueryParamState("runtime_id");
+  const [runtimeIDs, setRuntimeIDs] = useQueryParamState("runtime_ids");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
   const [severity, setSeverity] = useQueryParamState("severity");
   const [status, setStatus] = useQueryParamState("status", "open");
   const [query, setQuery] = useQueryParamState("q");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
-  const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
+  const debouncedRuntimeIDs = useDebouncedValue(runtimeIDs.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
   const path = useMemo(
     () => grcPath("/grc/findings", {
       tenant_id: debouncedTenantID,
-      runtime_id: debouncedRuntimeID,
+      runtime_ids: debouncedRuntimeIDs,
       source_id: debouncedSourceID,
       severity,
       status,
       limit: 200,
     }),
-    [debouncedRuntimeID, debouncedSourceID, debouncedTenantID, severity, status],
+    [debouncedRuntimeIDs, debouncedSourceID, debouncedTenantID, severity, status],
   );
   const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
   const findings = useMemo(() => {
@@ -86,7 +86,7 @@ export default function RiskInboxPage() {
             </label>
           </div>
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Runtime<input value={runtimeID} onChange={(e) => setRuntimeID(e.target.value)} placeholder="All" className={inputClass} /></label>
+          <label className={labelClass}>Runtimes<input value={runtimeIDs} onChange={(e) => setRuntimeIDs(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(e) => setSourceID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Severity<select value={severity} onChange={(e) => setSeverity(e.target.value)} className={selectClass}><option value="">All</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select></label>
           <label className={labelClass}>Status<select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}><option value="open">Open</option><option value="resolved">Resolved</option><option value="all">All</option></select></label>
