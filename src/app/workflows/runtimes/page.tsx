@@ -19,14 +19,14 @@ const runtimeDetailPaths = [
 
 export default function RuntimesWorkflow() {
   const { apiKey } = useApiKey();
-  const [runtimeIdFilter, setRuntimeIdFilter] = useState(() => initialQueryParam("runtime_id"));
+  const [runtimeIdsFilter, setRuntimeIdsFilter] = useState(() => initialQueryParam("runtime_ids"));
   const [tenantId, setTenantId] = useState(() => initialQueryParam("tenant_id"));
   const [sourceId, setSourceId] = useState(() => initialQueryParam("source_id"));
   const [limit, setLimit] = useState(() => initialQueryParam("limit") || "50");
   const [runtimes, setRuntimes] = useState<Record<string, unknown>[]>([]);
   const [runtimesError, setRuntimesError] = useState<string | null>(null);
   const [runtimesLoading, setRuntimesLoading] = useState(false);
-  const [selectedRuntimeId, setSelectedRuntimeId] = useState(() => initialQueryParam("runtime_id"));
+  const [selectedRuntimeId, setSelectedRuntimeId] = useState(() => initialQueryParam("runtime_ids"));
   const [detailLabel, setDetailLabel] = useState("");
   const [detailRows, setDetailRows] = useState<Record<string, unknown>[]>([]);
   const [detailRecord, setDetailRecord] = useState<Record<string, unknown> | null>(null);
@@ -38,7 +38,7 @@ export default function RuntimesWorkflow() {
     setRuntimesError(null);
     const response = await fetchCerebro(
       withQuery("/source-runtimes", {
-        runtime_id: runtimeIdFilter,
+        runtime_ids: runtimeIdsFilter,
         tenant_id: tenantId,
         source_id: sourceId,
         limit,
@@ -56,7 +56,7 @@ export default function RuntimesWorkflow() {
       setSelectedRuntimeId(firstString(rows[0], ["id", "runtime_id"]) ?? "");
     }
     setRuntimesLoading(false);
-  }, [apiKey, limit, runtimeIdFilter, selectedRuntimeId, sourceId, tenantId]);
+  }, [apiKey, limit, runtimeIdsFilter, selectedRuntimeId, sourceId, tenantId]);
 
   const loadDetail = useCallback(
     async (label: string, path: string) => {
@@ -115,7 +115,7 @@ export default function RuntimesWorkflow() {
       >
         <div className="mb-4 grid gap-3 sm:grid-cols-4">
           {[
-            ["Runtime ID", runtimeIdFilter, setRuntimeIdFilter, "writer-okta-audit"],
+            ["Runtime IDs", runtimeIdsFilter, setRuntimeIdsFilter, "writer-okta-audit"],
             ["Tenant ID", tenantId, setTenantId, "writer"],
             ["Source ID", sourceId, setSourceId, "okta"],
             ["Limit", limit, setLimit, "50"],
@@ -144,7 +144,7 @@ export default function RuntimesWorkflow() {
             emptyMessage="No runtimes returned."
             searchPlaceholder="Filter runtimes"
             getRowHref={(row) =>
-              row.id ? `/workflows/runtimes?runtime_id=${encodeURIComponent(String(row.id))}` : undefined
+              row.id ? `/workflows/runtimes?runtime_ids=${encodeURIComponent(String(row.id))}` : undefined
             }
           />
         )}

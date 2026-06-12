@@ -30,7 +30,7 @@ const searchCommands = (query: string): Command[] => {
     { id: "search-controls", label: `Filter controls by "${trimmed}"`, href: `/controls?control=${encoded}`, description: "Find control IDs and mapped findings.", section: "Operator", keywords: ["controls", "framework"] },
     { id: "open-report", label: `Build audit packet for "${trimmed}"`, href: `/reports?finding_id=${encoded}`, description: "Use as a finding ID for an audit packet.", section: "Operator", keywords: ["reports", "audit"] },
     { id: "open-evidence", label: `Find evidence for "${trimmed}"`, href: `/evidence?finding_id=${encoded}`, description: "Use as a finding ID in the evidence register.", section: "Operator", keywords: ["evidence", "proof"] },
-    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?runtime_id=${encoded}`, description: "Use as a source runtime ID.", section: "Operator", keywords: ["connectors", "runtimes"] },
+    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?runtime_ids=${encoded}`, description: "Use as source runtime IDs.", section: "Operator", keywords: ["connectors", "runtimes"] },
   ];
 };
 

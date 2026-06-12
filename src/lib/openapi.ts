@@ -190,7 +190,7 @@ const inferOperationTag = (path: string, tag?: string) => {
   if (path.startsWith("/reports") || path.startsWith("/report-runs")) {
     return "Reports";
   }
-  if (path.startsWith("/graph") || path.startsWith("/platform/graph")) {
+  if (path.startsWith("/platform/graph")) {
     return "Graph";
   }
   if (path.startsWith("/platform/knowledge") || path.startsWith("/platform/workflow")) {
