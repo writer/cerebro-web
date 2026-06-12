@@ -39,6 +39,7 @@ jobs:
 
       - name: Validate release source
         run: |
+          npm test
           npm run lint
           npm run build
           npm run oss:audit
@@ -58,6 +59,10 @@ jobs:
             tag="${INPUT_TAG}"
           else
             tag="sha-${short_sha}"
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "branch" ] && [ "${GITHUB_REF_NAME}" = "main" ] && [ "${tag}" != "sha-${short_sha}" ]; then
+            echo "Main releases must use sha-${short_sha} so infra promotion can verify the source commit" >&2
+            exit 1
           fi
           if ! [[ "${tag}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
             echo "Invalid image tag: ${tag}" >&2
@@ -185,15 +190,35 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN}" ]; then
-            echo "::warning::CEREBRO_INFRA_PROMOTION_TOKEN is not configured; skipping web deploy dispatch for ${WEB_IMAGE_TAG}"
-            exit 0
-          fi
-          if [ -z "${TARGET_ENVIRONMENT}" ]; then
-            echo "::warning::CEREBRO_INFRA_TARGET_ENVIRONMENT is not configured; skipping web deploy dispatch for ${WEB_IMAGE_TAG}"
-            exit 0
+            echo "ERROR: CEREBRO_INFRA_PROMOTION_TOKEN is required for main release promotion" >&2
+            exit 1
           fi
           if ! [[ "${INFRA_REPOSITORY}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
             echo "ERROR: CEREBRO_INFRA_REPOSITORY must be configured as owner/repo for deploy dispatches" >&2
+            exit 1
+          fi
+          if [ -z "${TARGET_ENVIRONMENT}" ] || ! [[ "${TARGET_ENVIRONMENT}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "ERROR: CEREBRO_INFRA_TARGET_ENVIRONMENT must be configured for deploy dispatches" >&2
+            exit 1
+          fi
+          if [ "${SOURCE_REPOSITORY}" != "writer/cerebro-web" ]; then
+            echo "ERROR: release source must be writer/cerebro-web" >&2
+            exit 1
+          fi
+          if [ "${WEB_IMAGE}" != "ghcr.io/writer/cerebro-web" ]; then
+            echo "ERROR: release image must be ghcr.io/writer/cerebro-web" >&2
+            exit 1
+          fi
+          if ! [[ "${SOURCE_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: release source ref must be a full commit SHA" >&2
+            exit 1
+          fi
+          if [ "${WEB_IMAGE_TAG}" != "sha-${SOURCE_REF:0:12}" ]; then
+            echo "ERROR: web image tag ${WEB_IMAGE_TAG} does not match source ref ${SOURCE_REF}" >&2
+            exit 1
+          fi
+          if ! [[ "${WEB_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "ERROR: web image digest must be a sha256 digest" >&2
             exit 1
           fi
 
@@ -230,22 +255,45 @@ jobs:
             }' | gh api --method POST "repos/${INFRA_REPOSITORY}/dispatches" --input -
 
           deadline=$((SECONDS + 120))
+          run_id=""
+          run_url=""
           while [ "${SECONDS}" -lt "${deadline}" ]; do
-            run_url="$(
+            run="$(
               gh run list \
                 --repo "${INFRA_REPOSITORY}" \
                 --workflow propose-web-image-tag.yml \
                 --event repository_dispatch \
-                --json createdAt,displayTitle,url \
+                --json createdAt,databaseId,displayTitle,url \
                 --limit 20 \
-                | jq -r --arg requested_at "${requested_at}" --arg request_id "${request_id}" '.[] | select(.createdAt >= $requested_at and ((.displayTitle // "") | contains($request_id))) | .url' \
+                | jq -r --arg requested_at "${requested_at}" --arg request_id "${request_id}" '.[] | select(.createdAt >= $requested_at and ((.displayTitle // "") | contains($request_id))) | [.databaseId, .url] | @tsv' \
                 | head -n 1
             )"
-            if [ -n "${run_url}" ]; then
+            if [ -n "${run}" ]; then
+              IFS=$'\t' read -r run_id run_url <<< "${run}"
               echo "Dispatched web deploy request for ${WEB_IMAGE}:${WEB_IMAGE_TAG}@${WEB_IMAGE_DIGEST}: ${run_url}"
-              exit 0
+              break
             fi
             sleep 5
           done
-          echo "ERROR: repository_dispatch was accepted, but no matching propose-web-image-tag.yml run appeared" >&2
+          if [ -z "${run_id}" ]; then
+            echo "ERROR: repository_dispatch was accepted, but no matching propose-web-image-tag.yml run appeared" >&2
+            exit 1
+          fi
+
+          deadline=$((SECONDS + 1800))
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            status_payload="$(gh run view "${run_id}" --repo "${INFRA_REPOSITORY}" --json status,conclusion,url)"
+            status="$(jq -r '.status' <<< "${status_payload}")"
+            conclusion="$(jq -r '.conclusion // ""' <<< "${status_payload}")"
+            if [ "${status}" = "completed" ]; then
+              if [ "${conclusion}" != "success" ]; then
+                echo "ERROR: promotion run ${run_id} completed with ${conclusion}: ${run_url}" >&2
+                exit 1
+              fi
+              echo "Promotion run ${run_id} completed successfully: ${run_url}"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "ERROR: promotion run ${run_id} did not complete before timeout: ${run_url}" >&2
           exit 1
