@@ -112,7 +112,25 @@ export type GRCInventoryAsset = {
   label: string;
   source_id?: string;
   runtime_id?: string;
+  risk_score?: number;
+  risk_level?: string;
+  risk_reasons?: string[];
+  scope_state?: "in_scope" | "out_of_scope" | string;
+  scope_reason?: string;
+  scope_updated_at?: string;
   attributes?: Record<string, string>;
+};
+
+export type GRCInventorySummary = {
+  total_assets: number;
+  in_scope_assets: number;
+  out_of_scope_assets: number;
+  high_risk_assets: number;
+  unassigned_assets: number;
+  org_groups: number;
+  public_assets: number;
+  scoped_coverage_pct: number;
+  assigned_coverage_pct: number;
 };
 
 export type GRCInventoryCategoriesResponse = {
@@ -122,6 +140,7 @@ export type GRCInventoryCategoriesResponse = {
 
 export type GRCInventoryAssetsResponse = {
   assets: GRCInventoryAsset[];
+  summary?: GRCInventorySummary;
   generated_at: string;
 };
 
@@ -145,6 +164,21 @@ export type GRCInventoryVulnerability = {
   finding_id?: string;
 };
 
+export type GRCInventoryTimelineEvent = {
+  at?: string;
+  kind: string;
+  title: string;
+  description?: string;
+  status?: string;
+};
+
+export type GRCInventoryAction = {
+  title: string;
+  description: string;
+  priority: string;
+  href?: string;
+};
+
 export type GRCInventoryAssetDetail = {
   asset: GRCInventoryAsset;
   graph?: GRCGraph;
@@ -153,6 +187,8 @@ export type GRCInventoryAssetDetail = {
   controls: GRCControl[];
   tests: GRCInventoryTest[];
   vulnerabilities: GRCInventoryVulnerability[];
+  timeline?: GRCInventoryTimelineEvent[];
+  actions?: GRCInventoryAction[];
   generated_at: string;
 };
 
@@ -168,6 +204,7 @@ export type GRCResourceScopeResponse = {
   source_id: string;
   runtimes: GRCResourceScopeRuntime[];
   resources: GRCInventoryAsset[];
+  summary?: GRCInventorySummary;
   generated_at: string;
 };
 
