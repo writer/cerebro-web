@@ -173,6 +173,9 @@ const inferOperationTag = (path: string, tag?: string) => {
   if (path.startsWith("/sources")) {
     return "Sources";
   }
+  if (path.startsWith("/connectors")) {
+    return "Connectors";
+  }
   if (path.startsWith("/source-runtimes")) {
     return "Source Runtimes";
   }

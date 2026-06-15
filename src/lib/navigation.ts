@@ -22,13 +22,6 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["findings", "risk", "sla", "triage", "owner"],
   },
   {
-    label: "Mission Control",
-    href: "/mission-control",
-    description: "Source runtime coverage, freshness, backfills, and graph assurance readiness.",
-    section: "Operator",
-    keywords: ["runtime", "coverage", "source", "backfill", "graph health", "mission control"],
-  },
-  {
     label: "Ask Cerebro",
     href: "/ask",
     description: "Ask the graph in natural language. Cypher is drafted, validated, run, and cited.",
@@ -71,11 +64,11 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["audit packet", "export", "report", "evidence"],
   },
   {
-    label: "Data connectors",
+    label: "Connectors",
     href: "/connectors",
-    description: "Source runtime freshness and ingestion health.",
+    description: "Connector library, credentials, source runtime freshness, and ingestion health.",
     section: "Operator",
-    keywords: ["runtimes", "sources", "connectors", "freshness"],
+    keywords: ["runtimes", "sources", "connectors", "freshness", "mission control"],
   },
 ];
 

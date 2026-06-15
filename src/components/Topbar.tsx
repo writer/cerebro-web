@@ -41,10 +41,10 @@ export default function Topbar() {
   const connected = apiKey || serverAuthConfigured;
 
   return (
-    <header className="relative flex h-16 items-center justify-between border-b border-[color:var(--border)] bg-[var(--surface)] px-6">
-      <div className="min-w-[180px]" />
+    <header className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
+      <div className="min-w-[180px] max-md:hidden" />
 
-      <div className="absolute left-1/2 top-1/2 w-[min(44rem,44vw)] -translate-x-1/2 -translate-y-1/2">
+      <div className="absolute left-1/2 top-1/2 w-[min(44rem,44vw)] -translate-x-1/2 -translate-y-1/2 max-md:static max-md:min-w-0 max-md:flex-1 max-md:translate-x-0 max-md:translate-y-0">
         <button
           type="button"
           onClick={openCommandPalette}
@@ -59,7 +59,7 @@ export default function Topbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[var(--surface-raised)] px-2.5 py-1.5">
+        <div className="flex items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[var(--surface-raised)] px-2.5 py-1.5 max-lg:hidden">
           <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500"}`} />
           <span className="text-[12px] font-medium text-[var(--text-secondary)]">{connected ? "Connected" : "No API Key"}</span>
         </div>
@@ -89,13 +89,13 @@ export default function Topbar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022 23.848 23.848 0 0 0 5.455 1.31m5.714 0a3 3 0 1 1-5.714 0" />
           </svg>
         </button>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)]">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)] max-md:hidden">
           CB
         </div>
         <button
           type="button"
           onClick={() => setShowConnection((prev) => !prev)}
-          className="secondary-button px-3 py-1.5 text-[13px]"
+          className="secondary-button px-3 py-1.5 text-[13px] max-md:hidden"
         >
           Settings
         </button>

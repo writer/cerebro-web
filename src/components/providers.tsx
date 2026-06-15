@@ -33,6 +33,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "cerebro.apiKey";
 const THEME_STORAGE_KEY = "cerebro.theme";
+const THEME_CHANGE_EVENT = "cerebro-theme";
 
 const notifyKeyChange = () => {
   window.dispatchEvent(new Event("cerebro-api-key"));
@@ -50,6 +51,32 @@ const subscribe = (callback: () => void) => {
 const getSnapshot = () => window.localStorage.getItem(STORAGE_KEY) ?? "";
 
 const getServerSnapshot = () => "";
+
+const notifyThemeChange = () => {
+  window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+};
+
+const subscribeTheme = (callback: () => void) => {
+  window.addEventListener("storage", callback);
+  window.addEventListener(THEME_CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(THEME_CHANGE_EVENT, callback);
+  };
+};
+
+const getThemeSnapshot = (): ThemeMode => {
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === "light" || stored === "dark") {
+    return stored;
+  }
+  if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+};
+
+const getThemeServerSnapshot = (): ThemeMode => "light";
 
 export function ApiKeyProvider({ children }: { children: React.ReactNode }) {
   const apiKey = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -105,30 +132,25 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "light";
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "light" || stored === "dark") {
-      return stored;
-    }
-    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-      return "dark";
-    }
-    return "light";
-  });
+  const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeServerSnapshot);
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", theme === "dark");
     root.dataset.theme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
   const contextValue = useMemo(
     () => ({
       theme,
-      setTheme: setThemeState,
-      toggleTheme: () => setThemeState((value) => value === "dark" ? "light" : "dark"),
+      setTheme: (value: ThemeMode) => {
+        window.localStorage.setItem(THEME_STORAGE_KEY, value);
+        notifyThemeChange();
+      },
+      toggleTheme: () => {
+        window.localStorage.setItem(THEME_STORAGE_KEY, theme === "dark" ? "light" : "dark");
+        notifyThemeChange();
+      },
     }),
     [theme],
   );

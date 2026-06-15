@@ -398,7 +398,7 @@ async function validatePlaywrightBrowser() {
       "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
       "/controls": ["Controls", "Framework", "Control"],
       "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-      "/connectors": ["Data Connectors", "Source runtime", "Connectors"],
+      "/connectors": ["Connectors", "Connector library", "Connected runtimes"],
       [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
       "/reports": ["Reports"],
     };
@@ -440,7 +440,7 @@ async function validateAgentBrowser() {
     "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
     "/controls": ["Controls", "Framework", "Control"],
     "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-    "/connectors": ["Data Connectors", "Source runtime", "Connectors"],
+    "/connectors": ["Connectors", "Connector library", "Connected runtimes"],
     [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
     "/reports": ["Reports"],
   };

@@ -10,6 +10,7 @@ export type ManualOperation = {
 export const manualTags: Record<string, string> = {
   System: "Health and API metadata.",
   Sources: "Registered source integrations and preview helpers.",
+  Connectors: "Connector library, runtime status, and credential transport metadata.",
   "Source Runtimes": "Persisted runtime configs, sync state, claims, evidence, and findings.",
   Findings: "Finding rules, finding detail, evidence, and evaluation runs.",
   GRC: "Dashboard, controls, audit packets, evidence, and GRC finding views.",
@@ -40,6 +41,16 @@ export const manualOperations: ManualOperation[] = [
     path: "/sources/:sourceID/read",
     summary: "Read one source preview page",
     params: ["sourceID"],
+  },
+  {
+    tag: "Connectors",
+    path: "/connectors",
+    summary: "List available connectors and connection health",
+  },
+  {
+    tag: "Connectors",
+    path: "/connectors/credential-key",
+    summary: "Get the public credential transport key",
   },
   {
     tag: "Source Runtimes",
