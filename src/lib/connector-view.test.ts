@@ -6,13 +6,14 @@ import {
   connectorPath,
   filterConnectorCards,
 } from "./connector-view";
+import { connectorDisplayName } from "./connectors";
 
 describe("connector view model", () => {
   it("merges catalog entries with source health and prioritizes unhealthy connectors", () => {
     const cards = buildConnectorCards(
       [
         { source_id: "github", name: "GitHub", status: "connected", configured_runtimes: 1, healthy_runtimes: 1 },
-        { source_id: "aws", name: "AWS", status: "available" },
+        { source_id: "aws", name: "AWS", display_name: "Amazon Web Services", status: "available" },
       ],
       [
         {
@@ -39,6 +40,7 @@ describe("connector view model", () => {
     );
 
     expect(cards[0]).toMatchObject({ source_id: "aws", readiness: "bad", nextAction: "Investigate failed sync" });
+    expect(connectorDisplayName(cards[0])).toBe("Amazon Web Services");
     expect(connectorAttentionTotal(cards[0])).toBe(3);
     expect(cards[1]).toMatchObject({ source_id: "github", readiness: "healthy" });
   });

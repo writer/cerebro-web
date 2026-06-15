@@ -1,5 +1,5 @@
 import type { ConnectorCatalogEntry } from "@/lib/connectors";
-import { connectorSearchText, connectorStatus } from "@/lib/connectors";
+import { connectorDisplayMetadata, connectorDisplayName, connectorSearchText, connectorStatus } from "@/lib/connectors";
 import type { SourceCoverageSummary, SourceReadiness } from "@/lib/mission-control";
 
 export type ReadinessFilter = SourceReadiness | "all";
@@ -80,6 +80,25 @@ export function connectorPrimaryAction(card: ConnectorCard) {
   return "Fix";
 }
 
+export function connectorCapabilities(card: Pick<ConnectorCatalogEntry, "emitted_kinds">, limit = 3) {
+  const seen = new Set<string>();
+  (card.emitted_kinds ?? []).forEach((kind) => {
+    const prefix = kind.split(".")[0]?.trim();
+    if (prefix) seen.add(prefix);
+  });
+  return [...seen].slice(0, limit);
+}
+
+export function connectorCardSummary(card: ConnectorCard) {
+  return {
+    meta: connectorDisplayMetadata(card),
+    capabilities: connectorCapabilities(card),
+    connectionLabel: `${connectorRuntimeTotal(card)} connection${connectorRuntimeTotal(card) === 1 ? "" : "s"}`,
+    attentionLabel: `${connectorAttentionTotal(card)} needs action`,
+    healthLabel: `${connectorHealthyTotal(card)} healthy`,
+  };
+}
+
 export function buildConnectorCards(library: ConnectorCatalogEntry[], sources: SourceCoverageSummary[]): ConnectorCard[] {
   const sourceByID = new Map(sources.map((source) => [source.source_id, source]));
   const seen = new Set<string>();
@@ -112,7 +131,7 @@ export function buildConnectorCards(library: ConnectorCatalogEntry[], sources: S
   return cards.sort((left, right) =>
     readinessOrder.indexOf(left.readiness) - readinessOrder.indexOf(right.readiness) ||
     connectorRuntimeTotal(right) - connectorRuntimeTotal(left) ||
-    (left.name || left.source_id).localeCompare(right.name || right.source_id),
+    connectorDisplayName(left).localeCompare(connectorDisplayName(right)),
   );
 }
 

@@ -12,7 +12,7 @@ import { displayDate } from "@/lib/grc";
 import { extractRecords, withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import type { ConnectorCatalogEntry, ConnectorLibraryResponse } from "@/lib/connectors";
-import { normalizeCredentialStores } from "@/lib/connectors";
+import { connectorDisplayName, normalizeCredentialStores } from "@/lib/connectors";
 import {
   buildConnectorCards,
   compactConnectorStatus,
@@ -152,7 +152,7 @@ export default function ConnectorDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={connector.name || connector.source_id}
+        title={connectorDisplayName(connector)}
         description={connector.description || "Connector setup, credential store selection, and connection health."}
         action={
           <div className="flex flex-wrap gap-2">

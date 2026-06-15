@@ -9,7 +9,7 @@ import { displayDate } from "@/lib/grc";
 import { extractRecords, withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import type { ConnectorLibraryResponse } from "@/lib/connectors";
-import { normalizeCredentialStores } from "@/lib/connectors";
+import { connectorDisplayName, normalizeCredentialStores } from "@/lib/connectors";
 import {
   buildConnectorCards,
   compactConnectorStatus,
@@ -102,7 +102,7 @@ function ConnectorRow({ card }: { card: ConnectorCard }) {
     <tr className={`border-l-[3px] ${readinessRowClass[status]} border-b border-[color:var(--border)] transition hover:bg-[var(--surface-hover)]`}>
       <td className="px-4 py-3">
         <Link href={connectorPath(card.source_id)} className="font-semibold text-[var(--text-primary)] hover:text-[var(--primary)]">
-          {card.name || card.source_id}
+          {connectorDisplayName(card)}
         </Link>
         <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{card.source_id}</div>
       </td>
@@ -141,7 +141,7 @@ function AttentionPanel({ cards }: { cards: ConnectorCard[] }) {
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{card.name || card.source_id}</div>
+                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(card)}</div>
                 <div className="mt-1 text-[12px] text-[var(--text-muted)]">{card.nextAction}</div>
               </div>
               <Badge value={card.readiness} />
