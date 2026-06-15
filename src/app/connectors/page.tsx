@@ -1,23 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { useApiKey } from "@/components/providers";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { displayDate, shortEntity } from "@/lib/grc";
-import { fetchCerebro } from "@/lib/cerebro-client";
 import { extractRecords, withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import {
   ConnectorCatalogEntry,
-  ConnectorCredentialKey,
-  ConnectorField,
   ConnectorLibraryResponse,
+  connectorDisplayName,
   connectorSearchText,
   connectorStatus,
-  encryptConnectorCredentials,
-  fieldSetForConnector,
 } from "@/lib/connectors";
 import {
   formatDuration,
@@ -100,7 +95,11 @@ function buildConnectorCards(library: ConnectorCatalogEntry[], sources: SourceCo
       nextAction: source.next_action,
     });
   });
-  return cards.sort((left, right) => compactConnectorStatus(left).localeCompare(compactConnectorStatus(right)) || left.name.localeCompare(right.name));
+  return cards.sort(
+    (left, right) =>
+      compactConnectorStatus(left).localeCompare(compactConnectorStatus(right))
+      || connectorDisplayName(left).localeCompare(connectorDisplayName(right)),
+  );
 }
 
 function SourceSignal({ label, value, attention = false }: { label: string; value: string; attention?: boolean }) {
@@ -112,16 +111,17 @@ function SourceSignal({ label, value, attention = false }: { label: string; valu
   );
 }
 
-function ConnectorLibraryCard({ card, active, onFilter, onConnect }: { card: ConnectorCard; active: boolean; onFilter: () => void; onConnect: () => void }) {
+function ConnectorLibraryCard({ card, active, onFilter, href }: { card: ConnectorCard; active: boolean; onFilter: () => void; href: string }) {
   const status = compactConnectorStatus(card);
   const total = connectorRuntimeTotal(card);
   const healthy = connectorHealthyTotal(card);
   const attention = Math.max(0, total - healthy);
+  const displayName = connectorDisplayName(card);
   return (
     <div className={`border-l-[3px] ${readinessBorderClass[status as SourceReadiness] ?? "border-l-slate-400"} rounded-md border-y border-r border-slate-200 bg-white p-4 transition dark:border-y-slate-800 dark:border-r-slate-800 dark:bg-slate-950/30 ${active ? "ring-2 ring-indigo-200 dark:ring-indigo-500/30" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-[14px] font-semibold text-slate-900 dark:text-slate-100">{card.name || card.source_id}</div>
+          <div className="truncate text-[14px] font-semibold text-slate-900 dark:text-slate-100">{displayName}</div>
           <div className="mt-1 truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">{card.source_id}</div>
         </div>
         <Badge value={status} />
@@ -133,9 +133,9 @@ function ConnectorLibraryCard({ card, active, onFilter, onConnect }: { card: Con
         <SourceSignal label="Attention" value={String(attention)} attention={attention > 0} />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" onClick={onConnect} className="inline-flex h-8 items-center justify-center rounded-md bg-slate-900 px-3 text-[12px] font-medium text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
+        <Link href={href} className="inline-flex h-8 items-center justify-center rounded-md bg-slate-900 px-3 text-[12px] font-medium text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
           Connect
-        </button>
+        </Link>
         <button type="button" onClick={onFilter} className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 px-3 text-[12px] font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-indigo-500/60 dark:hover:bg-indigo-500/10">
           Filter
         </button>
@@ -144,97 +144,12 @@ function ConnectorLibraryCard({ card, active, onFilter, onConnect }: { card: Con
   );
 }
 
-function fieldValue(formData: FormData, field: ConnectorField) {
-  return String(formData.get(field.key) ?? "").trim();
-}
-
-function ConnectDialog({
-  connector,
-  tenantID,
-  onClose,
-  onSubmit,
-  submitting,
-  error,
-}: {
-  connector: ConnectorCatalogEntry;
-  tenantID: string;
-  onClose: () => void;
-  onSubmit: (form: HTMLFormElement) => void;
-  submitting: boolean;
-  error: string | null;
-}) {
-  const fields = fieldSetForConnector(connector.source_id);
-  const defaultRuntimeID = [tenantID || "tenant", connector.source_id].filter(Boolean).join("-");
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
-      <form
-        className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-950"
-        onSubmit={(event: FormEvent<HTMLFormElement>) => {
-          event.preventDefault();
-          onSubmit(event.currentTarget);
-        }}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-          <div>
-            <div className="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Connect {connector.name || connector.source_id}</div>
-            <div className="mt-1 font-mono text-[11px] text-slate-500">{connector.source_id}</div>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-2 py-1 text-[12px] text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900">
-            Close
-          </button>
-        </div>
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-5">
-          {error && <ErrorBlock error={error} />}
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className={labelClass}>Tenant<input name="tenant_id" defaultValue={tenantID} required placeholder="tenant" className={inputClass} /></label>
-            <label className={labelClass}>Runtime<input name="runtime_id" defaultValue={defaultRuntimeID} required placeholder="tenant-source" className={inputClass} /></label>
-          </div>
-          {fields.config.length > 0 && (
-            <div>
-              <div className="mb-2 text-[12px] font-semibold text-slate-800 dark:text-slate-200">Configuration</div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {fields.config.map((field) => (
-                  <label key={field.key} className={labelClass}>
-                    {field.label}
-                    <input name={field.key} required={field.required} placeholder={field.placeholder} className={inputClass} />
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          <div>
-            <div className="mb-2 text-[12px] font-semibold text-slate-800 dark:text-slate-200">Credentials</div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {fields.credentials.map((field) => (
-                <label key={field.key} className={labelClass}>
-                  {field.label}
-                  <input name={field.key} type={field.type ?? "password"} required={field.required} autoComplete="off" className={inputClass} />
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
-          <div className="text-[12px] text-slate-500 dark:text-slate-400">Credential vault submission</div>
-          <button type="submit" disabled={submitting} className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-4 text-[13px] font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
-            {submitting ? "Connecting..." : "Connect"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 export default function ConnectorsPage() {
-  const { apiKey } = useApiKey();
   const [tenantID, setTenantID] = useState("");
   const [runtimeID, setRuntimeID] = useQueryParamState("runtime_id");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
   const [sourceQuery, setSourceQuery] = useState("");
   const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("all");
-  const [connecting, setConnecting] = useState<ConnectorCatalogEntry | null>(null);
-  const [connectError, setConnectError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
@@ -279,49 +194,6 @@ export default function ConnectorsPage() {
   const libraryLoading = libraryQuery.loading && !libraryQuery.data;
   const healthLoading = healthQuery.loading && !healthQuery.data;
   const vaultReady = Boolean(libraryQuery.data?.credential_vault?.available && libraryQuery.data?.credential_transport?.available);
-
-  const submitConnection = async (form: HTMLFormElement) => {
-    if (!connecting) return;
-    setSubmitting(true);
-    setConnectError(null);
-    try {
-      const formData = new FormData(form);
-      const runtime = String(formData.get("runtime_id") ?? "").trim();
-      const tenant = String(formData.get("tenant_id") ?? "").trim();
-      const fields = fieldSetForConnector(connecting.source_id);
-      const config: Record<string, string> = {};
-      fields.config.forEach((field) => {
-        const value = fieldValue(formData, field);
-        if (value) config[field.key] = value;
-      });
-      const credentials: Record<string, string> = {};
-      fields.credentials.forEach((field) => {
-        const value = fieldValue(formData, field);
-        if (value) credentials[field.key] = value;
-      });
-      const keyResponse = await fetchCerebro<ConnectorCredentialKey>("/connectors/credential-key", apiKey);
-      if (!keyResponse.ok) throw new Error(`Credential key unavailable (${keyResponse.status})`);
-      const encryptedCredentials = await encryptConnectorCredentials(keyResponse.data, credentials);
-      const response = await fetchCerebro(`/connectors/${encodeURIComponent(connecting.source_id)}/connections`, apiKey, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          runtime_id: runtime,
-          tenant_id: tenant,
-          config,
-          encrypted_credentials: encryptedCredentials,
-        }),
-      });
-      if (!response.ok) throw new Error(typeof response.data === "string" && response.data ? response.data : `Connection failed (${response.status})`);
-      form.reset();
-      setConnecting(null);
-      await Promise.all([libraryQuery.reload(), healthQuery.reload()]);
-    } catch (error) {
-      setConnectError(error instanceof Error ? error.message : "Connection failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -385,10 +257,7 @@ export default function ConnectorsPage() {
                   card={card}
                   active={debouncedSourceID === card.source_id}
                   onFilter={() => setSourceID(card.source_id)}
-                  onConnect={() => {
-                    setConnecting(card);
-                    setConnectError(vaultReady ? null : "Credential vault is unavailable.");
-                  }}
+                  href={`/connectors/${encodeURIComponent(card.source_id)}`}
                 />
               ))}
               {visibleCards.length === 0 && <div className="rounded-md border border-slate-200 p-8 text-center text-[13px] text-slate-500 dark:border-slate-800">No connectors match this scope.</div>}
@@ -478,21 +347,6 @@ export default function ConnectorsPage() {
         </div>
       </Panel>
 
-      {connecting && (
-        <ConnectDialog
-          connector={connecting}
-          tenantID={tenantID.trim()}
-          onClose={() => {
-            if (!submitting) {
-              setConnecting(null);
-              setConnectError(null);
-            }
-          }}
-          onSubmit={(form) => void submitConnection(form)}
-          submitting={submitting}
-          error={connectError}
-        />
-      )}
     </div>
   );
 }
