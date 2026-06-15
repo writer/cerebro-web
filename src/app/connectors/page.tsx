@@ -13,9 +13,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
-import ConnectorRuntimeTable from "@/components/connectors/ConnectorRuntimeTable";
 import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
-import { extractRecords, withQuery } from "@/lib/cerebro-data";
+import { withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { displayDate } from "@/lib/grc";
 import {
@@ -43,11 +42,6 @@ import {
   type ConnectorCard,
   type ReadinessFilter,
 } from "@/lib/connector-view";
-import {
-  normalizeRuntime,
-  sourceHealthBreakdown,
-  summarizeMissionControl,
-} from "@/lib/mission-control";
 import type { SourceReadiness } from "@/lib/mission-control";
 import { useQueryParamState } from "@/lib/query-params";
 
@@ -294,33 +288,22 @@ function ReadinessMix({
 
 export default function ConnectorsPage() {
   const [tenantID, setTenantID] = useState("");
-  const [runtimeID, setRuntimeID] = useQueryParamState("runtime_id");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
   const [sourceQuery, setSourceQuery] = useState("");
   const [libraryTab, setLibraryTab] = useState<LibraryTab>("all");
   const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("all");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
-  const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
   const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
-  const healthQuery = useGRCQuery<unknown>(
-    withQuery("/source-runtimes/health", { tenant_id: debouncedTenantID, runtime_id: debouncedRuntimeID, source_id: debouncedSourceID, limit: "500" }),
-  );
 
   const connectorView = useMemo(() => {
-    const now = new Date();
-    const runtimes = extractRecords(healthQuery.data, ["runtimes", "source_runtimes", "items", "results"])
-      .map((runtime) => normalizeRuntime(runtime, now, 24))
-      .sort((left, right) => (left.source_id || "").localeCompare(right.source_id || "") || left.runtime_id.localeCompare(right.runtime_id));
-    const summary = summarizeMissionControl(runtimes);
-    const sources = sourceHealthBreakdown(runtimes);
     const library = libraryQuery.data?.connectors ?? [];
-    const cards = buildConnectorCards(library, sources);
-    return { cards, runtimes, sources, summary };
-  }, [healthQuery.data, libraryQuery.data]);
+    const cards = buildConnectorCards(library, []);
+    return { cards };
+  }, [libraryQuery.data]);
 
-  const { cards, runtimes, sources, summary } = connectorView;
+  const { cards } = connectorView;
   const readinessCounts = useMemo(
     () =>
       readinessOrder.reduce(
@@ -338,9 +321,13 @@ export default function ConnectorsPage() {
     [cards],
   );
   const visibleCards = useMemo(() => {
-    const scoped = cards.filter((card) => tabMatchesCard(libraryTab, card));
+    const scoped = cards.filter((card) => {
+      if (!tabMatchesCard(libraryTab, card)) return false;
+      if (debouncedSourceID && card.source_id !== debouncedSourceID) return false;
+      return true;
+    });
     return filterConnectorCards(scoped, sourceQuery, readinessFilter);
-  }, [cards, libraryTab, readinessFilter, sourceQuery]);
+  }, [cards, debouncedSourceID, libraryTab, readinessFilter, sourceQuery]);
   const connectedCards = cards.filter((card) => connectorRuntimeTotal(card) > 0);
   const attentionCards = cards.filter((card) => {
     const status = compactConnectorStatus(card);
@@ -348,16 +335,17 @@ export default function ConnectorsPage() {
   });
   const readyStores = normalizeCredentialStores(libraryQuery.data).filter((store) => store.available);
   const libraryLoading = libraryQuery.loading && !libraryQuery.data;
-  const healthLoading = healthQuery.loading && !healthQuery.data;
-  const runtimeHealthUnavailable = healthQuery.error?.trim() === "Service Unavailable" && !healthQuery.data;
+  const totalConnections = cards.reduce((sum, card) => sum + connectorRuntimeTotal(card), 0);
+  const healthyConnections = cards.reduce((sum, card) => sum + connectorHealthyTotal(card), 0);
+  const actionConnections = cards.reduce((sum, card) => sum + connectorAttentionTotal(card), 0);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Connectors"
-        description="Connectors, credential stores, source runtime health, and graph readiness."
+        description="Connector library, credential stores, setup readiness, and connection health."
         action={
-          <button type="button" onClick={() => void Promise.all([libraryQuery.reload(), healthQuery.reload()])} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
+          <button type="button" onClick={() => void libraryQuery.reload()} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
@@ -366,16 +354,15 @@ export default function ConnectorsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Available" value={cards.length} detail="library connectors" />
-        <MetricCard label="Connected" value={connectedCards.length} detail={`${summary.total} runtime mappings`} intent="success" />
-        <MetricCard label="Needs Attention" value={attentionCards.length} detail="sync, freshness, or graph gaps" intent={attentionCards.length > 0 ? "warning" : "success"} />
-        <MetricCard label="Graph Current" value={summary.graph_current} detail={`${summary.graph_behind + summary.graph_failed} behind or failed`} intent={summary.graph_behind + summary.graph_failed > 0 ? "warning" : "success"} />
+        <MetricCard label="Connected" value={connectedCards.length} detail={`${totalConnections} runtime mappings`} intent="success" />
+        <MetricCard label="Needs Attention" value={attentionCards.length} detail={`${actionConnections} connection signals`} intent={attentionCards.length > 0 ? "warning" : "success"} />
+        <MetricCard label="Healthy" value={healthyConnections} detail="healthy connections" intent={healthyConnections > 0 ? "success" : "neutral"} />
         <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} />
       </div>
 
       <section className="surface-panel p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(160px,0.8fr)_minmax(160px,0.8fr)_minmax(160px,0.8fr)_minmax(220px,1.2fr)]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(160px,0.8fr)_minmax(160px,0.8fr)_minmax(220px,1.2fr)]">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
-          <label className={labelClass}>Runtime<input value={runtimeID} onChange={(event) => setRuntimeID(event.target.value)} placeholder="All runtimes" className={inputClass} /></label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="All sources" className={inputClass} /></label>
           <label className={labelClass}>
             Search library
@@ -392,9 +379,8 @@ export default function ConnectorsPage() {
         </div>
       </section>
 
-      {(libraryLoading || healthLoading) && <LoadingBlock label="Loading connectors..." />}
+      {libraryLoading && <LoadingBlock label="Loading connectors..." />}
       {libraryQuery.error && <ErrorBlock error={libraryQuery.error} />}
-      {healthQuery.error && !runtimeHealthUnavailable && <ErrorBlock error={healthQuery.error} />}
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
         <Panel
@@ -451,8 +437,24 @@ export default function ConnectorsPage() {
         </div>
       </div>
 
-      <Panel title="Connected runtimes" action={<span className="text-[12px] text-[var(--text-muted)]">{sources.length} sources observed</span>}>
-        <ConnectorRuntimeTable runtimes={runtimes} />
+      <Panel title="Connected runtimes" action={<span className="text-[12px] text-[var(--text-muted)]">{connectedCards.length} sources observed</span>}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {connectedCards.map((card) => {
+            const status = compactConnectorStatus(card);
+            return (
+              <Link key={card.source_id} href={connectorPath(card.source_id, { tenant_id: debouncedTenantID })} className={`surface-panel border-l-[3px] ${readinessRowClass[status]} p-3 transition hover:border-[color:var(--border-strong)]`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(card)}</div>
+                    <div className="mt-1 text-[12px] text-[var(--text-muted)]">{connectorRuntimeTotal(card)} runtime mappings</div>
+                  </div>
+                  <Badge value={status} />
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+        {connectedCards.length === 0 && <EmptyBlock label="No connections match this scope." />}
       </Panel>
     </div>
   );
