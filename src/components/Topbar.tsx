@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
-import { currentUserSourceLabel } from "@/lib/current-user";
+import { identityPosture } from "@/lib/identity";
 
 type ConsoleConfig = {
   apiBase: string;
@@ -41,16 +41,16 @@ export default function Topbar() {
   const clientKeyEnabled = config?.forwardRequestAuth ?? false;
   const canUseClientKey = clientKeyEnabled || !serverAuthConfigured;
   const connected = apiKey || serverAuthConfigured;
-  const userLabel = user?.displayName ?? (userLoading ? "Loading current user" : "Current user unavailable");
-  const userDetail = user?.email ?? user?.username ?? user?.subject ?? userError ?? userLabel;
-  const userInitials = user?.initials ?? "?";
-  const userSource = currentUserSourceLabel(user?.source);
+  const identity = identityPosture({ error: userError, loading: userLoading, user });
+  const authLabel = serverAuthConfigured ? "Server auth" : apiKey ? "API key" : "No API key";
+  const runtimeHealthy = Boolean(connected && identity.state === "resolved");
+  const runtimeWarning = !runtimeHealthy;
 
   return (
     <header className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
       <div className="min-w-[180px] max-md:hidden" />
 
-      <div className="absolute left-1/2 top-1/2 w-[min(44rem,44vw)] -translate-x-1/2 -translate-y-1/2 max-md:static max-md:min-w-0 max-md:flex-1 max-md:translate-x-0 max-md:translate-y-0">
+      <div className="w-[min(28rem,20vw)] min-w-[180px] max-md:min-w-0 max-md:flex-1">
         <button
           type="button"
           onClick={openCommandPalette}
@@ -65,9 +65,14 @@ export default function Topbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[var(--surface-raised)] px-2.5 py-1.5 max-lg:hidden">
-          <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500"}`} />
-          <span className="text-[12px] font-medium text-[var(--text-secondary)]">{connected ? "Connected" : "No API Key"}</span>
+        <div
+          className="flex max-w-[260px] items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[var(--surface-raised)] px-2.5 py-1.5 max-lg:hidden"
+          title={`${authLabel} · ${identity.displayName} · ${identity.sourceLabel}`}
+        >
+          <span className={`h-2 w-2 shrink-0 rounded-full ${runtimeWarning ? "bg-amber-500" : "bg-emerald-500"}`} />
+          <span className="truncate text-[12px] font-medium text-[var(--text-secondary)]">
+            {authLabel} · {identity.label}
+          </span>
         </div>
         <button
           type="button"
@@ -97,10 +102,10 @@ export default function Topbar() {
         </button>
         <div
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)]"
-          aria-label={`Current user: ${userLabel}`}
-          title={`${userLabel}${userDetail && userDetail !== userLabel ? ` (${userDetail})` : ""} · ${userSource}`}
+          aria-label={`Current user: ${identity.displayName}`}
+          title={`${identity.displayName}${identity.actor && identity.actor !== identity.displayName ? ` (${identity.actor})` : ""} · ${identity.sourceLabel}`}
         >
-          {userInitials}
+          {identity.initials}
         </div>
         <button
           type="button"
@@ -117,6 +122,25 @@ export default function Topbar() {
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">API Endpoint</div>
               <div className="mt-1 break-all font-mono text-[13px] text-[var(--text-secondary)]">{config?.apiBase ?? API_BASE}</div>
+            </div>
+            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Runtime Posture</div>
+                  <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{authLabel} · {identity.label}</div>
+                </div>
+                <span className={`h-2.5 w-2.5 rounded-full ${runtimeWarning ? "bg-amber-500" : "bg-emerald-500"}`} />
+              </div>
+              <div className="mt-2 grid gap-1.5 text-[12px] text-[var(--text-muted)]">
+                <div className="flex justify-between gap-3">
+                  <span>Actor</span>
+                  <span className="break-all text-right font-mono text-[var(--text-secondary)]">{identity.actor || "Not resolved"}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Identity source</span>
+                  <span className="text-right text-[var(--text-secondary)]">{identity.sourceLabel}</span>
+                </div>
+              </div>
             </div>
             <div>
               <label className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">

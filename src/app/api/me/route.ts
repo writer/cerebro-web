@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { currentUserFromHeadersWithFallback } from "@/lib/current-user";
+import { currentUserFromHeadersWithFallback } from "@/lib/identity";
 
 export async function GET(request: NextRequest) {
   const user = currentUserFromHeadersWithFallback(request.headers);

@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { currentUserActor } from "@/lib/current-user";
-import type { CurrentUser, CurrentUserResponse } from "@/lib/current-user";
+import { currentUserActor } from "@/lib/identity";
+import type { CurrentUser, CurrentUserResponse } from "@/lib/identity";
 
 type ApiKeyContextValue = {
   apiKey: string;

@@ -7,10 +7,10 @@ import AskAboutLink from "@/components/ask/AskAboutLink";
 import FindingTable from "@/components/grc/FindingTable";
 import GraphViewer from "@/components/grc/GraphViewer";
 import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
-import { isApiUnavailableError } from "@/lib/cerebro-errors";
 import { averageRiskScore, GRCEntityImpact, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
+import { metricValueForState, runtimeStateForError } from "@/lib/runtime-state";
 
 type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
@@ -39,9 +39,11 @@ export default function ImpactPage() {
   const nodeCount = (data?.graph?.neighbors?.length ?? 0) + (data?.graph?.root ? 1 : 0);
   const relationCount = data?.graph?.relations?.length ?? 0;
   const loadError = fallbackFindings.error || error;
-  const apiUnavailable = isApiUnavailableError(loadError);
+  const runtimeState = runtimeStateForError(loadError);
+  const apiUnavailable = runtimeState === "unavailable";
   const showUnavailableState = Boolean(loadError && apiUnavailable && !data);
   const showHardError = Boolean(loadError && !showUnavailableState);
+  const metricState = showUnavailableState ? runtimeState : "ready";
   const canRefresh = needsFallbackRoot || Boolean(selectedRoot);
   const refreshImpact = () => {
     if (needsFallbackRoot) void fallbackFindings.reload();
@@ -90,10 +92,14 @@ export default function ImpactPage() {
       {showHardError && <ErrorBlock error={loadError || "Unable to load impact map."} onRetry={refreshImpact} />}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Root Entity" value={shortEntity(selectedRoot)} detail="impact anchor" />
-        <MetricCard label="Avg Risk" value={<RiskBadge score={averageRiskScore(findings)} />} detail="related risk" />
-        <MetricCard label="Nodes" value={nodeCount} detail="entities in view" />
-        <MetricCard label="Relations" value={relationCount} detail="graph links" />
+        <MetricCard label="Root Entity" value={metricValueForState({ state: metricState, value: shortEntity(selectedRoot) })} detail={showUnavailableState ? "waiting for API" : "impact anchor"} />
+        <MetricCard
+          label="Avg Risk"
+          value={showUnavailableState ? metricValueForState({ state: metricState, value: "Unknown" }) : <RiskBadge score={averageRiskScore(findings)} />}
+          detail={showUnavailableState ? "waiting for API" : "related risk"}
+        />
+        <MetricCard label="Nodes" value={metricValueForState({ state: metricState, value: nodeCount })} detail={showUnavailableState ? "waiting for API" : "entities in view"} />
+        <MetricCard label="Relations" value={metricValueForState({ state: metricState, value: relationCount })} detail={showUnavailableState ? "waiting for API" : "graph links"} />
       </div>
 
       {!selectedRoot && !fallbackFindings.loading && !showHardError && (

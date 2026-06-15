@@ -30,7 +30,7 @@ describe("product UI contract", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps the removed split explainer route and data module absent", () => {
+  it("keeps removed topology explainer routes and data modules absent", () => {
     expect(existsSync(projectPath("src/app/developer/repository-split/page.tsx"))).toBe(false);
     expect(existsSync(projectPath("src/lib/repository-split.ts"))).toBe(false);
   });
@@ -38,7 +38,7 @@ describe("product UI contract", () => {
   it("keeps developer utilities focused on supported tools", () => {
     const source = readProjectFile("src/app/developer/page.tsx");
 
-    expect(PRODUCT_UI_CONTRACT_VERSION).toBe("2026-06-15.identity-recovery");
+    expect(PRODUCT_UI_CONTRACT_VERSION).toBe("2026-06-15.runtime-contracts");
     expect(source).toContain("Developer Utilities");
     for (const label of REQUIRED_DEVELOPER_UTILITY_LABELS) {
       expect(source).toContain(label);
@@ -50,23 +50,28 @@ describe("product UI contract", () => {
     const source = readProjectFile("src/components/Topbar.tsx");
 
     expect(source).toContain("useCurrentUser");
-    expect(source).toContain("user?.initials");
-    expect(source).toContain("currentUserSourceLabel");
+    expect(source).toContain("identityPosture");
+    expect(source).toContain("identity.initials");
     expect(source).not.toMatch(/>\s*(CB|JH)\s*</);
     expect(source).not.toMatch(/const\s+userInitials\s*=\s*["'`](CB|JH)["'`]/);
   });
 
   it("keeps identity and API recovery diagnostics in developer-owned surfaces", () => {
     expect(existsSync(projectPath("src/app/developer/identity/page.tsx"))).toBe(true);
+    expect(existsSync(projectPath("src/lib/identity.ts"))).toBe(true);
+    expect(existsSync(projectPath("src/lib/runtime-state.ts"))).toBe(true);
 
     const developerSource = readProjectFile("src/app/developer/page.tsx");
     const identityPanelSource = readProjectFile("src/components/identity/IdentityContractPanel.tsx");
     const primitivesSource = readProjectFile("src/components/grc/Primitives.tsx");
+    const runtimeStateSource = readProjectFile("src/lib/runtime-state.ts");
+    const statusSource = readProjectFile("src/components/StatusPanel.tsx");
 
     expect(developerSource).toContain("IdentityContractPanel");
     expect(identityPanelSource).toContain("Write Stamps");
     expect(identityPanelSource).toContain("currentUserWriteFieldForPath");
+    expect(statusSource).toContain("Runtime Health");
     expect(primitivesSource).toContain("/developer#quick-status");
-    expect(primitivesSource).toContain("Cerebro API unavailable");
+    expect(runtimeStateSource).toContain("Cerebro API unavailable");
   });
 });
