@@ -46,6 +46,13 @@ const withoutAbortSignal = (init: RequestInit) => {
   return rest;
 };
 
+const withFreshCacheHeaders = (init: RequestInit) => {
+  const headers = new Headers(init.headers);
+  headers.set("Cache-Control", "no-cache");
+  headers.set("Pragma", "no-cache");
+  return { ...init, headers };
+};
+
 const abortable = async <T,>(promise: Promise<T>, signal?: AbortSignal) => {
   if (!signal) {
     return promise;
@@ -77,7 +84,7 @@ export const fetchCachedGRC = async <T,>(
     return inflight as Promise<Awaited<ReturnType<typeof fetchCerebro<T>>>>;
   }
 
-  const requestInit = !force ? withoutAbortSignal(init) : init;
+  const requestInit = force ? withFreshCacheHeaders(init) : withoutAbortSignal(init);
   const request = fetchCerebro<T>(path, apiKey, requestInit).then((response) => {
     if (response.ok) {
       writeGRCQueryCache(key, response);

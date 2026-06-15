@@ -12,7 +12,9 @@ import {
   readCerebroProxyCache,
   readCerebroProxyInflight,
   responseHeadersFor,
+  shouldBypassCerebroProxyCache,
   trackCerebroProxyInflight,
+  withCerebroCacheBypassHeader,
   writeCerebroProxyCache,
 } from "@/lib/cerebro-proxy";
 import { normalizeAskModel } from "@/lib/ask";
@@ -29,7 +31,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   const authHeaders = authHeadersFor(request);
-  const cacheKey = isCacheableCerebroPath(path) ? cerebroProxyCacheKey(target, authHeaders) : null;
+  const bypassCache = shouldBypassCerebroProxyCache(request.headers);
+  const upstreamHeaders = bypassCache ? withCerebroCacheBypassHeader(authHeaders) : authHeaders;
+  const cacheKey = !bypassCache && isCacheableCerebroPath(path) ? cerebroProxyCacheKey(target, authHeaders) : null;
   const cached = cacheKey ? readCerebroProxyCache(cacheKey) : null;
   if (cached) {
     return new NextResponse(cached.body, {
@@ -52,7 +56,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     try {
       response = await fetchCerebro(target, {
         method: "GET",
-        headers: authHeaders,
+        headers: upstreamHeaders,
         cache: "no-store",
       });
     } catch (error) {
