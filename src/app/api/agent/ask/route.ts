@@ -32,6 +32,17 @@ type NormalizedAgentRequest = AskRequest & {
   tenant_id: string;
 };
 
+type AgentStreamStats = {
+  startedAt: number;
+  toolCalls: number;
+  toolResults: number;
+  deltaCount: number;
+  mcpConnectMs?: number;
+  agentRunMs?: number;
+  firstToolMs?: number;
+  firstDeltaMs?: number;
+};
+
 const sse = (event: string, data: unknown) =>
   encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
@@ -144,6 +155,12 @@ async function streamAgentRun(
 ) {
   const startedAt = Date.now();
   const traceId = `agent-${randomUUID()}`;
+  const stats: AgentStreamStats = {
+    startedAt,
+    toolCalls: 0,
+    toolResults: 0,
+    deltaCount: 0,
+  };
   const mcpUrl = getMcpUrl();
   if (!mcpUrl) {
     await streamLegacyAsk(controller, request, payload);
@@ -167,7 +184,9 @@ async function streamAgentRun(
   }));
 
   try {
+    const connectStartedAt = Date.now();
     await server.connect();
+    stats.mcpConnectMs = Date.now() - connectStartedAt;
     controller.enqueue(sse("agent_status", {
       stage: "plan",
       label: "Reading graph context",
@@ -196,10 +215,12 @@ async function streamAgentRun(
       maxTurns: 8,
     });
 
+    const agentRunStartedAt = Date.now();
     for await (const event of result) {
-      emitAgentStreamEvent(controller, event);
+      emitAgentStreamEvent(controller, event, stats);
     }
     await result.completed;
+    stats.agentRunMs = Date.now() - agentRunStartedAt;
 
     const finalOutput = stringifyFinalOutput(result.finalOutput);
     if (finalOutput) {
@@ -212,6 +233,10 @@ async function streamAgentRun(
       trace_id: traceId,
       total_ms: Date.now() - startedAt,
       cypher_refused: false,
+      timings: compactTimings(stats),
+      tool_calls: stats.toolCalls,
+      tool_results: stats.toolResults,
+      delta_count: stats.deltaCount,
     }));
   } finally {
     await server.close().catch(() => undefined);
@@ -293,6 +318,10 @@ Use the Cerebro MCP tools as the source of truth for findings, assets, evidence,
 
 Prefer narrow, high-signal tool calls. If the user is on a scoped screen, start with that entity, finding, resource, or route context before broad search. For changes or refreshes, only use propose/dry-run tools and clearly label the result as a proposal.
 
+Fast tool routing:
+${buildFastToolGuidance(payload)}
+- Avoid decomposing a request into findings, evidence, asset, and graph calls when one bundled tool already returns the needed context.
+
 Answer in concise Markdown. Lead with the actionable answer, then give supporting evidence, caveats, and suggested next action when useful. Mention the MCP tool names you used only when it helps auditability.
 
 Current request metadata:
@@ -302,6 +331,24 @@ Current request metadata:
 - Route: ${payload.context?.route ?? "unknown"}
 - Page title: ${payload.context?.title ?? payload.context?.routeLabel ?? "unknown"}
 `;
+
+const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
+  const findingId = payload.context?.findingId;
+  const route = payload.context?.route ?? "";
+  const scopedUrn = payload.scope_urn ?? payload.context?.scopeUrn ?? payload.context?.resourceUrn ?? payload.context?.entityUrn;
+  const hints = [
+    findingId
+      ? `- For this finding-scoped request, call cerebro.investigation.context first with finding_id="${findingId}" and compact=true unless the user explicitly asks for raw evidence.`
+      : "",
+    route.includes("risk") || route.includes("dashboard") || route.includes("inbox")
+      ? "- For risk dashboard or inbox questions without a specific finding, start with cerebro.risk.summary before broad finding search."
+      : "",
+    scopedUrn
+      ? `- For scoped asset or graph questions, start from the provided URN (${scopedUrn}) and prefer cerebro.assets.get before using cerebro.graph.neighborhood for relationship detail.`
+      : "",
+  ].filter(Boolean);
+  return hints.length ? hints.join("\n") : "- Start with the narrowest MCP tool that matches the current page context before broad search.";
+};
 
 const buildAgentInput = (payload: NormalizedAgentRequest) => {
   const context = payload.context
@@ -327,10 +374,13 @@ const contextLabel = (payload: NormalizedAgentRequest) => {
 const emitAgentStreamEvent = (
   controller: ReadableStreamDefaultController<Uint8Array>,
   event: RunStreamEvent,
+  stats: AgentStreamStats,
 ) => {
   if (event.type === "raw_model_stream_event") {
     const delta = textDeltaFromRawEvent(event.data);
     if (delta) {
+      stats.deltaCount += 1;
+      stats.firstDeltaMs ??= Date.now() - stats.startedAt;
       controller.enqueue(sse("agent_delta", { text: delta }));
     }
     return;
@@ -347,6 +397,8 @@ const emitAgentStreamEvent = (
 
   if (event.type === "run_item_stream_event") {
     if (event.name === "tool_called") {
+      stats.toolCalls += 1;
+      stats.firstToolMs ??= Date.now() - stats.startedAt;
       controller.enqueue(sse("agent_tool", {
         name: toolNameFromItem(event.item),
         status: "started",
@@ -354,6 +406,7 @@ const emitAgentStreamEvent = (
       }));
     }
     if (event.name === "tool_output") {
+      stats.toolResults += 1;
       controller.enqueue(sse("agent_tool", {
         name: toolNameFromItem(event.item),
         status: "completed",
@@ -368,6 +421,15 @@ const emitAgentStreamEvent = (
       }));
     }
   }
+};
+
+const compactTimings = (stats: AgentStreamStats) => {
+  const timings: Record<string, number> = {};
+  if (typeof stats.mcpConnectMs === "number") timings.mcp_connect_ms = stats.mcpConnectMs;
+  if (typeof stats.agentRunMs === "number") timings.agent_run_ms = stats.agentRunMs;
+  if (typeof stats.firstToolMs === "number") timings.first_tool_ms = stats.firstToolMs;
+  if (typeof stats.firstDeltaMs === "number") timings.first_delta_ms = stats.firstDeltaMs;
+  return timings;
 };
 
 const textDeltaFromRawEvent = (data: unknown) => {
