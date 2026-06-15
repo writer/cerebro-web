@@ -58,7 +58,7 @@ export default function StatusPanel() {
   }, [apiKey]);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div id="quick-status" className="rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
         <h3 className="text-[13px] font-semibold text-slate-900">Quick Status</h3>
         <span className="text-[11px] text-slate-400">/health & /healthz</span>

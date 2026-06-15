@@ -4,11 +4,12 @@ export type CurrentUser = {
   email?: string;
   username?: string;
   subject?: string;
-  source: "headers" | "jwt" | "azure-client-principal";
+  source: "headers" | "jwt" | "azure-client-principal" | "local-fallback";
 };
 
 export type CurrentUserResponse = {
   authenticated: boolean;
+  fallback?: boolean;
   user: CurrentUser | null;
 };
 
@@ -214,6 +215,47 @@ const currentUserFromAzureClientPrincipal = (value: string) => {
 export const currentUserActor = (user: CurrentUser | null | undefined) =>
   firstNonEmpty(user?.email, user?.username, user?.displayName, user?.subject);
 
+export const localCurrentUserFallback = (): CurrentUser => ({
+  displayName: "Local developer",
+  initials: "LD",
+  username: "local-developer",
+  source: "local-fallback",
+});
+
+export const localIdentityFallbackEnabled = () =>
+  process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK === "1" ||
+  (process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK !== "0" && process.env.NODE_ENV === "development");
+
+export const currentUserSourceLabel = (source: CurrentUser["source"] | null | undefined) => {
+  switch (source) {
+    case "headers":
+      return "Auth proxy headers";
+    case "jwt":
+      return "JWT claims";
+    case "azure-client-principal":
+      return "Azure client principal";
+    case "local-fallback":
+      return "Local fallback";
+    default:
+      return "Unavailable";
+  }
+};
+
+export const currentUserSourceDetail = (source: CurrentUser["source"] | null | undefined) => {
+  switch (source) {
+    case "headers":
+      return "Okta or auth proxy headers supplied the current user.";
+    case "jwt":
+      return "A bearer or identity-token JWT supplied the current user.";
+    case "azure-client-principal":
+      return "Azure Static Web Apps client-principal claims supplied the current user.";
+    case "local-fallback":
+      return "No upstream identity header was present, so local development uses a stable fallback identity.";
+    default:
+      return "No current-user signal was found on the request.";
+  }
+};
+
 export const currentUserFromHeaders = (headers: Headers): CurrentUser | null => {
   const directUser = currentUserFromClaims(
     {
@@ -247,3 +289,6 @@ export const currentUserFromHeaders = (headers: Headers): CurrentUser | null => 
 
   return null;
 };
+
+export const currentUserFromHeadersWithFallback = (headers: Headers): CurrentUser | null =>
+  currentUserFromHeaders(headers) ?? (localIdentityFallbackEnabled() ? localCurrentUserFallback() : null);

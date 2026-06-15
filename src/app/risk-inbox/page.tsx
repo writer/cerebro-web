@@ -102,7 +102,7 @@ export default function RiskInboxPage() {
       </div>
 
       {loading && <LoadingBlock label="Loading findings..." />}
-      {error && <ErrorBlock error={error} />}
+      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Findings will appear when the API is reachable." />}
       {!loading && !error && (
         <div>
           <div className="mb-3 flex items-center justify-between">

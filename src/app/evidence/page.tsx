@@ -81,7 +81,7 @@ export default function EvidencePage() {
       </div>
 
       {loading && <LoadingBlock label="Loading evidence..." />}
-      {error && <ErrorBlock error={error} />}
+      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Evidence will appear when the API is reachable." />}
 
       {!loading && !error && (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

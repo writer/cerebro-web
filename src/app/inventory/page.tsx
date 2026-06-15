@@ -341,7 +341,11 @@ export default function InventoryPage() {
       />
 
       {inventoryError && (
-        <ErrorBlock error={inventoryError || "Unable to load inventory."} />
+        <ErrorBlock
+          error={inventoryError || "Unable to load inventory."}
+          onRetry={() => { void categoriesQuery.reload(); void assetsQuery.reload(); }}
+          recoveryDetail="Inventory data will appear when the API is reachable."
+        />
       )}
 
       <div className="surface-panel grid gap-0 divide-y divide-[color:var(--border)] overflow-hidden md:grid-cols-5 md:divide-x md:divide-y-0">
@@ -493,7 +497,15 @@ export default function InventoryPage() {
               <ProgressCard title="Ownership" percent={summary?.assigned_coverage_pct ?? (assets.length ? Math.round((ownerCount / assets.length) * 100) : 0)} detail="assigned assets" total={ownerCount} />
               <ProgressCard title="Private posture" percent={assets.length ? Math.round(((assets.length - publicAssetCount) / assets.length) * 100) : 0} detail="not public" total={`${publicAssetCount} public`} />
             </div>
-            {scopeError && <div className="mt-4"><ErrorBlock error={scopeError} /></div>}
+            {scopeError && (
+              <div className="mt-4">
+                <ErrorBlock
+                  error={scopeError}
+                  onRetry={() => { void assetsQuery.reload(); void scopeQuery.reload(); }}
+                  recoveryDetail="Scope updates can resume when the API is reachable."
+                />
+              </div>
+            )}
           </section>
           <section className="surface-panel p-4">
             <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Org parity</h2>

@@ -158,7 +158,7 @@ export default function FindingDetailPage() {
       />
 
       {loading && <LoadingBlock label="Loading finding..." />}
-      {error && <ErrorBlock error={error} />}
+      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Finding details will appear when the API is reachable." />}
 
       {finding && (
         <>

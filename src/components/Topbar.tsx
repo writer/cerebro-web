@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
+import { currentUserSourceLabel } from "@/lib/current-user";
 
 type ConsoleConfig = {
   apiBase: string;
@@ -43,6 +44,7 @@ export default function Topbar() {
   const userLabel = user?.displayName ?? (userLoading ? "Loading current user" : "Current user unavailable");
   const userDetail = user?.email ?? user?.username ?? user?.subject ?? userError ?? userLabel;
   const userInitials = user?.initials ?? "?";
+  const userSource = currentUserSourceLabel(user?.source);
 
   return (
     <header className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
@@ -94,9 +96,9 @@ export default function Topbar() {
           </svg>
         </button>
         <div
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)] max-md:hidden"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)]"
           aria-label={`Current user: ${userLabel}`}
-          title={`${userLabel}${userDetail && userDetail !== userLabel ? ` (${userDetail})` : ""}`}
+          title={`${userLabel}${userDetail && userDetail !== userLabel ? ` (${userDetail})` : ""} · ${userSource}`}
         >
           {userInitials}
         </div>

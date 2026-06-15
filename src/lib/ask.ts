@@ -32,6 +32,7 @@ export type AskAgentContext = {
   scopeUrn?: string;
   findingId?: string;
   entityUrn?: string;
+  pageState?: "api_unavailable" | "empty" | "ready";
   resourceUrn?: string;
   chips?: AskAgentContextChip[];
   [key: string]: unknown;

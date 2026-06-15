@@ -123,7 +123,7 @@ export default function Home() {
       />
 
       {dashboard.loading && <LoadingBlock label="Loading dashboard..." />}
-      {dashboard.error && <ErrorBlock error={dashboard.error} />}
+      {dashboard.error && <ErrorBlock error={dashboard.error} onRetry={() => void dashboard.reload()} recoveryDetail="Overview metrics will appear when the API is reachable." />}
 
       {data && summary && (
         <>
@@ -244,7 +244,7 @@ export default function Home() {
               </div>
             )}
             {showEvidence && evidenceQuery.loading && <LoadingBlock label="Loading evidence..." />}
-            {showEvidence && evidenceQuery.error && <ErrorBlock error={evidenceQuery.error} />}
+            {showEvidence && evidenceQuery.error && <ErrorBlock error={evidenceQuery.error} onRetry={() => void evidenceQuery.reload()} recoveryDetail="Recent evidence will appear when the API is reachable." />}
             {showEvidence && !evidenceQuery.loading && !evidenceQuery.error && (
               <div className="grid gap-3 md:grid-cols-2">
                 {recentEvidence.map((item) => (

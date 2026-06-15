@@ -394,7 +394,15 @@ export default function ConnectorDetailPage() {
   const loading = detailQuery.loading && !detailQuery.data;
 
   if (loading) return <LoadingBlock label="Loading connector..." />;
-  if (detailQuery.error) return <ErrorBlock error={detailQuery.error} />;
+  if (detailQuery.error) {
+    return (
+      <ErrorBlock
+        error={detailQuery.error}
+        onRetry={() => { void detailQuery.reload(); void libraryQuery.reload(); }}
+        recoveryDetail="Connector details will appear when the API is reachable."
+      />
+    );
+  }
   if (!connector) {
     return (
       <div className="space-y-4">

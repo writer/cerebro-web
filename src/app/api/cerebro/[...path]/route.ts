@@ -16,7 +16,7 @@ import {
   writeCerebroProxyCache,
 } from "@/lib/cerebro-proxy";
 import { normalizeAskModel } from "@/lib/ask";
-import { currentUserActor, currentUserFromHeaders } from "@/lib/current-user";
+import { currentUserActor, currentUserFromHeadersWithFallback } from "@/lib/current-user";
 import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/current-user-write-stamp";
 
 type RouteContext = {
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const target = buildCerebroUrl(path, url.search);
   let body = await request.text();
   const normalizedPath = normalizeProxyPath(path);
-  const currentActor = currentUserActor(currentUserFromHeaders(request.headers));
+  const currentActor = currentUserActor(currentUserFromHeadersWithFallback(request.headers));
   const acceptsEventStream = (request.headers.get("accept") ?? "").includes("text/event-stream");
   const isAskStreamRequest = normalizedPath === "grc/ask" && acceptsEventStream;
   if (isAskStreamRequest) {
@@ -181,7 +181,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   body = stampCurrentUserOnWriteBody(
     body,
     normalizeProxyPath(path),
-    currentUserActor(currentUserFromHeaders(request.headers)),
+    currentUserActor(currentUserFromHeadersWithFallback(request.headers)),
   );
   const headers = {
     ...authHeadersFor(request),

@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
+import IdentityContractPanel from "@/components/identity/IdentityContractPanel";
 import StatusPanel from "@/components/StatusPanel";
 import { PageHeader, Panel } from "@/components/grc/Primitives";
 import { tagSlug } from "@/lib/openapi";
 import { useOpenApi } from "@/lib/openapi-store";
 
 const developerLinks = [
+  { label: "Identity Contract", href: "/developer/identity", description: "Current user source, avatar initials, actor value, and write-stamp fields." },
   { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and agent entry points for security producers." },
   { label: "Raindrop Ask Evals", href: "/developer/evals", description: "Local Ask quality evals, rubric outcomes, and Workshop trace links." },
 ];
@@ -31,6 +33,8 @@ export default function DeveloperPage() {
       />
 
       <StatusPanel />
+
+      <IdentityContractPanel compact />
 
       <Panel title="Developer Utilities">
         <div className="grid gap-3 lg:grid-cols-2">

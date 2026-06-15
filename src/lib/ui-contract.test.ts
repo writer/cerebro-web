@@ -3,6 +3,8 @@ import { join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { BANNED_PRODUCT_UI_PATTERNS, PRODUCT_UI_CONTRACT_VERSION, REQUIRED_DEVELOPER_UTILITY_LABELS } from "./product-ui-contract";
+
 const projectPath = (...parts: string[]) => join(process.cwd(), ...parts);
 const sourceRoot = projectPath("src");
 
@@ -18,14 +20,9 @@ const readProjectFile = (...parts: string[]) => readFileSync(projectPath(...part
 
 describe("product UI contract", () => {
   it("keeps repository process metadata out of product source", () => {
-    const bannedPatterns = [
-      /repository[\s_-]+split/i,
-      /cross[\s_-]+repo\s+contract/i,
-      /app[\s_-]+vs[\s_-]+deploy/i,
-    ];
     const offenders = sourceFiles(sourceRoot).flatMap((file) => {
       const source = readFileSync(file, "utf8");
-      return bannedPatterns
+      return BANNED_PRODUCT_UI_PATTERNS
         .filter((pattern) => pattern.test(source))
         .map((pattern) => `${relative(process.cwd(), file)}: ${pattern}`);
     });
@@ -41,9 +38,11 @@ describe("product UI contract", () => {
   it("keeps developer utilities focused on supported tools", () => {
     const source = readProjectFile("src/app/developer/page.tsx");
 
+    expect(PRODUCT_UI_CONTRACT_VERSION).toBe("2026-06-15.identity-recovery");
     expect(source).toContain("Developer Utilities");
-    expect(source).toContain("Security Producers");
-    expect(source).toContain("Raindrop Ask Evals");
+    for (const label of REQUIRED_DEVELOPER_UTILITY_LABELS) {
+      expect(source).toContain(label);
+    }
     expect(source).not.toMatch(/repository[\s_-]+split/i);
   });
 
@@ -52,7 +51,22 @@ describe("product UI contract", () => {
 
     expect(source).toContain("useCurrentUser");
     expect(source).toContain("user?.initials");
+    expect(source).toContain("currentUserSourceLabel");
     expect(source).not.toMatch(/>\s*(CB|JH)\s*</);
     expect(source).not.toMatch(/const\s+userInitials\s*=\s*["'`](CB|JH)["'`]/);
+  });
+
+  it("keeps identity and API recovery diagnostics in developer-owned surfaces", () => {
+    expect(existsSync(projectPath("src/app/developer/identity/page.tsx"))).toBe(true);
+
+    const developerSource = readProjectFile("src/app/developer/page.tsx");
+    const identityPanelSource = readProjectFile("src/components/identity/IdentityContractPanel.tsx");
+    const primitivesSource = readProjectFile("src/components/grc/Primitives.tsx");
+
+    expect(developerSource).toContain("IdentityContractPanel");
+    expect(identityPanelSource).toContain("Write Stamps");
+    expect(identityPanelSource).toContain("currentUserWriteFieldForPath");
+    expect(primitivesSource).toContain("/developer#quick-status");
+    expect(primitivesSource).toContain("Cerebro API unavailable");
   });
 });

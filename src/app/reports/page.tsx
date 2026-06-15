@@ -80,7 +80,13 @@ export default function ReportsPage() {
       </div>
 
       {(fallbackFindings.loading || packet.loading) && <LoadingBlock label="Loading report packet..." />}
-      {(fallbackFindings.error || packet.error) && <ErrorBlock error={fallbackFindings.error || packet.error || "Unable to load report."} />}
+      {(fallbackFindings.error || packet.error) && (
+        <ErrorBlock
+          error={fallbackFindings.error || packet.error || "Unable to load report."}
+          onRetry={() => { void fallbackFindings.reload(); void packet.reload(); }}
+          recoveryDetail="Report packets will appear when the API is reachable."
+        />
+      )}
 
       {!selectedFindingID && !fallbackFindings.loading && !fallbackFindings.error && (
         <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">

@@ -445,8 +445,8 @@ export default function InventoryAssetPage() {
       />
 
       {loading && <LoadingBlock label="Loading asset..." />}
-      {error && <ErrorBlock error={error} />}
-      {scopeError && <ErrorBlock error={scopeError} />}
+      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Asset details will appear when the API is reachable." />}
+      {scopeError && <ErrorBlock error={scopeError} onRetry={() => void reload()} recoveryDetail="Scope updates can resume when the API is reachable." />}
 
       {data && (
         <>
