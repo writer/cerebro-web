@@ -3,6 +3,9 @@ import { dirname } from "path";
 import { fileURLToPath } from "url";
 
 const root = dirname(fileURLToPath(import.meta.url));
+const scriptSrc = process.env.NODE_ENV === "development"
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline'";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -22,7 +25,7 @@ const nextConfig: NextConfig = {
               "form-action 'self'",
               "frame-ancestors 'none'",
               "img-src 'self' data:",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "connect-src 'self'",
             ].join("; "),

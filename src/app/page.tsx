@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApiKey } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
+import { connectorPath } from "@/lib/connector-view";
 import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
@@ -211,7 +212,7 @@ export default function Home() {
                   {(data.connectors ?? []).slice(0, 5).map((c) => (
                     <Link
                       key={c.runtime_id}
-                      href={`/connectors?runtime_id=${encodeURIComponent(c.runtime_id)}`}
+                      href={c.source_id ? connectorPath(c.source_id, { runtime_id: c.runtime_id }) : `/connectors?runtime_id=${encodeURIComponent(c.runtime_id)}`}
                       className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
                     >
                       <div>

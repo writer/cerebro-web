@@ -1,247 +1,208 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { useApiKey } from "@/components/providers";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
-import { displayDate, shortEntity } from "@/lib/grc";
-import { fetchCerebro } from "@/lib/cerebro-client";
+import ConnectorRuntimeTable from "@/components/connectors/ConnectorRuntimeTable";
+import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
+import { displayDate } from "@/lib/grc";
 import { extractRecords, withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import type { ConnectorLibraryResponse } from "@/lib/connectors";
+import { normalizeCredentialStores } from "@/lib/connectors";
 import {
-  ConnectorCatalogEntry,
-  ConnectorCredentialKey,
-  ConnectorField,
-  ConnectorLibraryResponse,
-  connectorSearchText,
-  connectorStatus,
-  encryptConnectorCredentials,
-  fieldSetForConnector,
-} from "@/lib/connectors";
+  buildConnectorCards,
+  compactConnectorStatus,
+  connectorAttentionTotal,
+  connectorHealthyTotal,
+  connectorPath,
+  connectorPrimaryAction,
+  connectorRuntimeTotal,
+  filterConnectorCards,
+  readinessAccentClass,
+  readinessDescriptions,
+  readinessLabels,
+  readinessOrder,
+  readinessRowClass,
+  type ConnectorCard,
+  type ReadinessFilter,
+} from "@/lib/connector-view";
 import {
-  formatDuration,
   normalizeRuntime,
   sourceHealthBreakdown,
   summarizeMissionControl,
 } from "@/lib/mission-control";
-import type { MissionControlRuntime, SourceCoverageSummary, SourceReadiness } from "@/lib/mission-control";
+import type { MissionControlRuntime, SourceReadiness } from "@/lib/mission-control";
 import { useQueryParamState } from "@/lib/query-params";
 
-type ReadinessFilter = SourceReadiness | "all";
+const inputClass = "control-input w-full px-3 py-2 text-[13px]";
+const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
 
-type ConnectorCard = ConnectorCatalogEntry & {
-  coverage?: SourceCoverageSummary;
-  readiness: SourceReadiness | "not_configured";
-  nextAction: string;
-};
-
-const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
-const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400";
-const readinessOrder: SourceReadiness[] = ["bad", "needs_refresh", "poor", "healthy", "not_configured"];
-
-const readinessLabels: Record<ReadinessFilter, string> = {
-  all: "All",
-  bad: "Bad",
-  needs_refresh: "Needs refresh",
-  poor: "Poor",
-  healthy: "Healthy",
-  not_configured: "Not configured",
-};
-
-const readinessBorderClass: Record<SourceReadiness, string> = {
-  bad: "border-l-red-500",
-  needs_refresh: "border-l-amber-500",
-  poor: "border-l-orange-500",
-  healthy: "border-l-emerald-500",
-  not_configured: "border-l-slate-400",
-};
-
-const runtimeAttentionCount = (source: SourceCoverageSummary) => source.degraded + source.stale + source.unknown;
-
-function compactConnectorStatus(card: ConnectorCard) {
-  if (card.coverage) return card.coverage.performance;
-  return connectorStatus(card);
-}
-
-function connectorRuntimeTotal(card: ConnectorCard) {
-  return card.coverage?.total ?? card.configured_runtimes ?? 0;
-}
-
-function connectorHealthyTotal(card: ConnectorCard) {
-  return card.coverage?.healthy ?? card.healthy_runtimes ?? 0;
-}
-
-function buildConnectorCards(library: ConnectorCatalogEntry[], sources: SourceCoverageSummary[]): ConnectorCard[] {
-  const sourceByID = new Map(sources.map((source) => [source.source_id, source]));
-  const seen = new Set<string>();
-  const cards = library.map((connector) => {
-    const coverage = sourceByID.get(connector.source_id);
-    seen.add(connector.source_id);
-    return {
-      ...connector,
-      coverage,
-      readiness: coverage?.performance ?? (connectorStatus(connector) as SourceReadiness),
-      nextAction: coverage?.next_action ?? ((connector.configured_runtimes ?? 0) > 0 ? "Monitor sync health" : "Connect credential"),
-    };
-  });
-  sources.forEach((source) => {
-    if (seen.has(source.source_id)) return;
-    cards.push({
-      source_id: source.source_id,
-      name: source.name || source.source_id,
-      description: source.description,
-      configured_runtimes: source.total,
-      healthy_runtimes: source.healthy,
-      needs_attention_runtimes: runtimeAttentionCount(source),
-      status: source.performance,
-      coverage: source,
-      readiness: source.performance,
-      nextAction: source.next_action,
-    });
-  });
-  return cards.sort((left, right) => compactConnectorStatus(left).localeCompare(compactConnectorStatus(right)) || left.name.localeCompare(right.name));
-}
-
-function SourceSignal({ label, value, attention = false }: { label: string; value: string; attention?: boolean }) {
+function SummaryTile({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone?: "neutral" | "success" | "warning";
+}) {
+  const dot = tone === "success" ? "bg-emerald-500" : tone === "warning" ? "bg-amber-500" : "bg-[var(--text-muted)]";
   return (
-    <div className={`rounded-md border px-2.5 py-1.5 ${attention ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100" : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300"}`}>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
-      <div className="mt-0.5 text-[12px] font-medium">{value}</div>
+    <div className="min-w-[150px] p-4">
+      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+        <span className={`h-2 w-2 rounded-full ${dot}`} />
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-semibold tabular-nums text-[var(--text-primary)]">{value}</div>
+      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{detail}</div>
     </div>
   );
 }
 
-function ConnectorLibraryCard({ card, active, onFilter, onConnect }: { card: ConnectorCard; active: boolean; onFilter: () => void; onConnect: () => void }) {
-  const status = compactConnectorStatus(card);
+function ReadinessPill({
+  filter,
+  count,
+  active,
+  onClick,
+}: {
+  filter: ReadinessFilter;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const dot = filter === "all" ? "bg-zinc-400" : readinessAccentClass[filter as SourceReadiness];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition ${
+        active
+          ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--text-primary)]"
+          : "border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[color:var(--border-strong)]"
+      }`}
+    >
+      <span className={`h-2 w-2 rounded-full ${dot}`} />
+      {readinessLabels[filter]}
+      <span className="tabular-nums text-[var(--text-muted)]">{count}</span>
+    </button>
+  );
+}
+
+function ConnectorRow({ card }: { card: ConnectorCard }) {
   const total = connectorRuntimeTotal(card);
   const healthy = connectorHealthyTotal(card);
-  const attention = Math.max(0, total - healthy);
+  const attention = connectorAttentionTotal(card);
+  const status = compactConnectorStatus(card);
+  const latest = card.coverage?.latest_activity_at;
+
   return (
-    <div className={`border-l-[3px] ${readinessBorderClass[status as SourceReadiness] ?? "border-l-slate-400"} rounded-md border-y border-r border-slate-200 bg-white p-4 transition dark:border-y-slate-800 dark:border-r-slate-800 dark:bg-slate-950/30 ${active ? "ring-2 ring-indigo-200 dark:ring-indigo-500/30" : ""}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-[14px] font-semibold text-slate-900 dark:text-slate-100">{card.name || card.source_id}</div>
-          <div className="mt-1 truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">{card.source_id}</div>
-        </div>
-        <Badge value={status} />
-      </div>
-      <div className="mt-3 min-h-10 text-[12px] leading-5 text-slate-500 dark:text-slate-400">{card.description || card.nextAction}</div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <SourceSignal label="Runtimes" value={String(total)} attention={total === 0} />
-        <SourceSignal label="Healthy" value={`${healthy}/${Math.max(total, 1)}`} attention={total > 0 && healthy < total} />
-        <SourceSignal label="Attention" value={String(attention)} attention={attention > 0} />
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" onClick={onConnect} className="inline-flex h-8 items-center justify-center rounded-md bg-slate-900 px-3 text-[12px] font-medium text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-          Connect
-        </button>
-        <button type="button" onClick={onFilter} className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 px-3 text-[12px] font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-indigo-500/60 dark:hover:bg-indigo-500/10">
-          Filter
-        </button>
-      </div>
-    </div>
+    <tr className={`border-l-[3px] ${readinessRowClass[status]} border-b border-[color:var(--border)] transition hover:bg-[var(--surface-hover)]`}>
+      <td className="px-4 py-3">
+        <Link href={connectorPath(card.source_id)} className="font-semibold text-[var(--text-primary)] hover:text-[var(--primary)]">
+          {card.name || card.source_id}
+        </Link>
+        <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{card.source_id}</div>
+      </td>
+      <td className="px-4 py-3"><Badge value={status} /></td>
+      <td className="px-4 py-3">
+        <div className="font-semibold tabular-nums text-[var(--text-primary)]">{total}</div>
+        <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{healthy} healthy</div>
+      </td>
+      <td className="px-4 py-3">
+        <div className={`font-semibold tabular-nums ${attention > 0 ? "text-red-600 dark:text-red-300" : "text-[var(--text-primary)]"}`}>{attention}</div>
+        <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">needs action</div>
+      </td>
+      <td className="px-4 py-3 text-[var(--text-secondary)]">{displayDate(latest)}</td>
+      <td className="px-4 py-3">
+        <div className="max-w-[240px] text-[12px] leading-5 text-[var(--text-secondary)]">{card.nextAction}</div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3 text-right">
+        <Link href={connectorPath(card.source_id)} className="primary-button inline-flex px-3 py-1.5 text-[12px]">
+          {connectorPrimaryAction(card)}
+        </Link>
+      </td>
+    </tr>
   );
 }
 
-function fieldValue(formData: FormData, field: ConnectorField) {
-  return String(formData.get(field.key) ?? "").trim();
+function AttentionPanel({ cards }: { cards: ConnectorCard[] }) {
+  const priority = cards.filter((card) => !["healthy", "not_configured"].includes(card.readiness)).slice(0, 5);
+  return (
+    <Panel title="Attention" action={<span className="text-[12px] text-[var(--text-muted)]">{priority.length} active</span>}>
+      <div className="space-y-2">
+        {priority.map((card) => (
+          <Link
+            key={card.source_id}
+            href={connectorPath(card.source_id)}
+            className={`block rounded-lg border-l-[3px] ${readinessRowClass[card.readiness]} border-y border-r border-[color:var(--border)] bg-[var(--surface)] px-3 py-2.5 transition hover:bg-[var(--surface-hover)]`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{card.name || card.source_id}</div>
+                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{card.nextAction}</div>
+              </div>
+              <Badge value={card.readiness} />
+            </div>
+          </Link>
+        ))}
+        {priority.length === 0 && <EmptyBlock label="No connector health gaps in this scope." />}
+      </div>
+    </Panel>
+  );
 }
 
-function ConnectDialog({
-  connector,
-  tenantID,
-  onClose,
-  onSubmit,
-  submitting,
-  error,
+function ReadinessPanel({
+  counts,
+  active,
+  onSelect,
 }: {
-  connector: ConnectorCatalogEntry;
-  tenantID: string;
-  onClose: () => void;
-  onSubmit: (form: HTMLFormElement) => void;
-  submitting: boolean;
-  error: string | null;
+  counts: Record<SourceReadiness, number>;
+  active: ReadinessFilter;
+  onSelect: (filter: ReadinessFilter) => void;
 }) {
-  const fields = fieldSetForConnector(connector.source_id);
-  const defaultRuntimeID = [tenantID || "tenant", connector.source_id].filter(Boolean).join("-");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
-      <form
-        className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-950"
-        onSubmit={(event: FormEvent<HTMLFormElement>) => {
-          event.preventDefault();
-          onSubmit(event.currentTarget);
-        }}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-          <div>
-            <div className="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Connect {connector.name || connector.source_id}</div>
-            <div className="mt-1 font-mono text-[11px] text-slate-500">{connector.source_id}</div>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-2 py-1 text-[12px] text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900">
-            Close
+    <Panel title="Readiness Model">
+      <div className="space-y-2">
+        {readinessOrder.map((readiness) => (
+          <button
+            key={readiness}
+            type="button"
+            onClick={() => onSelect(active === readiness ? "all" : readiness)}
+            className={`flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition ${
+              active === readiness
+                ? "border-[var(--primary)] bg-[var(--primary-soft)]"
+                : "border-[color:var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]"
+            }`}
+          >
+            <span>
+              <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                <span className={`h-2 w-2 rounded-full ${readinessAccentClass[readiness]}`} />
+                {readinessLabels[readiness]}
+              </span>
+              <span className="mt-1 block text-[11px] leading-4 text-[var(--text-muted)]">{readinessDescriptions[readiness]}</span>
+            </span>
+            <span className="tabular-nums text-[13px] font-semibold text-[var(--text-primary)]">{counts[readiness]}</span>
           </button>
-        </div>
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-5">
-          {error && <ErrorBlock error={error} />}
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className={labelClass}>Tenant<input name="tenant_id" defaultValue={tenantID} required placeholder="tenant" className={inputClass} /></label>
-            <label className={labelClass}>Runtime<input name="runtime_id" defaultValue={defaultRuntimeID} required placeholder="tenant-source" className={inputClass} /></label>
-          </div>
-          {fields.config.length > 0 && (
-            <div>
-              <div className="mb-2 text-[12px] font-semibold text-slate-800 dark:text-slate-200">Configuration</div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {fields.config.map((field) => (
-                  <label key={field.key} className={labelClass}>
-                    {field.label}
-                    <input name={field.key} required={field.required} placeholder={field.placeholder} className={inputClass} />
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          <div>
-            <div className="mb-2 text-[12px] font-semibold text-slate-800 dark:text-slate-200">Credentials</div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {fields.credentials.map((field) => (
-                <label key={field.key} className={labelClass}>
-                  {field.label}
-                  <input name={field.key} type={field.type ?? "password"} required={field.required} autoComplete="off" className={inputClass} />
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
-          <div className="text-[12px] text-slate-500 dark:text-slate-400">Credential vault submission</div>
-          <button type="submit" disabled={submitting} className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-4 text-[13px] font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
-            {submitting ? "Connecting..." : "Connect"}
-          </button>
-        </div>
-      </form>
-    </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
 export default function ConnectorsPage() {
-  const { apiKey } = useApiKey();
   const [tenantID, setTenantID] = useState("");
   const [runtimeID, setRuntimeID] = useQueryParamState("runtime_id");
-  const [sourceID, setSourceID] = useQueryParamState("source_id");
-  const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceQuery, setSourceQuery] = useQueryParamState("q");
   const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("all");
-  const [connecting, setConnecting] = useState<ConnectorCatalogEntry | null>(null);
-  const [connectError, setConnectError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
-  const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
   const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
   const healthQuery = useGRCQuery<unknown>(
-    withQuery("/source-runtimes/health", { tenant_id: debouncedTenantID, runtime_id: debouncedRuntimeID, source_id: debouncedSourceID, limit: "500" }),
+    withQuery("/source-runtimes/health", { tenant_id: debouncedTenantID, runtime_id: debouncedRuntimeID, limit: "500" }),
   );
 
   const connectorView = useMemo(() => {
@@ -250,249 +211,131 @@ export default function ConnectorsPage() {
       .map((runtime) => normalizeRuntime(runtime, now, 24))
       .sort((left, right) => (left.source_id || "").localeCompare(right.source_id || "") || left.runtime_id.localeCompare(right.runtime_id));
     const summary = summarizeMissionControl(runtimes);
-    const sources = sourceHealthBreakdown(runtimes);
     const library = libraryQuery.data?.connectors ?? [];
+    const sources = sourceHealthBreakdown(runtimes, library as unknown as Record<string, unknown>[]);
     const cards = buildConnectorCards(library, sources);
-    return { cards, runtimes, sources, summary };
+    return { cards, runtimes, summary };
   }, [healthQuery.data, libraryQuery.data]);
 
-  const { cards, runtimes, sources, summary } = connectorView;
+  const { cards, runtimes, summary } = connectorView;
+  const credentialStores = useMemo(() => normalizeCredentialStores(libraryQuery.data), [libraryQuery.data]);
+  const availableStores = credentialStores.filter((store) => store.available);
   const readinessCounts = useMemo(
     () =>
       readinessOrder.reduce(
-        (counts, readiness) => ({ ...counts, [readiness]: cards.filter((card) => compactConnectorStatus(card) === readiness).length }),
+        (counts, readiness) => ({ ...counts, [readiness]: cards.filter((card) => card.readiness === readiness).length }),
         {} as Record<SourceReadiness, number>,
       ),
     [cards],
   );
-  const visibleCards = useMemo(
-    () =>
-      cards.filter((card) => {
-        const status = compactConnectorStatus(card);
-        if (readinessFilter !== "all" && status !== readinessFilter) return false;
-        const query = sourceQuery.trim().toLowerCase();
-        return !query || connectorSearchText(card).includes(query) || card.nextAction.toLowerCase().includes(query);
-      }),
-    [cards, readinessFilter, sourceQuery],
-  );
-  const prioritySources = sources.filter((source) => source.performance !== "healthy").slice(0, 4);
+  const visibleCards = useMemo(() => filterConnectorCards(cards, sourceQuery, readinessFilter), [cards, sourceQuery, readinessFilter]);
+  const needsAction = cards.filter((card) => !["healthy", "not_configured"].includes(card.readiness)).length;
   const libraryLoading = libraryQuery.loading && !libraryQuery.data;
   const healthLoading = healthQuery.loading && !healthQuery.data;
-  const vaultReady = Boolean(libraryQuery.data?.credential_vault?.available && libraryQuery.data?.credential_transport?.available);
-
-  const submitConnection = async (form: HTMLFormElement) => {
-    if (!connecting) return;
-    setSubmitting(true);
-    setConnectError(null);
-    try {
-      const formData = new FormData(form);
-      const runtime = String(formData.get("runtime_id") ?? "").trim();
-      const tenant = String(formData.get("tenant_id") ?? "").trim();
-      const fields = fieldSetForConnector(connecting.source_id);
-      const config: Record<string, string> = {};
-      fields.config.forEach((field) => {
-        const value = fieldValue(formData, field);
-        if (value) config[field.key] = value;
-      });
-      const credentials: Record<string, string> = {};
-      fields.credentials.forEach((field) => {
-        const value = fieldValue(formData, field);
-        if (value) credentials[field.key] = value;
-      });
-      const keyResponse = await fetchCerebro<ConnectorCredentialKey>("/connectors/credential-key", apiKey);
-      if (!keyResponse.ok) throw new Error(`Credential key unavailable (${keyResponse.status})`);
-      const encryptedCredentials = await encryptConnectorCredentials(keyResponse.data, credentials);
-      const response = await fetchCerebro(`/connectors/${encodeURIComponent(connecting.source_id)}/connections`, apiKey, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          runtime_id: runtime,
-          tenant_id: tenant,
-          config,
-          encrypted_credentials: encryptedCredentials,
-        }),
-      });
-      if (!response.ok) throw new Error(typeof response.data === "string" && response.data ? response.data : `Connection failed (${response.status})`);
-      form.reset();
-      setConnecting(null);
-      await Promise.all([libraryQuery.reload(), healthQuery.reload()]);
-    } catch (error) {
-      setConnectError(error instanceof Error ? error.message : "Connection failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Connectors"
-        description="Connector library, credentialed connections, source runtime health, and graph readiness."
+        description="Connector library, connection health, credential store readiness, and graph ingestion status."
         action={
-          <button type="button" onClick={() => void Promise.all([libraryQuery.reload(), healthQuery.reload()])} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600 dark:border-indigo-500 dark:bg-indigo-500">
+          <button type="button" onClick={() => void Promise.all([libraryQuery.reload(), healthQuery.reload()])} className="primary-button px-3 py-2 text-[13px]">
             Refresh
           </button>
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Available" value={cards.length} detail="library connectors" />
-        <MetricCard label="Connected" value={cards.filter((card) => connectorRuntimeTotal(card) > 0).length} detail={`${summary.total} runtime mappings`} intent="success" />
-        <MetricCard label="Needs Attention" value={cards.filter((card) => !["healthy", "not_configured"].includes(compactConnectorStatus(card))).length} detail="bad, poor, or refresh due" intent={prioritySources.length > 0 ? "warning" : "success"} />
-        <MetricCard label="Graph Current" value={summary.graph_current} detail={`${summary.graph_behind + summary.graph_failed} behind/failed`} intent={summary.graph_behind + summary.graph_failed > 0 ? "warning" : "success"} />
-        <MetricCard label="Vault" value={vaultReady ? "Ready" : "Unavailable"} detail={libraryQuery.data?.credential_vault?.detail || "credential storage"} intent={vaultReady ? "success" : "warning"} />
+      <div className="surface-panel grid overflow-hidden sm:grid-cols-2 lg:grid-cols-5 lg:divide-x lg:divide-[color:var(--border)]">
+        <SummaryTile label="Library" value={cards.length} detail="available connectors" />
+        <SummaryTile label="Connected" value={cards.filter((card) => connectorRuntimeTotal(card) > 0).length} detail={`${summary.total} connections`} tone="success" />
+        <SummaryTile label="Needs Action" value={needsAction} detail="bad, poor, or refresh due" tone={needsAction > 0 ? "warning" : "success"} />
+        <SummaryTile label="Graph Current" value={summary.graph_current} detail={`${summary.graph_behind + summary.graph_failed} behind/failed`} tone={summary.graph_behind + summary.graph_failed > 0 ? "warning" : "success"} />
+        <SummaryTile label="Secret Stores" value={`${availableStores.length}/${credentialStores.length}`} detail={availableStores[0]?.label || "none available"} tone={availableStores.length > 0 ? "success" : "warning"} />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-950/30">
-        <div className="grid gap-3 md:grid-cols-3">
-          <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Runtime<input value={runtimeID} onChange={(event) => setRuntimeID(event.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="All" className={inputClass} /></label>
+      <section className="surface-panel p-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(180px,0.8fr)_minmax(180px,0.8fr)_minmax(260px,1fr)]">
+          <label className={labelClass}>
+            Tenant scope
+            <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={`${inputClass} mt-1`} />
+          </label>
+          <label className={labelClass}>
+            Connection ID
+            <input value={runtimeID} onChange={(event) => setRuntimeID(event.target.value)} placeholder="All connections" className={`${inputClass} mt-1`} />
+          </label>
+          <label className={labelClass}>
+            Search library
+            <input value={sourceQuery} onChange={(event) => setSourceQuery(event.target.value)} placeholder="Connector, source, status, or action" className={`${inputClass} mt-1`} />
+          </label>
         </div>
-      </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {(["all", ...readinessOrder] as ReadinessFilter[]).map((filter) => (
+            <ReadinessPill
+              key={filter}
+              filter={filter}
+              count={filter === "all" ? cards.length : readinessCounts[filter]}
+              active={readinessFilter === filter}
+              onClick={() => setReadinessFilter(filter)}
+            />
+          ))}
+        </div>
+      </section>
 
       {(libraryLoading || healthLoading) && <LoadingBlock label="Loading connectors..." />}
       {libraryQuery.error && <ErrorBlock error={libraryQuery.error} />}
-      {healthQuery.error && <ErrorBlock error={healthQuery.error} />}
+      {healthQuery.error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-900 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+          Connection health is unavailable in this local scope. The connector library can still be browsed.
+        </div>
+      )}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]">
-        <Panel title="Connector library" action={<span className="text-[12px] text-slate-500 dark:text-slate-400">{visibleCards.length} shown</span>}>
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <input
-                value={sourceQuery}
-                onChange={(event) => setSourceQuery(event.target.value)}
-                placeholder="Filter connectors"
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-100 dark:placeholder:text-slate-500 xl:max-w-sm"
-              />
-              <div className="flex flex-wrap gap-1.5">
-                {(["all", ...readinessOrder] as ReadinessFilter[]).map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setReadinessFilter(filter)}
-                    className={`rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition ${readinessFilter === filter ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-500/50 dark:bg-indigo-500/10 dark:text-indigo-200" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-slate-600"}`}
-                  >
-                    {readinessLabels[filter]} {filter === "all" ? cards.length : readinessCounts[filter]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              {visibleCards.map((card) => (
-                <ConnectorLibraryCard
-                  key={card.source_id}
-                  card={card}
-                  active={debouncedSourceID === card.source_id}
-                  onFilter={() => setSourceID(card.source_id)}
-                  onConnect={() => {
-                    setConnecting(card);
-                    setConnectError(vaultReady ? null : "Credential vault is unavailable.");
-                  }}
-                />
-              ))}
-              {visibleCards.length === 0 && <div className="rounded-md border border-slate-200 p-8 text-center text-[13px] text-slate-500 dark:border-slate-800">No connectors match this scope.</div>}
-            </div>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)]">
+        <Panel title="Connector Library" action={<span className="text-[12px] text-[var(--text-muted)]">{visibleCards.length} shown</span>}>
+          <div className="overflow-x-auto rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-[color:var(--border)] bg-[var(--surface-muted)]">
+                  <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Connector</th>
+                  <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Readiness</th>
+                  <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Connections</th>
+                  <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Attention</th>
+                  <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last Activity</th>
+                  <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Next Action</th>
+                  <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Open</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleCards.map((card) => <ConnectorRow key={card.source_id} card={card} />)}
+              </tbody>
+            </table>
+            {visibleCards.length === 0 && <div className="p-5"><EmptyBlock label="No connectors match this scope." /></div>}
           </div>
         </Panel>
 
         <div className="space-y-4">
-          <Panel title="Attention queue" action={<span className="text-[12px] text-slate-500 dark:text-slate-400">source first</span>}>
+          <AttentionPanel cards={cards} />
+          <ReadinessPanel counts={readinessCounts} active={readinessFilter} onSelect={setReadinessFilter} />
+          <Panel title="Credential Stores" action={<span className="text-[12px] text-[var(--text-muted)]">closed set</span>}>
             <div className="space-y-2">
-              {prioritySources.map((source) => (
-                <button
-                  key={source.source_id}
-                  type="button"
-                  onClick={() => setSourceID(source.source_id)}
-                  className={`block w-full rounded-md border-l-[3px] ${readinessBorderClass[source.performance]} border-y border-r border-slate-200 px-3 py-2.5 text-left transition hover:border-r-indigo-200 hover:bg-indigo-50/40 dark:border-y-slate-800 dark:border-r-slate-800 dark:hover:border-r-indigo-500/50 dark:hover:bg-indigo-500/10`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{source.name || source.source_id}</div>
-                      <div className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">{source.next_action}</div>
-                    </div>
-                    <Badge value={source.performance} />
+              {credentialStores.map((store) => (
+                <div key={store.id} className="flex items-start justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                  <div>
+                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">{store.label}</div>
+                    <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{store.provider} · {store.mode.replaceAll("_", " ")}</div>
                   </div>
-                </button>
-              ))}
-              {prioritySources.length === 0 && <div className="text-[13px] text-slate-500 dark:text-slate-400">No connector health gaps in this scope.</div>}
-            </div>
-          </Panel>
-
-          <Panel title="Readiness mix">
-            <div className="space-y-2">
-              {readinessOrder.map((readiness) => (
-                <button
-                  key={readiness}
-                  type="button"
-                  onClick={() => setReadinessFilter(readinessFilter === readiness ? "all" : readiness)}
-                  className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left transition ${readinessFilter === readiness ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/50 dark:bg-indigo-500/10" : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950/40 dark:hover:border-slate-600"}`}
-                >
-                  <Badge value={readiness} />
-                  <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">{readinessCounts[readiness]}</span>
-                </button>
+                  <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${store.available ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:ring-emerald-500/25" : "bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-500/15 dark:text-zinc-200 dark:ring-zinc-500/25"}`}>
+                    {store.available ? "Ready" : "Unavailable"}
+                  </span>
+                </div>
               ))}
             </div>
           </Panel>
         </div>
       </div>
 
-      <Panel title="Connected runtimes" action={<span className="font-mono text-[12px] text-slate-500 dark:text-slate-400">/source-runtimes/health</span>}>
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/20">
-          <table className="w-full text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/60">
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Connector</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Runtime</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Graph</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Last Sync</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Watermark</th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {runtimes.map((connector: MissionControlRuntime) => (
-                <tr key={connector.runtime_id} className="border-b border-slate-50 transition hover:bg-slate-50/60 dark:border-slate-900 dark:hover:bg-slate-900/50">
-                  <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{connector.source_id || "Unknown"}</td>
-                  <td className="px-4 py-3 font-mono text-[12px] text-slate-500">{shortEntity(connector.runtime_id)}</td>
-                  <td className="px-4 py-3"><Badge value={connector.health} /></td>
-                  <td className="px-4 py-3"><Badge value={connector.graph_freshness} /></td>
-                  <td className="px-4 py-3 text-slate-500">{displayDate(connector.last_activity_at)}</td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                    <div>{displayDate(connector.checkpoint_watermark)}</div>
-                    <div className="mt-0.5 text-[11px] text-slate-400">
-                      {connector.cursor_state} · {formatDuration(connector.watermark_lag_seconds)} lag
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <Link href={`/connectors?runtime_id=${encodeURIComponent(connector.runtime_id)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-300">
-                      Focus
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {runtimes.length === 0 && <div className="flex items-center justify-center p-8 text-[13px] text-slate-500">No connected runtimes match this scope.</div>}
-        </div>
+      <Panel title="Connections" action={<span className="font-mono text-[12px] text-[var(--text-muted)]">/source-runtimes/health</span>}>
+        <ConnectorRuntimeTable runtimes={runtimes as MissionControlRuntime[]} />
       </Panel>
-
-      {connecting && (
-        <ConnectDialog
-          connector={connecting}
-          tenantID={tenantID.trim()}
-          onClose={() => {
-            if (!submitting) {
-              setConnecting(null);
-              setConnectError(null);
-            }
-          }}
-          onSubmit={(form) => void submitConnection(form)}
-          submitting={submitting}
-          error={connectError}
-        />
-      )}
     </div>
   );
 }

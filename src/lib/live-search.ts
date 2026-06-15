@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
+import { connectorPath } from "@/lib/connector-view";
 import { fetchCachedGRC, grcPath } from "@/lib/grc-client";
 import {
   displayDate,
@@ -233,7 +234,9 @@ const connectorCommand = (query: string, connector: GRCConnector): LiveSearchCom
   return {
     id: `live:connector:${connector.runtime_id}`,
     label: connector.source_id || connector.runtime_id,
-    href: `/connectors?runtime_id=${encodeURIComponent(connector.runtime_id)}`,
+    href: connector.source_id
+      ? connectorPath(connector.source_id, { runtime_id: connector.runtime_id })
+      : `/connectors?runtime_id=${encodeURIComponent(connector.runtime_id)}`,
     description: `${connector.status} · ${connector.freshness} · last sync ${displayDate(connector.last_synced_at)}`,
     section: "Connector",
     keywords,

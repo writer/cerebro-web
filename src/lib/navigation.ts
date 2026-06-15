@@ -66,9 +66,9 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Connectors",
     href: "/connectors",
-    description: "Connector library, credentials, source runtime freshness, and ingestion health.",
+    description: "Connector library, credentials, connection freshness, and ingestion health.",
     section: "Operator",
-    keywords: ["runtimes", "sources", "connectors", "freshness", "mission control"],
+    keywords: ["connections", "sources", "connectors", "freshness", "credentials"],
   },
 ];
 

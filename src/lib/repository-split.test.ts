@@ -32,5 +32,13 @@ describe("repository split contract", () => {
     expect(surface?.guardrail).toContain("Never copy private producer names");
     expect(publicRepoForbiddenItems).toContain("private producer repository names or runtime IDs");
   });
-});
 
+  it("keeps concrete connector deployment details out of the public app repo", () => {
+    const surface = repositorySplitSurfaces.find((item) => item.id === "source-readiness");
+
+    expect(surface?.owner).toBe("public_app");
+    expect(surface?.publicRepo).toContain("closed public-safe credential-store labels");
+    expect(surface?.deploymentRepo).toContain("credential-store wiring");
+    expect(surface?.guardrail).toContain("store paths");
+  });
+});
