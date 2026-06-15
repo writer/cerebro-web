@@ -251,9 +251,13 @@ function requirementCount(fields: ConnectorField[] | undefined) {
 function OnboardingBrief({
   method,
   store,
+  basicsReady,
+  fieldsReady,
 }: {
   method?: ConnectorConnectionMethod;
   store?: NormalizedCredentialStore;
+  basicsReady: boolean;
+  fieldsReady: boolean;
 }) {
   const configRequired = requirementCount(method?.config_fields);
   const credentialRequired = requirementCount(method?.credential_fields);
@@ -272,14 +276,19 @@ function OnboardingBrief({
       ready: Boolean(store?.available),
     },
     {
+      label: "Basics",
+      detail: basicsReady ? "Tenant and connection ID are set" : "Add tenant and connection ID",
+      ready: basicsReady,
+    },
+    {
       label: "Preflight",
       detail: requiresPreflight ? "Run the CLI checks before testing" : "No CLI preflight required",
       ready: !requiresPreflight,
     },
     {
       label: "Fields",
-      detail: requiredFields > 0 ? `${configRequired} config and ${credentialRequired} credential/reference required below` : "No required fields",
-      ready: requiredFields === 0,
+      detail: requiredFields === 0 ? "No required fields" : fieldsReady ? "Required fields are filled" : `${configRequired} config and ${credentialRequired} credential/reference required below`,
+      ready: fieldsReady,
     },
   ];
 
@@ -345,7 +354,27 @@ export default function ConnectorSetupForm({
   const [submitting, setSubmitting] = useState<"check" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ runtimeID: string; tenant: string; storeLabel: string; status: "checked" | "saved" } | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const defaultRuntimeID = [tenantID, connector.source_id, "connection"].filter(Boolean).join("-") || `${connector.source_id}-connection`;
+  const updateFormValues = () => {
+    const form = formRef.current;
+    if (!form) return;
+    const data = new FormData(form);
+    const values: Record<string, string> = {};
+    data.forEach((value, key) => {
+      values[key] = String(value).trim();
+    });
+    setFormValues(values);
+  };
+  const requiredFieldKeys = useMemo(() => {
+    if (!selectedMethod) return [];
+    return [
+      ...(selectedMethod.config_fields ?? []).filter((field) => field.required).map((field) => field.key),
+      ...(selectedMethod.credential_fields ?? []).filter((field) => field.required).map((field) => credentialInputName(field.key)),
+    ];
+  }, [selectedMethod]);
+  const basicsReady = Boolean(formValues.tenant_id && formValues.runtime_id);
+  const requiredFieldsReady = requiredFieldKeys.length === 0 || requiredFieldKeys.every((key) => Boolean(formValues[key]));
 
   useEffect(() => {
     if (!methods.some((method) => method.id === selectedMethodID) && preferredMethod) {
@@ -366,6 +395,11 @@ export default function ConnectorSetupForm({
     setError(null);
     setSuccess(null);
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(updateFormValues, 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedMethodID, selectedStoreID, tenantID]);
 
   const submitConnection = async (checkOnly: boolean) => {
     const form = formRef.current;
@@ -434,6 +468,7 @@ export default function ConnectorSetupForm({
       setSuccess({ runtimeID, tenant, storeLabel: selectedStore.label, status: checkOnly ? "checked" : "saved" });
       if (!checkOnly) {
         form.reset();
+        updateFormValues();
         await onConnected();
       }
     } catch (submitError) {
@@ -448,7 +483,13 @@ export default function ConnectorSetupForm({
   };
 
   return (
-    <form ref={formRef} onSubmit={(event) => { event.preventDefault(); void submitConnection(false); }} className="surface-panel overflow-hidden">
+    <form
+      ref={formRef}
+      onInput={updateFormValues}
+      onReset={() => window.setTimeout(updateFormValues, 0)}
+      onSubmit={(event) => { event.preventDefault(); void submitConnection(false); }}
+      className="surface-panel overflow-hidden"
+    >
       <div className="border-b border-[color:var(--border)] px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -474,7 +515,7 @@ export default function ConnectorSetupForm({
               </div>
             </div>
           )}
-          <OnboardingBrief method={selectedMethod} store={selectedStore} />
+          <OnboardingBrief method={selectedMethod} store={selectedStore} basicsReady={basicsReady} fieldsReady={requiredFieldsReady} />
 
           <SetupStep index={1} title="Choose authentication method" icon={<KeyRound className="h-4 w-4" />}>
             <p className="mb-3 text-[12px] leading-5 text-[var(--text-muted)]">
