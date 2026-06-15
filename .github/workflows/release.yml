@@ -262,6 +262,27 @@ jobs:
           set -euo pipefail
           cosign sign --yes "${IMAGE}@${DIGEST}"
 
+      - name: Write image summary
+        shell: bash
+        env:
+          IMAGE: ${{ needs.validate-release.outputs.image }}
+          IMAGE_TAG: ${{ needs.validate-release.outputs.image_tag }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image_ref="${IMAGE}:${IMAGE_TAG}@${DIGEST}"
+          echo "::notice title=Published image::${image_ref}"
+          {
+            echo "## Published image"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Image | \`${IMAGE}\` |"
+            echo "| Tag | \`${IMAGE_TAG}\` |"
+            echo "| Digest | \`${DIGEST}\` |"
+            echo "| Pull by digest | \`${IMAGE}@${DIGEST}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   notify-infra:
     name: Notify infra for deployment
     needs: publish
@@ -269,6 +290,7 @@ jobs:
     if: github.ref_type == 'branch' && github.ref_name == 'main'
     steps:
       - name: Dispatch web image promotion
+        id: dispatch
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.CEREBRO_INFRA_PROMOTION_TOKEN }}
@@ -282,6 +304,28 @@ jobs:
           WAIT_FOR_PROMOTION: ${{ github.event.inputs.wait_for_promotion || 'false' }}
         run: |
           set -euo pipefail
+          write_promotion_summary() {
+            local status="$1"
+            {
+              echo "## Infra promotion"
+              echo
+              echo "| Field | Value |"
+              echo "| --- | --- |"
+              echo "| Target | \`${TARGET_ENVIRONMENT}\` |"
+              echo "| Image | \`${WEB_IMAGE}:${WEB_IMAGE_TAG}\` |"
+              echo "| Digest | \`${WEB_IMAGE_DIGEST}\` |"
+              echo "| Source | \`${SOURCE_REPOSITORY}@${SOURCE_REF}\` |"
+              echo "| Request ID | \`${request_id:-unknown}\` |"
+              if [ -n "${run_url:-}" ]; then
+                echo "| Promotion run | [${run_id}](${run_url}) |"
+              else
+                echo "| Promotion run | Not observed |"
+              fi
+              echo "| Waited for completion | \`${WAIT_FOR_PROMOTION}\` |"
+              echo "| Status | ${status} |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
           if [ -z "${GH_TOKEN}" ]; then
             echo "ERROR: CEREBRO_INFRA_PROMOTION_TOKEN is required for main release promotion" >&2
             exit 1
@@ -369,10 +413,17 @@ jobs:
             sleep 5
           done
           if [ -z "${run_id}" ]; then
+            write_promotion_summary "dispatch accepted, but no matching run was observed"
             echo "ERROR: repository_dispatch was accepted, but no matching propose-web-image-tag.yml run appeared" >&2
             exit 1
           fi
+          {
+            echo "promotion_run_id=${run_id}"
+            echo "promotion_run_url=${run_url}"
+          } >> "$GITHUB_OUTPUT"
           if [ "${WAIT_FOR_PROMOTION}" != "true" ]; then
+            write_promotion_summary "started"
+            echo "::notice title=Infra promotion started::${run_url}"
             echo "Promotion run ${run_id} started: ${run_url}"
             exit 0
           fi
@@ -384,13 +435,17 @@ jobs:
             conclusion="$(jq -r '.conclusion // ""' <<< "${status_payload}")"
             if [ "${status}" = "completed" ]; then
               if [ "${conclusion}" != "success" ]; then
+                write_promotion_summary "completed with ${conclusion}"
                 echo "ERROR: promotion run ${run_id} completed with ${conclusion}: ${run_url}" >&2
                 exit 1
               fi
+              write_promotion_summary "completed successfully"
+              echo "::notice title=Infra promotion completed::${run_url}"
               echo "Promotion run ${run_id} completed successfully: ${run_url}"
               exit 0
             fi
             sleep 15
           done
+          write_promotion_summary "timed out"
           echo "ERROR: promotion run ${run_id} did not complete before timeout: ${run_url}" >&2
           exit 1

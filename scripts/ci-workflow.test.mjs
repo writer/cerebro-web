@@ -7,25 +7,39 @@ describe("ci workflow cost controls", () => {
   it("resolves changed files before expensive validation", () => {
     expect(ciWorkflow).toContain("fetch-depth: 0");
     expect(ciWorkflow).toContain("- name: Resolve expensive validation scope");
+    expect(ciWorkflow).toContain("scope:\n    name: Resolve validation scope\n    runs-on: ubuntu-latest\n    defaults:");
     expect(ciWorkflow).toContain("needs_e2e=${needs_e2e}");
     expect(ciWorkflow).toContain("needs_docker=${needs_docker}");
     expect(ciWorkflow).toContain("run_full=true");
     expect(ciWorkflow).not.toContain("\\.github/workflows/ci\\.yml");
   });
 
-  it("gates local E2E dependencies behind the expensive validation scope", () => {
-    expect(ciWorkflow).toContain("- name: Checkout Cerebro\n        if: steps.scope.outputs.needs_e2e == 'true'");
-    expect(ciWorkflow).toContain("- name: Setup Go\n        if: steps.scope.outputs.needs_e2e == 'true'");
-    expect(ciWorkflow).toContain("- name: Install Playwright browser\n        if: steps.scope.outputs.needs_e2e == 'true'");
-    expect(ciWorkflow).toContain("- name: Local GRC E2E\n        if: steps.scope.outputs.needs_e2e == 'true'");
+  it("runs local E2E in a scoped parallel job", () => {
+    expect(ciWorkflow).toContain("local-grc-e2e:");
+    expect(ciWorkflow).toContain("if: needs.scope.outputs.needs_e2e == 'true'");
+    expect(ciWorkflow).toContain("- name: Checkout Cerebro");
+    expect(ciWorkflow).toContain("- name: Setup Go");
+    expect(ciWorkflow).toContain("- name: Install Playwright browser");
+    expect(ciWorkflow).toContain("- name: Local GRC E2E\n        run: npm run e2e:grc:local -- --browser");
   });
 
-  it("uses cached Buildx only when Docker validation is required", () => {
-    expect(ciWorkflow).toContain("- name: Set up Buildx\n        if: steps.scope.outputs.needs_docker == 'true'");
-    expect(ciWorkflow).toContain("- name: Docker build\n        if: steps.scope.outputs.needs_docker == 'true'");
+  it("runs cached Docker validation in a scoped parallel job", () => {
+    expect(ciWorkflow).toContain("docker-build:");
+    expect(ciWorkflow).toContain("if: needs.scope.outputs.needs_docker == 'true'");
+    expect(ciWorkflow).toContain("- name: Set up Buildx");
+    expect(ciWorkflow).toContain("- name: Docker build");
     expect(ciWorkflow).toContain("uses: docker/build-push-action@");
     expect(ciWorkflow).toContain("cache-from: type=gha,scope=cerebro-web-ci");
     expect(ciWorkflow).toContain("cache-to: type=gha,mode=max,scope=cerebro-web-ci");
     expect(ciWorkflow).toContain("load: true");
+  });
+
+  it("keeps validate as the aggregate required check", () => {
+    expect(ciWorkflow).toContain("validate:\n    name: validate");
+    expect(ciWorkflow).toContain("- node-validation");
+    expect(ciWorkflow).toContain("- local-grc-e2e");
+    expect(ciWorkflow).toContain("- docker-build");
+    expect(ciWorkflow).toContain('NODE_VALIDATION_RESULT: ${{ needs.node-validation.result }}');
+    expect(ciWorkflow).toContain('if [ "${result}" != "success" ] && [ "${result}" != "skipped" ]; then');
   });
 });
