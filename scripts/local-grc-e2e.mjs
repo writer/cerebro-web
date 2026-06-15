@@ -93,6 +93,8 @@ async function main() {
       CEREBRO_NEO4J_USERNAME: neo4jUser,
       CEREBRO_NEO4J_PASSWORD: neo4jCredential,
       CEREBRO_API_AUTH_ENABLED: "false",
+      CEREBRO_DEV_MODE: "1",
+      CEREBRO_DEV_MODE_ACK: "1",
     },
   });
   await waitFor("Cerebro API readiness", async () => {
@@ -396,7 +398,7 @@ async function validatePlaywrightBrowser() {
       "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
       "/controls": ["Controls", "Framework", "Control"],
       "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-      "/connectors": ["Data Connectors", "Source runtime", "Connectors"],
+      "/connectors": ["Connectors", "Connector library", "Connected runtimes"],
       [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
       "/reports": ["Reports"],
     };
@@ -438,7 +440,7 @@ async function validateAgentBrowser() {
     "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
     "/controls": ["Controls", "Framework", "Control"],
     "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-    "/connectors": ["Data Connectors", "Source runtime", "Connectors"],
+    "/connectors": ["Connectors", "Connector library", "Connected runtimes"],
     [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
     "/reports": ["Reports"],
   };

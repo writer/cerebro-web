@@ -10,6 +10,7 @@ import {
   runtimeHealth,
   runtimeIsBackfill,
   sourceBreakdown,
+  sourceHealthBreakdown,
   summarizeMissionControl,
 } from "./mission-control";
 
@@ -19,9 +20,9 @@ describe("Mission Control runtime normalization", () => {
   it("marks recently active runtimes healthy", () => {
     const runtime = normalizeRuntime(
       {
-        id: "writer-okta-audit",
+        id: "example-okta-audit",
         source_id: "okta",
-        tenant_id: "writer",
+        tenant_id: "tenant-a",
         status: "running",
         last_synced_at: "2026-06-03T11:30:00Z",
         config: { family: "audit" },
@@ -31,9 +32,9 @@ describe("Mission Control runtime normalization", () => {
     );
 
     expect(runtime).toMatchObject({
-      runtime_id: "writer-okta-audit",
+      runtime_id: "example-okta-audit",
       source_id: "okta",
-      tenant_id: "writer",
+      tenant_id: "tenant-a",
       family: "audit",
       health: "healthy",
       age_hours: 0.5,
@@ -57,9 +58,9 @@ describe("Mission Control runtime normalization", () => {
   it("uses health endpoint schedule threshold and watermark lag when present", () => {
     const runtime = normalizeRuntime(
       {
-        runtime_id: "writer-okta-audit",
+        runtime_id: "example-okta-audit",
         source_id: "okta",
-        tenant_id: "writer",
+        tenant_id: "tenant-a",
         family: "audit",
         last_synced_at: "2026-06-03T11:30:00Z",
         sync_lag_seconds: 1_800,
@@ -75,7 +76,7 @@ describe("Mission Control runtime normalization", () => {
     );
 
     expect(runtime).toMatchObject({
-      runtime_id: "writer-okta-audit",
+      runtime_id: "example-okta-audit",
       family: "audit",
       health: "stale",
       checkpoint_watermark: "2026-06-01T12:00:00Z",
@@ -90,7 +91,7 @@ describe("Mission Control runtime normalization", () => {
   it("reports pending cursor state without exposing opaque cursor values", () => {
     const runtime = normalizeRuntime(
       {
-        runtime_id: "writer-github-audit",
+        runtime_id: "example-github-audit",
         last_synced_at: "2026-06-03T11:30:00Z",
         cursor_pending: true,
         checkpoint_cursor_present: true,
@@ -140,17 +141,17 @@ describe("Mission Control runtime normalization", () => {
   });
 
   it("detects backfills from runtime id or bounded config", () => {
-    expect(runtimeIsBackfill({ id: "writer-okta-audit-backfill", config: {} })).toBe(true);
-    expect(runtimeIsBackfill({ id: "writer-okta-audit-2026-q1", config: { since: "2026-01-01T00:00:00Z" } })).toBe(true);
-    expect(runtimeIsBackfill({ id: "writer-okta-audit", config: {} })).toBe(false);
+    expect(runtimeIsBackfill({ id: "example-okta-audit-backfill", config: {} })).toBe(true);
+    expect(runtimeIsBackfill({ id: "example-okta-audit-2026-q1", config: { since: "2026-01-01T00:00:00Z" } })).toBe(true);
+    expect(runtimeIsBackfill({ id: "example-okta-audit", config: {} })).toBe(false);
   });
 
   it("summarizes runtime health and source coverage", () => {
     const runtimes = [
-      normalizeRuntime({ id: "a", source_id: "okta", tenant_id: "writer", last_sync_at: "2026-06-03T11:00:00Z" }, now, 24),
-      normalizeRuntime({ id: "b", source_id: "aws", tenant_id: "writer", last_synced_at: "2026-06-01T00:00:00Z" }, now, 24),
-      normalizeRuntime({ id: "c", source_id: "aws", tenant_id: "writer" }, now, 24),
-      normalizeRuntime({ id: "d-backfill", source_id: "okta", tenant_id: "writer", status: "failed" }, now, 24),
+      normalizeRuntime({ id: "a", source_id: "okta", tenant_id: "tenant-a", last_sync_at: "2026-06-03T11:00:00Z" }, now, 24),
+      normalizeRuntime({ id: "b", source_id: "aws", tenant_id: "tenant-a", last_synced_at: "2026-06-01T00:00:00Z" }, now, 24),
+      normalizeRuntime({ id: "c", source_id: "aws", tenant_id: "tenant-a" }, now, 24),
+      normalizeRuntime({ id: "d-backfill", source_id: "okta", tenant_id: "tenant-a", status: "failed" }, now, 24),
     ];
 
     expect(summarizeMissionControl(runtimes)).toEqual({
@@ -181,6 +182,56 @@ describe("Mission Control runtime normalization", () => {
       { source_id: "aws", total: 2, stale: 1, degraded: 0, unknown: 1 },
       { source_id: "okta", total: 1, stale: 0, degraded: 0, unknown: 0 },
     ]);
+  });
+
+  it("rolls source readiness up from runtime, cursor, graph, and catalog coverage", () => {
+    const summaries = sourceHealthBreakdown(
+      [
+        normalizeRuntime(
+          {
+            id: "ready-runtime",
+            source_id: "okta",
+            last_synced_at: "2026-06-03T11:30:00Z",
+            cursor_pending: false,
+            latest_graph_run: { id: "ready-graph", status: "completed", finished_at: "2026-06-03T11:35:00Z" },
+          },
+          now,
+          24,
+        ),
+        normalizeRuntime({ id: "stale-runtime", source_id: "aws", last_synced_at: "2026-06-01T00:00:00Z" }, now, 24),
+        normalizeRuntime(
+          {
+            id: "cursor-runtime",
+            source_id: "github",
+            last_synced_at: "2026-06-03T11:30:00Z",
+            cursor_pending: true,
+            latest_graph_run: { id: "cursor-graph", status: "completed", finished_at: "2026-06-03T11:35:00Z" },
+          },
+          now,
+          24,
+        ),
+        normalizeRuntime(
+          {
+            id: "failed-graph-runtime",
+            source_id: "jira",
+            last_synced_at: "2026-06-03T11:30:00Z",
+            latest_graph_run: { id: "failed-graph", status: "failed", finished_at: "2026-06-03T11:35:00Z" },
+          },
+          now,
+          24,
+        ),
+        normalizeRuntime({ id: "missing-graph-runtime", source_id: "slack", last_synced_at: "2026-06-03T11:30:00Z" }, now, 24),
+      ],
+      [{ id: "zendesk", name: "Zendesk", status: "available" }],
+    );
+    const bySource = Object.fromEntries(summaries.map((source) => [source.source_id, source]));
+
+    expect(bySource.okta).toMatchObject({ performance: "healthy", next_action: "No action", healthy: 1, graph_current: 1 });
+    expect(bySource.aws).toMatchObject({ performance: "needs_refresh", stale: 1, next_action: "Refresh source sync" });
+    expect(bySource.github).toMatchObject({ performance: "needs_refresh", cursor_pending: 1 });
+    expect(bySource.jira).toMatchObject({ performance: "bad", degraded: 1, graph_failed: 1 });
+    expect(bySource.slack).toMatchObject({ performance: "poor", graph_not_observed: 1 });
+    expect(bySource.zendesk).toMatchObject({ performance: "not_configured", total: 0, name: "Zendesk" });
   });
 
   it("classifies graph projection freshness against source sync time", () => {
@@ -218,9 +269,9 @@ describe("Mission Control runtime normalization", () => {
   it("normalizes endpoint graph run counts, deltas, duration, errors, and finding evaluation", () => {
     const runtime = normalizeRuntime(
       {
-        runtime_id: "writer-github-audit",
+        runtime_id: "example-github-audit",
         source_id: "github",
-        tenant_id: "writer",
+        tenant_id: "tenant-a",
         family: "audit",
         last_synced_at: "2026-06-03T11:30:00Z",
         latest_graph_run: {
@@ -243,7 +294,7 @@ describe("Mission Control runtime normalization", () => {
         },
         latest_finding_evaluation: {
           id: "finding-run",
-          runtime_id: "writer-github-audit",
+          runtime_id: "example-github-audit",
           status: "completed",
           events_evaluated: 1200,
           events_processed: 1190,
@@ -282,14 +333,14 @@ describe("Mission Control runtime normalization", () => {
   });
 
   it("marks graph projection behind when source sync is newer than graph ingest", () => {
-    const runtime = normalizeRuntime({ id: "writer-okta-audit", last_synced_at: "2026-06-03T11:30:00Z" }, now, 24);
+    const runtime = normalizeRuntime({ id: "example-okta-audit", last_synced_at: "2026-06-03T11:30:00Z" }, now, 24);
 
     expect(
       attachGraphFreshness(
         runtime,
         {
           id: "graph-run",
-          runtime_id: "writer-okta-audit",
+          runtime_id: "example-okta-audit",
           status: "completed",
           finished_at: "2026-06-03T10:00:00Z",
         },
@@ -304,7 +355,7 @@ describe("Mission Control runtime normalization", () => {
   it("keeps endpoint graph health when no fallback graph run is attached", () => {
     const runtime = normalizeRuntime(
       {
-        runtime_id: "writer-okta-audit",
+        runtime_id: "example-okta-audit",
         last_synced_at: "2026-06-03T11:30:00Z",
         latest_graph_run: {
           id: "endpoint-graph-run",

@@ -15,7 +15,7 @@ describe("Ask eval report contract", () => {
           kind: "ask",
           name: "High-risk repository summary",
           question: "Summarize high-risk repositories",
-          tenantId: "writer",
+          tenantId: "tenant-a",
           model: "claude-sonnet-4-6",
           status: "passed",
           score: 100,

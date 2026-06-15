@@ -30,11 +30,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ThemeProvider>
             <CommandPaletteProvider>
               <SidebarProvider>
-                <div className="flex h-screen overflow-hidden bg-[var(--app-bg)]">
+                <div className="flex h-screen max-w-full overflow-hidden bg-[var(--app-bg)]">
                   <Sidebar />
-                  <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
                     <Topbar />
-                    <main className="flex-1 overflow-y-auto bg-[var(--app-bg)] px-8 py-6">{children}</main>
+                    <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[var(--app-bg)] px-8 py-6 max-md:px-4">{children}</main>
                   </div>
                 </div>
                 <CommandPalette />

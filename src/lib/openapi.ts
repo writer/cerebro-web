@@ -173,6 +173,9 @@ const inferOperationTag = (path: string, tag?: string) => {
   if (path.startsWith("/sources")) {
     return "Sources";
   }
+  if (path.startsWith("/connectors")) {
+    return "Connectors";
+  }
   if (path.startsWith("/source-runtimes")) {
     return "Source Runtimes";
   }
@@ -194,7 +197,7 @@ const inferOperationTag = (path: string, tag?: string) => {
     return "Graph";
   }
   if (path.startsWith("/platform/knowledge") || path.startsWith("/platform/workflow")) {
-    return "Workflow";
+    return "Platform";
   }
   return tag ?? "Uncategorized";
 };
