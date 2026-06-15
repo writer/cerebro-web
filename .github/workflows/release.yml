@@ -12,6 +12,11 @@ on:
         description: Optional image tag. Defaults to sha-<commit>.
         required: false
         type: string
+      wait_for_promotion:
+        description: Wait for the downstream infra promotion workflow to complete.
+        default: false
+        required: false
+        type: boolean
 
 permissions:
   contents: read
@@ -23,8 +28,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  validate-release:
+    name: Validate release source
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.image.outputs.tag }}
+      image: ${{ steps.image.outputs.image }}
+      image_tags: ${{ steps.image.outputs.tags }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
@@ -81,6 +91,23 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Resolved ${image}:${tag}"
 
+  build-platform:
+    name: Build ${{ matrix.platform }}
+    needs: validate-release
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
       - name: Log in to GHCR
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
@@ -88,67 +115,137 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Build and push platform image
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          pull: true
+          provenance: mode=max
+          sbom: true
+          outputs: type=image,name=${{ needs.validate-release.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=cerebro-web-release-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=cerebro-web-release-${{ matrix.arch }}
+
+      - name: Export platform digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid platform digest: ${DIGEST}" >&2
+            exit 1
+          fi
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload platform digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish multi-arch image
+    needs:
+      - validate-release
+      - build-platform
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ needs.validate-release.outputs.image_tag }}
+      image: ${{ needs.validate-release.outputs.image }}
+      image_digest: ${{ steps.manifest.outputs.digest }}
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      - name: Build local image
-        run: docker build --pull -t cerebro-web:scan .
+      - name: Download platform digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digests-*
+          path: /tmp/digests
+          merge-multiple: true
 
-      - name: Scan local image
-        run: |
-          set -euo pipefail
-          mkdir -p "${HOME}/.cache/trivy"
-          docker run --rm \
-            -v "${HOME}/.cache/trivy:/root/.cache/" \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.66.0 image \
-            --exit-code 0 \
-            --ignore-unfixed \
-            --scanners vuln \
-            --severity HIGH,CRITICAL \
-            cerebro-web:scan
-          docker run --rm \
-            -v "${HOME}/.cache/trivy:/root/.cache/" \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.66.0 image \
-            --exit-code 1 \
-            --ignore-unfixed \
-            --scanners vuln \
-            --severity CRITICAL \
-            cerebro-web:scan
-
-      - name: Build and push image
-        id: build-push
+      - name: Create multi-arch manifest
+        id: manifest
         shell: bash
         env:
+          IMAGE: ${{ needs.validate-release.outputs.image }}
+          IMAGE_TAG: ${{ needs.validate-release.outputs.image_tag }}
           IMAGE_TAGS: |
-            ${{ steps.image.outputs.tags }}
+            ${{ needs.validate-release.outputs.image_tags }}
         run: |
           set -euo pipefail
           tag_args=()
           while IFS= read -r tag; do
             [ -n "${tag}" ] && tag_args+=("-t" "${tag}")
           done <<< "${IMAGE_TAGS}"
-          metadata_file="$(mktemp)"
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --provenance=mode=max \
-            --sbom=true \
-            --metadata-file "${metadata_file}" \
-            "${tag_args[@]}" \
-            --push \
-            .
-          digest="$(jq -r '."containerimage.digest" // empty' "${metadata_file}")"
-          if [ -z "${digest}" ]; then
-            echo "Could not resolve pushed image digest" >&2
-            cat "${metadata_file}" >&2
+
+          digest_args=()
+          shopt -s nullglob
+          for digest_file in /tmp/digests/*; do
+            digest="$(basename "${digest_file}")"
+            digest_args+=("${IMAGE}@sha256:${digest}")
+          done
+          if [ "${#digest_args[@]}" -eq 0 ]; then
+            echo "No platform digests were downloaded" >&2
             exit 1
           fi
-          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-          echo "Published ${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}@${digest}"
+
+          docker buildx imagetools create "${tag_args[@]}" "${digest_args[@]}"
+          manifest_digest="$(docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}" --format '{{ .Manifest.Digest }}')"
+          if ! [[ "${manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Could not resolve multi-arch manifest digest" >&2
+            exit 1
+          fi
+          echo "digest=${manifest_digest}" >> "$GITHUB_OUTPUT"
+          echo "Published ${IMAGE}:${IMAGE_TAG}@${manifest_digest}"
+
+      - name: Scan pushed image
+        shell: bash
+        env:
+          IMAGE: ${{ needs.validate-release.outputs.image }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image_ref="${IMAGE}@${DIGEST}"
+          mkdir -p "${HOME}/.cache/trivy"
+          docker run --rm \
+            -e TRIVY_USERNAME \
+            -e TRIVY_PASSWORD \
+            -v "${HOME}/.cache/trivy:/root/.cache/" \
+            aquasec/trivy:0.66.0 image \
+            --exit-code 0 \
+            --ignore-unfixed \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            "${image_ref}"
+          docker run --rm \
+            -e TRIVY_USERNAME \
+            -e TRIVY_PASSWORD \
+            -v "${HOME}/.cache/trivy:/root/.cache/" \
+            aquasec/trivy:0.66.0 image \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --scanners vuln \
+            --severity CRITICAL \
+            "${image_ref}"
 
       - name: Set up cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -158,17 +255,12 @@ jobs:
       - name: Keyless sign image
         shell: bash
         env:
-          IMAGE: ${{ steps.image.outputs.image }}
-          DIGEST: ${{ steps.build-push.outputs.digest }}
+          IMAGE: ${{ needs.validate-release.outputs.image }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
           COSIGN_EXPERIMENTAL: "true"
         run: |
           set -euo pipefail
           cosign sign --yes "${IMAGE}@${DIGEST}"
-
-    outputs:
-      image_tag: ${{ steps.image.outputs.tag }}
-      image: ${{ steps.image.outputs.image }}
-      image_digest: ${{ steps.build-push.outputs.digest }}
 
   notify-infra:
     name: Notify infra for deployment
@@ -187,6 +279,7 @@ jobs:
           SOURCE_REPOSITORY: ${{ github.repository }}
           SOURCE_REF: ${{ github.sha }}
           TARGET_ENVIRONMENT: ${{ secrets.CEREBRO_INFRA_TARGET_ENVIRONMENT }}
+          WAIT_FOR_PROMOTION: ${{ github.event.inputs.wait_for_promotion || 'false' }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN}" ]; then
@@ -278,6 +371,10 @@ jobs:
           if [ -z "${run_id}" ]; then
             echo "ERROR: repository_dispatch was accepted, but no matching propose-web-image-tag.yml run appeared" >&2
             exit 1
+          fi
+          if [ "${WAIT_FOR_PROMOTION}" != "true" ]; then
+            echo "Promotion run ${run_id} started: ${run_url}"
+            exit 0
           fi
 
           deadline=$((SECONDS + 1800))

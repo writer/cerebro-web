@@ -14,6 +14,20 @@ describe("release workflow promotion contract", () => {
     expect(releaseWorkflow).toContain("npm run audit:high");
   });
 
+  it("builds native platform images and scans the assembled pushed image", () => {
+    expect(releaseWorkflow).toContain("runner: ubuntu-24.04-arm");
+    expect(releaseWorkflow).not.toContain("setup-qemu-action");
+    expect(releaseWorkflow).toContain("uses: docker/build-push-action@");
+    expect(releaseWorkflow).toContain("cache-from: type=gha,scope=cerebro-web-release-${{ matrix.arch }}");
+    expect(releaseWorkflow).toContain("cache-to: type=gha,mode=max,scope=cerebro-web-release-${{ matrix.arch }}");
+    expect(releaseWorkflow).toContain("push-by-digest=true");
+    expect(releaseWorkflow).toContain("- name: Create multi-arch manifest");
+    expect(releaseWorkflow).toContain("- name: Scan pushed image");
+    expect(releaseWorkflow).toContain('image_ref="${IMAGE}@${DIGEST}"');
+    expect(releaseWorkflow).not.toContain("- name: Build local image");
+    expect(releaseWorkflow).not.toContain("cerebro-web:scan");
+  });
+
   it("fails closed when promotion configuration is absent or unexpected", () => {
     expect(dispatchBlock).toContain("CEREBRO_INFRA_PROMOTION_TOKEN is required");
     expect(dispatchBlock).toContain("CEREBRO_INFRA_REPOSITORY must be configured as owner/repo");
@@ -32,11 +46,13 @@ describe("release workflow promotion contract", () => {
     expect(dispatchBlock).toContain('WEB_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$');
   });
 
-  it("waits for the matching infra promotion run to succeed", () => {
+  it("dispatches promotion without blocking release by default", () => {
+    expect(releaseWorkflow).toContain("wait_for_promotion");
+    expect(dispatchBlock).toContain('WAIT_FOR_PROMOTION: ${{ github.event.inputs.wait_for_promotion || \'false\' }}');
+    expect(dispatchBlock).toContain('if [ "${WAIT_FOR_PROMOTION}" != "true" ]; then');
+    expect(dispatchBlock).toContain("Promotion run ${run_id} started");
     expect(dispatchBlock).toContain('gh run view "${run_id}"');
     expect(dispatchBlock).toContain('conclusion}" != "success"');
-    expect(dispatchBlock).toContain("Promotion run ${run_id} completed successfully");
-    expect(dispatchBlock).toContain("did not complete before timeout");
   });
 
   it("locks native arm64 Alpine packages required by the multi-arch publish image", () => {
