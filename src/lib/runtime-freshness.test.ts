@@ -9,7 +9,7 @@ describe("normalizeRuntimeFreshness", () => {
       status: "degraded",
       runtimes: [
         {
-          runtime_id: "writer-gcp-runtime",
+          runtime_id: "example-gcp-runtime",
           source_id: "gcp",
           freshness_state: "graph_missing",
           source_sync_state: "current",
@@ -33,7 +33,7 @@ describe("normalizeRuntimeFreshness", () => {
     expect(view.source).toBe("canonical");
     expect(view.status).toBe("degraded");
     expect(view.rows[0]).toMatchObject({
-      runtime_id: "writer-gcp-runtime",
+      runtime_id: "example-gcp-runtime",
       source_id: "gcp",
       freshness_state: "graph_missing",
       backfill_eligible: true,
@@ -50,9 +50,9 @@ describe("normalizeRuntimeFreshness", () => {
     const view = normalizeRuntimeFreshness({
       status: "failed",
       ingest: {
-        missing_runtime_ids: ["writer-aws-prod-runtime"],
+        missing_runtime_ids: ["example-aws-prod-runtime"],
       },
-      failures: ["writer-gcp-prod-runtime:graph-ingest:writer-gcp-prod-runtime: failed"],
+      failures: ["example-gcp-prod-runtime:graph-ingest:example-gcp-prod-runtime: failed"],
     });
 
     expect(view.source).toBe("graph-ingest-health");

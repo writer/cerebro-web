@@ -22,8 +22,6 @@ export const extractRecords = (
     "nodes",
     "edges",
     "events",
-    "workflow_events",
-    "workflowEvents",
     "timeline",
   ],
 ): Record<string, unknown>[] => {

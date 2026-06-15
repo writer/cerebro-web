@@ -1,6 +1,7 @@
 export type RuntimeHealth = "healthy" | "stale" | "unknown" | "degraded";
 export type GraphFreshness = "current" | "behind" | "running" | "failed" | "not_observed" | "unknown";
 export type CursorState = "pending" | "caught_up" | "unknown";
+export type SourceReadiness = "healthy" | "needs_refresh" | "poor" | "bad" | "not_configured";
 
 export type MissionControlGraphRun = {
   id?: string;
@@ -87,6 +88,31 @@ export type MissionControlSummary = {
   graph_running: number;
   graph_failed: number;
   graph_not_observed: number;
+};
+
+export type SourceCoverageSummary = {
+  source_id: string;
+  name?: string;
+  description?: string;
+  status?: string;
+  performance: SourceReadiness;
+  next_action: string;
+  total: number;
+  healthy: number;
+  stale: number;
+  degraded: number;
+  unknown: number;
+  cursor_pending: number;
+  cursor_unknown: number;
+  graph_current: number;
+  graph_behind: number;
+  graph_running: number;
+  graph_failed: number;
+  graph_not_observed: number;
+  graph_unknown: number;
+  backfills: number;
+  schedule_context_missing: number;
+  latest_activity_at?: string;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -469,6 +495,127 @@ export const summarizeMissionControl = (runtimes: MissionControlRuntime[]): Miss
   summary.sources = sources.size;
   summary.tenants = tenants.size;
   return summary;
+};
+
+const emptySourceSummary = (sourceID: string): SourceCoverageSummary => ({
+  source_id: sourceID || "unknown",
+  performance: "not_configured",
+  next_action: "Configure runtime coverage",
+  total: 0,
+  healthy: 0,
+  stale: 0,
+  degraded: 0,
+  unknown: 0,
+  cursor_pending: 0,
+  cursor_unknown: 0,
+  graph_current: 0,
+  graph_behind: 0,
+  graph_running: 0,
+  graph_failed: 0,
+  graph_not_observed: 0,
+  graph_unknown: 0,
+  backfills: 0,
+  schedule_context_missing: 0,
+});
+
+const sourceCatalogSummary = (source: Record<string, unknown>): SourceCoverageSummary => {
+  const sourceID = stringField(source, ["id", "source_id", "sourceId", "name"]) || "unknown";
+  return {
+    ...emptySourceSummary(sourceID),
+    name: stringField(source, ["name", "label", "source_id", "sourceId", "id"]) || undefined,
+    description: stringField(source, ["description", "summary"]) || undefined,
+    status: stringField(source, ["status", "state"]) || undefined,
+  };
+};
+
+const updateLatestActivity = (summary: SourceCoverageSummary, activity?: string) => {
+  if (!activity) return;
+  const next = parseTime(activity);
+  if (!next) return;
+  const current = summary.latest_activity_at ? parseTime(summary.latest_activity_at) : null;
+  if (!current || next.getTime() > current.getTime()) {
+    summary.latest_activity_at = next.toISOString();
+  }
+};
+
+const sourceReadiness = (summary: SourceCoverageSummary): Pick<SourceCoverageSummary, "performance" | "next_action"> => {
+  if (summary.total === 0) {
+    return { performance: "not_configured", next_action: "Configure runtime coverage" };
+  }
+  if (summary.degraded > 0 || summary.graph_failed > 0) {
+    return { performance: "bad", next_action: summary.graph_failed > 0 ? "Inspect failed graph projection" : "Investigate failed sync" };
+  }
+  if (summary.stale > 0 || summary.cursor_pending > 0 || summary.schedule_context_missing > 0) {
+    return { performance: "needs_refresh", next_action: "Refresh source sync" };
+  }
+  if (summary.unknown > 0 || summary.graph_behind > 0 || summary.graph_not_observed > 0 || summary.graph_unknown > 0) {
+    return { performance: "poor", next_action: "Verify runtime and graph telemetry" };
+  }
+  return { performance: "healthy", next_action: "No action" };
+};
+
+export const sourceReadinessRank = (value: SourceReadiness) => {
+  const rank: Record<SourceReadiness, number> = {
+    bad: 0,
+    needs_refresh: 1,
+    poor: 2,
+    not_configured: 3,
+    healthy: 4,
+  };
+  return rank[value] ?? 5;
+};
+
+export const sourceHealthBreakdown = (
+  runtimes: MissionControlRuntime[],
+  sourceCatalog: Record<string, unknown>[] = [],
+): SourceCoverageSummary[] => {
+  const counts = new Map<string, SourceCoverageSummary>();
+  for (const source of sourceCatalog) {
+    const summary = sourceCatalogSummary(source);
+    counts.set(summary.source_id, summary);
+  }
+
+  for (const runtime of runtimes) {
+    const sourceID = runtime.source_id || "unknown";
+    const current = counts.get(sourceID) ?? emptySourceSummary(sourceID);
+    current.total += 1;
+    current[runtime.health] += 1;
+    if (runtime.cursor_state === "pending") current.cursor_pending += 1;
+    if (runtime.cursor_state === "unknown") current.cursor_unknown += 1;
+    if (runtime.backfill) current.backfills += 1;
+    if (runtime.schedule_context_configured === false) current.schedule_context_missing += 1;
+    updateLatestActivity(current, runtime.last_activity_at);
+
+    switch (runtime.graph_freshness) {
+      case "current":
+        current.graph_current += 1;
+        break;
+      case "behind":
+        current.graph_behind += 1;
+        break;
+      case "running":
+        current.graph_running += 1;
+        break;
+      case "failed":
+        current.graph_failed += 1;
+        break;
+      case "not_observed":
+        current.graph_not_observed += 1;
+        break;
+      case "unknown":
+        current.graph_unknown += 1;
+        break;
+    }
+    counts.set(sourceID, current);
+  }
+
+  return Array.from(counts.values())
+    .map((source) => ({ ...source, ...sourceReadiness(source) }))
+    .sort((left, right) =>
+      sourceReadinessRank(left.performance) - sourceReadinessRank(right.performance) ||
+      right.total - left.total ||
+      left.source_id.localeCompare(right.source_id),
+    );
 };
 
 export const sourceBreakdown = (runtimes: MissionControlRuntime[]) => {
