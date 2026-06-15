@@ -93,6 +93,8 @@ async function main() {
       CEREBRO_NEO4J_USERNAME: neo4jUser,
       CEREBRO_NEO4J_PASSWORD: neo4jCredential,
       CEREBRO_API_AUTH_ENABLED: "false",
+      CEREBRO_DEV_MODE: "1",
+      CEREBRO_DEV_MODE_ACK: "1",
     },
   });
   await waitFor("Cerebro API readiness", async () => {
