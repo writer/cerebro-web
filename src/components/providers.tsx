@@ -2,6 +2,9 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { currentUserActor } from "@/lib/current-user";
+import type { CurrentUser, CurrentUserResponse } from "@/lib/current-user";
+
 type ApiKeyContextValue = {
   apiKey: string;
   setApiKey: (value: string) => void;
@@ -26,10 +29,18 @@ type ThemeContextValue = {
   toggleTheme: () => void;
 };
 
+type CurrentUserContextValue = {
+  actor: string;
+  error: string | null;
+  loading: boolean;
+  user: CurrentUser | null;
+};
+
 const ApiKeyContext = createContext<ApiKeyContextValue | undefined>(undefined);
 const CommandPaletteContext = createContext<CommandPaletteContextValue | undefined>(undefined);
 const SidebarContext = createContext<SidebarContextValue | undefined>(undefined);
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
+const CurrentUserContext = createContext<CurrentUserContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "cerebro.apiKey";
 const THEME_STORAGE_KEY = "cerebro.theme";
@@ -162,6 +173,52 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function CurrentUserProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadUser = async () => {
+      try {
+        const response = await fetch("/api/me", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Current user unavailable (${response.status})`);
+        }
+        const payload = (await response.json()) as CurrentUserResponse;
+        if (!mounted) return;
+        setUser(payload.user);
+        setError(null);
+      } catch (nextError) {
+        if (!mounted) return;
+        setUser(null);
+        setError(nextError instanceof Error ? nextError.message : "Current user unavailable");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void loadUser();
+    return () => { mounted = false; };
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      actor: currentUserActor(user),
+      error,
+      loading,
+      user,
+    }),
+    [error, loading, user],
+  );
+
+  return (
+    <CurrentUserContext.Provider value={contextValue}>
+      {children}
+    </CurrentUserContext.Provider>
+  );
+}
+
 export function useSidebar() {
   const context = useContext(SidebarContext);
   if (!context) throw new Error("useSidebar must be used within SidebarProvider");
@@ -188,6 +245,14 @@ export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) {
     throw new Error("useTheme must be used within ThemeProvider");
+  }
+  return context;
+}
+
+export function useCurrentUser() {
+  const context = useContext(CurrentUserContext);
+  if (!context) {
+    throw new Error("useCurrentUser must be used within CurrentUserProvider");
   }
   return context;
 }

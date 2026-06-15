@@ -5,7 +5,7 @@ import "./globals.css";
 import CerebroAgentPanel from "@/components/agent/CerebroAgentPanel";
 import { CerebroAgentProvider } from "@/components/agent/CerebroAgentProvider";
 import CommandPalette from "@/components/CommandPalette";
-import { ApiKeyProvider, CommandPaletteProvider, SidebarProvider, ThemeProvider } from "@/components/providers";
+import { ApiKeyProvider, CommandPaletteProvider, CurrentUserProvider, SidebarProvider, ThemeProvider } from "@/components/providers";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 
@@ -35,23 +35,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} ${agentMono.variable} bg-[var(--app-bg)] text-[var(--text-primary)] antialiased`}>
         <ApiKeyProvider>
-          <ThemeProvider>
-            <CerebroAgentProvider>
-              <CommandPaletteProvider>
-                <SidebarProvider>
-                  <div className="flex h-screen max-w-full overflow-hidden bg-[var(--app-bg)]">
-                    <Sidebar />
-                    <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
-                      <Topbar />
-                      <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[var(--app-bg)] px-8 py-6 max-md:px-4">{children}</main>
+          <CurrentUserProvider>
+            <ThemeProvider>
+              <CerebroAgentProvider>
+                <CommandPaletteProvider>
+                  <SidebarProvider>
+                    <div className="flex h-screen max-w-full overflow-hidden bg-[var(--app-bg)]">
+                      <Sidebar />
+                      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+                        <Topbar />
+                        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[var(--app-bg)] px-8 py-6 max-md:px-4">{children}</main>
+                      </div>
                     </div>
-                  </div>
-                  <CommandPalette />
-                  <CerebroAgentPanel />
-                </SidebarProvider>
-              </CommandPaletteProvider>
-            </CerebroAgentProvider>
-          </ThemeProvider>
+                    <CommandPalette />
+                    <CerebroAgentPanel />
+                  </SidebarProvider>
+                </CommandPaletteProvider>
+              </CerebroAgentProvider>
+            </ThemeProvider>
+          </CurrentUserProvider>
         </ApiKeyProvider>
       </body>
     </html>

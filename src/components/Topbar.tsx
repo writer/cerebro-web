@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API_BASE } from "@/lib/api";
-import { useApiKey, useCommandPalette, useTheme } from "@/components/providers";
+import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
 
 type ConsoleConfig = {
   apiBase: string;
@@ -14,6 +14,7 @@ type ConsoleConfig = {
 export default function Topbar() {
   const { apiKey, setApiKey } = useApiKey();
   const { openCommandPalette } = useCommandPalette();
+  const { error: userError, loading: userLoading, user } = useCurrentUser();
   const { theme, toggleTheme } = useTheme();
   const [showKey, setShowKey] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
@@ -39,6 +40,9 @@ export default function Topbar() {
   const clientKeyEnabled = config?.forwardRequestAuth ?? false;
   const canUseClientKey = clientKeyEnabled || !serverAuthConfigured;
   const connected = apiKey || serverAuthConfigured;
+  const userLabel = user?.displayName ?? (userLoading ? "Loading current user" : "Current user unavailable");
+  const userDetail = user?.email ?? user?.username ?? user?.subject ?? userError ?? userLabel;
+  const userInitials = user?.initials ?? "?";
 
   return (
     <header className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
@@ -89,8 +93,12 @@ export default function Topbar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022 23.848 23.848 0 0 0 5.455 1.31m5.714 0a3 3 0 1 1-5.714 0" />
           </svg>
         </button>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)] max-md:hidden">
-          CB
+        <div
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)] max-md:hidden"
+          aria-label={`Current user: ${userLabel}`}
+          title={`${userLabel}${userDetail && userDetail !== userLabel ? ` (${userDetail})` : ""}`}
+        >
+          {userInitials}
         </div>
         <button
           type="button"

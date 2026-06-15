@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { useApiKey } from "@/components/providers";
+import { useApiKey, useCurrentUser } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import AssetReportModal from "@/components/grc/AssetReportModal";
 import GraphViewer from "@/components/grc/GraphViewer";
@@ -344,6 +344,7 @@ export default function InventoryAssetPage() {
   const params = useParams<{ urn: string }>();
   const searchParams = useSearchParams();
   const { apiKey } = useApiKey();
+  const { actor } = useCurrentUser();
   const urn = useMemo(() => decodeURIComponent(params.urn ?? ""), [params.urn]);
   const initialTab = (searchParams.get("tab") as Tab | null) ?? "overview";
   const [tab, setTab] = useState<Tab>(["overview", "vulnerabilities", "tests", "framework", "reports", "timeline"].includes(initialTab) ? initialTab : "overview");
@@ -392,6 +393,7 @@ export default function InventoryAssetPage() {
         asset_urn: asset.urn,
         source_id: asset.source_id,
         reason,
+        reporter: actor || undefined,
         attributes: {
           label: asset.label,
           entity_type: asset.entity_type,
@@ -416,6 +418,7 @@ export default function InventoryAssetPage() {
       body: JSON.stringify({
         triage_status: status,
         triage_reason: `Marked ${humanize(status)} from inventory detail`,
+        triaged_by: actor || undefined,
       }),
     });
     setTriageSavingID(null);

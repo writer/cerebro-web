@@ -16,6 +16,7 @@ import {
   writeCerebroProxyCache,
 } from "@/lib/cerebro-proxy";
 import { normalizeAskModel } from "@/lib/ask";
+import { currentUserActor, currentUserFromHeaders } from "@/lib/current-user";
 
 type RouteContext = {
   params: Promise<{ path?: string[] }>;
@@ -120,11 +121,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   let body = await request.text();
+  const normalizedPath = normalizeProxyPath(path);
+  const currentActor = currentUserActor(currentUserFromHeaders(request.headers));
   const acceptsEventStream = (request.headers.get("accept") ?? "").includes("text/event-stream");
-  const isAskStreamRequest = path.replace(/^\/+|\/+$/g, "") === "grc/ask" && acceptsEventStream;
+  const isAskStreamRequest = normalizedPath === "grc/ask" && acceptsEventStream;
   if (isAskStreamRequest) {
     body = normalizeAskRequestBody(body);
   }
+  body = stampCurrentUserOnWriteBody(body, normalizedPath, currentActor);
   const headers = {
     ...authHeadersFor(request),
     "content-type": request.headers.get("content-type") ?? "application/json",
@@ -172,7 +176,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const path = (params.path ?? []).join("/");
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
-  const body = await request.text();
+  let body = await request.text();
+  body = stampCurrentUserOnWriteBody(
+    body,
+    normalizeProxyPath(path),
+    currentUserActor(currentUserFromHeaders(request.headers)),
+  );
   const headers = {
     ...authHeadersFor(request),
     "content-type": request.headers.get("content-type") ?? "application/json",
@@ -204,6 +213,31 @@ function normalizeAskRequestBody(body: string): string {
     return JSON.stringify({
       ...parsed,
       model: normalizeAskModel(typeof parsed.model === "string" ? parsed.model : undefined),
+    });
+  } catch {
+    return body;
+  }
+}
+
+function normalizeProxyPath(path: string) {
+  return path.replace(/^\/+|\/+$/g, "");
+}
+
+function stampCurrentUserOnWriteBody(body: string, path: string, actor: string): string {
+  if (!actor) return body;
+  const field =
+    path === "grc/inventory/asset-reports"
+      ? "reporter"
+      : /^grc\/inventory\/asset-reports\/[^/]+\/triage$/.test(path)
+        ? "triaged_by"
+        : "";
+  if (!field) return body;
+
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    return JSON.stringify({
+      ...parsed,
+      [field]: actor,
     });
   } catch {
     return body;
