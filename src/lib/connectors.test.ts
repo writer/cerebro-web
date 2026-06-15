@@ -58,13 +58,22 @@ describe("connector credential store normalization", () => {
       connection_methods: [{
         id: "aws_sso_profile",
         label: "AWS IAM Identity Center profile",
+        short_label: "AWS SSO",
+        category: "Recommended",
         description: "Use a server-side AWS CLI SSO profile.",
         credential_stores: ["environment_managed"],
+        recommended: true,
         saveable: true,
         config_fields: [
           { key: "account_id", label: "Account ID", required: true },
           { key: "profile", label: "Profile", required: true },
         ],
+        prerequisites: [{ id: "aws_role", label: "Role ready", required: true }],
+        steps: [{ id: "validate", label: "Validate", description: "Check access", commands: ["aws sts get-caller-identity --profile cerebro"] }],
+        product_groups: [{ id: "identity_center", label: "IAM Identity Center", families: ["identity_center_account_assignment"] }],
+        deployment_guides: [{ id: "trust", label: "Trust policy", language: "json", body: "{}" }],
+        region_guidance: { default_region: "us-east-1", supports_global: true },
+        security_notes: ["No AWS secret key is returned."],
       }],
     }, stores);
 
@@ -72,10 +81,18 @@ describe("connector credential store normalization", () => {
     expect(methods[0]).toMatchObject({
       id: "aws_sso_profile",
       shortLabel: "AWS SSO",
+      category: "Recommended",
+      recommended: true,
       status: "guided",
       saveable: true,
     });
     expect(methods[0].config_fields?.map((field) => field.key)).toEqual(["account_id", "profile"]);
+    expect(methods[0].steps[0]).toMatchObject({ id: "validate", commands: ["aws sts get-caller-identity --profile cerebro"] });
+    expect(methods[0].commands).toEqual(["aws sts get-caller-identity --profile cerebro"]);
+    expect(methods[0].product_groups[0]).toMatchObject({ id: "identity_center" });
+    expect(methods[0].deployment_guides[0]).toMatchObject({ id: "trust" });
+    expect(methods[0].region_guidance?.supports_global).toBe(true);
+    expect(methods[0].security_notes).toEqual(["No AWS secret key is returned."]);
   });
 });
 
