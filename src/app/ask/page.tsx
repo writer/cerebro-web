@@ -145,15 +145,19 @@ function AskPageInner() {
   );
 
   useEffect(() => {
-    if (autoFiredRef.current) return;
-    if (!seededQuestion.trim()) return;
-    autoFiredRef.current = true;
-    void runAsk({
-      question: seededQuestion.trim(),
-      model: seededModel || defaultAskModel,
-      tenantId: seededTenant,
-      scopeUrn: seededScope,
-    });
+    const question = seededQuestion.trim();
+    if (autoFiredRef.current || !question) return;
+    const timer = window.setTimeout(() => {
+      if (autoFiredRef.current) return;
+      autoFiredRef.current = true;
+      void runAsk({
+        question,
+        model: seededModel || defaultAskModel,
+        tenantId: seededTenant,
+        scopeUrn: seededScope,
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [runAsk, seededModel, seededQuestion, seededScope, seededTenant]);
 
   return (
