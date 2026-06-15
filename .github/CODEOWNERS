@@ -11,5 +11,5 @@
 /package.json            @jonathanhaaswriter
 /package-lock.json       @jonathanhaaswriter
 
-# Docker / deploy
+# Docker / release artifact
 /Dockerfile              @jonathanhaaswriter

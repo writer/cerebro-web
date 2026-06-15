@@ -80,6 +80,20 @@ PROHIBITED_PATTERNS = [
     re.compile(r"github>WriterInternal/"),
     re.compile(r"ghcr\.io/writerinternal/"),
     re.compile(r"arn:aws:iam::\d{12}:"),
+    re.compile(
+        r"\bWriterInternal/(security-tooling-map|trusted-endpoint|aurelius|seclift|npm-guard|vulnerabilities|security-reviewer|panopticon|dast|writer-vuln-miner|mender|tiresias|2password|huggingface-vanta-connector|strix)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bwriter-(aurelius|seclift|npm-guard|vulnerabilities|security-reviewer|panopticon|dast|security-tooling-map)[a-z0-9-]*\b",
+        re.IGNORECASE,
+    ),
+]
+
+DEPLOYMENT_MANIFEST_PATHS = [
+    re.compile(r"^(infra|deploy|manifests|helm|charts|k8s)/"),
+    re.compile(r"(^|/)Pulumi\.[^/]+\.ya?ml$"),
+    re.compile(r"(^|/)kustomization\.ya?ml$"),
 ]
 
 
@@ -161,12 +175,31 @@ def scan_file(path: Path, rel: str) -> list[str]:
     return findings
 
 
+def check_repository_split(root: Path) -> list[str]:
+    findings: list[str] = []
+    for _, rel in iter_files(root):
+        if any(pattern.search(rel) for pattern in DEPLOYMENT_MANIFEST_PATHS):
+            findings.append(f"{rel}: deployment manifest belongs in the internal deployment repository")
+
+    producers = root / "src/lib/security-producers.ts"
+    try:
+        text = producers.read_text(encoding="utf-8")
+    except OSError:
+        return findings
+    if "export const securityProducers: SecurityProducer[] = [" in text:
+        findings.append("src/lib/security-producers.ts: public repo must stay config-driven, not hardcode producer registries")
+    if "WriterInternal/" in text:
+        findings.append("src/lib/security-producers.ts: private producer repositories belong in the private web overlay")
+    return findings
+
+
 def main() -> int:
     root = repo_root()
     findings: list[str] = []
     for path, rel in iter_files(root):
         if is_text(path):
             findings.extend(scan_file(path, rel))
+    findings.extend(check_repository_split(root))
     if findings:
         print("oss-audit: public repository hygiene findings:", file=sys.stderr)
         for finding in findings:

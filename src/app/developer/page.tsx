@@ -9,6 +9,7 @@ import { tagSlug } from "@/lib/openapi";
 import { useOpenApi } from "@/lib/openapi-store";
 
 const developerLinks = [
+  { label: "Repository Split", href: "/developer/repository-split", description: "App-vs-deploy ownership rules for public, private overlay, and deployment repositories." },
   { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and agent entry points for security producers." },
   { label: "Raindrop Ask Evals", href: "/developer/evals", description: "Local Ask quality evals, rubric outcomes, and Workshop trace links." },
 ];
