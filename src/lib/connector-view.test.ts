@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildConnectorCards,
   connectorAttentionTotal,
+  connectorCapabilityLabel,
   connectorPath,
   filterConnectorCards,
 } from "./connector-view";
@@ -60,5 +61,10 @@ describe("connector view model", () => {
 
   it("builds shareable connector routes without leaking extra state", () => {
     expect(connectorPath("github", { runtime_id: "example-runtime", tenant_id: "" })).toBe("/connectors/github?runtime_id=example-runtime");
+  });
+
+  it("renders provider capability labels with full public names", () => {
+    expect(connectorCapabilityLabel("aws")).toBe("Amazon Web Services");
+    expect(connectorCapabilityLabel("gcp")).toBe("Google Cloud Platform");
   });
 });

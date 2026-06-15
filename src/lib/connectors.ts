@@ -27,6 +27,74 @@ export type ConnectorLibraryResponse = {
   credential_stores?: ConnectorCredentialStore[];
 };
 
+export type ConnectorOperationsSummary = {
+  status: "not_configured" | "healthy" | "needs_refresh" | "poor" | "bad" | string;
+  status_reason?: string;
+  top_issue?: string;
+  total_connections?: number;
+  healthy_connections?: number;
+  needs_attention?: number;
+  last_activity_at?: string;
+  sync_frequency_seconds?: number;
+  resource_types?: number;
+  emitted_kinds?: number;
+};
+
+export type ConnectorConnectionSummary = {
+  runtime_id: string;
+  source_id: string;
+  tenant_id?: string;
+  family?: string;
+  status?: string;
+  graph_status?: string;
+  contract_probe_state?: string;
+  last_activity_at?: string;
+  checkpoint_watermark?: string;
+  watermark_lag_seconds?: number;
+  records_accepted?: number;
+  records_rejected?: number;
+  entities_projected?: number;
+  links_projected?: number;
+  cursor_pending?: boolean;
+  checkpoint_cursor_present?: boolean;
+  next_action?: string;
+};
+
+export type ConnectorActivity = {
+  id: string;
+  runtime_id: string;
+  source_id: string;
+  tenant_id?: string;
+  family?: string;
+  type: "sync" | "graph" | string;
+  status: "success" | "failed" | "needs_refresh" | "running" | "incomplete" | string;
+  title: string;
+  description?: string;
+  occurred_at?: string;
+  duration_seconds?: number;
+  records_accepted?: number;
+  records_rejected?: number;
+  entities_projected?: number;
+  links_projected?: number;
+  failure_class?: string;
+};
+
+export type ConnectorDetailResponse = {
+  generated_at?: string;
+  tenant_id?: string;
+  connector?: ConnectorCatalogEntry;
+  summary?: ConnectorOperationsSummary;
+  connections?: ConnectorConnectionSummary[];
+  activity?: ConnectorActivity[];
+};
+
+export type ConnectorActivityResponse = {
+  generated_at?: string;
+  tenant_id?: string;
+  source_id?: string;
+  activity?: ConnectorActivity[];
+};
+
 export type ConnectorCredentialKey = {
   key_id: string;
   algorithm: string;
@@ -160,7 +228,7 @@ const sourceAliases: Record<string, string[]> = {
 
 const connectorDisplayCatalog: Record<string, ConnectorDisplayMetadata> = {
   anthropic: { logoText: "A", category: "AI platform", provider: "Anthropic", accentClass: "bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-100 dark:ring-orange-500/25" },
-  aws: { logoText: "aws", category: "Cloud provider", provider: "Amazon Web Services", accentClass: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25", authBadge: "SSO ready" },
+  aws: { logoText: "AWS", category: "Cloud provider", provider: "Amazon Web Services", accentClass: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25", authBadge: "SSO ready" },
   azure: { logoText: "Az", category: "Cloud provider", provider: "Microsoft Azure", accentClass: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-100 dark:ring-blue-500/25" },
   cloudflare: { logoText: "CF", category: "Edge platform", provider: "Cloudflare", accentClass: "bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-100 dark:ring-orange-500/25" },
   gcp: { logoText: "G", category: "Cloud provider", provider: "Google Cloud Platform", accentClass: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-100 dark:ring-blue-500/25" },
