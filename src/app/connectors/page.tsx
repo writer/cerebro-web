@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -13,7 +13,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
-import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { displayDate } from "@/lib/grc";
@@ -44,6 +44,7 @@ import {
 } from "@/lib/connector-view";
 import type { SourceReadiness } from "@/lib/mission-control";
 import { useQueryParamState } from "@/lib/query-params";
+import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 type LibraryTab = "all" | "attention" | "connected" | "available";
 
@@ -287,11 +288,11 @@ function ReadinessMix({
 }
 
 export default function ConnectorsPage() {
-  const [tenantID, setTenantID] = useState("");
+  const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
-  const [sourceQuery, setSourceQuery] = useState("");
-  const [libraryTab, setLibraryTab] = useState<LibraryTab>("all");
-  const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("all");
+  const [sourceQuery, setSourceQuery] = useQueryParamState("q");
+  const [libraryTabValue, setLibraryTab] = useQueryParamState("tab", "all");
+  const [readinessFilterValue, setReadinessFilter] = useQueryParamState("readiness", "all");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
@@ -304,6 +305,10 @@ export default function ConnectorsPage() {
   }, [libraryQuery.data]);
 
   const { cards } = connectorView;
+  const libraryTab = (libraryTabs.some((tab) => tab.id === libraryTabValue) ? libraryTabValue : "all") as LibraryTab;
+  const readinessFilter = (readinessFilterValue === "all" || readinessOrder.includes(readinessFilterValue as SourceReadiness)
+    ? readinessFilterValue
+    : "all") as ReadinessFilter;
   const readinessCounts = useMemo(
     () =>
       readinessOrder.reduce(
@@ -335,9 +340,25 @@ export default function ConnectorsPage() {
   });
   const readyStores = normalizeCredentialStores(libraryQuery.data).filter((store) => store.available);
   const libraryLoading = libraryQuery.loading && !libraryQuery.data;
+  const runtimeState = runtimeStateForError(libraryQuery.error);
+  const metricState: RuntimeState = libraryQuery.error ? runtimeState : libraryLoading ? "loading" : "ready";
   const totalConnections = cards.reduce((sum, card) => sum + connectorRuntimeTotal(card), 0);
   const healthyConnections = cards.reduce((sum, card) => sum + connectorHealthyTotal(card), 0);
   const actionConnections = cards.reduce((sum, card) => sum + connectorAttentionTotal(card), 0);
+  const filterChips = [
+    { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
+    { label: "Source", value: sourceID, onClear: () => setSourceID("") },
+    { label: "Search", value: sourceQuery, onClear: () => setSourceQuery("") },
+    { label: "View", value: libraryTab === "all" ? "" : libraryTabs.find((tab) => tab.id === libraryTab)?.label ?? libraryTab, onClear: () => setLibraryTab("all") },
+    { label: "Readiness", value: readinessFilter === "all" ? "" : readinessLabels[readinessFilter], onClear: () => setReadinessFilter("all") },
+  ];
+  const clearFilters = () => {
+    setTenantID("");
+    setSourceID("");
+    setSourceQuery("");
+    setLibraryTab("all");
+    setReadinessFilter("all");
+  };
 
   return (
     <div className="space-y-6">
@@ -353,11 +374,11 @@ export default function ConnectorsPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Available" value={cards.length} detail="library connectors" />
-        <MetricCard label="Connected" value={connectedCards.length} detail={`${totalConnections} runtime mappings`} intent="success" />
-        <MetricCard label="Needs Attention" value={attentionCards.length} detail={`${actionConnections} connection signals`} intent={attentionCards.length > 0 ? "warning" : "success"} />
-        <MetricCard label="Healthy" value={healthyConnections} detail="healthy connections" intent={healthyConnections > 0 ? "success" : "neutral"} />
-        <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} />
+        <MetricCard label="Available" value={cards.length} detail="library connectors" state={metricState} />
+        <MetricCard label="Connected" value={connectedCards.length} detail={`${totalConnections} runtime mappings`} intent="success" state={metricState} />
+        <MetricCard label="Needs Attention" value={attentionCards.length} detail={`${actionConnections} connection signals`} intent={attentionCards.length > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Healthy" value={healthyConnections} detail="healthy connections" intent={healthyConnections > 0 ? "success" : "neutral"} state={metricState} />
+        <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
       </div>
 
       <section className="surface-panel p-4">
@@ -377,6 +398,7 @@ export default function ConnectorsPage() {
             </div>
           </label>
         </div>
+        <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </section>
 
       {libraryLoading && <LoadingBlock label="Loading connectors..." />}

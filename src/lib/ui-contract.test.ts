@@ -38,7 +38,7 @@ describe("product UI contract", () => {
   it("keeps developer utilities focused on supported tools", () => {
     const source = readProjectFile("src/app/developer/page.tsx");
 
-    expect(PRODUCT_UI_CONTRACT_VERSION).toBe("2026-06-15.runtime-contracts");
+    expect(PRODUCT_UI_CONTRACT_VERSION).toBe("2026-06-15.runtime-identity-ux");
     expect(source).toContain("Developer Utilities");
     for (const label of REQUIRED_DEVELOPER_UTILITY_LABELS) {
       expect(source).toContain(label);
@@ -52,6 +52,8 @@ describe("product UI contract", () => {
     expect(source).toContain("useCurrentUser");
     expect(source).toContain("identityPosture");
     expect(source).toContain("identity.initials");
+    expect(source).toContain("View identity contract");
+    expect(source).toContain("currentUserWriteFieldForPath");
     expect(source).not.toMatch(/>\s*(CB|JH)\s*</);
     expect(source).not.toMatch(/const\s+userInitials\s*=\s*["'`](CB|JH)["'`]/);
   });
@@ -71,7 +73,40 @@ describe("product UI contract", () => {
     expect(identityPanelSource).toContain("Write Stamps");
     expect(identityPanelSource).toContain("currentUserWriteFieldForPath");
     expect(statusSource).toContain("Runtime Health");
+    expect(primitivesSource).toContain("RuntimeRecoveryBlock");
     expect(primitivesSource).toContain("/developer#quick-status");
     expect(runtimeStateSource).toContain("Cerebro API unavailable");
+    expect(runtimeStateSource).toContain("metricDetailForState");
+  });
+
+  it("keeps data-page metrics and filters tied to runtime state", () => {
+    const queryParamSource = readProjectFile("src/lib/query-params.ts");
+    const primitivesSource = readProjectFile("src/components/grc/Primitives.tsx");
+    const pages = [
+      "src/app/evidence/page.tsx",
+      "src/app/controls/page.tsx",
+      "src/app/risk-inbox/page.tsx",
+      "src/app/connectors/page.tsx",
+    ];
+
+    expect(queryParamSource).toContain("window.history.replaceState");
+    expect(primitivesSource).toContain("AppliedFilterChips");
+    expect(primitivesSource).toContain("state?: RuntimeState");
+
+    for (const page of pages) {
+      const source = readProjectFile(page);
+      expect(source).toContain("AppliedFilterChips");
+      expect(source).toContain("runtimeStateForError");
+      expect(source).toContain("state={metricState}");
+    }
+
+    const inventorySource = readProjectFile("src/app/inventory/page.tsx");
+    expect(inventorySource).toContain("AppliedFilterChips");
+    expect(inventorySource).toContain("metricValueForState");
+    expect(inventorySource).toContain("metricDetailForState");
+
+    const reportsSource = readProjectFile("src/app/reports/page.tsx");
+    expect(reportsSource).toContain("AppliedFilterChips");
+    expect(reportsSource).not.toContain("applyScope");
   });
 });

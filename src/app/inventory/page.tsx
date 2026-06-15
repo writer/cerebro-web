@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useApiKey, useCurrentUser } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import AssetReportModal from "@/components/grc/AssetReportModal";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import {
   GRCInventoryAsset,
   GRCInventoryAssetReport,
@@ -19,6 +19,7 @@ import {
 } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
+import { metricDetailForState, metricValueForState, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 const inputClass = "control-input mt-1 w-full px-3 py-1.5 text-[13px]";
 const labelClass = "text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]";
@@ -208,7 +209,7 @@ function ScopeModal({
 export default function InventoryPage() {
   const { apiKey } = useApiKey();
   const { actor } = useCurrentUser();
-  const [tenantID, setTenantID] = useState("");
+  const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [categoryID, setCategoryID] = useQueryParamState("category_id");
   const [query, setQuery] = useQueryParamState("q");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
@@ -253,6 +254,9 @@ export default function InventoryPage() {
   const publicAssetCount = summary?.public_assets ?? assets.filter(isPublicAsset).length;
   const missingOwnerCount = assets.filter((asset) => ownerLabel(asset) === "Unassigned").length;
   const inventoryError = categoriesQuery.error || assetsQuery.error;
+  const runtimeState = runtimeStateForError(inventoryError);
+  const inventoryLoading = categoriesQuery.loading || assetsQuery.loading;
+  const metricState: RuntimeState = inventoryError ? runtimeState : inventoryLoading && !assetsQuery.data ? "loading" : "ready";
   const hasAssetData = assets.length > 0;
   const scopedCoverage = hasAssetData ? `${summary?.scoped_coverage_pct ?? 100}%` : "No data";
   const orgGroups = useMemo(() => {
@@ -273,6 +277,20 @@ export default function InventoryPage() {
     if (categories.some((category) => category.id === categoryID) || !categoryID) return categories;
     return [{ id: categoryID, label: humanize(categoryID), entity_types: [], count: assets.length }, ...categories];
   }, [assets.length, categories, categoryID]);
+  const filterChips = [
+    { label: "Category", value: selectedCategory?.label || categoryID, onClear: () => setCategoryID("") },
+    { label: "Search", value: query, onClear: () => setQuery("") },
+    { label: "Source", value: sourceID, onClear: () => setSourceID("") },
+    { label: "Scope", value: scopeFilter ? scopeCopy(scopeFilter) : "", onClear: () => setScopeFilter("") },
+    { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
+  ];
+  const clearFilters = () => {
+    setCategoryID("");
+    setQuery("");
+    setSourceID("");
+    setScopeFilter("");
+    setTenantID("");
+  };
   const updateScope = useCallback(async (asset: GRCInventoryAsset, state: "in_scope" | "out_of_scope") => {
     setScopeSavingURN(asset.urn);
     setScopeError(null);
@@ -358,8 +376,8 @@ export default function InventoryPage() {
         ].map((item) => (
           <div key={item.label} className="px-4 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{item.label}</div>
-            <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{item.value}</div>
-            <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">{item.detail}</div>
+            <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{metricValueForState({ state: metricState, value: item.value })}</div>
+            <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">{metricDetailForState({ state: metricState, detail: item.detail })}</div>
           </div>
         ))}
       </div>
@@ -396,6 +414,7 @@ export default function InventoryPage() {
               </label>
               <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
             </div>
+            <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
           </div>
 
           {!inventoryError && (
@@ -404,7 +423,7 @@ export default function InventoryPage() {
             </div>
           )}
 
-          {(categoriesQuery.loading || assetsQuery.loading) && <LoadingBlock label="Loading inventory..." />}
+          {inventoryLoading && <LoadingBlock label="Loading inventory..." />}
 
           {!assetsQuery.loading && !assetsQuery.error && (
             <div className="surface-panel overflow-x-auto">

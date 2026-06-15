@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { metricValueForState, runtimeStateDescription, runtimeStateForError, runtimeStateLabel } from "./runtime-state";
+import { metricDetailForState, metricValueForState, runtimeStateDescription, runtimeStateForError, runtimeStateLabel } from "./runtime-state";
 
 describe("runtime state contract", () => {
   it("classifies API availability and permission failures", () => {
@@ -16,5 +16,7 @@ describe("runtime state contract", () => {
     expect(runtimeStateDescription("unavailable")).toContain("Cerebro API");
     expect(metricValueForState({ state: "unavailable", value: 0 })).toBe("Not loaded");
     expect(metricValueForState({ state: "ready", value: 0 })).toBe(0);
+    expect(metricDetailForState({ state: "unavailable", detail: "in scope" })).toBe("waiting for API");
+    expect(metricDetailForState({ state: "ready", detail: "in scope" })).toBe("in scope");
   });
 });
