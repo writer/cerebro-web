@@ -2,7 +2,7 @@ export type NavigationEntry = {
   label: string;
   href: string;
   description: string;
-  section: "Operator" | "Advanced" | "Workflow";
+  section: "Operator" | "Advanced";
   keywords: string[];
 };
 
@@ -87,62 +87,9 @@ export const utilityLinks: NavigationEntry[] = [
     section: "Advanced",
     keywords: ["openapi", "status", "developer", "api"],
   },
-  {
-    label: "Legacy Workflows",
-    href: "/workflows",
-    description: "Legacy source, runtime, finding, report, and graph workflow explorers.",
-    section: "Advanced",
-    keywords: ["workflow", "legacy", "explorer"],
-  },
-];
-
-export const workflowLinks: NavigationEntry[] = [
-  {
-    label: "Workflow timeline",
-    href: "/workflows/timeline",
-    description: "Replay and inspect workflow.v1 event-registry timelines.",
-    section: "Workflow",
-    keywords: ["timeline", "events", "workflow", "event registry"],
-  },
-  {
-    label: "Workflow sources",
-    href: "/workflows/sources",
-    description: "Explore source catalog operations.",
-    section: "Workflow",
-    keywords: ["sources", "catalog", "workflow"],
-  },
-  {
-    label: "Workflow runtimes",
-    href: "/workflows/runtimes",
-    description: "Explore runtime configuration and sync workflows.",
-    section: "Workflow",
-    keywords: ["runtimes", "sync", "workflow"],
-  },
-  {
-    label: "Workflow findings",
-    href: "/workflows/findings",
-    description: "Explore finding operations and evaluations.",
-    section: "Workflow",
-    keywords: ["findings", "evaluation", "workflow"],
-  },
-  {
-    label: "Workflow reports",
-    href: "/workflows/reports",
-    description: "Explore report definition and run APIs.",
-    section: "Workflow",
-    keywords: ["reports", "runs", "workflow"],
-  },
-  {
-    label: "Workflow graph",
-    href: "/workflows/graph",
-    description: "Explore graph neighborhood and impact APIs.",
-    section: "Workflow",
-    keywords: ["graph", "impact", "workflow"],
-  },
 ];
 
 export const navigationEntries = [
   ...operatorNavLinks,
   ...utilityLinks,
-  ...workflowLinks,
 ];

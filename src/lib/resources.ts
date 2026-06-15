@@ -14,7 +14,7 @@ export const manualTags: Record<string, string> = {
   Findings: "Finding rules, finding detail, evidence, and evaluation runs.",
   GRC: "Dashboard, controls, audit packets, evidence, and GRC finding views.",
   Reports: "Report definitions and durable report runs.",
-  Workflow: "Workflow replay and knowledge event surfaces.",
+  Platform: "Platform knowledge and automation APIs.",
   Graph: "Graph neighborhoods, impact queries, ingest health, and ingest run status.",
 };
 

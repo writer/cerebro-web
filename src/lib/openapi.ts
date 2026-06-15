@@ -194,7 +194,7 @@ const inferOperationTag = (path: string, tag?: string) => {
     return "Graph";
   }
   if (path.startsWith("/platform/knowledge") || path.startsWith("/platform/workflow")) {
-    return "Workflow";
+    return "Platform";
   }
   return tag ?? "Uncategorized";
 };

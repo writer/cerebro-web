@@ -37,7 +37,7 @@ export default function SecurityProducersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Security Producers"
-        description="Cerebro source runtime coverage, graph context tools, and agent workflow entry points for security producers."
+        description="Cerebro source runtime coverage, graph context tools, and agent entry points for security producers."
       />
 
       <Panel title="Runtime Health Snapshot">

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
-import DataTable from "@/components/workflows/DataTable";
+import DataTable from "@/components/grc/DataTable";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { extractRecords, withQuery } from "@/lib/cerebro-data";
 import {
@@ -254,7 +254,7 @@ export default function MissionControlPage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <Panel
             title="Runtime coverage registry"
-            action={<Link href="/workflows/runtimes" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Legacy explorer</Link>}
+            action={<Link href="/connectors" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Data Connectors</Link>}
           >
             <DataTable
               rows={tableRows}
@@ -280,13 +280,13 @@ export default function MissionControlPage() {
               filterKeys={["runtime_id", "source_id", "family", "tenant_id", "health", "cursor_state", "graph_freshness", "graph_run", "finding_eval", "graph_error", "backfill"]}
               emptyMessage="No runtimes returned for this scope."
               getRowHref={(row) =>
-                row.runtime_id ? `/workflows/runtimes?runtime_id=${encodeURIComponent(String(row.runtime_id))}` : undefined
+                row.runtime_id ? `/mission-control?runtime_id=${encodeURIComponent(String(row.runtime_id))}` : undefined
               }
             />
           </Panel>
 
           <div className="space-y-6">
-            <Panel title="Freshness workflow">
+            <Panel title="Freshness actions">
               <div className="space-y-3">
                 <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-600">
                   Source health uses runtime sync, checkpoint watermark, cursor state, graph ingest, and finding evaluation status. Backend schedule/SLA fields are preferred when available.
@@ -294,7 +294,7 @@ export default function MissionControlPage() {
                 {freshnessWorklist.map((runtime) => (
                   <Link
                     key={runtime.runtime_id}
-                    href={`/workflows/runtimes?runtime_id=${encodeURIComponent(runtime.runtime_id)}`}
+                    href={`/mission-control?runtime_id=${encodeURIComponent(runtime.runtime_id)}`}
                     className="block rounded-md border border-slate-100 px-3 py-2.5 transition hover:border-indigo-200 hover:bg-indigo-50/30"
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -355,7 +355,7 @@ export default function MissionControlPage() {
                 {backfills.slice(0, 8).map((runtime) => (
                   <Link
                     key={runtime.runtime_id}
-                    href={`/workflows/runtimes?runtime_id=${encodeURIComponent(runtime.runtime_id)}`}
+                    href={`/mission-control?runtime_id=${encodeURIComponent(runtime.runtime_id)}`}
                     className="block rounded-md border border-slate-100 px-3 py-2.5 transition hover:border-indigo-200 hover:bg-indigo-50/30"
                   >
                     <div className="text-[13px] font-medium text-slate-900">{runtime.runtime_id}</div>
