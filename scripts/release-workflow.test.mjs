@@ -24,6 +24,9 @@ describe("release workflow promotion contract", () => {
     expect(releaseWorkflow).toContain("- name: Create multi-arch manifest");
     expect(releaseWorkflow).toContain("- name: Scan pushed image");
     expect(releaseWorkflow).toContain('image_ref="${IMAGE}@${DIGEST}"');
+    expect(releaseWorkflow).toContain("- name: Write image summary");
+    expect(releaseWorkflow).toContain("::notice title=Published image::");
+    expect(releaseWorkflow).toContain("## Published image");
     expect(releaseWorkflow).not.toContain("- name: Build local image");
     expect(releaseWorkflow).not.toContain("cerebro-web:scan");
   });
@@ -51,6 +54,10 @@ describe("release workflow promotion contract", () => {
     expect(dispatchBlock).toContain('WAIT_FOR_PROMOTION: ${{ github.event.inputs.wait_for_promotion || \'false\' }}');
     expect(dispatchBlock).toContain('if [ "${WAIT_FOR_PROMOTION}" != "true" ]; then');
     expect(dispatchBlock).toContain("Promotion run ${run_id} started");
+    expect(dispatchBlock).toContain("write_promotion_summary");
+    expect(dispatchBlock).toContain("promotion_run_url=${run_url}");
+    expect(dispatchBlock).toContain("::notice title=Infra promotion started::");
+    expect(dispatchBlock).toContain("## Infra promotion");
     expect(dispatchBlock).toContain('gh run view "${run_id}"');
     expect(dispatchBlock).toContain('conclusion}" != "success"');
   });
