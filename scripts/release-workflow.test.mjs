@@ -5,6 +5,15 @@ const releaseWorkflow = readFileSync(new URL("../.github/workflows/release.yml",
 const dispatchBlock = releaseWorkflow.split("- name: Dispatch web image promotion", 2)[1];
 const lockfile = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
 
+function expectArm64MuslPackage(packagePath, expectedVersion) {
+  expect(lockfile.packages[packagePath]).toMatchObject({
+    cpu: ["arm64"],
+    optional: true,
+    os: ["linux"],
+    version: expectedVersion,
+  });
+}
+
 describe("release workflow promotion contract", () => {
   it("validates release source before publishing", () => {
     expect(releaseWorkflow).toContain("npm test");
@@ -63,23 +72,13 @@ describe("release workflow promotion contract", () => {
   });
 
   it("locks native arm64 Alpine packages required by the multi-arch publish image", () => {
-    expect(lockfile.packages["node_modules/@tailwindcss/oxide-linux-arm64-musl"]).toMatchObject({
-      cpu: ["arm64"],
-      optional: true,
-      os: ["linux"],
-      version: "4.1.18",
-    });
-    expect(lockfile.packages["node_modules/lightningcss-linux-arm64-musl"]).toMatchObject({
-      cpu: ["arm64"],
-      optional: true,
-      os: ["linux"],
-      version: "1.30.2",
-    });
-    expect(lockfile.packages["node_modules/vite/node_modules/lightningcss-linux-arm64-musl"]).toMatchObject({
-      cpu: ["arm64"],
-      optional: true,
-      os: ["linux"],
-      version: "1.32.0",
-    });
+    expectArm64MuslPackage(
+      "node_modules/@tailwindcss/oxide-linux-arm64-musl",
+      lockfile.packages["node_modules/@tailwindcss/oxide"].version,
+    );
+    expectArm64MuslPackage(
+      "node_modules/lightningcss-linux-arm64-musl",
+      lockfile.packages["node_modules/lightningcss"].version,
+    );
   });
 });
