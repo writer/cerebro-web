@@ -9,7 +9,6 @@ import { tagSlug } from "@/lib/openapi";
 import { useOpenApi } from "@/lib/openapi-store";
 
 const developerLinks = [
-  { label: "Repository Split", href: "/developer/repository-split", description: "App-vs-deploy ownership rules for public, private overlay, and deployment repositories." },
   { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and agent entry points for security producers." },
   { label: "Raindrop Ask Evals", href: "/developer/evals", description: "Local Ask quality evals, rubric outcomes, and Workshop trace links." },
 ];
@@ -34,7 +33,7 @@ export default function DeveloperPage() {
       <StatusPanel />
 
       <Panel title="Developer Utilities">
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid gap-3 lg:grid-cols-2">
           {developerLinks.map((link) => (
             <Link key={link.href} href={link.href} className="rounded-md border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">
               <div className="text-[13px] font-semibold text-slate-900">{link.label}</div>

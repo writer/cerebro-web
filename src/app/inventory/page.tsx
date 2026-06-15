@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
-import { useApiKey } from "@/components/providers";
+import { useApiKey, useCurrentUser } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import AssetReportModal from "@/components/grc/AssetReportModal";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
@@ -207,6 +207,7 @@ function ScopeModal({
 
 export default function InventoryPage() {
   const { apiKey } = useApiKey();
+  const { actor } = useCurrentUser();
   const [tenantID, setTenantID] = useState("");
   const [categoryID, setCategoryID] = useQueryParamState("category_id");
   const [query, setQuery] = useQueryParamState("q");
@@ -305,6 +306,7 @@ export default function InventoryPage() {
         asset_urn: asset.urn,
         source_id: asset.source_id || debouncedSourceID || undefined,
         reason,
+        reporter: actor || undefined,
         attributes: {
           label: asset.label,
           entity_type: asset.entity_type,
@@ -319,7 +321,7 @@ export default function InventoryPage() {
     }
     setReportAsset(null);
     void assetsQuery.reload();
-  }, [apiKey, assetsQuery, debouncedSourceID, debouncedTenantID]);
+  }, [actor, apiKey, assetsQuery, debouncedSourceID, debouncedTenantID]);
 
   return (
     <div className="space-y-6">

@@ -67,6 +67,9 @@ const routeLabels: Record<string, string> = {
   "/evidence": "Evidence register",
   "/controls": "Controls",
   "/connectors": "Connectors",
+  "/developer": "Developer Tools",
+  "/developer/evals": "Ask evals",
+  "/developer/security-producers": "Security producers",
   "/inventory": "Inventory",
   "/reports": "Reports",
 };
