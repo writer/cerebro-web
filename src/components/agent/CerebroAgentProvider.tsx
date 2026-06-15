@@ -78,8 +78,15 @@ const capturePageContext = (): AskAgentContext => {
     ? decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) ?? "")
     : undefined;
   const routeLabel = routeLabelForPath(pathname);
+  const bodyText = document.body?.innerText?.toLowerCase() ?? "";
+  const pageState = bodyText.includes("cerebro api unavailable")
+    ? "api_unavailable"
+    : /\b(no .*available|no .*match|enter .*to query)\b/.test(bodyText)
+      ? "empty"
+      : "ready";
   const chips = [
     { label: "Screen", value: routeLabel },
+    pageState !== "ready" ? { label: "State", value: pageState === "api_unavailable" ? "API unavailable" : "Empty" } : null,
     scopeUrn ? { label: "Scope", value: scopeUrn } : null,
     findingFromQuery || findingFromPath
       ? { label: "Finding", value: findingFromQuery ?? findingFromPath ?? "" }
@@ -95,6 +102,7 @@ const capturePageContext = (): AskAgentContext => {
     scopeUrn,
     findingId: findingFromQuery ?? findingFromPath,
     entityUrn: scopeUrn,
+    pageState,
     resourceUrn,
     chips,
   };

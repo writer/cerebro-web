@@ -380,7 +380,7 @@ export default function ConnectorsPage() {
       </section>
 
       {libraryLoading && <LoadingBlock label="Loading connectors..." />}
-      {libraryQuery.error && <ErrorBlock error={libraryQuery.error} />}
+      {libraryQuery.error && <ErrorBlock error={libraryQuery.error} onRetry={() => void libraryQuery.reload()} recoveryDetail="Connector data will appear when the API is reachable." />}
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
         <Panel

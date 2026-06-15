@@ -6,7 +6,8 @@ import { useMemo, useState } from "react";
 import AskAboutLink from "@/components/ask/AskAboutLink";
 import FindingTable from "@/components/grc/FindingTable";
 import GraphViewer from "@/components/grc/GraphViewer";
-import { AttentionBanner, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
+import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
+import { isApiUnavailableError } from "@/lib/cerebro-errors";
 import { averageRiskScore, GRCEntityImpact, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
@@ -15,8 +16,6 @@ type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
-const isApiUnavailableError = (error: string | null | undefined) =>
-  Boolean(error && /(?:\b50[234]\b|unable to reach|timed out)/i.test(error));
 
 export default function ImpactPage() {
   const [tenantID, setTenantID] = useState("");
@@ -86,26 +85,16 @@ export default function ImpactPage() {
         )}
       </div>
 
+      {(fallbackFindings.loading || loading) && <LoadingBlock label="Loading impact map..." />}
+      {showUnavailableState && <ErrorBlock error={loadError || "Unable to load impact map."} onRetry={refreshImpact} recoveryDetail="Impact data will appear when the API is reachable." />}
+      {showHardError && <ErrorBlock error={loadError || "Unable to load impact map."} onRetry={refreshImpact} />}
+
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Root Entity" value={shortEntity(selectedRoot)} detail="impact anchor" />
         <MetricCard label="Avg Risk" value={<RiskBadge score={averageRiskScore(findings)} />} detail="related risk" />
         <MetricCard label="Nodes" value={nodeCount} detail="entities in view" />
         <MetricCard label="Relations" value={relationCount} detail="graph links" />
       </div>
-
-      {(fallbackFindings.loading || loading) && <LoadingBlock label="Loading impact map..." />}
-      {showUnavailableState && (
-        <AttentionBanner
-          action={
-            <button type="button" onClick={refreshImpact} className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-900 transition hover:border-amber-400 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-              Retry
-            </button>
-          }
-        >
-          Cerebro API is unavailable. Impact data will appear when the API is reachable.
-        </AttentionBanner>
-      )}
-      {showHardError && <ErrorBlock error={loadError || "Unable to load impact map."} />}
 
       {!selectedRoot && !fallbackFindings.loading && !showHardError && (
         <EmptyBlock

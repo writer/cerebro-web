@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { currentUserActor, currentUserFromHeaders, type CurrentUser } from "./current-user";
+import {
+  currentUserActor,
+  currentUserFromHeaders,
+  currentUserFromHeadersWithFallback,
+  currentUserSourceLabel,
+  localCurrentUserFallback,
+  type CurrentUser,
+} from "./current-user";
 
 const base64Json = (payload: Record<string, unknown>) => {
   const encoder = new TextEncoder();
@@ -123,6 +130,27 @@ describe("current user identity", () => {
 
   it("returns null when no current-user signal is available", () => {
     expect(currentUserFromHeaders(new Headers())).toBeNull();
+  });
+
+  it("uses a stable local fallback only when explicitly enabled", () => {
+    const previous = process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK;
+    process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK = "1";
+    try {
+      expect(currentUserFromHeadersWithFallback(new Headers())).toMatchObject({
+        displayName: "Local developer",
+        initials: "LD",
+        username: "local-developer",
+        source: "local-fallback",
+      });
+      expect(currentUserActor(localCurrentUserFallback())).toBe("local-developer");
+      expect(currentUserSourceLabel("local-fallback")).toBe("Local fallback");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK;
+      } else {
+        process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK = previous;
+      }
+    }
   });
 
   it("uses the most stable available actor identifier", () => {

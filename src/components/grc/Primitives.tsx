@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import type { GRCFinding } from "@/lib/grc";
 
+import { API_BASE } from "@/lib/api";
+import { isApiUnavailableError } from "@/lib/cerebro-errors";
 import { humanize, riskLevelFromScore } from "@/lib/grc";
+
+type ConsoleConfig = {
+  apiBase: string;
+};
 
 const severityClasses: Record<string, string> = {
   CRITICAL: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/15 dark:text-red-200 dark:ring-red-500/25",
@@ -252,7 +259,83 @@ export function LoadingBlock({ label = "Loading..." }: { label?: string }) {
   );
 }
 
-export function ErrorBlock({ error }: { error: string }) {
+export function ErrorBlock({
+  error,
+  onRetry,
+  recoveryDetail = "Data will appear when the API is reachable.",
+}: {
+  error: string;
+  onRetry?: () => void;
+  recoveryDetail?: string;
+}) {
+  const [apiBase, setApiBase] = useState(API_BASE);
+  const apiUnavailable = isApiUnavailableError(error);
+  const checkedAt = new Date();
+
+  useEffect(() => {
+    if (!apiUnavailable) return;
+    let mounted = true;
+    const loadConfig = async () => {
+      try {
+        const response = await fetch("/api/config", { cache: "no-store" });
+        if (!response.ok) return;
+        const config = (await response.json()) as ConsoleConfig;
+        if (mounted && config.apiBase) setApiBase(config.apiBase);
+      } catch {
+        return;
+      }
+    };
+    void loadConfig();
+    return () => { mounted = false; };
+  }, [apiUnavailable, error]);
+
+  if (apiUnavailable) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            <div className="min-w-0">
+              <div className="font-semibold">Cerebro API unavailable</div>
+              <div className="mt-1 leading-5 text-amber-900/80 dark:text-amber-100/80">{recoveryDetail}</div>
+              <div className="mt-3 grid gap-2 text-[12px] text-amber-900/75 dark:text-amber-100/75 md:grid-cols-[auto_minmax(0,1fr)]">
+                <span>Last checked</span>
+                <span className="font-mono">{checkedAt.toLocaleTimeString()}</span>
+                <span>API base</span>
+                <span className="break-all font-mono">{apiBase}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-950 transition hover:border-amber-400 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50 dark:hover:bg-amber-500/20"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M20.49 9.023A8.25 8.25 0 1 0 21.75 13.5" />
+                </svg>
+                Retry
+              </button>
+            )}
+            <Link
+              href="/developer#quick-status"
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-950 transition hover:border-amber-400 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50 dark:hover:bg-amber-500/20"
+            >
+              Health
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H18m0 0v4.5M18 6l-7.5 7.5M6 8.25v9A1.75 1.75 0 0 0 7.75 19h8.5A1.75 1.75 0 0 0 18 17.25v-3" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2.5 rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-100">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">

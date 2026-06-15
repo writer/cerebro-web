@@ -72,7 +72,7 @@ export default function ControlsPage() {
       </div>
 
       {loading && <LoadingBlock label="Loading controls..." />}
-      {error && <ErrorBlock error={error} />}
+      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Controls will appear when the API is reachable." />}
 
       {!loading && !error && (
         <div className="space-y-3">

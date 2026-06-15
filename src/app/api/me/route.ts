@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { currentUserFromHeaders } from "@/lib/current-user";
+import { currentUserFromHeadersWithFallback } from "@/lib/current-user";
 
 export async function GET(request: NextRequest) {
-  const user = currentUserFromHeaders(request.headers);
+  const user = currentUserFromHeadersWithFallback(request.headers);
+  const fallback = user?.source === "local-fallback";
   return NextResponse.json(
     {
-      authenticated: Boolean(user),
+      authenticated: Boolean(user && !fallback),
+      fallback,
       user,
     },
     {

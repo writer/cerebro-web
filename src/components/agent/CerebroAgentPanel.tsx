@@ -56,27 +56,69 @@ const formatEvent = (event: AskAgentTimelineEvent) => {
   return event.label;
 };
 
-const samplePrompts = (routeLabel?: string, scope?: string) => [
-  {
-    label: "Triage this view",
-    prompt: `On the ${routeLabel ?? "current"} screen, identify the highest-risk item I should inspect next and why.`,
-    icon: Search,
-  },
-  {
-    label: "Gather evidence",
-    prompt: scope
-      ? `Find the strongest evidence, source freshness, and connected findings for ${scope}.`
-      : "Find the strongest evidence and source freshness for the current investigation context.",
-    icon: Database,
-  },
-  {
-    label: "Map impact",
-    prompt: scope
-      ? `Map the blast radius and likely impact paths for ${scope}.`
-      : "Map the likely blast radius for the current screen's most important entity.",
-    icon: Activity,
-  },
-];
+const samplePrompts = (routeLabel?: string, scope?: string, pageState?: string) => {
+  if (pageState === "api_unavailable") {
+    return [
+      {
+        label: "Check API health",
+        prompt: `On the ${routeLabel ?? "current"} screen, explain why Cerebro data is unavailable and what health checks I should run next.`,
+        icon: Activity,
+      },
+      {
+        label: "Plan recovery",
+        prompt: "List the fastest recovery steps for restoring the Cerebro API and validating that the UI is healthy again.",
+        icon: RefreshCw,
+      },
+      {
+        label: "Explain empty graph",
+        prompt: scope
+          ? `Explain what data should appear for ${scope} once the API is reachable.`
+          : "Explain what data should appear here once the API is reachable.",
+        icon: Database,
+      },
+    ];
+  }
+  if (pageState === "empty") {
+    return [
+      {
+        label: "Why empty?",
+        prompt: `Explain why the ${routeLabel ?? "current"} screen is empty and what filters or inputs I should check first.`,
+        icon: Search,
+      },
+      {
+        label: "Find a root",
+        prompt: "Find a good entity or finding to use as the next investigation root.",
+        icon: Activity,
+      },
+      {
+        label: "Next query",
+        prompt: "Suggest the next query or filter that would make this screen useful.",
+        icon: Database,
+      },
+    ];
+  }
+  return [
+    {
+      label: "Triage this view",
+      prompt: `On the ${routeLabel ?? "current"} screen, identify the highest-risk item I should inspect next and why.`,
+      icon: Search,
+    },
+    {
+      label: "Gather evidence",
+      prompt: scope
+        ? `Find the strongest evidence, source freshness, and connected findings for ${scope}.`
+        : "Find the strongest evidence and source freshness for the current investigation context.",
+      icon: Database,
+    },
+    {
+      label: "Map impact",
+      prompt: scope
+        ? `Map the blast radius and likely impact paths for ${scope}.`
+        : "Map the likely blast radius for the current screen's most important entity.",
+      icon: Activity,
+    },
+  ];
+};
 
 const answerText = (turn: AskTurnState) => turn.summary?.markdown ?? turn.agentAnswerDraft ?? "";
 
@@ -99,9 +141,10 @@ export default function CerebroAgentPanel() {
   const latestTurn = turns.at(-1);
   const activeTurn = turns.find((turn) => turn.id === activeTurnId);
   const currentStatus = latestEvent(latestTurn);
+  const quietLauncher = !activeTurn && (pageContext.pageState === "api_unavailable" || pageContext.pageState === "empty");
   const prompts = useMemo(
-    () => samplePrompts(pageContext.routeLabel, pageContext.scopeUrn ?? pageContext.entityUrn),
-    [pageContext.entityUrn, pageContext.routeLabel, pageContext.scopeUrn],
+    () => samplePrompts(pageContext.routeLabel, pageContext.scopeUrn ?? pageContext.entityUrn, pageContext.pageState),
+    [pageContext.entityUrn, pageContext.pageState, pageContext.routeLabel, pageContext.scopeUrn],
   );
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -116,19 +159,20 @@ export default function CerebroAgentPanel() {
       <button
         type="button"
         onClick={() => openAgent()}
-        className="agent-surface agent-launcher fixed bottom-5 right-5 z-40 flex w-[234px] items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-left shadow-[0_18px_45px_rgba(15,23,42,0.15)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_22px_55px_rgba(15,23,42,0.18)]"
+        className={`agent-surface agent-launcher fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-lg border border-slate-200 bg-white text-left shadow-[0_18px_45px_rgba(15,23,42,0.15)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_22px_55px_rgba(15,23,42,0.18)] ${quietLauncher ? "w-[58px] justify-center px-2.5 py-2.5" : "w-[234px] px-3 py-3"}`}
         aria-label="Open Cerebro AI"
+        title={quietLauncher ? `Open Cerebro AI for ${pageContext.routeLabel ?? "this screen"}` : undefined}
       >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-950 text-white">
+        <span className={`grid shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-950 text-white ${quietLauncher ? "h-9 w-9" : "h-10 w-10"}`}>
           {activeTurn ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
         </span>
-        <span className="min-w-0 flex-1">
+        <span className={quietLauncher ? "sr-only" : "min-w-0 flex-1"}>
           <span className="block text-[14px] font-semibold text-slate-950">Cerebro AI</span>
           <span className="mt-0.5 block truncate text-[12px] text-slate-500">
             {activeTurn ? "Working across context" : pageContext.routeLabel ?? "Ask across Cerebro"}
           </span>
         </span>
-        <ArrowUpRight className="h-4 w-4 text-slate-400" />
+        {!quietLauncher && <ArrowUpRight className="h-4 w-4 text-slate-400" />}
       </button>
     );
   }
