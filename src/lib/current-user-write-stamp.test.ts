@@ -4,7 +4,7 @@ import {
   currentUserWriteFieldForPath,
   normalizeProxyPath,
   stampCurrentUserOnWriteBody,
-} from "./current-user-write-stamp";
+} from "./identity-write-stamp";
 
 describe("current user write stamping", () => {
   it("normalizes proxied write paths before matching", () => {

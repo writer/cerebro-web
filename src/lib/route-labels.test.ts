@@ -9,8 +9,8 @@ describe("route labels", () => {
     expect(routeLabelForPath("/developer/security-producers")).toBe("Security producers");
   });
 
-  it("keeps removed nested developer routes under the developer tools label", () => {
-    expect(routeLabelForPath("/developer/repository-split")).toBe("Developer Tools");
+  it("keeps unknown nested developer routes under the developer tools label", () => {
+    expect(routeLabelForPath("/developer/runtime-diagnostics")).toBe("Developer Tools");
   });
 
   it("falls back only for truly unknown routes", () => {

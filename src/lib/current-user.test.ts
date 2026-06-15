@@ -5,9 +5,10 @@ import {
   currentUserFromHeaders,
   currentUserFromHeadersWithFallback,
   currentUserSourceLabel,
+  identityPosture,
   localCurrentUserFallback,
   type CurrentUser,
-} from "./current-user";
+} from "./identity";
 
 const base64Json = (payload: Record<string, unknown>) => {
   const encoder = new TextEncoder();
@@ -166,5 +167,28 @@ describe("current user identity", () => {
     expect(currentUserActor(baseUser)).toBe("display.user");
     expect(currentUserActor({ ...baseUser, username: undefined })).toBe("Display User");
     expect(currentUserActor({ ...baseUser, displayName: "", username: undefined })).toBe("subject-123");
+  });
+
+  it("summarizes identity posture for product UI", () => {
+    expect(identityPosture({ loading: true, user: null })).toMatchObject({
+      label: "Resolving identity",
+      state: "loading",
+      tone: "neutral",
+    });
+
+    expect(identityPosture({ user: localCurrentUserFallback() })).toMatchObject({
+      actor: "local-developer",
+      displayName: "Local developer",
+      label: "Local identity",
+      sourceLabel: "Local fallback",
+      state: "fallback",
+      tone: "warning",
+    });
+
+    expect(identityPosture({ error: "missing headers", user: null })).toMatchObject({
+      detail: "missing headers",
+      label: "Identity unavailable",
+      state: "unavailable",
+    });
   });
 });

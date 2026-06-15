@@ -16,8 +16,8 @@ import {
   writeCerebroProxyCache,
 } from "@/lib/cerebro-proxy";
 import { normalizeAskModel } from "@/lib/ask";
-import { currentUserActor, currentUserFromHeadersWithFallback } from "@/lib/current-user";
-import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/current-user-write-stamp";
+import { currentUserActor, currentUserFromHeadersWithFallback } from "@/lib/identity";
+import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/identity-write-stamp";
 
 type RouteContext = {
   params: Promise<{ path?: string[] }>;

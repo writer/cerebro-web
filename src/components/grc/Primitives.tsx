@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 import type { GRCFinding } from "@/lib/grc";
 
 import { API_BASE } from "@/lib/api";
-import { isApiUnavailableError } from "@/lib/cerebro-errors";
 import { humanize, riskLevelFromScore } from "@/lib/grc";
+import { runtimeStateDescription, runtimeStateForError, runtimeStateLabel } from "@/lib/runtime-state";
 
 type ConsoleConfig = {
   apiBase: string;
@@ -262,14 +262,15 @@ export function LoadingBlock({ label = "Loading..." }: { label?: string }) {
 export function ErrorBlock({
   error,
   onRetry,
-  recoveryDetail = "Data will appear when the API is reachable.",
+  recoveryDetail,
 }: {
   error: string;
   onRetry?: () => void;
   recoveryDetail?: string;
 }) {
   const [apiBase, setApiBase] = useState(API_BASE);
-  const apiUnavailable = isApiUnavailableError(error);
+  const runtimeState = runtimeStateForError(error);
+  const apiUnavailable = runtimeState === "unavailable";
   const checkedAt = new Date();
 
   useEffect(() => {
@@ -298,8 +299,8 @@ export function ErrorBlock({
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
             </svg>
             <div className="min-w-0">
-              <div className="font-semibold">Cerebro API unavailable</div>
-              <div className="mt-1 leading-5 text-amber-900/80 dark:text-amber-100/80">{recoveryDetail}</div>
+              <div className="font-semibold">{runtimeStateLabel(runtimeState)}</div>
+              <div className="mt-1 leading-5 text-amber-900/80 dark:text-amber-100/80">{runtimeStateDescription(runtimeState, recoveryDetail)}</div>
               <div className="mt-3 grid gap-2 text-[12px] text-amber-900/75 dark:text-amber-100/75 md:grid-cols-[auto_minmax(0,1fr)]">
                 <span>Last checked</span>
                 <span className="font-mono">{checkedAt.toLocaleTimeString()}</span>
@@ -332,6 +333,17 @@ export function ErrorBlock({
             </Link>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (runtimeState === "permission-denied") {
+    return (
+      <div className="flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-900 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5A2.25 2.25 0 0 0 19.5 19.5v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+        <span>{runtimeStateDescription(runtimeState, recoveryDetail)}</span>
       </div>
     );
   }
