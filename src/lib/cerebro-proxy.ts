@@ -164,6 +164,22 @@ export const readCerebroProxyCache = (key: string, allowStale = false) => {
 
 export const readCerebroProxyInflight = (key: string) => proxyResponseInflight.get(key) ?? null;
 
+export const shouldBypassCerebroProxyCache = (headers: Headers) => {
+  const cacheControl = (headers.get("cache-control") ?? "").toLowerCase();
+  const pragma = (headers.get("pragma") ?? "").toLowerCase();
+  return cacheControl
+    .split(",")
+    .map((token) => token.trim())
+    .some((token) => token === "no-cache" || token === "no-store")
+    || pragma.split(",").map((token) => token.trim()).includes("no-cache");
+};
+
+export const withCerebroCacheBypassHeader = (headers: HeadersInit): Headers => {
+  const next = new Headers(headers);
+  next.set("cache-control", "no-cache");
+  return next;
+};
+
 export const trackCerebroProxyInflight = (key: string, request: Promise<ProxyResponsePayload>) => {
   const tracked = request.finally(() => {
     if (proxyResponseInflight.get(key) === tracked) {
@@ -195,11 +211,16 @@ export const writeCerebroProxyCache = (key: string, response: Response, body: st
 };
 
 export const cachedResponseHeaders = (cached: Pick<CachedProxyResponse, "headers">, state: "hit" | "miss" | "stale" | "dedupe"): Record<string, string> => {
+  const upstreamCacheState = cached.headers["x-cerebro-cache"];
   const headers: Record<string, string> = {
     ...cached.headers,
     "cache-control": "private, max-age=0, must-revalidate",
+    "x-cerebro-web-cache": state,
     "x-cerebro-cache": state,
   };
+  if (upstreamCacheState) {
+    headers["x-cerebro-upstream-cache"] = upstreamCacheState;
+  }
   if (state === "stale") {
     headers.warning = "110 - Response is stale";
   }
@@ -258,6 +279,9 @@ export const responseHeadersFor = (response: Response): Record<string, string> =
     "www-authenticate",
     "cache-control",
     "retry-after",
+    "vary",
+    "warning",
+    "x-cerebro-cache",
     "x-request-id",
   ].forEach((name) => {
     const value = response.headers.get(name);
