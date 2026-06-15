@@ -16,7 +16,7 @@ import {
   markAskTurnAborted,
   normalizeAskModel,
   reduceAskEvent,
-  streamAsk,
+  streamAgentAsk,
 } from "@/lib/ask";
 
 const sampleQuestions = [
@@ -85,9 +85,19 @@ function AskPageInner() {
         scope_urn: input.scopeUrn || undefined,
         model,
         history,
+        context: {
+          route: "/ask",
+          routeLabel: "Ask console",
+          scopeUrn: input.scopeUrn || undefined,
+          chips: [
+            { label: "Screen", value: "Ask console" },
+            ...(input.scopeUrn ? [{ label: "Scope", value: input.scopeUrn }] : []),
+          ],
+        },
+        surface: "ask_page",
       };
       try {
-        for await (const event of streamAsk(request, apiKey, controller.signal)) {
+        for await (const event of streamAgentAsk(request, apiKey, controller.signal)) {
           setTurns((prev) =>
             prev.map((turn) => (turn.id === turnId ? reduceAskEvent(turn, event) : turn)),
           );
@@ -150,7 +160,7 @@ function AskPageInner() {
     <div className="space-y-6">
       <PageHeader
         title="Ask Cerebro"
-        description="Natural-language questions against the graph. The model drafts Cypher, a validator checks it, Neo4j runs it, and you get cited results back."
+        description="Expanded console for the Cerebro agent. Ask natural-language questions against the graph, inspect tool progress, Cypher, rows, summaries, and trace metadata."
         action={
           turns.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">

@@ -14,6 +14,27 @@ export type AskRequest = {
   scope_urn?: string;
   model?: string;
   history?: AskHistoryEntry[];
+  context?: AskAgentContext;
+  surface?: string;
+  conversation_id?: string;
+};
+
+export type AskAgentContextChip = {
+  label: string;
+  value: string;
+};
+
+export type AskAgentContext = {
+  route?: string;
+  routeLabel?: string;
+  href?: string;
+  title?: string;
+  scopeUrn?: string;
+  findingId?: string;
+  entityUrn?: string;
+  resourceUrn?: string;
+  chips?: AskAgentContextChip[];
+  [key: string]: unknown;
 };
 
 export type AskValidator = {
@@ -81,10 +102,31 @@ export type AskErrorEvent = {
   retryable?: boolean;
 };
 
+export type AskAgentStatusEvent = {
+  stage: string;
+  label: string;
+  detail?: string;
+  mode?: "agent" | "legacy";
+};
+
+export type AskAgentToolEvent = {
+  name: string;
+  status: "started" | "completed" | "error";
+  detail?: string;
+};
+
+export type AskAgentDeltaEvent = {
+  text: string;
+};
+
 export type AskUnknownEvent = {
   event: string;
   payload: unknown;
 };
+
+export type AskAgentTimelineEvent =
+  | ({ type: "status"; at: number } & AskAgentStatusEvent)
+  | ({ type: "tool"; at: number } & AskAgentToolEvent);
 
 export type AskEvent =
   | { type: "rationale"; data: AskRationaleEvent }
@@ -92,6 +134,9 @@ export type AskEvent =
   | { type: "cypher"; data: AskCypherEvent }
   | { type: "rows"; data: AskRowsEvent }
   | { type: "summary"; data: AskSummaryEvent }
+  | { type: "agent_status"; data: AskAgentStatusEvent }
+  | { type: "agent_tool"; data: AskAgentToolEvent }
+  | { type: "agent_delta"; data: AskAgentDeltaEvent }
   | { type: "done"; data: AskDoneEvent }
   | { type: "error"; data: AskErrorEvent }
   | { type: "unknown"; data: AskUnknownEvent };
@@ -110,6 +155,9 @@ export type AskTurnState = {
   cypher?: AskCypherEvent;
   rows?: AskRowsEvent;
   summary?: AskSummaryEvent;
+  agentEvents?: AskAgentTimelineEvent[];
+  agentAnswerDraft?: string;
+  agentMode?: "agent" | "legacy";
   done?: AskDoneEvent;
   error?: AskErrorEvent;
   unknownEvents?: AskUnknownEvent[];
@@ -235,6 +283,12 @@ export const parseAskEventBlock = (block: string): AskEvent | null => {
       const summary = normalizeSummaryEvent(payload);
       return summary ? { type: "summary", data: summary } : null;
     }
+    case "agent_status":
+      return { type: "agent_status", data: payload as AskAgentStatusEvent };
+    case "agent_tool":
+      return { type: "agent_tool", data: payload as AskAgentToolEvent };
+    case "agent_delta":
+      return { type: "agent_delta", data: payload as AskAgentDeltaEvent };
     case "done":
       return { type: "done", data: payload as AskDoneEvent };
     case "error":
@@ -249,7 +303,24 @@ export async function* streamAsk(
   apiKey: string,
   signal?: AbortSignal,
 ): AsyncGenerator<AskEvent> {
-  const response = await fetch("/api/cerebro/grc/ask", {
+  yield* streamAskEndpoint("/api/cerebro/grc/ask", request, apiKey, signal);
+}
+
+export async function* streamAgentAsk(
+  request: AskRequest,
+  apiKey: string,
+  signal?: AbortSignal,
+): AsyncGenerator<AskEvent> {
+  yield* streamAskEndpoint("/api/agent/ask", request, apiKey, signal);
+}
+
+async function* streamAskEndpoint(
+  endpoint: string,
+  request: AskRequest,
+  apiKey: string,
+  signal?: AbortSignal,
+): AsyncGenerator<AskEvent> {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -327,6 +398,31 @@ export const reduceAskEvent = (turn: AskTurnState, event: AskEvent): AskTurnStat
       return { ...turn, updatedAt, rows: event.data };
     case "summary":
       return { ...turn, updatedAt, summary: event.data };
+    case "agent_status":
+      return {
+        ...turn,
+        updatedAt,
+        agentMode: event.data.mode ?? turn.agentMode,
+        agentEvents: [
+          ...(turn.agentEvents ?? []),
+          { ...event.data, type: "status", at: updatedAt },
+        ],
+      };
+    case "agent_tool":
+      return {
+        ...turn,
+        updatedAt,
+        agentEvents: [
+          ...(turn.agentEvents ?? []),
+          { ...event.data, type: "tool", at: updatedAt },
+        ],
+      };
+    case "agent_delta":
+      return {
+        ...turn,
+        updatedAt,
+        agentAnswerDraft: `${turn.agentAnswerDraft ?? ""}${event.data.text}`,
+      };
     case "done":
       return { ...turn, updatedAt, status: "completed", done: event.data };
     case "error":

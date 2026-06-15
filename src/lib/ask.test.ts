@@ -6,6 +6,7 @@ import {
   normalizeAskModel,
   parseAskEventBlock,
   reduceAskEvent,
+  streamAgentAsk,
   streamAsk,
 } from "./ask";
 
@@ -43,6 +44,26 @@ describe("Ask stream contract", () => {
       type: "unknown",
       data: { event: "token_usage", payload: { input: 100, output: 20 } },
     });
+  });
+
+  it("parses agent progress events", () => {
+    const status = parseAskEventBlock(
+      'event: agent_status\ndata: {"stage":"connect","label":"Connecting to Cerebro MCP","mode":"agent"}',
+    );
+    const tool = parseAskEventBlock(
+      'event: agent_tool\ndata: {"name":"cerebro.findings.search","status":"completed","detail":"Result received"}',
+    );
+    const delta = parseAskEventBlock('event: agent_delta\ndata: {"text":"hello"}');
+
+    expect(status).toEqual({
+      type: "agent_status",
+      data: { stage: "connect", label: "Connecting to Cerebro MCP", mode: "agent" },
+    });
+    expect(tool).toEqual({
+      type: "agent_tool",
+      data: { name: "cerebro.findings.search", status: "completed", detail: "Result received" },
+    });
+    expect(delta).toEqual({ type: "agent_delta", data: { text: "hello" } });
   });
 
   it("parses query plan diagnostics as a first-class stream event", () => {
@@ -91,6 +112,27 @@ describe("Ask stream contract", () => {
     fetchMock.mockRestore();
   });
 
+  it("posts panel requests to the agent route", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(streamFromText('event: done\ndata: {"trace_id":"trace-1","total_ms":1,"cypher_refused":false}\n\n'), {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+
+    const events = [];
+    for await (const event of streamAgentAsk({ tenant_id: "writer", question: "q" }, "")) {
+      events.push(event);
+    }
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/agent/ask",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(events.at(-1)?.type).toBe("done");
+    fetchMock.mockRestore();
+  });
+
   it("keeps reducer status terminal after done and error events", () => {
     const turn = askEmptyState({ question: "q" });
     const completed = reduceAskEvent(turn, {
@@ -120,5 +162,20 @@ describe("Ask stream contract", () => {
 
     expect(turn.queryPlan?.plan.intent).toBe("top_risk_findings");
     expect(turn.queryPlan?.deterministic).toBe(true);
+  });
+
+  it("stores agent timeline and streaming draft text", () => {
+    const withStatus = reduceAskEvent(askEmptyState({ question: "q" }), {
+      type: "agent_status",
+      data: { stage: "connect", label: "Connecting", mode: "agent" },
+    });
+    const withText = reduceAskEvent(withStatus, {
+      type: "agent_delta",
+      data: { text: "First sentence." },
+    });
+
+    expect(withText.agentMode).toBe("agent");
+    expect(withText.agentEvents?.[0]).toMatchObject({ type: "status", stage: "connect" });
+    expect(withText.agentAnswerDraft).toBe("First sentence.");
   });
 });
