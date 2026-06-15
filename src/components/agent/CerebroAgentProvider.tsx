@@ -131,6 +131,10 @@ const mergeContext = (
   };
 };
 
+function createConversationId() {
+  return typeof crypto !== "undefined" ? crypto.randomUUID() : `c-${Date.now()}`;
+}
+
 export function CerebroAgentProvider({ children }: { children: React.ReactNode }) {
   const { apiKey } = useApiKey();
   const [isOpen, setOpen] = useState(false);
@@ -143,9 +147,11 @@ export function CerebroAgentProvider({ children }: { children: React.ReactNode }
     chips: [],
   }));
   const abortRef = useRef<AbortController | null>(null);
-  const conversationIdRef = useRef(
-    typeof crypto !== "undefined" ? crypto.randomUUID() : `c-${Date.now()}`,
-  );
+  const conversationIdRef = useRef<string | null>(null);
+  const getConversationId = useCallback(() => {
+    conversationIdRef.current ??= createConversationId();
+    return conversationIdRef.current;
+  }, []);
 
   useEffect(() => {
     const refresh = () => setPageContext(capturePageContext());
@@ -224,7 +230,7 @@ export function CerebroAgentProvider({ children }: { children: React.ReactNode }
         history,
         context,
         surface: input.surface ?? "agent_panel",
-        conversation_id: conversationIdRef.current,
+        conversation_id: getConversationId(),
       };
 
       try {
@@ -260,7 +266,7 @@ export function CerebroAgentProvider({ children }: { children: React.ReactNode }
         setActiveTurnId(null);
       }
     },
-    [apiKey, history],
+    [apiKey, getConversationId, history],
   );
 
   const openAgent = useCallback(
@@ -303,7 +309,7 @@ export function CerebroAgentProvider({ children }: { children: React.ReactNode }
     setTurns([]);
     setActiveTurnId(null);
     setDraft("");
-    conversationIdRef.current = typeof crypto !== "undefined" ? crypto.randomUUID() : `c-${Date.now()}`;
+    conversationIdRef.current = null;
   }, []);
 
   const submitDraft = useCallback(() => {

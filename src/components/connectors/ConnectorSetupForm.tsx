@@ -628,11 +628,18 @@ export default function ConnectorSetupForm({
   const methods = useMemo(() => connectionMethodsForConnector(connector, credentialStores), [connector, credentialStores]);
   const preferredMethod = methods.find((method) => method.status !== "unavailable" && method.saveable !== false) ?? methods[0];
   const [selectedMethodID, setSelectedMethodID] = useState<ConnectorConnectionMethodID>(preferredMethod?.id ?? "encrypted_submission");
-  const selectedMethod = methods.find((method) => method.id === selectedMethodID) ?? preferredMethod;
+  const effectiveSelectedMethodID = methods.some((method) => method.id === selectedMethodID)
+    ? selectedMethodID
+    : preferredMethod?.id;
+  const selectedMethod = methods.find((method) => method.id === effectiveSelectedMethodID) ?? preferredMethod;
   const methodStores = storesForMethod(selectedMethod, credentialStores);
   const visibleStores = methodStores.length > 0 ? methodStores : credentialStores;
   const [selectedStoreID, setSelectedStoreID] = useState<ConnectorCredentialStoreID>(() => defaultStoreForMethod(preferredMethod, credentialStores));
-  const selectedStore = visibleStores.find((store) => store.id === selectedStoreID) ?? visibleStores[0];
+  const defaultSelectedStoreID = defaultStoreForMethod(selectedMethod, credentialStores);
+  const selectedStore = visibleStores.find((store) => store.id === selectedStoreID)
+    ?? visibleStores.find((store) => store.id === defaultSelectedStoreID)
+    ?? visibleStores[0];
+  const effectiveSelectedStoreID = selectedStore?.id ?? defaultSelectedStoreID;
   const selectedStoreIsValid = Boolean(selectedMethod && selectedStore && storeMatchesMethod(selectedStore, selectedMethod));
   const canSubmit = Boolean(selectedMethod && selectedStore?.available && selectedMethod.saveable !== false && selectedStoreIsValid);
   const anyStoreReady = credentialStores.some((store) => store.available);
@@ -670,18 +677,6 @@ export default function ConnectorSetupForm({
   }), [excludedFamilies, excludedResources, resourceURNs]);
   const scopeCount = scopePolicyExclusionCount(scopePolicy);
 
-  useEffect(() => {
-    if (!methods.some((method) => method.id === selectedMethodID) && preferredMethod) {
-      setSelectedMethodID(preferredMethod.id);
-    }
-  }, [methods, preferredMethod, selectedMethodID]);
-
-  useEffect(() => {
-    const nextStoreID = defaultStoreForMethod(selectedMethod, credentialStores);
-    const current = storesForMethod(selectedMethod, credentialStores).find((store) => store.id === selectedStoreID);
-    if (!current) setSelectedStoreID(nextStoreID);
-  }, [credentialStores, selectedMethod, selectedStoreID]);
-
   const changeMethod = (methodID: ConnectorConnectionMethodID) => {
     const nextMethod = methods.find((method) => method.id === methodID);
     setSelectedMethodID(methodID);
@@ -713,7 +708,7 @@ export default function ConnectorSetupForm({
   useEffect(() => {
     const timer = window.setTimeout(updateFormValues, 0);
     return () => window.clearTimeout(timer);
-  }, [selectedMethodID, selectedStoreID, tenantID]);
+  }, [effectiveSelectedMethodID, effectiveSelectedStoreID, tenantID]);
 
   const submitConnection = async (checkOnly: boolean) => {
     const form = formRef.current;
@@ -837,7 +832,7 @@ export default function ConnectorSetupForm({
             <p className="mb-3 text-[12px] leading-5 text-[var(--text-muted)]">
               Available methods are advertised by the backend for this source. Unsupported methods are collapsed below.
             </p>
-            <MethodTabs methods={methods} selectedID={selectedMethodID} onSelect={changeMethod} />
+            <MethodTabs methods={methods} selectedID={effectiveSelectedMethodID ?? "encrypted_submission"} onSelect={changeMethod} />
           </SetupStep>
 
           <SetupStep index={2} title="Choose credential store" icon={<LockKeyhole className="h-4 w-4" />}>
@@ -849,7 +844,7 @@ export default function ConnectorSetupForm({
                     {selectedStore?.available ? selectedStore.label : "No ready store"}
                   </span>
                 </div>
-                <CredentialStoreSelector stores={visibleStores} selectedID={selectedStoreID} onSelect={setSelectedStoreID} compact />
+                <CredentialStoreSelector stores={visibleStores} selectedID={effectiveSelectedStoreID} onSelect={setSelectedStoreID} compact />
               </>
             )}
           </SetupStep>
