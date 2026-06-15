@@ -30,18 +30,36 @@ describe("connector credential store normalization", () => {
   it("only honors advertised closed-set stores and sanitizes detail copy", () => {
     const stores = normalizeCredentialStores({
       credential_stores: [
-        { id: "google_secret_manager", label: "Google Secret Manager", provider: "Google Cloud Platform", available: true, default: true, mode: "reference", detail: "deployment managed" },
+        {
+          id: "aws_secrets_manager",
+          label: "AWS Secrets Manager",
+          provider: "Amazon Web Services",
+          available: true,
+          default: true,
+          mode: "reference",
+          detail: "deployment managed",
+          status: "ready",
+          reference_prefixes: ["env:", "aws-sm:"],
+          reference_placeholder: "aws-sm:us-east-1:cerebro/tenant-a/aws/runtime-a/credentials#token",
+          native_resolution_available: true,
+          required_config: [{ env: "CEREBRO_CONNECTOR_SECRET_STORES", label: "Enabled stores", required: true }],
+        },
         { id: "unknown_store", available: true, detail: "should not render" },
       ],
     });
 
-    expect(defaultCredentialStoreID(stores)).toBe("google_secret_manager");
-    expect(stores.find((store) => store.id === "google_secret_manager")).toMatchObject({
+    expect(defaultCredentialStoreID(stores)).toBe("aws_secrets_manager");
+    expect(stores.find((store) => store.id === "aws_secrets_manager")).toMatchObject({
       available: true,
       detail: "Configured by deployment",
       mode: "reference",
+      status: "ready",
+      referencePrefixes: ["env:", "aws-sm:"],
+      referencePlaceholder: "aws-sm:us-east-1:cerebro/tenant-a/aws/runtime-a/credentials#token",
+      nativeResolutionAvailable: true,
     });
-    expect(stores.some((store) => String(store.id) === "unknown_store")).toBe(false);
+    expect(stores.find((store) => store.id === "aws_secrets_manager")?.requiredConfig).toHaveLength(1);
+    expect(stores.some((store) => store.id === "unknown_store")).toBe(false);
   });
 
   it("uses backend-advertised connection methods and field metadata", () => {

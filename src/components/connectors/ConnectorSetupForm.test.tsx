@@ -24,7 +24,13 @@ const credentialStores: NormalizedCredentialStore[] = [{
   mode: "environment_managed",
   available: true,
   default: true,
+  status: "ready",
   detail: "Ready",
+  referencePrefixes: ["env:"],
+  referencePlaceholder: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
+  nativeResolutionAvailable: false,
+  setupSteps: [],
+  requiredConfig: [],
 }];
 
 function awsConnector(): ConnectorCatalogEntry {
