@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
+import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
 import { useCommandPalette } from "@/components/providers";
 import { LiveSearchCommand, useLiveSearchCommands } from "@/lib/live-search";
 import { NavigationEntry, navigationEntries } from "@/lib/navigation";
@@ -13,17 +14,18 @@ type Command = Omit<NavigationEntry, "section"> & {
   id: string;
   section: CommandSection;
   rank?: number;
+  onRun?: () => void;
 };
 
 const commandText = (command: Command) =>
   [command.label, command.description, command.href, command.section, ...command.keywords].join(" ").toLowerCase();
 
-const searchCommands = (query: string): Command[] => {
+const searchCommands = (query: string, askCerebro: (question: string) => void): Command[] => {
   const trimmed = query.trim();
   if (!trimmed) return [];
   const encoded = encodeURIComponent(trimmed);
   return [
-    { id: "ask-cerebro", label: `Ask Cerebro: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Send this question to Ask Cerebro.", section: "Operator", keywords: ["ask", "graph", "cypher"] },
+    { id: "ask-cerebro", label: `Ask Cerebro: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Send this question to the Cerebro agent.", section: "Operator", keywords: ["ask", "agent", "graph", "cypher"], onRun: () => askCerebro(trimmed) },
     { id: "search-risk-inbox", label: `Search Risk Inbox for "${trimmed}"`, href: `/risk-inbox?q=${encoded}`, description: "Filter findings by title, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk"] },
     { id: "open-finding", label: `Open finding "${trimmed}"`, href: `/findings/${encoded}`, description: "Jump to a finding detail page by ID.", section: "Operator", keywords: ["finding", "detail"] },
     { id: "open-impact", label: `Open impact map for "${trimmed}"`, href: `/impact?root_urn=${encoded}`, description: "Use as entity URN or graph root.", section: "Operator", keywords: ["impact", "graph"] },
@@ -43,18 +45,24 @@ const isEditableTarget = (target: EventTarget | null) => {
 
 export default function CommandPalette() {
   const router = useRouter();
+  const { openAgent } = useCerebroAgent();
   const { closeCommandPalette, isCommandPaletteOpen, openCommandPalette } = useCommandPalette();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const liveSearch = useLiveSearchCommands(query, isCommandPaletteOpen);
 
+  const askCerebro = useMemo(
+    () => (question: string) => openAgent({ question, autoSubmit: true }),
+    [openAgent],
+  );
+
   const commands = useMemo<Command[]>(() => {
     const base = navigationEntries.map((e) => ({ ...e, id: `nav:${e.href}` }));
     const q = query.trim().toLowerCase();
     const filtered = q ? base.filter((c) => commandText(c).includes(q)) : base;
-    return [...liveSearch.commands, ...searchCommands(query), ...filtered];
-  }, [liveSearch.commands, query]);
+    return [...liveSearch.commands, ...searchCommands(query, askCerebro), ...filtered];
+  }, [askCerebro, liveSearch.commands, query]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -88,7 +96,11 @@ export default function CommandPalette() {
   };
 
   const run = (c: Command) => {
-    router.push(c.href);
+    if (c.onRun) {
+      c.onRun();
+    } else {
+      router.push(c.href);
+    }
     dismiss();
   };
 

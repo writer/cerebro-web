@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
 
 type Props = {
   question: string;
@@ -25,14 +25,30 @@ export default function AskAboutLink({
   title,
   children,
 }: Props) {
-  const params = new URLSearchParams({ q: question });
-  if (scopeUrn) params.set("scope_urn", scopeUrn);
-  const href = `/ask?${params.toString()}`;
+  const { openAgent } = useCerebroAgent();
   const cls =
     className ?? (variant === "button" ? baseButton : baseLink);
   return (
-    <Link href={href} className={cls} title={title ?? "Ask Cerebro about this context"} prefetch={false}>
+    <button
+      type="button"
+      className={cls}
+      title={title ?? "Ask Cerebro about this context"}
+      onClick={() =>
+        openAgent({
+          question,
+          scopeUrn,
+          context: scopeUrn
+            ? {
+                scopeUrn,
+                entityUrn: scopeUrn,
+                chips: [{ label: "Scope", value: scopeUrn }],
+              }
+            : undefined,
+          autoSubmit: true,
+        })
+      }
+    >
       {children ?? "Ask about this"}
-    </Link>
+    </button>
   );
 }

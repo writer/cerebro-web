@@ -35,6 +35,7 @@ const formatElapsed = (startedAt: number, now: number) => `${Math.max(0, Math.ro
 
 const turnAnswerText = (turn: AskTurnState) =>
   turn.summary?.markdown ??
+  turn.agentAnswerDraft ??
   turn.rationale ??
   (turn.rows ? JSON.stringify(turn.rows.rows, null, 2) : "") ??
   "";
@@ -95,7 +96,8 @@ export default function AskThread({ turns, activeTurnId, onRetry, onStop }: Prop
         const hasQueryPlan = Boolean(turn.queryPlan);
         const hasCypher = Boolean(turn.cypher);
         const hasRows = Boolean(turn.rows);
-        const hasSummary = Boolean(turn.summary);
+        const displayedSummary = turn.summary ?? (turn.agentAnswerDraft ? { markdown: turn.agentAnswerDraft, citations: [] } : null);
+        const hasSummary = Boolean(displayedSummary);
         const isDone = Boolean(turn.done);
         const isTerminal = turn.status === "completed" || turn.status === "error" || turn.status === "aborted";
         const isStalled = isActive && now - turn.updatedAt > 15_000;
@@ -136,6 +138,7 @@ export default function AskThread({ turns, activeTurnId, onRetry, onStop }: Prop
                 {stepBadge("Cypher", isActive && !hasCypher && hasQueryPlan, hasCypher)}
                 {stepBadge("Rows", isActive && !hasRows && hasCypher, hasRows)}
                 {stepBadge("Summary", isActive && !hasSummary && hasRows, hasSummary)}
+                {turn.agentEvents?.length ? stepBadge(turn.agentMode === "legacy" ? "Ask" : "MCP", isActive, true) : null}
                 <button
                   type="button"
                   onClick={() => setTraceTurn(turn)}
@@ -194,6 +197,37 @@ export default function AskThread({ turns, activeTurnId, onRetry, onStop }: Prop
                 </div>
               )}
 
+              {turn.agentEvents?.length ? (
+                <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-slate-400">
+                    Agent progress
+                  </div>
+                  <div className="mt-2 grid gap-1.5">
+                    {turn.agentEvents.slice(-8).map((event, eventIndex) => (
+                      <div key={`${event.at}:${event.type}:${eventIndex}:${"label" in event ? event.label : event.name}`} className="flex items-center gap-2 text-[12px] text-slate-600">
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            event.type === "tool"
+                              ? event.status === "completed"
+                                ? "bg-emerald-500"
+                                : "bg-amber-500"
+                              : "bg-indigo-500"
+                          }`}
+                        />
+                        <span className="font-medium text-slate-700">
+                          {event.type === "tool" ? event.name : event.label}
+                        </span>
+                        {event.type === "tool" ? (
+                          <span className="text-slate-400">{event.status}</span>
+                        ) : event.detail ? (
+                          <span className="truncate text-slate-400">{event.detail}</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
               {turn.rationale && (
                 <section>
                   <div className="text-[10px] uppercase tracking-[0.22em] text-slate-400">
@@ -234,15 +268,15 @@ export default function AskThread({ turns, activeTurnId, onRetry, onStop }: Prop
                 </section>
               )}
 
-              {turn.summary && (
+              {displayedSummary && (
                 <section>
                   <div className="text-[10px] uppercase tracking-[0.22em] text-slate-400">
                     Summary
                   </div>
                   <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 p-4">
                     <MarkdownSummary
-                      markdown={turn.summary.markdown}
-                      citations={turn.summary.citations}
+                      markdown={displayedSummary.markdown}
+                      citations={displayedSummary.citations}
                     />
                   </div>
                   {sources.length > 0 && (
