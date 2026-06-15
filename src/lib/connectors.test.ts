@@ -41,7 +41,7 @@ describe("connector credential store normalization", () => {
       detail: "Configured by deployment",
       mode: "reference",
     });
-    expect(stores.some((store) => store.id === "unknown_store")).toBe(false);
+    expect(stores.some((store) => String(store.id) === "unknown_store")).toBe(false);
   });
 
   it("uses backend-advertised connection methods and field metadata", () => {

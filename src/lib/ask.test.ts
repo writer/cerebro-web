@@ -20,11 +20,19 @@ const streamFromText = (text: string) =>
 
 describe("Ask stream contract", () => {
   it("parses CRLF-framed SSE blocks", () => {
-    const event = parseAskEventBlock('event: done\r\ndata: {"trace_id":"trace-1","total_ms":42,"cypher_refused":false}');
+    const event = parseAskEventBlock('event: done\r\ndata: {"trace_id":"trace-1","total_ms":42,"cypher_refused":false,"timings":{"mcp_connect_ms":4,"first_tool_ms":12},"tool_calls":2,"tool_results":2,"delta_count":7}');
 
     expect(event).toEqual({
       type: "done",
-      data: { trace_id: "trace-1", total_ms: 42, cypher_refused: false },
+      data: {
+        trace_id: "trace-1",
+        total_ms: 42,
+        cypher_refused: false,
+        timings: { mcp_connect_ms: 4, first_tool_ms: 12 },
+        tool_calls: 2,
+        tool_results: 2,
+        delta_count: 7,
+      },
     });
   });
 

@@ -95,6 +95,10 @@ export type AskDoneEvent = {
   trace_id: string;
   total_ms: number;
   cypher_refused: boolean;
+  timings?: Record<string, number>;
+  tool_calls?: number;
+  tool_results?: number;
+  delta_count?: number;
 };
 
 export type AskErrorEvent = {

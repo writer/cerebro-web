@@ -67,6 +67,22 @@ export default function TraceDrawer({ turn, onClose }: Props) {
                 <dd className="text-[13px] font-semibold text-slate-900">{formatMs(turn.done?.total_ms)}</dd>
               </div>
               <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                <dt className="text-[10px] uppercase tracking-wide text-slate-500">MCP connect</dt>
+                <dd className="text-[13px] font-semibold text-slate-900">{formatMs(turn.done?.timings?.mcp_connect_ms)}</dd>
+              </div>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                <dt className="text-[10px] uppercase tracking-wide text-slate-500">First tool</dt>
+                <dd className="text-[13px] font-semibold text-slate-900">{formatMs(turn.done?.timings?.first_tool_ms)}</dd>
+              </div>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                <dt className="text-[10px] uppercase tracking-wide text-slate-500">First text</dt>
+                <dd className="text-[13px] font-semibold text-slate-900">{formatMs(turn.done?.timings?.first_delta_ms)}</dd>
+              </div>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                <dt className="text-[10px] uppercase tracking-wide text-slate-500">Tools</dt>
+                <dd className="font-mono text-[11px]">{turn.done ? `${turn.done.tool_results ?? 0}/${turn.done.tool_calls ?? 0}` : "—"}</dd>
+              </div>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
                 <dt className="text-[10px] uppercase tracking-wide text-slate-500">Trace ID</dt>
                 <dd className="break-all font-mono text-[11px]">{turn.done?.trace_id ?? "—"}</dd>
               </div>
