@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
 import { identityPosture } from "@/lib/identity";
+import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 
 type ConsoleConfig = {
   apiBase: string;
@@ -19,6 +21,7 @@ export default function Topbar() {
   const { theme, toggleTheme } = useTheme();
   const [showKey, setShowKey] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
+  const [showIdentity, setShowIdentity] = useState(false);
   const [config, setConfig] = useState<ConsoleConfig | null>(null);
 
   useEffect(() => {
@@ -43,8 +46,13 @@ export default function Topbar() {
   const connected = apiKey || serverAuthConfigured;
   const identity = identityPosture({ error: userError, loading: userLoading, user });
   const authLabel = serverAuthConfigured ? "Server auth" : apiKey ? "API key" : "No API key";
+  const apiKeyPosture = canUseClientKey ? (apiKey ? "Client key present" : "No client key") : "Server-managed";
   const runtimeHealthy = Boolean(connected && identity.state === "resolved");
   const runtimeWarning = !runtimeHealthy;
+  const writeStampRows = [
+    { label: "Asset report create", path: "grc/inventory/asset-reports" },
+    { label: "Asset report triage", path: "grc/inventory/asset-reports/{id}/triage" },
+  ];
 
   return (
     <header className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
@@ -100,21 +108,82 @@ export default function Topbar() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022 23.848 23.848 0 0 0 5.455 1.31m5.714 0a3 3 0 1 1-5.714 0" />
           </svg>
         </button>
-        <div
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)]"
+        <button
+          type="button"
+          onClick={() => {
+            setShowIdentity((prev) => !prev);
+            setShowConnection(false);
+          }}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
           aria-label={`Current user: ${identity.displayName}`}
           title={`${identity.displayName}${identity.actor && identity.actor !== identity.displayName ? ` (${identity.actor})` : ""} · ${identity.sourceLabel}`}
         >
           {identity.initials}
-        </div>
+        </button>
         <button
           type="button"
-          onClick={() => setShowConnection((prev) => !prev)}
+          onClick={() => {
+            setShowConnection((prev) => !prev);
+            setShowIdentity(false);
+          }}
           className="secondary-button px-3 py-1.5 text-[13px] max-md:hidden"
         >
           Settings
         </button>
       </div>
+
+      {showIdentity && (
+        <div className="surface-raised absolute right-6 top-16 z-50 mt-1 w-[380px] p-4">
+          <div className="flex items-start gap-3 border-b border-[color:var(--border)] pb-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[13px] font-semibold text-[var(--text-primary)]">
+              {identity.initials}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-[14px] font-semibold text-[var(--text-primary)]">{identity.displayName}</div>
+              <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">{identity.sourceLabel}</div>
+            </div>
+            <span className={`ml-auto mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${identity.tone === "success" ? "bg-emerald-500" : identity.tone === "warning" ? "bg-amber-500" : "bg-slate-400"}`} />
+          </div>
+
+          <div className="mt-3 grid gap-2 text-[12px]">
+            {[
+              ["Actor", identity.actor || "Not resolved"],
+              ["Email", user?.email ?? "—"],
+              ["Username", user?.username ?? "—"],
+              ["Subject", user?.subject ?? "—"],
+              ["Auth mode", authLabel],
+              ["API key posture", apiKeyPosture],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-start justify-between gap-4">
+                <span className="text-[var(--text-muted)]">{label}</span>
+                <span className="max-w-[65%] break-words text-right font-mono text-[var(--text-secondary)]">{value}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Write Attribution</div>
+            <div className="mt-2 space-y-2">
+              {writeStampRows.map((row) => (
+                <div key={row.path} className="flex items-start justify-between gap-3 text-[12px]">
+                  <span className="text-[var(--text-secondary)]">{row.label}</span>
+                  <span className="font-mono text-[var(--text-muted)]">{currentUserWriteFieldForPath(row.path) ?? "not stamped"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">{identity.detail}</p>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <Link href="/developer/identity" className="text-[12px] font-medium text-[var(--primary)] hover:text-[var(--primary-hover)]">
+              View identity contract
+            </Link>
+            <button type="button" onClick={() => setShowIdentity(false)} className="text-[12px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {showConnection && (
         <div className="surface-raised absolute right-6 top-16 z-50 mt-1 w-[420px] p-4">
