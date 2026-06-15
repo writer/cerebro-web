@@ -75,10 +75,10 @@ const normalizeFederatedHeaderValue = (value: string) => {
   return value;
 };
 
-const firstHeader = (headers: Headers, names: string[]) => {
+const firstHeader = (headers: Headers, names: string[], maxLength = 8000) => {
   for (const name of names) {
     const value = headers.get(name);
-    const first = cleanString(value?.split(",")[0]);
+    const first = cleanString(value?.split(",")[0], maxLength);
     if (first) return normalizeFederatedHeaderValue(first);
   }
   return "";
