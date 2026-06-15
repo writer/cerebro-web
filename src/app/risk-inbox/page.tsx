@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
-import { ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
+import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { GRCFinding, riskSort } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
+import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
@@ -15,7 +16,7 @@ const selectClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
 
 export default function RiskInboxPage() {
-  const [tenantID, setTenantID] = useState("");
+  const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [runtimeID, setRuntimeID] = useQueryParamState("runtime_id");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
   const [severity, setSeverity] = useQueryParamState("severity");
@@ -37,6 +38,8 @@ export default function RiskInboxPage() {
     [debouncedRuntimeID, debouncedSourceID, debouncedTenantID, severity, status],
   );
   const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
+  const runtimeState = runtimeStateForError(error);
+  const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
   const findings = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (data?.findings ?? [])
@@ -59,6 +62,22 @@ export default function RiskInboxPage() {
     });
     return { averageRisk: scored === 0 ? 0 : Math.round(riskTotal / scored), critical, criticalRisk, high, overdue, unassigned };
   }, [findings]);
+  const filterChips = [
+    { label: "Search", value: query, onClear: () => setQuery("") },
+    { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
+    { label: "Runtime", value: runtimeID, onClear: () => setRuntimeID("") },
+    { label: "Source", value: sourceID, onClear: () => setSourceID("") },
+    { label: "Severity", value: severity, onClear: () => setSeverity("") },
+    { label: "Status", value: status === "open" ? "" : status, onClear: () => setStatus("open") },
+  ];
+  const clearFilters = () => {
+    setQuery("");
+    setTenantID("");
+    setRuntimeID("");
+    setSourceID("");
+    setSeverity("");
+    setStatus("open");
+  };
 
   return (
     <div className="space-y-6">
@@ -91,14 +110,15 @@ export default function RiskInboxPage() {
           <label className={labelClass}>Severity<select value={severity} onChange={(e) => setSeverity(e.target.value)} className={selectClass}><option value="">All</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select></label>
           <label className={labelClass}>Status<select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}><option value="open">Open</option><option value="resolved">Resolved</option><option value="all">All</option></select></label>
         </div>
+        <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-5">
-        <MetricCard label="Findings" value={findings.length} detail="in scope" />
-        <MetricCard label="Avg Risk" value={<RiskBadge score={metrics.averageRisk} />} detail={`${metrics.criticalRisk} critical-risk`} intent={metrics.criticalRisk > 0 ? "danger" : "neutral"} />
-        <MetricCard label="Critical / High" value={`${metrics.critical} / ${metrics.high}`} intent={metrics.critical > 0 ? "danger" : "neutral"} />
-        <MetricCard label="Overdue" value={metrics.overdue} detail="past SLA" intent={metrics.overdue > 0 ? "danger" : "success"} />
-        <MetricCard label="Unassigned" value={metrics.unassigned} detail="needs owner" intent={metrics.unassigned > 0 ? "warning" : "success"} />
+        <MetricCard label="Findings" value={findings.length} detail="in scope" state={metricState} />
+        <MetricCard label="Avg Risk" value={<RiskBadge score={metrics.averageRisk} />} detail={`${metrics.criticalRisk} critical-risk`} intent={metrics.criticalRisk > 0 ? "danger" : "neutral"} state={metricState} />
+        <MetricCard label="Critical / High" value={`${metrics.critical} / ${metrics.high}`} intent={metrics.critical > 0 ? "danger" : "neutral"} state={metricState} />
+        <MetricCard label="Overdue" value={metrics.overdue} detail="past SLA" intent={metrics.overdue > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Unassigned" value={metrics.unassigned} detail="needs owner" intent={metrics.unassigned > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
       {loading && <LoadingBlock label="Loading findings..." />}

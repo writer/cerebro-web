@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import GraphViewer from "@/components/grc/GraphViewer";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown } from "@/components/grc/Primitives";
 import { displayDate, GRCAuditPacket, GRCFinding, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
@@ -15,9 +15,7 @@ const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
 
 export default function ReportsPage() {
-  const [tenantInput, setTenantInput] = useQueryParamState("tenant_id");
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
-  const [findingInput, setFindingInput] = useQueryParamState("finding_id");
   const [findingID, setFindingID] = useQueryParamState("finding_id");
   const needsFallbackFinding = findingID.trim() === "";
   const fallbackFindings = useGRCQuery<FindingsResponse>(
@@ -28,9 +26,13 @@ export default function ReportsPage() {
   const packet = useGRCQuery<GRCAuditPacket>(
     selectedFindingID ? grcPath(`/grc/audit-packets/${encodeURIComponent(selectedFindingID)}`, { limit: 25 }) : null,
   );
-  const applyScope = () => {
-    setTenantID(tenantInput.trim());
-    setFindingID(findingInput.trim());
+  const filterChips = [
+    { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
+    { label: "Finding", value: findingID, onClear: () => setFindingID("") },
+  ];
+  const clearFilters = () => {
+    setTenantID("");
+    setFindingID("");
   };
   const reportBody = useMemo(() => {
     if (!packet.data) return "";
@@ -62,16 +64,11 @@ export default function ReportsPage() {
       />
 
       <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
-        <form
-          className="grid gap-3 md:grid-cols-[1fr_2fr_auto]"
-          onSubmit={(e) => { e.preventDefault(); applyScope(); }}
-        >
-          <label className={labelClass}>Tenant<input value={tenantInput} onChange={(e) => setTenantInput(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Finding<input value={findingInput} onChange={(e) => setFindingInput(e.target.value)} placeholder={fallbackFindingID || "finding id"} className={inputClass} /></label>
-          <div className="flex items-end">
-            <button type="submit" className="rounded-md bg-indigo-500 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">Apply</button>
-          </div>
-        </form>
+        <div className="grid gap-3 md:grid-cols-[1fr_2fr]">
+          <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
+          <label className={labelClass}>Finding<input value={findingID} onChange={(e) => setFindingID(e.target.value)} placeholder={fallbackFindingID || "finding id"} className={inputClass} /></label>
+        </div>
+        <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
         {!findingID && fallbackFindingID && (
           <div className="mt-2 text-[12px] text-slate-500">
             Showing highest-priority finding: <span className="font-mono text-slate-700">{fallbackFindingID}</span>

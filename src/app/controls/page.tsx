@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
 import { GRCControl, riskSort } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
+import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 type ControlsResponse = { controls: GRCControl[]; generated_at: string };
 
@@ -16,7 +17,7 @@ const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
 
 export default function ControlsPage() {
-  const [tenantID, setTenantID] = useState("");
+  const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [framework, setFramework] = useQueryParamState("framework");
   const [controlID, setControlID] = useQueryParamState("control");
   const [showAllControls, setShowAllControls] = useState(false);
@@ -25,6 +26,8 @@ export default function ControlsPage() {
   const { data, error, loading, reload } = useGRCQuery<ControlsResponse>(
     grcPath("/grc/controls", { tenant_id: debouncedTenantID, limit: 200 }),
   );
+  const runtimeState = runtimeStateForError(error);
+  const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
   const controlView = useMemo(() => {
     const fw = framework.trim().toLowerCase();
     const cf = controlID.trim().toLowerCase();
@@ -43,6 +46,16 @@ export default function ControlsPage() {
   const { controls, critical, failing, openFindings } = controlView;
   const visibleControls = showAllControls ? controls : controls.slice(0, INITIAL_CONTROL_RENDER_LIMIT);
   const hiddenControlCount = controls.length - visibleControls.length;
+  const filterChips = [
+    { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
+    { label: "Framework", value: framework, onClear: () => setFramework("") },
+    { label: "Control", value: controlID, onClear: () => setControlID("") },
+  ];
+  const clearFilters = () => {
+    setTenantID("");
+    setFramework("");
+    setControlID("");
+  };
 
   return (
     <div className="space-y-6">
@@ -62,13 +75,14 @@ export default function ControlsPage() {
           <label className={labelClass}>Framework<input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="SOC 2, ISO 27001" className={inputClass} /></label>
           <label className={labelClass}>Control<input value={controlID} onChange={(e) => setControlID(e.target.value)} placeholder="CC6.1" className={inputClass} /></label>
         </div>
+        <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Controls" value={controls.length} detail="in scope" />
-        <MetricCard label="Failing" value={failing} detail="with open findings" intent={failing > 0 ? "danger" : "success"} />
-        <MetricCard label="Open Findings" value={openFindings} detail="mapped to controls" intent={openFindings > 0 ? "warning" : "success"} />
-        <MetricCard label="Critical" value={critical} detail="critical findings" intent={critical > 0 ? "danger" : "neutral"} />
+        <MetricCard label="Controls" value={controls.length} detail="in scope" state={metricState} />
+        <MetricCard label="Failing" value={failing} detail="with open findings" intent={failing > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Open Findings" value={openFindings} detail="mapped to controls" intent={openFindings > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Critical" value={critical} detail="critical findings" intent={critical > 0 ? "danger" : "neutral"} state={metricState} />
       </div>
 
       {loading && <LoadingBlock label="Loading controls..." />}

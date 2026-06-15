@@ -1,4 +1,4 @@
-export const PRODUCT_UI_CONTRACT_VERSION = "2026-06-15.runtime-contracts";
+export const PRODUCT_UI_CONTRACT_VERSION = "2026-06-15.runtime-identity-ux";
 
 export const REQUIRED_DEVELOPER_UTILITY_LABELS = [
   "Identity Contract",

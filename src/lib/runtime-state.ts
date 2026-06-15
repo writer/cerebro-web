@@ -89,3 +89,19 @@ export function metricValueForState({
   if (state === "loading") return "Loading";
   return value;
 }
+
+export function metricDetailForState({
+  detail,
+  state,
+}: {
+  detail?: string;
+  state: RuntimeState;
+}) {
+  if (state === "unavailable") return "waiting for API";
+  if (state === "permission-denied") return "access unavailable";
+  if (state === "loading") return "loading data";
+  if (state === "error") return "not loaded";
+  if (state === "stale") return "refresh needed";
+  if (state === "partial") return "partially loaded";
+  return detail;
+}

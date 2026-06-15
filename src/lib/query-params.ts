@@ -63,7 +63,19 @@ export const useQueryParamState = (key: string, fallback = "") => {
   const value = local?.routeValue === routeValue ? local.value : routeValue;
   const setValue = useCallback((nextValue: string) => {
     setLocal({ routeValue, value: nextValue });
-  }, [routeValue]);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const normalized = nextValue.trim();
+    if (!normalized || normalized === fallback) {
+      url.searchParams.delete(key);
+    } else {
+      url.searchParams.set(key, normalized);
+    }
+    const nextPath = `${url.pathname}${url.search}${url.hash}`;
+    if (nextPath !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(window.history.state, "", nextPath);
+    }
+  }, [fallback, key, routeValue]);
 
   return [value, setValue] as const;
 };
