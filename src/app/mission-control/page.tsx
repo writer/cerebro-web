@@ -18,7 +18,7 @@ import {
   MissionControlRuntime,
   normalizeRuntime,
   snippet,
-  sourceBreakdown,
+  sourceHealthBreakdown,
   summarizeMissionControl,
 } from "@/lib/mission-control";
 import { useQueryParamState } from "@/lib/query-params";
@@ -173,7 +173,7 @@ export default function MissionControlPage() {
     });
   }, [rawGraphRuns, rawRuntimes, staleHours]);
   const summary = useMemo(() => summarizeMissionControl(runtimes), [runtimes]);
-  const sources = useMemo(() => sourceBreakdown(runtimes), [runtimes]);
+  const sources = useMemo(() => sourceHealthBreakdown(runtimes), [runtimes]);
   const backfills = useMemo(() => runtimes.filter((runtime) => runtime.backfill), [runtimes]);
   const freshnessWorklist = useMemo(
     () =>
@@ -229,7 +229,7 @@ export default function MissionControlPage() {
 
       <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
         <div className="grid gap-3 md:grid-cols-5">
-          <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="writer" className={inputClass} /></label>
+          <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Runtime<input value={runtimeID} onChange={(event) => setRuntimeID(event.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Limit<input value={limit} onChange={(event) => setLimit(event.target.value)} placeholder="500" className={inputClass} /></label>
@@ -329,11 +329,20 @@ export default function MissionControlPage() {
                     className={`block w-full rounded-md border px-3 py-2.5 text-left transition hover:border-indigo-200 hover:bg-indigo-50/30 ${sourceID === source.source_id ? "border-indigo-200 bg-indigo-50/40" : "border-slate-100"}`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-[13px] font-medium text-slate-900">{source.source_id}</div>
-                      <div className="text-[12px] text-slate-500">{source.total} runtimes</div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-medium text-slate-900">{source.source_id}</div>
+                        <div className="mt-1 text-[12px] text-slate-500">{source.next_action}</div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge value={source.performance} />
+                        <div className="text-[12px] text-slate-500">{source.total} runtimes</div>
+                      </div>
                     </div>
                     <div className="mt-1 text-[12px] text-slate-500">
-                      {source.stale} stale · {source.degraded} degraded · {source.unknown} unknown
+                      {source.healthy}/{source.total} healthy · {source.stale} stale · {source.degraded} bad · {source.cursor_pending} cursor pending
+                    </div>
+                    <div className="mt-1 text-[12px] text-slate-500">
+                      graph {source.graph_current} current · {source.graph_behind + source.graph_failed + source.graph_not_observed + source.graph_unknown} attention
                     </div>
                   </button>
                 ))}

@@ -115,8 +115,8 @@ export default function RuntimesWorkflow() {
       >
         <div className="mb-4 grid gap-3 sm:grid-cols-4">
           {[
-            ["Runtime ID", runtimeIdFilter, setRuntimeIdFilter, "writer-okta-audit"],
-            ["Tenant ID", tenantId, setTenantId, "writer"],
+            ["Runtime ID", runtimeIdFilter, setRuntimeIdFilter, "example-okta-audit"],
+            ["Tenant ID", tenantId, setTenantId, "tenant-a"],
             ["Source ID", sourceId, setSourceId, "okta"],
             ["Limit", limit, setLimit, "50"],
           ].map(([label, value, setter, placeholder]) => (
@@ -156,7 +156,7 @@ export default function RuntimesWorkflow() {
           <input
             value={selectedRuntimeId}
             onChange={(event) => setSelectedRuntimeId(event.target.value)}
-            placeholder="writer-okta-audit"
+            placeholder="example-okta-audit"
             className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30"
           />
         </label>
