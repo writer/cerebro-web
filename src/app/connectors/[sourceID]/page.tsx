@@ -33,11 +33,13 @@ import type {
   ConnectorDetailResponse,
   ConnectorLibraryResponse,
   ConnectorOperationsSummary,
+  ConnectorScopePolicy,
 } from "@/lib/connectors";
 import {
   connectorDisplayMetadata,
   connectorDisplayName,
   normalizeCredentialStores,
+  scopePolicyExclusionCount,
 } from "@/lib/connectors";
 
 type DetailTab = "overview" | "setup" | "connections" | "activity" | "scope" | "data";
@@ -214,6 +216,7 @@ function ConnectionsTable({ connections }: { connections: ConnectorConnectionSum
             <th>Graph</th>
             <th>Records</th>
             <th>Projected</th>
+            <th>Scope</th>
             <th>Last Activity</th>
             <th>Next Action</th>
           </tr>
@@ -235,6 +238,7 @@ function ConnectionsTable({ connections }: { connections: ConnectorConnectionSum
                 <div>{connection.entities_projected ?? 0} entities</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{connection.links_projected ?? 0} links</div>
               </td>
+              <td><Badge value={scopePolicyExclusionCount(connection.scope_policy) > 0 ? `${scopePolicyExclusionCount(connection.scope_policy)} excluded` : "all in scope"} /></td>
               <td>
                 <div>{displayDate(connection.last_activity_at)}</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{formatDuration(connection.watermark_lag_seconds)} lag</div>
@@ -244,6 +248,61 @@ function ConnectionsTable({ connections }: { connections: ConnectorConnectionSum
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function scopeList(policy: ConnectorScopePolicy | undefined, key: keyof ConnectorScopePolicy) {
+  const value = policy?.[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function ScopePolicyCard({ connection }: { connection: ConnectorConnectionSummary }) {
+  const policy = connection.scope_policy;
+  const count = scopePolicyExclusionCount(policy);
+  const families = scopeList(policy, "excluded_families");
+  const assetClasses = scopeList(policy, "excluded_asset_classes");
+  const kinds = scopeList(policy, "excluded_kinds");
+  const resourceURNs = scopeList(policy, "excluded_resource_urns");
+  const resources = policy?.excluded_resources ?? [];
+  return (
+    <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[13px] font-semibold text-[var(--text-primary)]">{connection.family || "Default family"}</div>
+          <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{connection.runtime_id}</div>
+        </div>
+        <Badge value={count > 0 ? `${count} excluded` : "all in scope"} />
+      </div>
+      {count === 0 ? (
+        <div className="mt-3 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
+          This connection has no source-time exclusions. The runtime will attempt every configured family.
+        </div>
+      ) : (
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {families.length > 0 && <ScopeListBlock title="Families skipped before fetch" items={families} />}
+          {assetClasses.length > 0 && <ScopeListBlock title="Asset classes" items={assetClasses} />}
+          {kinds.length > 0 && <ScopeListBlock title="Event kinds" items={kinds} />}
+          {resourceURNs.length > 0 && <ScopeListBlock title="Exact URNs" items={resourceURNs} mono />}
+          {resources.length > 0 && <ScopeListBlock title="Typed resources" items={resources.map((resource) => `${resource.type}:${resource.id}`)} mono />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScopeListBlock({ title, items, mono = false }: { title: string; items: string[]; mono?: boolean }) {
+  return (
+    <div className="rounded-md bg-[var(--surface-muted)] p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{title}</div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {items.slice(0, 12).map((item) => (
+          <span key={item} className={`max-w-full truncate rounded-md bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--text-secondary)] ${mono ? "font-mono" : "font-semibold"}`}>
+            {item}
+          </span>
+        ))}
+        {items.length > 12 && <span className="rounded-md bg-[var(--surface)] px-2 py-1 text-[11px] font-semibold text-[var(--text-muted)]">+{items.length - 12} more</span>}
+      </div>
     </div>
   );
 }
@@ -265,45 +324,43 @@ function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
 
 function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntry; connections: ConnectorConnectionSummary[] }) {
   const capabilities = connectorCapabilities(connector, 8);
+  const scopeOptions = connector.scope_options ?? [];
+  const excludedConnections = connections.filter((connection) => scopePolicyExclusionCount(connection.scope_policy) > 0);
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <Panel title="Resource scope">
-        <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-4">
-          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Scope editing is read-only for this release</div>
-          <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
-            After inventory-backed resource scope is available, this tab should let operators move resources in or out of monitoring by connection and resource type.
-          </p>
+      <Panel title="Source-time resource scope">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div className="text-xl font-semibold text-[var(--text-primary)]">{scopeOptions.length}</div>
+            <div className="text-[11px] text-[var(--text-muted)]">available scope classes</div>
+          </div>
+          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div className="text-xl font-semibold text-[var(--text-primary)]">{excludedConnections.length}</div>
+            <div className="text-[11px] text-[var(--text-muted)]">connections scoped down</div>
+          </div>
+          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div className="text-xl font-semibold text-[var(--text-primary)]">{connections.reduce((sum, connection) => sum + scopePolicyExclusionCount(connection.scope_policy), 0)}</div>
+            <div className="text-[11px] text-[var(--text-muted)]">total exclusions</div>
+          </div>
         </div>
         <div className="mt-4 space-y-3">
           {connections.length === 0 && <EmptyBlock label="Connect this source before resource scope can be evaluated." />}
           {connections.map((connection) => (
-            <div key={connection.runtime_id} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[13px] font-semibold text-[var(--text-primary)]">{connection.family || "Default"}</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{connection.runtime_id}</div>
-                </div>
-                <Badge value={connection.status || "unknown"} />
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px]">
-                  <div className="font-semibold text-[var(--text-primary)]">{connection.entities_projected ?? 0}</div>
-                  <div className="text-[11px] text-[var(--text-muted)]">entities projected</div>
-                </div>
-                <div className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px]">
-                  <div className="font-semibold text-[var(--text-primary)]">{connection.links_projected ?? 0}</div>
-                  <div className="text-[11px] text-[var(--text-muted)]">links projected</div>
-                </div>
-                <div className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px]">
-                  <div className="font-semibold text-[var(--text-primary)]">{connection.cursor_pending ? "Pending" : "Clear"}</div>
-                  <div className="text-[11px] text-[var(--text-muted)]">cursor state</div>
-                </div>
-              </div>
-            </div>
+            <ScopePolicyCard key={connection.runtime_id} connection={connection} />
           ))}
         </div>
       </Panel>
       <Panel title="Capability coverage">
+        {scopeOptions.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {scopeOptions.slice(0, 10).map((option) => (
+              <div key={option.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+                <div className="text-[12px] font-semibold text-[var(--text-primary)]">{option.label}</div>
+                <div className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">{option.families?.join(", ") || option.id}</div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {capabilities.length > 0 ? capabilities.map((capability) => (
             <span key={capability} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[12px] font-semibold text-[var(--text-secondary)]">

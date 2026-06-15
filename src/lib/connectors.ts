@@ -9,6 +9,7 @@ export type ConnectorCatalogEntry = {
   healthy_runtimes?: number;
   needs_attention_runtimes?: number;
   connection_methods?: ConnectorConnectionMethodInput[];
+  scope_options?: ConnectorScopeOption[];
 };
 
 export type ConnectorLibraryResponse = {
@@ -58,6 +59,7 @@ export type ConnectorConnectionSummary = {
   cursor_pending?: boolean;
   checkpoint_cursor_present?: boolean;
   next_action?: string;
+  scope_policy?: ConnectorScopePolicy;
 };
 
 export type ConnectorActivity = {
@@ -99,6 +101,31 @@ export type ConnectorCredentialKey = {
   key_id: string;
   algorithm: string;
   jwk: JsonWebKey;
+};
+
+export type ConnectorScopeResource = {
+  urn?: string;
+  type?: string;
+  id?: string;
+  reason?: string;
+};
+
+export type ConnectorScopePolicy = {
+  mode?: "exclude" | string;
+  excluded_families?: string[];
+  excluded_asset_classes?: string[];
+  excluded_kinds?: string[];
+  excluded_resource_urns?: string[];
+  excluded_resources?: ConnectorScopeResource[];
+};
+
+export type ConnectorScopeOption = {
+  id: string;
+  label: string;
+  type?: string;
+  families?: string[];
+  support?: string;
+  high_value?: boolean;
 };
 
 export type ConnectorCredentialStoreID =
@@ -211,6 +238,7 @@ export type ConnectorConnectionPayload = {
   auth_method: ConnectorConnectionMethodID;
   credential_store_id: ConnectorCredentialStoreID;
   config: Record<string, string>;
+  scope_policy?: ConnectorScopePolicy;
   credential_references?: Record<string, string>;
   encrypted_credentials?: Awaited<ReturnType<typeof encryptConnectorCredentials>>;
 };
@@ -681,6 +709,63 @@ export const connectorSubmitErrorMessage = (status?: number) => {
   if (status === 404) return "Connector source was not found.";
   if (status === 503) return "Credential storage or runtime services are unavailable.";
   return "Connection failed. No credential details were displayed.";
+};
+
+const uniqueClean = (values: string[], lower = true) => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  values.forEach((value) => {
+    const trimmed = value.trim();
+    const normalized = lower ? trimmed.toLowerCase() : trimmed;
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result.sort((left, right) => left.localeCompare(right));
+};
+
+export const normalizeScopePolicy = (policy?: ConnectorScopePolicy): ConnectorScopePolicy | undefined => {
+  const excludedFamilies = uniqueClean(policy?.excluded_families ?? []);
+  const excludedAssetClasses = uniqueClean(policy?.excluded_asset_classes ?? []);
+  const excludedKinds = uniqueClean(policy?.excluded_kinds ?? []);
+  const excludedResourceURNs = uniqueClean(policy?.excluded_resource_urns ?? [], false);
+  const excludedResources = (policy?.excluded_resources ?? [])
+    .map((resource) => ({
+      urn: resource.urn?.trim(),
+      type: resource.type?.trim().toLowerCase(),
+      id: resource.id?.trim(),
+      reason: resource.reason?.trim(),
+    }))
+    .filter((resource) => resource.urn || (resource.type && resource.id));
+  if (
+    excludedFamilies.length === 0 &&
+    excludedAssetClasses.length === 0 &&
+    excludedKinds.length === 0 &&
+    excludedResourceURNs.length === 0 &&
+    excludedResources.length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    mode: "exclude",
+    ...(excludedFamilies.length > 0 ? { excluded_families: excludedFamilies } : {}),
+    ...(excludedAssetClasses.length > 0 ? { excluded_asset_classes: excludedAssetClasses } : {}),
+    ...(excludedKinds.length > 0 ? { excluded_kinds: excludedKinds } : {}),
+    ...(excludedResourceURNs.length > 0 ? { excluded_resource_urns: excludedResourceURNs } : {}),
+    ...(excludedResources.length > 0 ? { excluded_resources: excludedResources } : {}),
+  };
+};
+
+export const scopePolicyExclusionCount = (policy?: ConnectorScopePolicy) =>
+  (policy?.excluded_families?.length ?? 0) +
+  (policy?.excluded_asset_classes?.length ?? 0) +
+  (policy?.excluded_kinds?.length ?? 0) +
+  (policy?.excluded_resource_urns?.length ?? 0) +
+  (policy?.excluded_resources?.length ?? 0);
+
+export const connectorScopeOptionFamilies = (option: ConnectorScopeOption) => {
+  const families = option.families?.length ? option.families : [option.id];
+  return uniqueClean(families);
 };
 
 const validateConnectorCredentialKey = (key: ConnectorCredentialKey) => {
