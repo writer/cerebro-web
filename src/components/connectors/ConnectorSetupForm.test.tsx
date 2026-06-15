@@ -102,6 +102,29 @@ describe("ConnectorSetupForm", () => {
     await renderForm(awsConnector());
     expect(container.querySelector("[role='switch'][aria-label='Skip IAM Identity Center']")).not.toBeNull();
 
+    fetchCerebroMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        source_id: "aws",
+        runtime_id: "writer-aws-connection",
+        tenant_id: "writer",
+        status: "ready",
+        summary: "Preflight passed.",
+        next_action: "save_connection",
+        checks: [{ id: "source_check", label: "Source validation", status: "passed", severity: "success" }],
+        scope_preview: { available_resource_types: 2, enabled_resource_types: 2, disabled_resource_types: 0, exact_resource_count: 0 },
+        credential_boundary: { mode: "aws_sso_profile", credential_store_id: "environment_managed", reference_only: true },
+      },
+    } as never);
+    const preflightButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes("Run preflight"));
+    expect(preflightButton).toBeDefined();
+    await act(async () => {
+      preflightButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    const preflightCall = fetchCerebroMock.mock.calls.find((call) => call[0] === "/connectors/aws/preflight");
+    expect(preflightCall).toBeDefined();
+
+    fetchCerebroMock.mockResolvedValueOnce({ ok: true, data: {} } as never);
     const form = container.querySelector("form");
     expect(form).not.toBeNull();
     await act(async () => {

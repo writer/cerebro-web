@@ -133,7 +133,7 @@ function ConnectorLibraryRow({
   const healthy = connectorHealthyTotal(card);
   const attention = connectorAttentionTotal(card);
   const primaryAction = connectorPrimaryAction(card);
-  const href = connectorPath(card.source_id, { tenant_id: tenantID });
+  const href = connectorPath(card.source_id, { tenant_id: tenantID, tab: status === "not_configured" ? "setup" : undefined });
 
   return (
     <article className={`surface-panel border-l-[3px] ${readinessRowClass[status]} p-4 transition hover:border-[color:var(--border-strong)] hover:shadow-[var(--shadow-md)] ${active ? "ring-2 ring-[color:var(--ring)]" : ""}`}>

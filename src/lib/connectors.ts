@@ -303,6 +303,50 @@ export type ConnectorConnectionPayload = {
   encrypted_credentials?: Awaited<ReturnType<typeof encryptConnectorCredentials>>;
 };
 
+export type ConnectorPreflightStatus = "ready" | "warning" | "blocked" | string;
+
+export type ConnectorPreflightCheck = {
+  id: string;
+  label: string;
+  status: "passed" | "warning" | "blocked" | "skipped" | string;
+  severity: "success" | "warning" | "error" | "info" | string;
+  detail?: string;
+  next_action?: string;
+  blocking?: boolean;
+};
+
+export type ConnectorScopePreview = {
+  mode?: string;
+  available_resource_types?: number;
+  disabled_resource_types?: number;
+  enabled_resource_types?: number;
+  excluded_families?: string[];
+  exact_resource_count?: number;
+};
+
+export type ConnectorCredentialBoundary = {
+  mode?: ConnectorConnectionMethodID | string;
+  credential_store_id?: ConnectorCredentialStoreID | string;
+  sends_secrets?: boolean;
+  reference_only?: boolean;
+  fields_accepted?: string[];
+};
+
+export type ConnectorPreflightResponse = {
+  generated_at?: string;
+  source_id: string;
+  runtime_id?: string;
+  tenant_id?: string;
+  auth_method?: ConnectorConnectionMethodID | string;
+  credential_store_id?: ConnectorCredentialStoreID | string;
+  status: ConnectorPreflightStatus;
+  summary: string;
+  next_action: string;
+  checks: ConnectorPreflightCheck[];
+  scope_preview?: ConnectorScopePreview;
+  credential_boundary?: ConnectorCredentialBoundary;
+};
+
 export const CONNECTOR_CREDENTIAL_TRANSPORT_ALGORITHM = "RSA-OAEP-256+A256GCM";
 export const CONNECTOR_CREDENTIAL_TRANSIT_JWK_ALGORITHM = "RSA-OAEP-256";
 

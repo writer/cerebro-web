@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Circle, Clipboard, Code2, FileJson, Globe2, KeyRound, ListChecks, LockKeyhole, PackageCheck, Plus, RotateCcw, Search, ShieldCheck, SlidersHorizontal, TerminalSquare, X } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Circle, Clipboard, Code2, FileJson, Globe2, KeyRound, ListChecks, LockKeyhole, PackageCheck, Plus, RotateCcw, Search, ShieldAlert, ShieldCheck, SlidersHorizontal, TerminalSquare, X } from "lucide-react";
 
 import CredentialStoreSelector from "@/components/connectors/CredentialStoreSelector";
 import { Badge, ErrorBlock } from "@/components/grc/Primitives";
@@ -14,6 +14,8 @@ import type {
   ConnectorCredentialKey,
   ConnectorCredentialStoreID,
   ConnectorField,
+  ConnectorPreflightCheck,
+  ConnectorPreflightResponse,
   ConnectorProductGroup,
   ConnectorScopeOption,
   ConnectorScopeResource,
@@ -551,6 +553,146 @@ function OnboardingBrief({
   );
 }
 
+const preflightAccent: Record<string, string> = {
+  ready: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100",
+  warning: "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100",
+  blocked: "border-red-300 bg-red-50 text-red-950 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100",
+  idle: "border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-primary)]",
+};
+
+function preflightStatusLabel(status?: string) {
+  switch (status) {
+    case "ready":
+      return "Ready to save";
+    case "warning":
+      return "Review warnings";
+    case "blocked":
+      return "Blocked";
+    default:
+      return "Not tested";
+  }
+}
+
+function PreflightIcon({ status }: { status?: string }) {
+  if (status === "ready" || status === "passed") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (status === "warning") return <AlertCircle className="h-4 w-4 text-amber-600" />;
+  if (status === "blocked") return <ShieldAlert className="h-4 w-4 text-red-600" />;
+  return <Circle className="h-4 w-4 text-[var(--text-muted)]" />;
+}
+
+function PreflightTile({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+      <div className="mt-1.5 truncate text-[15px] font-semibold text-[var(--text-primary)]">{value}</div>
+      {detail && <div className="mt-1 truncate text-[11px] text-[var(--text-muted)]">{detail}</div>}
+    </div>
+  );
+}
+
+function PreflightCheckRow({ check }: { check: ConnectorPreflightCheck }) {
+  return (
+    <div className="flex gap-3 border-t border-[color:var(--border)] py-3 first:border-t-0 first:pt-0 last:pb-0">
+      <span className="mt-0.5 shrink-0"><PreflightIcon status={check.status} /></span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-[12px] font-semibold text-[var(--text-primary)]">{check.label}</div>
+          <Badge value={check.status} />
+        </div>
+        {check.detail && <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{check.detail}</div>}
+      </div>
+    </div>
+  );
+}
+
+function PreflightCockpit({
+  preflight,
+  method,
+  store,
+  scopeCount,
+}: {
+  preflight: ConnectorPreflightResponse | null;
+  method?: ConnectorConnectionMethod;
+  store?: NormalizedCredentialStore;
+  scopeCount: number;
+}) {
+  const status = preflight?.status ?? "idle";
+  const checks = preflight?.checks ?? [];
+  const blocking = checks.filter((check) => check.status === "blocked").length;
+  const warnings = checks.filter((check) => check.status === "warning").length;
+  const scopePreview = preflight?.scope_preview;
+  const boundary = preflight?.credential_boundary;
+  const fieldsAccepted = boundary?.fields_accepted?.length ?? 0;
+
+  return (
+    <section className={`overflow-hidden rounded-xl border ${preflightAccent[status] ?? preflightAccent.idle}`}>
+      <div className="grid gap-4 border-b border-current/10 p-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[13px] font-semibold">
+            <PreflightIcon status={status} />
+            {preflightStatusLabel(status)}
+          </div>
+          <p className="mt-1 max-w-3xl text-[12px] leading-5 opacity-80">
+            {preflight?.summary ?? "Run preflight before saving. Cerebro will validate the method, credential boundary, source config, and resource scope without storing the runtime."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-[12px] font-semibold">
+          <span>{preflight?.next_action?.replaceAll("_", " ") ?? "run preflight"}</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </div>
+      </div>
+
+      <div className="grid gap-3 bg-[var(--surface-muted)] p-4 md:grid-cols-2 xl:grid-cols-4">
+        <PreflightTile label="Method" value={method?.shortLabel ?? "Choose method"} detail={method?.category ?? "Connection"} />
+        <PreflightTile label="Credential Store" value={store?.label ?? "Choose store"} detail={boundary?.reference_only ? "references only" : boundary?.sends_secrets ? "encrypted submission" : store?.detail} />
+        <PreflightTile
+          label="Scope"
+          value={scopePreview ? `${scopePreview.enabled_resource_types ?? 0} on / ${scopePreview.disabled_resource_types ?? 0} off` : `${scopeCount} exclusions`}
+          detail={scopePreview ? `${scopePreview.exact_resource_count ?? 0} exact resources` : "pending preflight preview"}
+        />
+        <PreflightTile label="Checks" value={preflight ? `${checks.length - blocking}/${checks.length} passing` : "Not run"} detail={warnings > 0 ? `${warnings} warnings` : fieldsAccepted > 0 ? `${fieldsAccepted} credential fields` : "source check pending"} />
+      </div>
+
+      {checks.length > 0 && (
+        <div className="grid gap-4 bg-[var(--surface)] p-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div>
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Readiness checks</div>
+            <div className="mt-2">
+              {checks.map((check) => <PreflightCheckRow key={check.id} check={check} />)}
+            </div>
+          </div>
+          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 text-[12px] leading-5 text-[var(--text-muted)]">
+            <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-primary)]">
+              <ShieldCheck className="h-4 w-4" />
+              Credential boundary
+            </div>
+            <div className="mt-2">
+              {boundary?.sends_secrets
+                ? "Secrets were encrypted for transit and are not returned by connector reads."
+                : "Only backend-resolvable references are submitted for this method."}
+            </div>
+            {fieldsAccepted > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {boundary?.fields_accepted?.map((field) => (
+                  <span key={field} className="rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-secondary)]">{field}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 type ResourceTypeFilter = "all" | "enabled" | "disabled" | "high_value";
 
 function scopeOptionSearchText(option: ConnectorScopeOption, families: string[]) {
@@ -863,6 +1005,7 @@ export default function ConnectorSetupForm({
   const [submitting, setSubmitting] = useState<"check" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ runtimeID: string; tenant: string; storeLabel: string; status: "checked" | "saved" } | null>(null);
+  const [preflight, setPreflight] = useState<ConnectorPreflightResponse | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [excludedFamilies, setExcludedFamilies] = useState<Set<string>>(() => new Set(productGroupDefaultExcludedFamilies(preferredMethod)));
   const [resourceURNs, setResourceURNs] = useState("");
@@ -900,6 +1043,7 @@ export default function ConnectorSetupForm({
     excluded_resources: excludedResources,
   }), [excludedFamilies, excludedResources, protectedProductFamilies, resourceURNs]);
   const scopeCount = scopePolicyExclusionCount(scopePolicy);
+  const canSave = canSubmit && (preflight?.status === "ready" || preflight?.status === "warning");
 
   const changeMethod = (methodID: ConnectorConnectionMethodID) => {
     const nextMethod = methods.find((method) => method.id === methodID);
@@ -911,10 +1055,12 @@ export default function ConnectorSetupForm({
     setScopeEdited(false);
     setError(null);
     setSuccess(null);
+    setPreflight(null);
   };
 
   const updateScopeFamilies = (families: string[], disabled: boolean) => {
     setScopeEdited(true);
+    setPreflight(null);
     setExcludedFamilies((previous) => {
       const next = new Set(previous);
       const normalized = families.map(normalizeFamily).filter(Boolean);
@@ -929,11 +1075,13 @@ export default function ConnectorSetupForm({
   const updateResourceURNs = (value: string) => {
     setResourceURNs(value);
     setScopeEdited(true);
+    setPreflight(null);
   };
 
   const updateExcludedResources = (resources: ConnectorScopeResource[]) => {
     setExcludedResources(resources);
     setScopeEdited(true);
+    setPreflight(null);
   };
 
   const resetForm = () => {
@@ -942,6 +1090,8 @@ export default function ConnectorSetupForm({
     setResourceURNs("");
     setExcludedResources([]);
     setScopeEdited(false);
+    setPreflight(null);
+    setSuccess(null);
     window.setTimeout(updateFormValues, 0);
   };
 
@@ -971,6 +1121,10 @@ export default function ConnectorSetupForm({
     if (!form.reportValidity()) return;
     if (!canSubmit) {
       setError(selectedMethod.disabledReason || "Selected auth method or credential store is not available.");
+      return;
+    }
+    if (!checkOnly && !canSave) {
+      setError("Run preflight successfully before saving this connection.");
       return;
     }
 
@@ -1004,11 +1158,13 @@ export default function ConnectorSetupForm({
       const body: Record<string, unknown> = {
         runtime_id: runtimeID,
         tenant_id: tenant,
-        check_only: checkOnly,
         auth_method: selectedMethod.id,
         credential_store_id: selectedStore.id,
         config,
       };
+      if (!checkOnly) {
+        body.check_only = false;
+      }
       if (scopePolicy) {
         body.scope_policy = scopePolicy;
       }
@@ -1026,15 +1182,22 @@ export default function ConnectorSetupForm({
         body.credential_references = credentialReferences;
       }
 
-      const response = await fetchCerebro(`/connectors/${encodeURIComponent(connector.source_id)}/connections`, apiKey, {
+      const path = checkOnly
+        ? `/connectors/${encodeURIComponent(connector.source_id)}/preflight`
+        : `/connectors/${encodeURIComponent(connector.source_id)}/connections`;
+      const response = await fetchCerebro<ConnectorPreflightResponse>(path, apiKey, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error(connectorSubmitErrorMessage(response.status));
-      setSuccess({ runtimeID, tenant, storeLabel: selectedStore.label, status: checkOnly ? "checked" : "saved" });
-      if (!checkOnly) {
+      if (checkOnly) {
+        setPreflight(response.data);
+        setSuccess(null);
+      } else {
+        setPreflight(null);
         resetForm();
+        setSuccess({ runtimeID, tenant, storeLabel: selectedStore.label, status: "saved" });
         await onConnected();
       }
     } catch (submitError) {
@@ -1051,7 +1214,10 @@ export default function ConnectorSetupForm({
   return (
     <form
       ref={formRef}
-      onInput={updateFormValues}
+      onInput={() => {
+        setPreflight(null);
+        updateFormValues();
+      }}
       onReset={() => window.setTimeout(updateFormValues, 0)}
       onSubmit={(event) => { event.preventDefault(); void submitConnection(false); }}
       className="surface-panel max-w-full overflow-hidden"
@@ -1082,6 +1248,7 @@ export default function ConnectorSetupForm({
             </div>
           )}
           <OnboardingBrief method={selectedMethod} store={selectedStore} basicsReady={basicsReady} fieldsReady={requiredFieldsReady} scopeCount={scopeCount} />
+          <PreflightCockpit preflight={preflight} method={selectedMethod} store={selectedStore} scopeCount={scopeCount} />
           <SetupGuidancePanel method={selectedMethod} />
 
           <SetupStep index={1} title="Choose authentication method" icon={<KeyRound className="h-4 w-4" />}>
@@ -1100,7 +1267,15 @@ export default function ConnectorSetupForm({
                     {selectedStore?.available ? selectedStore.label : "No ready store"}
                   </span>
                 </div>
-                <CredentialStoreSelector stores={visibleStores} selectedID={effectiveSelectedStoreID} onSelect={setSelectedStoreID} compact />
+                <CredentialStoreSelector
+                  stores={visibleStores}
+                  selectedID={effectiveSelectedStoreID}
+                  onSelect={(storeID) => {
+                    setSelectedStoreID(storeID);
+                    setPreflight(null);
+                  }}
+                  compact
+                />
               </>
             )}
           </SetupStep>
@@ -1211,9 +1386,9 @@ export default function ConnectorSetupForm({
             onClick={() => void submitConnection(true)}
             className="secondary-button w-full px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto"
           >
-            {submitting === "check" ? "Testing..." : "Test connection"}
+            {submitting === "check" ? "Running..." : "Run preflight"}
           </button>
-          <button type="submit" disabled={!canSubmit || submitting !== null} className="primary-button w-full px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto">
+          <button type="submit" disabled={!canSave || submitting !== null} className="primary-button w-full px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto">
             {submitting === "save" ? "Saving..." : "Save connection"}
           </button>
         </div>

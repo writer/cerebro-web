@@ -333,12 +333,25 @@ export const displayDurationSeconds = (value?: number) => {
   return `${days < 10 ? days.toFixed(1) : Math.round(days)}d`;
 };
 
+const humanizedAcronyms: Record<string, string> = {
+  api: "API",
+  aws: "AWS",
+  cli: "CLI",
+  gcp: "GCP",
+  gsm: "GSM",
+  iam: "IAM",
+  id: "ID",
+  oidc: "OIDC",
+  sso: "SSO",
+  url: "URL",
+};
+
 export const humanize = (value?: string) =>
   (value || "unknown")
     .replace(/^FINDING_STATUS_/, "")
     .replace(/[_-]+/g, " ")
     .toLowerCase()
-    .replace(/\b\w/g, (match) => match.toUpperCase());
+    .replace(/\b\w+\b/g, (word) => humanizedAcronyms[word] ?? `${word.charAt(0).toUpperCase()}${word.slice(1)}`);
 
 export const shortEntity = (value?: string) => {
   if (!value) {
