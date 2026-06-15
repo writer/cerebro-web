@@ -418,28 +418,37 @@ function ProductGroupSelector({
 function FieldGrid({
   fields,
   credential = false,
+  store,
+  methodID,
 }: {
   fields: ConnectorField[];
   credential?: boolean;
+  store?: NormalizedCredentialStore;
+  methodID?: ConnectorConnectionMethodID;
 }) {
   if (fields.length === 0) return null;
 
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      {fields.map((field) => (
-        <label key={field.key} className={labelClass}>
-          {field.label || field.key}{field.required ? " *" : ""}
-          <input
-            name={credential ? credentialInputName(field.key) : field.key}
-            type={field.secret ? "password" : field.type ?? "text"}
-            required={field.required}
-            placeholder={field.placeholder}
-            autoComplete={field.secret ? "new-password" : "off"}
-            className={inputClass}
-          />
-          {field.help && <span className="mt-1 block text-[11px] font-normal leading-4 text-[var(--text-muted)]">{field.help}</span>}
-        </label>
-      ))}
+      {fields.map((field) => {
+        const referencePlaceholder = credential && methodID !== "encrypted_submission" && store?.referencePlaceholder
+          ? store.referencePlaceholder.replace("<field>", field.key)
+          : undefined;
+        return (
+          <label key={field.key} className={labelClass}>
+            {field.label || field.key}{field.required ? " *" : ""}
+            <input
+              name={credential ? credentialInputName(field.key) : field.key}
+              type={field.secret ? "password" : field.type ?? "text"}
+              required={field.required}
+              placeholder={referencePlaceholder || field.placeholder}
+              autoComplete={field.secret ? "new-password" : "off"}
+              className={inputClass}
+            />
+            {field.help && <span className="mt-1 block text-[11px] font-normal leading-4 text-[var(--text-muted)]">{field.help}</span>}
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -460,6 +469,91 @@ function StoreReadinessChecklist({ stores }: { stores: NormalizedCredentialStore
         ))}
         {ready.length === 0 && <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] font-semibold dark:bg-black/15">waiting on backend</span>}
       </div>
+    </div>
+  );
+}
+
+function SecretStoreIntegrationPanel({ store, method }: { store?: NormalizedCredentialStore; method?: ConnectorConnectionMethod }) {
+  if (!store || !method) return null;
+  const referenceMode = method.id !== "encrypted_submission";
+  const setupSteps = store.setupSteps.slice(0, 3);
+  const requiredConfig = store.requiredConfig.slice(0, 5);
+  return (
+    <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+            {store.available ? <ShieldCheck className="h-4 w-4 text-emerald-600" /> : <ShieldAlert className="h-4 w-4 text-amber-600" />}
+            Secret store integration
+          </div>
+          <div className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--text-muted)]">{store.description}</div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+            store.available
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-100"
+              : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-100"
+          }`}>
+            {store.available ? store.detail : store.disabledReason}
+          </span>
+          {store.nativeResolutionAvailable && (
+            <span className="rounded-md bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-100">native resolver</span>
+          )}
+        </div>
+      </div>
+
+      {referenceMode && (
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(280px,1fr)]">
+          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Accepted prefixes</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {store.referencePrefixes.map((prefix) => (
+                <code key={prefix} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {prefix}
+                </code>
+              ))}
+            </div>
+            {store.referencePlaceholder && (
+              <code className="mt-3 block overflow-x-auto rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">
+                {store.referencePlaceholder}
+              </code>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Backend config</div>
+            {requiredConfig.length > 0 ? (
+              <div className="mt-2 grid gap-2">
+                {requiredConfig.map((field) => (
+                  <div key={field.env || field.label} className="flex items-start justify-between gap-3 border-t border-[color:var(--border)] pt-2 first:border-t-0 first:pt-0">
+                    <div>
+                      <div className="text-[12px] font-semibold text-[var(--text-primary)]">{field.label || field.env}</div>
+                      {field.description && <div className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{field.description}</div>}
+                    </div>
+                    {field.env && <code className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">{field.env}</code>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-2 text-[12px] text-[var(--text-muted)]">No additional backend configuration advertised.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {setupSteps.length > 0 && (
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {setupSteps.map((step, index) => (
+            <div key={step.id || step.label || index} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
+              <div className="text-[12px] font-semibold text-[var(--text-primary)]">{step.label}</div>
+              {step.description && <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{step.description}</div>}
+              {step.command && (
+                <code className="mt-2 block overflow-x-auto rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{step.command}</code>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -995,7 +1089,10 @@ export default function ConnectorSetupForm({
   const visibleStores = methodStores.length > 0 ? methodStores : credentialStores;
   const [selectedStoreID, setSelectedStoreID] = useState<ConnectorCredentialStoreID>(() => defaultStoreForMethod(preferredMethod, credentialStores));
   const defaultSelectedStoreID = defaultStoreForMethod(selectedMethod, credentialStores);
-  const selectedStore = visibleStores.find((store) => store.id === selectedStoreID)
+  const selectedStore = visibleStores.find((store) => store.id === selectedStoreID && store.available)
+    ?? visibleStores.find((store) => store.id === defaultSelectedStoreID && store.available)
+    ?? visibleStores.find((store) => store.available)
+    ?? visibleStores.find((store) => store.id === selectedStoreID)
     ?? visibleStores.find((store) => store.id === defaultSelectedStoreID)
     ?? visibleStores[0];
   const effectiveSelectedStoreID = selectedStore?.id ?? defaultSelectedStoreID;
@@ -1276,6 +1373,7 @@ export default function ConnectorSetupForm({
                   }}
                   compact
                 />
+                <SecretStoreIntegrationPanel store={selectedStore} method={selectedMethod} />
               </>
             )}
           </SetupStep>
@@ -1322,7 +1420,7 @@ export default function ConnectorSetupForm({
                       : "Enter server-resolvable references only; do not enter secret values."}
                   </div>
                 </div>
-                <FieldGrid fields={selectedMethod.credential_fields ?? []} credential />
+                <FieldGrid fields={selectedMethod.credential_fields ?? []} credential store={selectedStore} methodID={selectedMethod.id} />
               </div>
             )}
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.65fr)]">

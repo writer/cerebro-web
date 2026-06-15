@@ -151,7 +151,28 @@ export type ConnectorCredentialStore = {
   available?: boolean;
   default?: boolean;
   mode?: string;
+  status?: string;
   detail?: string;
+  description?: string;
+  reference_prefixes?: string[];
+  reference_placeholder?: string;
+  native_resolution_available?: boolean;
+  setup_steps?: ConnectorCredentialStoreSetupStep[];
+  required_config?: ConnectorCredentialStoreConfigField[];
+};
+
+export type ConnectorCredentialStoreSetupStep = {
+  id?: string;
+  label?: string;
+  description?: string;
+  command?: string;
+};
+
+export type ConnectorCredentialStoreConfigField = {
+  env?: string;
+  label?: string;
+  required?: boolean;
+  description?: string;
 };
 
 export type NormalizedCredentialStore = {
@@ -163,7 +184,13 @@ export type NormalizedCredentialStore = {
   mode: ConnectorCredentialStoreMode;
   available: boolean;
   default: boolean;
+  status: string;
   detail: string;
+  referencePrefixes: string[];
+  referencePlaceholder?: string;
+  nativeResolutionAvailable: boolean;
+  setupSteps: ConnectorCredentialStoreSetupStep[];
+  requiredConfig: ConnectorCredentialStoreConfigField[];
   disabledReason?: string;
 };
 
@@ -375,7 +402,13 @@ const defaultFieldSet: ConnectorFieldSet = {
   credentials: [{ key: "token", label: "API token", type: "password", required: true }],
 };
 
-const credentialStoreCatalog: Record<ConnectorCredentialStoreID, Omit<NormalizedCredentialStore, "available" | "default" | "detail" | "disabledReason">> = {
+const credentialStoreCatalog: Record<
+  ConnectorCredentialStoreID,
+  Omit<
+    NormalizedCredentialStore,
+    "available" | "default" | "status" | "detail" | "referencePrefixes" | "referencePlaceholder" | "nativeResolutionAvailable" | "setupSteps" | "requiredConfig" | "disabledReason"
+  >
+> = {
   cerebro_vault: {
     id: "cerebro_vault",
     label: "Cerebro Vault",
@@ -832,6 +865,21 @@ const safeStoreDetail = (detail?: string) => {
   return "Configured by deployment";
 };
 
+const safeStringList = (values?: string[]) =>
+  (Array.isArray(values) ? values : []).map((value) => String(value ?? "").trim()).filter(Boolean);
+
+const defaultReferencePrefixes = (id: ConnectorCredentialStoreID, mode: ConnectorCredentialStoreMode) => {
+  if (mode === "encrypted_submission") return [];
+  if (id === "aws_secrets_manager") return ["env:", "aws-sm:"];
+  return ["env:"];
+};
+
+const defaultReferencePlaceholder = (id: ConnectorCredentialStoreID, mode: ConnectorCredentialStoreMode) => {
+  if (mode === "encrypted_submission") return undefined;
+  if (id === "aws_secrets_manager") return "aws-sm:us-east-1:cerebro/<tenant>/<source>/<runtime>/credentials#<field>";
+  return "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>";
+};
+
 export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | null): NormalizedCredentialStore[] => {
   const advertised = new Map<string, ConnectorCredentialStore>();
   (library?.credential_stores ?? []).forEach((store) => {
@@ -848,21 +896,33 @@ export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | n
     const available = Boolean(server?.available ?? (isFallbackVault ? fallbackVaultAvailable : false));
     const detail = safeStoreDetail(server?.detail ?? (isFallbackVault ? library?.credential_vault?.detail : undefined));
     const rawMode = server?.mode === "external_reference" ? "reference" : server?.mode;
+    const mode = (rawMode && ["encrypted_submission", "reference", "environment_managed"].includes(rawMode)
+      ? rawMode
+      : catalog.mode) as ConnectorCredentialStoreMode;
+    const status = server?.status?.trim() || (available ? "ready" : "needs_configuration");
+    const referencePrefixes = safeStringList(server?.reference_prefixes);
     const disabledReason = available
       ? undefined
       : id === "cerebro_vault"
         ? detail || "Credential transport or vault is unavailable."
-        : "Not advertised by this Cerebro deployment.";
+        : status === "needs_configuration"
+          ? "Enable this store in the Cerebro backend configuration."
+          : "Not advertised by this Cerebro deployment.";
     return {
       ...catalog,
       label: server?.label?.trim() || catalog.label,
       provider: server?.provider?.trim() || catalog.provider,
-      mode: (rawMode && ["encrypted_submission", "reference", "environment_managed"].includes(rawMode)
-        ? rawMode
-        : catalog.mode) as ConnectorCredentialStoreMode,
+      description: server?.description?.trim() || catalog.description,
+      mode,
       available,
       default: Boolean(server?.default),
+      status,
       detail: detail || (available ? "Ready" : "Unavailable"),
+      referencePrefixes: referencePrefixes.length > 0 ? referencePrefixes : defaultReferencePrefixes(id, mode),
+      referencePlaceholder: server?.reference_placeholder?.trim() || defaultReferencePlaceholder(id, mode),
+      nativeResolutionAvailable: Boolean(server?.native_resolution_available),
+      setupSteps: Array.isArray(server?.setup_steps) ? server.setup_steps : [],
+      requiredConfig: Array.isArray(server?.required_config) ? server.required_config : [],
       disabledReason,
     };
   });
@@ -874,7 +934,10 @@ export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | n
 };
 
 export const defaultCredentialStoreID = (stores: NormalizedCredentialStore[]): ConnectorCredentialStoreID =>
-  stores.find((store) => store.default)?.id ?? stores.find((store) => store.available)?.id ?? "cerebro_vault";
+  stores.find((store) => store.default && store.available)?.id
+  ?? stores.find((store) => store.available)?.id
+  ?? stores.find((store) => store.default)?.id
+  ?? "cerebro_vault";
 
 export const connectorSubmitErrorMessage = (status?: number) => {
   if (status === 400) return "Connection request was not accepted. Check required fields and credential store availability.";
