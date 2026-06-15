@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import AskAboutLink from "@/components/ask/AskAboutLink";
 import FindingTable from "@/components/grc/FindingTable";
 import GraphViewer from "@/components/grc/GraphViewer";
-import { ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
+import { AttentionBanner, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
 import { averageRiskScore, GRCEntityImpact, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
@@ -15,6 +15,8 @@ type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
+const isApiUnavailableError = (error: string | null | undefined) =>
+  Boolean(error && /(?:\b50[234]\b|unable to reach|timed out)/i.test(error));
 
 export default function ImpactPage() {
   const [tenantID, setTenantID] = useState("");
@@ -37,6 +39,15 @@ export default function ImpactPage() {
   const findings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
   const nodeCount = (data?.graph?.neighbors?.length ?? 0) + (data?.graph?.root ? 1 : 0);
   const relationCount = data?.graph?.relations?.length ?? 0;
+  const loadError = fallbackFindings.error || error;
+  const apiUnavailable = isApiUnavailableError(loadError);
+  const showUnavailableState = Boolean(loadError && apiUnavailable && !data);
+  const showHardError = Boolean(loadError && !showUnavailableState);
+  const canRefresh = needsFallbackRoot || Boolean(selectedRoot);
+  const refreshImpact = () => {
+    if (needsFallbackRoot) void fallbackFindings.reload();
+    if (selectedRoot) void reload();
+  };
 
   return (
     <div className="space-y-6">
@@ -55,7 +66,7 @@ export default function ImpactPage() {
                 Ask Cerebro
               </AskAboutLink>
             )}
-            <button type="button" onClick={() => void reload()} disabled={!selectedRoot} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600 disabled:opacity-50">
+            <button type="button" onClick={refreshImpact} disabled={!canRefresh} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600 disabled:opacity-50">
               Refresh
             </button>
           </div>
@@ -83,12 +94,25 @@ export default function ImpactPage() {
       </div>
 
       {(fallbackFindings.loading || loading) && <LoadingBlock label="Loading impact map..." />}
-      {(fallbackFindings.error || error) && <ErrorBlock error={fallbackFindings.error || error || "Unable to load impact map."} />}
+      {showUnavailableState && (
+        <AttentionBanner
+          action={
+            <button type="button" onClick={refreshImpact} className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-900 transition hover:border-amber-400 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+              Retry
+            </button>
+          }
+        >
+          Cerebro API is unavailable. Impact data will appear when the API is reachable.
+        </AttentionBanner>
+      )}
+      {showHardError && <ErrorBlock error={loadError || "Unable to load impact map."} />}
 
-      {!selectedRoot && !fallbackFindings.loading && !fallbackFindings.error && (
-        <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
-          No entities available. Enter an entity URN to query impact.
-        </div>
+      {!selectedRoot && !fallbackFindings.loading && !showHardError && (
+        <EmptyBlock
+          label={showUnavailableState
+            ? "Enter an entity URN to query impact once Cerebro is reachable."
+            : "No entities available. Enter an entity URN to query impact."}
+        />
       )}
 
       {data && (

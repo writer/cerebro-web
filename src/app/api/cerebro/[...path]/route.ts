@@ -17,6 +17,7 @@ import {
 } from "@/lib/cerebro-proxy";
 import { normalizeAskModel } from "@/lib/ask";
 import { currentUserActor, currentUserFromHeaders } from "@/lib/current-user";
+import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/current-user-write-stamp";
 
 type RouteContext = {
   params: Promise<{ path?: string[] }>;
@@ -213,31 +214,6 @@ function normalizeAskRequestBody(body: string): string {
     return JSON.stringify({
       ...parsed,
       model: normalizeAskModel(typeof parsed.model === "string" ? parsed.model : undefined),
-    });
-  } catch {
-    return body;
-  }
-}
-
-function normalizeProxyPath(path: string) {
-  return path.replace(/^\/+|\/+$/g, "");
-}
-
-function stampCurrentUserOnWriteBody(body: string, path: string, actor: string): string {
-  if (!actor) return body;
-  const field =
-    path === "grc/inventory/asset-reports"
-      ? "reporter"
-      : /^grc\/inventory\/asset-reports\/[^/]+\/triage$/.test(path)
-        ? "triaged_by"
-        : "";
-  if (!field) return body;
-
-  try {
-    const parsed = JSON.parse(body) as Record<string, unknown>;
-    return JSON.stringify({
-      ...parsed,
-      [field]: actor,
     });
   } catch {
     return body;

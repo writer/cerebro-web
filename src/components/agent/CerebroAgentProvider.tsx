@@ -23,6 +23,7 @@ import {
   reduceAskEvent,
   streamAgentAsk,
 } from "@/lib/ask";
+import { routeLabelForPath } from "@/lib/route-labels";
 
 type RunAgentInput = {
   question: string;
@@ -58,32 +59,6 @@ type CerebroAgentContextValue = {
 
 const CerebroAgentContext = createContext<CerebroAgentContextValue | undefined>(undefined);
 
-const routeLabels: Record<string, string> = {
-  "/": "Overview",
-  "/ask": "Ask console",
-  "/risk-inbox": "Risk inbox",
-  "/findings": "Finding detail",
-  "/impact": "Impact map",
-  "/evidence": "Evidence register",
-  "/controls": "Controls",
-  "/connectors": "Connectors",
-  "/developer": "Developer Tools",
-  "/developer/evals": "Ask evals",
-  "/developer/security-producers": "Security producers",
-  "/inventory": "Inventory",
-  "/reports": "Reports",
-};
-
-const labelForRoute = (pathname: string) => {
-  const direct = routeLabels[pathname];
-  if (direct) return direct;
-  const match = Object.keys(routeLabels)
-    .filter((route) => route !== "/" && pathname.startsWith(route))
-    .sort((left, right) => right.length - left.length)[0];
-  if (match) return routeLabels[match];
-  return pathname.split("/").filter(Boolean).at(-1)?.replace(/-/g, " ") ?? "Cerebro";
-};
-
 const capturePageContext = (): AskAgentContext => {
   if (typeof window === "undefined") {
     return { route: "/", routeLabel: "Cerebro", chips: [] };
@@ -102,8 +77,9 @@ const capturePageContext = (): AskAgentContext => {
   const resourceUrn = pathname.startsWith("/inventory/")
     ? decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) ?? "")
     : undefined;
+  const routeLabel = routeLabelForPath(pathname);
   const chips = [
-    { label: "Screen", value: labelForRoute(pathname) },
+    { label: "Screen", value: routeLabel },
     scopeUrn ? { label: "Scope", value: scopeUrn } : null,
     findingFromQuery || findingFromPath
       ? { label: "Finding", value: findingFromQuery ?? findingFromPath ?? "" }
@@ -113,7 +89,7 @@ const capturePageContext = (): AskAgentContext => {
 
   return {
     route: pathname,
-    routeLabel: labelForRoute(pathname),
+    routeLabel,
     href: `${url.pathname}${url.search}`,
     title: typeof document !== "undefined" ? document.title : undefined,
     scopeUrn,
