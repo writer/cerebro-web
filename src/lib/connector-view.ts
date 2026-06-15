@@ -89,6 +89,30 @@ export function connectorCapabilities(card: Pick<ConnectorCatalogEntry, "emitted
   return [...seen].slice(0, limit);
 }
 
+const connectorCapabilityLabels: Record<string, string> = {
+  anthropic: "Anthropic",
+  asset: "Assets",
+  aws: "Amazon Web Services",
+  azure: "Microsoft Azure",
+  cloudflare: "Cloudflare",
+  gcp: "Google Cloud Platform",
+  github: "GitHub",
+  google_workspace: "Google Workspace",
+  okta: "Okta",
+  openai: "OpenAI",
+};
+
+export function connectorCapabilityLabel(capability: string) {
+  const normalized = capability.trim().toLowerCase();
+  const label = connectorCapabilityLabels[normalized];
+  if (label) return label;
+  return normalized
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function connectorCardSummary(card: ConnectorCard) {
   return {
     meta: connectorDisplayMetadata(card),

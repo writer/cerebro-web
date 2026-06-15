@@ -52,7 +52,7 @@ export default function ConnectorRuntimeTable({
               <td>
                 <div className="text-[var(--text-secondary)]">{displayDate(runtime.checkpoint_watermark)}</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-                  {runtime.cursor_state} · {formatDuration(runtime.watermark_lag_seconds)} lag
+                  {runtime.cursor_state} - {formatDuration(runtime.watermark_lag_seconds)} lag
                 </div>
               </td>
               <td>
