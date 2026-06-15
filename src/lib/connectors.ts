@@ -126,6 +126,8 @@ export type ConnectorScopeOption = {
   families?: string[];
   support?: string;
   high_value?: boolean;
+  known_unsupported_fields?: string[];
+  notes?: string[];
 };
 
 export type ConnectorCredentialStoreID =
@@ -199,29 +201,87 @@ export type ConnectorConnectionMethodID =
 export type ConnectorConnectionMethodInput = {
   id: string;
   label?: string;
+  short_label?: string;
   description?: string;
+  category?: string;
   credential_stores?: string[];
   config_fields?: ConnectorField[];
   credential_fields?: ConnectorField[];
   requires_secrets?: boolean;
+  recommended?: boolean;
   saveable?: boolean;
   unavailable_reason?: string;
   shortLabel?: string;
   status?: "ready" | "guided" | "unavailable";
   commands?: string[];
-  steps?: string[];
+  steps?: Array<string | ConnectorSetupStep>;
+  prerequisites?: ConnectorPrerequisite[];
+  product_groups?: ConnectorProductGroup[];
+  deployment_guides?: ConnectorDeploymentGuide[];
+  region_guidance?: ConnectorRegionGuidance;
+  security_notes?: string[];
   disabledReason?: string;
 };
 
-export type ConnectorConnectionMethod = ConnectorConnectionMethodInput & {
+export type ConnectorConnectionMethod = Omit<
+  ConnectorConnectionMethodInput,
+  "commands" | "steps" | "prerequisites" | "product_groups" | "deployment_guides" | "region_guidance" | "security_notes"
+> & {
   id: ConnectorConnectionMethodID;
   label: string;
   description: string;
   shortLabel: string;
+  category: string;
   status: "ready" | "guided" | "unavailable";
   commands: string[];
-  steps: string[];
+  steps: ConnectorSetupStep[];
+  prerequisites: ConnectorPrerequisite[];
+  product_groups: ConnectorProductGroup[];
+  deployment_guides: ConnectorDeploymentGuide[];
+  region_guidance?: ConnectorRegionGuidance;
+  security_notes: string[];
   disabledReason?: string;
+};
+
+export type ConnectorPrerequisite = {
+  id: string;
+  label: string;
+  description?: string;
+  required?: boolean;
+};
+
+export type ConnectorSetupStep = {
+  id: string;
+  label: string;
+  description?: string;
+  commands?: string[];
+};
+
+export type ConnectorProductGroup = {
+  id: string;
+  label: string;
+  description?: string;
+  families?: string[];
+  default_enabled?: boolean;
+  required?: boolean;
+  permission_note?: string;
+  cost_note?: string;
+};
+
+export type ConnectorDeploymentGuide = {
+  id: string;
+  label: string;
+  language?: string;
+  description?: string;
+  body?: string;
+};
+
+export type ConnectorRegionGuidance = {
+  default_region?: string;
+  examples?: string[];
+  supports_global?: boolean;
+  supports_multi_region?: boolean;
+  description?: string;
 };
 
 export type ConnectorCredentialContext = {
@@ -546,19 +606,48 @@ const enrichConnectionMethod = (
 ): ConnectorConnectionMethod => {
   const id = knownConnectionMethodID(method.id) ? method.id : "encrypted_submission";
   const saveable = Boolean(method.saveable);
+  const steps = normalizeConnectionMethodSteps(method.steps) ?? connectionMethodSteps(id);
+  const stepCommands = steps.flatMap((step) => step.commands ?? []);
+  const commands = method.commands ?? (stepCommands.length > 0 ? stepCommands : connectionMethodCommands(id, connector));
   return {
     ...method,
     id,
     label: method.label || connectionMethodShortLabel(id),
     description: method.description || connectionMethodShortLabel(id),
-    shortLabel: method.shortLabel || connectionMethodShortLabel(id),
+    shortLabel: method.shortLabel || method.short_label || connectionMethodShortLabel(id),
+    category: method.category || (method.recommended ? "Recommended" : "Connection"),
     status: method.status || (saveable ? (id === "infisical_cli" || id === "aws_sso_profile" ? "guided" : "ready") : "unavailable"),
-    commands: method.commands ?? connectionMethodCommands(id, connector),
-    steps: method.steps ?? connectionMethodSteps(id),
+    commands,
+    steps,
+    prerequisites: method.prerequisites ?? connectionMethodPrerequisites(id),
+    product_groups: method.product_groups ?? [],
+    deployment_guides: method.deployment_guides ?? [],
+    region_guidance: method.region_guidance,
+    security_notes: method.security_notes ?? connectionMethodSecurityNotes(id),
     disabledReason: method.disabledReason || method.unavailable_reason,
     config_fields: method.config_fields ?? [],
     credential_fields: method.credential_fields ?? [],
   };
+};
+
+const normalizeConnectionMethodSteps = (steps?: Array<string | ConnectorSetupStep>) => {
+  if (!Array.isArray(steps)) return undefined;
+  return steps
+    .map((step, index): ConnectorSetupStep | null => {
+      if (typeof step === "string") {
+        const label = step.trim();
+        return label ? { id: `step_${index + 1}`, label } : null;
+      }
+      const label = step.label?.trim();
+      if (!label) return null;
+      return {
+        id: step.id?.trim() || `step_${index + 1}`,
+        label,
+        description: step.description?.trim(),
+        commands: step.commands?.filter(Boolean),
+      };
+    })
+    .filter((step): step is ConnectorSetupStep => Boolean(step));
 };
 
 const connectionMethodShortLabel = (id: ConnectorConnectionMethodID) => {
@@ -600,21 +689,61 @@ const connectionMethodCommands = (
   }
 };
 
-const connectionMethodSteps = (id: ConnectorConnectionMethodID) => {
+const connectionMethodSteps = (id: ConnectorConnectionMethodID): ConnectorSetupStep[] => {
   switch (id) {
     case "aws_sso_profile":
-      return ["Authenticate the AWS CLI profile on the server.", "Save the profile and account configuration.", "Cerebro validates the source before persisting the runtime."];
+      return [
+        { id: "authenticate", label: "Authenticate the AWS CLI profile on the server." },
+        { id: "save_profile", label: "Save the profile and account configuration." },
+        { id: "validate", label: "Cerebro validates the source before persisting the runtime." },
+      ];
     case "infisical_cli":
-      return ["Authenticate Infisical outside the browser.", "Inject the expected environment references into the Cerebro runtime.", "Save references only; secret values stay server-side."];
+      return [
+        { id: "authenticate", label: "Authenticate Infisical outside the browser." },
+        { id: "inject", label: "Inject the expected environment references into the Cerebro runtime." },
+        { id: "save", label: "Save references only; secret values stay server-side." },
+      ];
     case "environment_managed":
-      return ["Populate the referenced environment values in the runtime.", "Submit references and non-secret config.", "Cerebro validates before saving."];
+      return [
+        { id: "populate", label: "Populate the referenced environment values in the runtime." },
+        { id: "submit", label: "Submit references and non-secret config." },
+        { id: "validate", label: "Cerebro validates before saving." },
+      ];
     case "external_reference":
-      return ["Choose the backing store.", "Expose the selected secret to Cerebro as server-resolvable references.", "Submit references only; secret values stay outside the browser."];
+      return [
+        { id: "choose_store", label: "Choose the backing store." },
+        { id: "expose_reference", label: "Expose the selected secret to Cerebro as server-resolvable references." },
+        { id: "submit", label: "Submit references only; secret values stay outside the browser." },
+      ];
     case "encrypted_submission":
     default:
-      return ["Enter the required credential fields.", "The browser encrypts the payload with Cerebro's transit key.", "Cerebro validates and stores a sealed credential reference."];
+      return [
+        { id: "enter", label: "Enter the required credential fields." },
+        { id: "encrypt", label: "The browser encrypts the payload with Cerebro's transit key." },
+        { id: "store", label: "Cerebro validates and stores a sealed credential reference." },
+      ];
   }
 };
+
+const connectionMethodPrerequisites = (id: ConnectorConnectionMethodID): ConnectorPrerequisite[] => [
+  {
+    id: "backend_store",
+    label: id === "encrypted_submission" ? "Encrypted credential transport is ready" : "Backend can resolve the reference",
+    required: true,
+  },
+  {
+    id: "source_check",
+    label: "Source check passes before save",
+    required: true,
+  },
+];
+
+const connectionMethodSecurityNotes = (id: ConnectorConnectionMethodID) => [
+  id === "encrypted_submission"
+    ? "Secret material is encrypted before submission and never returned by the API."
+    : "Only server-resolvable references are submitted from the browser.",
+  "Runtime responses redact credential fields.",
+];
 
 const referenceFields = (fields: ConnectorField[], sourceID: string): ConnectorField[] =>
   fields.map((field) => ({

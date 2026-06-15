@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Circle, Clipboard, Database, KeyRound, ListChecks, LockKeyhole, Plus, RotateCcw, Search, ShieldCheck, TerminalSquare, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Circle, Clipboard, Code2, FileJson, Globe2, KeyRound, ListChecks, LockKeyhole, PackageCheck, Plus, RotateCcw, Search, ShieldCheck, SlidersHorizontal, TerminalSquare, X } from "lucide-react";
 
 import CredentialStoreSelector from "@/components/connectors/CredentialStoreSelector";
 import { Badge, ErrorBlock } from "@/components/grc/Primitives";
@@ -10,9 +10,11 @@ import type {
   ConnectorCatalogEntry,
   ConnectorConnectionMethod,
   ConnectorConnectionMethodID,
+  ConnectorDeploymentGuide,
   ConnectorCredentialKey,
   ConnectorCredentialStoreID,
   ConnectorField,
+  ConnectorProductGroup,
   ConnectorScopeOption,
   ConnectorScopeResource,
   NormalizedCredentialStore,
@@ -33,6 +35,31 @@ const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
 const readField = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim();
 const credentialInputName = (key: string) => `credential:${key}`;
 const splitScopeValues = (value: string) => value.split(/[,\n]/).map((item) => item.trim()).filter(Boolean);
+const normalizeFamily = (family: string) => family.trim().toLowerCase();
+
+function productGroupDefaultExcludedFamilies(method?: ConnectorConnectionMethod) {
+  const families = new Set<string>();
+  (method?.product_groups ?? []).forEach((group) => {
+    if (group.required || group.default_enabled) return;
+    (group.families ?? []).forEach((family) => {
+      const normalized = normalizeFamily(family);
+      if (normalized) families.add(normalized);
+    });
+  });
+  return Array.from(families).sort();
+}
+
+function productGroupRequiredFamilies(method?: ConnectorConnectionMethod) {
+  const families = new Set<string>();
+  (method?.product_groups ?? []).forEach((group) => {
+    if (!group.required) return;
+    (group.families ?? []).forEach((family) => {
+      const normalized = normalizeFamily(family);
+      if (normalized) families.add(normalized);
+    });
+  });
+  return families;
+}
 
 function clearCredentialInputs(form: HTMLFormElement, fields: ConnectorField[]) {
   fields.forEach((field) => {
@@ -73,7 +100,7 @@ function MethodTabs({
   const unavailableMethods = methods.filter((method) => method.status === "unavailable" || method.saveable === false);
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {availableMethods.map((method) => {
           const active = method.id === selectedID;
           return (
@@ -81,22 +108,26 @@ function MethodTabs({
               key={method.id}
               type="button"
               onClick={() => onSelect(method.id)}
-              className={`min-h-[112px] rounded-lg border p-3 text-left transition ${
+              className={`group min-h-0 w-full min-w-0 rounded-lg border p-3 text-left transition md:min-h-[154px] md:p-4 ${
                 active
                   ? "border-[var(--primary)] bg-[var(--primary-soft)] shadow-[var(--shadow-sm)]"
                   : "border-[color:var(--border)] bg-[var(--surface-raised)] hover:border-[color:var(--border-strong)] hover:bg-[var(--surface-hover)]"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[13px] font-semibold text-[var(--text-primary)]">{method.shortLabel}</div>
-                  <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{method.label}</div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="text-[14px] font-semibold text-[var(--text-primary)]">{method.shortLabel}</div>
+                    {method.recommended && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:ring-emerald-500/25">Recommended</span>}
+                  </div>
+                  <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{method.category}</div>
                 </div>
-                {active ? <CheckCircle2 className="h-4 w-4 text-[var(--primary)]" /> : <Circle className="h-4 w-4 text-[var(--text-muted)]" />}
+                {active ? <CheckCircle2 className="h-4 w-4 text-[var(--primary)]" /> : <Circle className="h-4 w-4 text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]" />}
               </div>
-              <div className="mt-3 text-[11px] leading-4 text-[var(--text-muted)]">{method.description}</div>
-              <div className="mt-3">
-                <Badge value={method.id === "encrypted_submission" ? "encrypted" : "backend backed"} />
+              <div className="mt-2 max-h-[4.75rem] overflow-hidden break-words text-[12px] leading-5 text-[var(--text-muted)] sm:max-h-none md:mt-3">{method.description}</div>
+              <div className="mt-3 flex flex-wrap gap-1.5 md:mt-4">
+                <Badge value={method.id === "encrypted_submission" ? "encrypted" : "reference"} />
+                {method.product_groups.length > 0 && <Badge value={`${method.product_groups.length} groups`} />}
               </div>
             </button>
           );
@@ -136,7 +167,7 @@ function SetupStep({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
+    <section className="min-w-0 rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[12px] font-semibold text-[var(--primary)]">
           {index}
@@ -149,19 +180,19 @@ function SetupStep({
   );
 }
 
-function StepRail({ methodLabel, storeLabel }: { methodLabel?: string; storeLabel?: string }) {
-  const steps = [
-    ["Method", methodLabel || "Choose auth"],
+function StepRail({ method, storeLabel }: { method?: ConnectorConnectionMethod; storeLabel?: string }) {
+  const setupSteps = [
+    ["Method", method?.shortLabel || "Choose auth"],
     ["Store", storeLabel || "Choose store"],
     ["Config", "Runtime metadata"],
     ["Scope", "Skip excluded assets"],
     ["Validate", "Test before saving"],
   ];
   return (
-    <div className="hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 text-[12px] lg:block">
+    <div className="hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 text-[12px] xl:block">
       <div className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Connection flow</div>
       <ol className="space-y-3">
-        {steps.map(([label, detail], index) => (
+        {setupSteps.map(([label, detail], index) => (
           <li key={label} className="flex gap-2">
             <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] bg-[var(--surface)] text-[10px] font-semibold text-[var(--text-secondary)]">
               {index + 1}
@@ -198,6 +229,186 @@ function CommandBlock({ commands }: { commands: string[] }) {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function copyButtonLabel(copied: boolean) {
+  return copied ? "Copied" : "Copy";
+}
+
+function DeploymentGuideCard({ guide }: { guide: ConnectorDeploymentGuide }) {
+  const [copied, setCopied] = useState(false);
+  if (!guide.body) return null;
+  return (
+    <div className="overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+            {guide.language === "json" ? <FileJson className="h-4 w-4 text-[var(--text-muted)]" /> : <Code2 className="h-4 w-4 text-[var(--text-muted)]" />}
+            {guide.label}
+          </div>
+          {guide.description && <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{guide.description}</div>}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard.writeText(guide.body || "").then(() => setCopied(true));
+          }}
+          className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px]"
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+          {copyButtonLabel(copied)}
+        </button>
+      </div>
+      <pre className="max-h-72 overflow-auto bg-zinc-950 p-4 text-[12px] leading-5 text-zinc-100 dark:bg-black">
+        <code>{guide.body}</code>
+      </pre>
+    </div>
+  );
+}
+
+function SetupGuidancePanel({ method }: { method?: ConnectorConnectionMethod }) {
+  if (!method) return null;
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.72fr)]">
+      <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+        <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+          <ListChecks className="h-4 w-4 text-[var(--text-muted)]" />
+          Prerequisites
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {method.prerequisites.map((item) => (
+            <div key={item.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+              <div className="flex items-start gap-2">
+                <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+                <div>
+                  <div className="text-[12px] font-semibold text-[var(--text-primary)]">{item.label}</div>
+                  {item.description && <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{item.description}</div>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+        <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+          <ShieldCheck className="h-4 w-4 text-[var(--text-muted)]" />
+          Safety boundary
+        </div>
+        <div className="space-y-2">
+          {method.security_notes.map((note) => (
+            <div key={note} className="flex gap-2 text-[12px] leading-5 text-[var(--text-muted)]">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <span>{note}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RegionGuidancePanel({ method }: { method?: ConnectorConnectionMethod }) {
+  const guidance = method?.region_guidance;
+  if (!guidance) return null;
+  return (
+    <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+      <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+        <Globe2 className="h-4 w-4 text-[var(--text-muted)]" />
+        Region and global coverage
+      </div>
+      <p className="text-[12px] leading-5 text-[var(--text-muted)]">{guidance.description}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {guidance.default_region && <Badge value={`default ${guidance.default_region}`} />}
+        {guidance.supports_global && <Badge value="global families" />}
+        {guidance.supports_multi_region && <Badge value="multi-region" />}
+        {(guidance.examples ?? []).map((example) => (
+          <span key={example} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-secondary)]">
+            {example}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductGroupSelector({
+  groups,
+  selectedFamilies,
+  onEnableFamilies,
+  onDisableFamilies,
+}: {
+  groups: ConnectorProductGroup[];
+  selectedFamilies: Set<string>;
+  onEnableFamilies: (families: string[]) => void;
+  onDisableFamilies: (families: string[]) => void;
+}) {
+  if (groups.length === 0) return null;
+  return (
+    <div className="min-w-0 rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+      <div className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+        <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+          <PackageCheck className="h-4 w-4 text-[var(--text-muted)]" />
+          Product and permission groups
+        </div>
+        <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
+          Groups are translated into resource-family scope. Turning one off skips those families before source collection where supported.
+        </p>
+      </div>
+      <div className="grid min-w-0 gap-3 p-4 md:grid-cols-2">
+        {groups.map((group) => {
+          const families = group.families ?? [];
+          const enabled = group.required || families.some((family) => !selectedFamilies.has(family.trim().toLowerCase()));
+          return (
+            <div key={group.id} className={`min-w-0 overflow-hidden rounded-lg border border-l-4 bg-[var(--surface-raised)] p-3 ${enabled ? "border-[color:var(--border)] border-l-emerald-500" : "border-[color:var(--border)] border-l-amber-500"}`}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">{group.label}</div>
+                    {group.required && <Badge value="required" />}
+                    {!group.required && group.default_enabled && <Badge value="default on" />}
+                    {!group.required && !group.default_enabled && <Badge value="default skipped" />}
+                  </div>
+                  {group.description && <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{group.description}</p>}
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label={`${enabled ? "Skip" : "Collect"} ${group.label}`}
+                  aria-checked={enabled}
+                  disabled={group.required || families.length === 0}
+                  onClick={() => (enabled ? onDisableFamilies(families) : onEnableFamilies(families))}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-60 lg:mt-0 ${
+                    enabled
+                      ? "border-emerald-300 bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/20"
+                      : "border-[color:var(--border)] bg-[var(--surface)]"
+                  }`}
+                >
+                  <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition dark:bg-zinc-100 ${enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+              {(group.permission_note || group.cost_note) && (
+                <div className="mt-3 space-y-1 rounded-md bg-[var(--surface)] px-3 py-2 text-[11px] leading-4 text-[var(--text-muted)]">
+                  {group.permission_note && <div>{group.permission_note}</div>}
+                  {group.cost_note && <div>{group.cost_note}</div>}
+                </div>
+              )}
+              {families.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {families.slice(0, 8).map((family) => (
+                    <span key={family} className="max-w-full break-all rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">
+                      {family}
+                    </span>
+                  ))}
+                  {families.length > 8 && <span className="rounded bg-[var(--surface)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">+{families.length - 8}</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -292,7 +503,7 @@ function OnboardingBrief({
     {
       label: "Preflight",
       detail: requiresPreflight ? "Run the CLI checks before testing" : "No CLI preflight required",
-      ready: !requiresPreflight,
+      ready: true,
     },
     {
       label: "Fields",
@@ -349,6 +560,7 @@ function scopeOptionSearchText(option: ConnectorScopeOption, families: string[])
 function ScopePolicyBuilder({
   connector,
   selectedFamilies,
+  protectedFamilies,
   onDisableFamilies,
   onEnableFamilies,
   resourceURNs,
@@ -358,6 +570,7 @@ function ScopePolicyBuilder({
 }: {
   connector: ConnectorCatalogEntry;
   selectedFamilies: Set<string>;
+  protectedFamilies: Set<string>;
   onDisableFamilies: (families: string[]) => void;
   onEnableFamilies: (families: string[]) => void;
   resourceURNs: string;
@@ -373,14 +586,16 @@ function ScopePolicyBuilder({
   const options = useMemo(() => connector.scope_options ?? [], [connector.scope_options]);
   const rows = useMemo(() => options.map((option) => {
     const families = connectorScopeOptionFamilies(option);
-    const disabled = families.some((family) => selectedFamilies.has(family));
+    const protectedRow = families.length > 0 && families.every((family) => protectedFamilies.has(family));
+    const disabled = !protectedRow && families.some((family) => selectedFamilies.has(family));
     return {
       option,
       families,
       disabled,
+      protectedRow,
       search: scopeOptionSearchText(option, families),
     };
-  }), [options, selectedFamilies]);
+  }), [options, protectedFamilies, selectedFamilies]);
   const disabledRows = rows.filter((row) => row.disabled);
   const enabledCount = Math.max(rows.length - disabledRows.length, 0);
   const selectedURNs = splitScopeValues(resourceURNs);
@@ -396,8 +611,9 @@ function ScopePolicyBuilder({
     return matchesQuery && matchesFilter;
   });
   const shownRows = visibleRows.slice(0, 80);
-  const allVisibleDisabled = shownRows.length > 0 && shownRows.every((row) => row.disabled);
-  const visibleFamilies = shownRows.flatMap((row) => row.families);
+  const mutableShownRows = shownRows.filter((row) => !row.protectedRow);
+  const allVisibleDisabled = mutableShownRows.length > 0 && mutableShownRows.every((row) => row.disabled);
+  const visibleFamilies = mutableShownRows.flatMap((row) => row.families).filter((family) => !protectedFamilies.has(family));
   const exampleFamily = rows[0]?.families[0] ?? `${connector.source_id}.resource`;
   const exampleResourceType = exampleFamily.includes(".") || exampleFamily.startsWith(`${connector.source_id}_`)
     ? exampleFamily.replace(`${connector.source_id}_`, `${connector.source_id}.`)
@@ -470,7 +686,7 @@ function ScopePolicyBuilder({
           <button
             type="button"
             onClick={() => (allVisibleDisabled ? onEnableFamilies(visibleFamilies) : onDisableFamilies(visibleFamilies))}
-            disabled={shownRows.length === 0}
+            disabled={shownRows.length === 0 || visibleFamilies.length === 0}
             className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -479,7 +695,7 @@ function ScopePolicyBuilder({
         </div>
 
         <div className="max-h-[430px] overflow-y-auto">
-          {shownRows.map(({ option, families, disabled }) => (
+          {shownRows.map(({ option, families, disabled, protectedRow }) => (
             <div
               key={`${option.id}:${families.join(",")}`}
               className={`grid gap-3 border-b border-[color:var(--border)] px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto] ${
@@ -508,9 +724,10 @@ function ScopePolicyBuilder({
                   type="button"
                   role="switch"
                   aria-checked={!disabled}
-                  aria-label={`${disabled ? "Enable" : "Disable"} ${option.label || option.id}`}
+                  aria-label={protectedRow ? `${option.label || option.id} is required` : `${disabled ? "Enable" : "Disable"} ${option.label || option.id}`}
+                  disabled={protectedRow}
                   onClick={() => (disabled ? onEnableFamilies(families) : onDisableFamilies(families))}
-                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition ${
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-55 ${
                     disabled
                       ? "border-amber-300 bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/20"
                       : "border-emerald-300 bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/20"
@@ -647,10 +864,17 @@ export default function ConnectorSetupForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ runtimeID: string; tenant: string; storeLabel: string; status: "checked" | "saved" } | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
-  const [excludedFamilies, setExcludedFamilies] = useState<Set<string>>(() => new Set());
+  const [excludedFamilies, setExcludedFamilies] = useState<Set<string>>(() => new Set(productGroupDefaultExcludedFamilies(preferredMethod)));
   const [resourceURNs, setResourceURNs] = useState("");
   const [excludedResources, setExcludedResources] = useState<ConnectorScopeResource[]>([]);
+  const [scopeEdited, setScopeEdited] = useState(false);
   const defaultRuntimeID = [tenantID, connector.source_id, "connection"].filter(Boolean).join("-") || `${connector.source_id}-connection`;
+  const defaultExcludedProductFamilies = useMemo(() => productGroupDefaultExcludedFamilies(selectedMethod), [selectedMethod]);
+  const defaultExcludedProductFamiliesKey = defaultExcludedProductFamilies.join("\n");
+  const protectedProductFamilies = useMemo(() => productGroupRequiredFamilies(selectedMethod), [selectedMethod]);
+  const scopeSelectionSignature = `${connector.source_id}:${selectedMethod?.id ?? selectedMethodID}`;
+  const previousScopeSelectionSignature = useRef(scopeSelectionSignature);
+  const previousScopeDefaultKey = useRef(defaultExcludedProductFamiliesKey);
   const updateFormValues = () => {
     const form = formRef.current;
     if (!form) return;
@@ -671,37 +895,53 @@ export default function ConnectorSetupForm({
   const basicsReady = Boolean(formValues.tenant_id && formValues.runtime_id);
   const requiredFieldsReady = requiredFieldKeys.length === 0 || requiredFieldKeys.every((key) => Boolean(formValues[key]));
   const scopePolicy = useMemo(() => normalizeScopePolicy({
-    excluded_families: Array.from(excludedFamilies),
+    excluded_families: Array.from(excludedFamilies).filter((family) => !protectedProductFamilies.has(family)),
     excluded_resource_urns: splitScopeValues(resourceURNs),
     excluded_resources: excludedResources,
-  }), [excludedFamilies, excludedResources, resourceURNs]);
+  }), [excludedFamilies, excludedResources, protectedProductFamilies, resourceURNs]);
   const scopeCount = scopePolicyExclusionCount(scopePolicy);
 
   const changeMethod = (methodID: ConnectorConnectionMethodID) => {
     const nextMethod = methods.find((method) => method.id === methodID);
     setSelectedMethodID(methodID);
     setSelectedStoreID(defaultStoreForMethod(nextMethod, credentialStores));
+    setExcludedFamilies(new Set(productGroupDefaultExcludedFamilies(nextMethod)));
+    setResourceURNs("");
+    setExcludedResources([]);
+    setScopeEdited(false);
     setError(null);
     setSuccess(null);
   };
 
   const updateScopeFamilies = (families: string[], disabled: boolean) => {
+    setScopeEdited(true);
     setExcludedFamilies((previous) => {
       const next = new Set(previous);
-      const normalized = families.map((family) => family.trim().toLowerCase()).filter(Boolean);
+      const normalized = families.map(normalizeFamily).filter(Boolean);
       normalized.forEach((family) => {
-        if (disabled) next.add(family);
+        if (disabled && !protectedProductFamilies.has(family)) next.add(family);
         else next.delete(family);
       });
       return next;
     });
   };
 
+  const updateResourceURNs = (value: string) => {
+    setResourceURNs(value);
+    setScopeEdited(true);
+  };
+
+  const updateExcludedResources = (resources: ConnectorScopeResource[]) => {
+    setExcludedResources(resources);
+    setScopeEdited(true);
+  };
+
   const resetForm = () => {
     formRef.current?.reset();
-    setExcludedFamilies(new Set());
+    setExcludedFamilies(new Set(defaultExcludedProductFamilies));
     setResourceURNs("");
     setExcludedResources([]);
+    setScopeEdited(false);
     window.setTimeout(updateFormValues, 0);
   };
 
@@ -709,6 +949,21 @@ export default function ConnectorSetupForm({
     const timer = window.setTimeout(updateFormValues, 0);
     return () => window.clearTimeout(timer);
   }, [effectiveSelectedMethodID, effectiveSelectedStoreID, tenantID]);
+
+  useEffect(() => {
+    const sourceOrMethodChanged = previousScopeSelectionSignature.current !== scopeSelectionSignature;
+    const defaultsChanged = previousScopeDefaultKey.current !== defaultExcludedProductFamiliesKey;
+    if (sourceOrMethodChanged || (defaultsChanged && !scopeEdited)) {
+      setExcludedFamilies(new Set(defaultExcludedProductFamilies));
+      if (sourceOrMethodChanged) {
+        setResourceURNs("");
+        setExcludedResources([]);
+      }
+      setScopeEdited(false);
+    }
+    previousScopeSelectionSignature.current = scopeSelectionSignature;
+    previousScopeDefaultKey.current = defaultExcludedProductFamiliesKey;
+  }, [defaultExcludedProductFamilies, defaultExcludedProductFamiliesKey, scopeEdited, scopeSelectionSignature]);
 
   const submitConnection = async (checkOnly: boolean) => {
     const form = formRef.current;
@@ -799,7 +1054,7 @@ export default function ConnectorSetupForm({
       onInput={updateFormValues}
       onReset={() => window.setTimeout(updateFormValues, 0)}
       onSubmit={(event) => { event.preventDefault(); void submitConnection(false); }}
-      className="surface-panel overflow-hidden"
+      className="surface-panel max-w-full overflow-hidden"
     >
       <div className="border-b border-[color:var(--border)] px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -813,9 +1068,9 @@ export default function ConnectorSetupForm({
         </div>
       </div>
 
-      <div className="grid gap-5 p-5 lg:grid-cols-[180px_minmax(0,1fr)]">
-        <StepRail methodLabel={selectedMethod?.shortLabel} storeLabel={selectedStore?.label} />
-        <div className="space-y-4">
+      <div className="grid min-w-0 max-w-full gap-5 p-5 xl:grid-cols-[220px_minmax(0,1fr)]">
+        <StepRail method={selectedMethod} storeLabel={selectedStore?.label} />
+        <div className="min-w-0 space-y-4">
           {!anyStoreReady && <StoreReadinessChecklist stores={credentialStores} />}
           {error && <ErrorBlock error={error} />}
           {success && (
@@ -827,6 +1082,7 @@ export default function ConnectorSetupForm({
             </div>
           )}
           <OnboardingBrief method={selectedMethod} store={selectedStore} basicsReady={basicsReady} fieldsReady={requiredFieldsReady} scopeCount={scopeCount} />
+          <SetupGuidancePanel method={selectedMethod} />
 
           <SetupStep index={1} title="Choose authentication method" icon={<KeyRound className="h-4 w-4" />}>
             <p className="mb-3 text-[12px] leading-5 text-[var(--text-muted)]">
@@ -894,37 +1150,70 @@ export default function ConnectorSetupForm({
                 <FieldGrid fields={selectedMethod.credential_fields ?? []} credential />
               </div>
             )}
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.65fr)]">
+              <RegionGuidancePanel method={selectedMethod} />
+              {selectedMethod?.deployment_guides?.slice(0, 1).map((guide) => (
+                <DeploymentGuideCard key={guide.id} guide={guide} />
+              ))}
+            </div>
+            {(selectedMethod?.deployment_guides?.length ?? 0) > 1 && (
+              <details className="mt-4 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                      <Code2 className="h-4 w-4 text-[var(--text-muted)]" />
+                      Deployment snippets
+                    </div>
+                    <Badge value={`${(selectedMethod?.deployment_guides?.length ?? 1) - 1} more`} />
+                  </div>
+                </summary>
+                <div className="mt-4 grid gap-3">
+                  {selectedMethod?.deployment_guides?.slice(1).map((guide) => (
+                    <DeploymentGuideCard key={guide.id} guide={guide} />
+                  ))}
+                </div>
+              </details>
+            )}
           </SetupStep>
 
-          <SetupStep index={4} title="Set resource scope" icon={<Database className="h-4 w-4" />}>
-            <ScopePolicyBuilder
-              connector={connector}
-              selectedFamilies={excludedFamilies}
-              onDisableFamilies={(families) => updateScopeFamilies(families, true)}
-              onEnableFamilies={(families) => updateScopeFamilies(families, false)}
-              resourceURNs={resourceURNs}
-              onResourceURNsChange={setResourceURNs}
-              resources={excludedResources}
-              onResourcesChange={setExcludedResources}
-            />
+          <SetupStep index={4} title="Set resource scope" icon={<SlidersHorizontal className="h-4 w-4" />}>
+            <div className="space-y-4">
+              <ProductGroupSelector
+                groups={selectedMethod?.product_groups ?? []}
+                selectedFamilies={excludedFamilies}
+                onDisableFamilies={(families) => updateScopeFamilies(families, true)}
+                onEnableFamilies={(families) => updateScopeFamilies(families, false)}
+              />
+              <ScopePolicyBuilder
+                connector={connector}
+                selectedFamilies={excludedFamilies}
+                protectedFamilies={protectedProductFamilies}
+                onDisableFamilies={(families) => updateScopeFamilies(families, true)}
+                onEnableFamilies={(families) => updateScopeFamilies(families, false)}
+                resourceURNs={resourceURNs}
+                onResourceURNsChange={updateResourceURNs}
+                resources={excludedResources}
+                onResourcesChange={updateExcludedResources}
+              />
+            </div>
           </SetupStep>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-5 py-4">
-        <button type="button" onClick={resetForm} className="secondary-button px-3 py-2 text-[13px]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-5 pb-28 pt-4 sm:pb-4 lg:pr-[18rem] xl:pr-5">
+        <button type="button" onClick={resetForm} className="secondary-button w-full px-3 py-2 text-[13px] sm:w-auto">
           Reset
         </button>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <button
             type="button"
             disabled={!canSubmit || submitting !== null}
             onClick={() => void submitConnection(true)}
-            className="secondary-button px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-55"
+            className="secondary-button w-full px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto"
           >
             {submitting === "check" ? "Testing..." : "Test connection"}
           </button>
-          <button type="submit" disabled={!canSubmit || submitting !== null} className="primary-button px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-55">
+          <button type="submit" disabled={!canSubmit || submitting !== null} className="primary-button w-full px-4 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto">
             {submitting === "save" ? "Saving..." : "Save connection"}
           </button>
         </div>

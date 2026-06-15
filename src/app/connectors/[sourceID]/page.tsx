@@ -103,7 +103,7 @@ function TabButton({
     <button
       type="button"
       onClick={() => onClick(id)}
-      className={`inline-flex h-10 items-center gap-2 border-b-2 px-1 text-[13px] font-semibold transition ${
+      className={`inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-1 text-[13px] font-semibold transition ${
         active
           ? "border-[var(--text-primary)] text-[var(--text-primary)]"
           : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -475,7 +475,7 @@ export default function ConnectorDetailPage() {
         </div>
       </section>
 
-      <div className="flex flex-wrap gap-5 border-b border-[color:var(--border)]">
+      <div className="flex gap-4 overflow-x-auto border-b border-[color:var(--border)] pb-1">
         {tabs.map((tab) => (
           <TabButton key={tab.id} id={tab.id} active={activeTab === tab.id} onClick={setActiveTab} />
         ))}
