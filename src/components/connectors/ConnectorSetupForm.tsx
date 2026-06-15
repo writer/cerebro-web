@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Circle, Clipboard, KeyRound, LockKeyhole, TerminalSquare } from "lucide-react";
+import { AlertCircle, CheckCircle2, Circle, Clipboard, KeyRound, ListChecks, LockKeyhole, ShieldCheck, TerminalSquare } from "lucide-react";
 
 import CredentialStoreSelector from "@/components/connectors/CredentialStoreSelector";
 import { Badge, ErrorBlock } from "@/components/grc/Primitives";
@@ -244,6 +244,79 @@ function StoreReadinessChecklist({ stores }: { stores: NormalizedCredentialStore
   );
 }
 
+function requirementCount(fields: ConnectorField[] | undefined) {
+  return (fields ?? []).filter((field) => field.required).length;
+}
+
+function OnboardingBrief({
+  method,
+  store,
+}: {
+  method?: ConnectorConnectionMethod;
+  store?: NormalizedCredentialStore;
+}) {
+  const configRequired = requirementCount(method?.config_fields);
+  const credentialRequired = requirementCount(method?.credential_fields);
+  const requiredFields = configRequired + credentialRequired;
+  const requiresPreflight = (method?.commands?.length ?? 0) > 0;
+  const sendsSecrets = method?.id === "encrypted_submission";
+  const rows = [
+    {
+      label: "Method",
+      detail: method ? `${method.shortLabel} selected` : "Choose a supported authentication method",
+      ready: Boolean(method && method.status !== "unavailable" && method.saveable !== false),
+    },
+    {
+      label: "Store",
+      detail: store?.available ? `${store.label} is ready` : store?.disabledReason || "Choose a ready credential store",
+      ready: Boolean(store?.available),
+    },
+    {
+      label: "Preflight",
+      detail: requiresPreflight ? "Run the CLI checks before testing" : "No CLI preflight required",
+      ready: !requiresPreflight,
+    },
+    {
+      label: "Fields",
+      detail: requiredFields > 0 ? `${configRequired} config and ${credentialRequired} credential/reference required below` : "No required fields",
+      ready: requiredFields === 0,
+    },
+  ];
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
+      <div>
+        <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+          <ListChecks className="h-4 w-4 text-[var(--text-muted)]" />
+          Onboarding checklist
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {rows.map((row) => (
+            <div key={row.label} className="flex items-start gap-2 border-t border-[color:var(--border)] pt-2 first:border-t-0 first:pt-0 md:first:border-t md:first:pt-2">
+              {row.ready ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />}
+              <div>
+                <div className="text-[12px] font-semibold text-[var(--text-primary)]">{row.label}</div>
+                <div className="text-[11px] leading-4 text-[var(--text-muted)]">{row.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+        <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-primary)]">
+          <ShieldCheck className="h-4 w-4 text-[var(--text-muted)]" />
+          Credential boundary
+        </div>
+        <p className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">
+          {sendsSecrets
+            ? "Secret material is encrypted before submission, cleared after each attempt, and never returned by connector reads."
+            : "This path stores only backend-resolvable references; paste references here, not secret values."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function ConnectorSetupForm({
   connector,
   tenantID,
@@ -272,7 +345,7 @@ export default function ConnectorSetupForm({
   const [submitting, setSubmitting] = useState<"check" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ runtimeID: string; tenant: string; storeLabel: string; status: "checked" | "saved" } | null>(null);
-  const defaultRuntimeID = [tenantID || "tenant", connector.source_id].filter(Boolean).join("-");
+  const defaultRuntimeID = [tenantID, connector.source_id, "connection"].filter(Boolean).join("-") || `${connector.source_id}-connection`;
 
   useEffect(() => {
     if (!methods.some((method) => method.id === selectedMethodID) && preferredMethod) {
@@ -401,6 +474,7 @@ export default function ConnectorSetupForm({
               </div>
             </div>
           )}
+          <OnboardingBrief method={selectedMethod} store={selectedStore} />
 
           <SetupStep index={1} title="Choose authentication method" icon={<KeyRound className="h-4 w-4" />}>
             <p className="mb-3 text-[12px] leading-5 text-[var(--text-muted)]">
