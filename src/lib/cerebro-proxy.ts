@@ -127,7 +127,12 @@ export const isCacheableCerebroPath = (path: string) => {
     "grc/controls",
     "grc/findings",
     "grc/evidence",
-  ].includes(normalized) || normalized.startsWith("grc/entities/") || normalized.startsWith("grc/audit-packets/");
+    "grc/inventory/categories",
+    "grc/inventory/assets",
+    "grc/inventory/assets/detail",
+    "grc/inventory/resource-scope",
+    "grc/inventory/asset-reports",
+  ].includes(normalized) || normalized.startsWith("grc/inventory/asset-reports/") || normalized.startsWith("grc/entities/") || normalized.startsWith("grc/audit-packets/");
 };
 
 export const cerebroProxyCacheKey = (target: URL, headers: HeadersInit) => {

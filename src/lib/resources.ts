@@ -10,11 +10,12 @@ export type ManualOperation = {
 export const manualTags: Record<string, string> = {
   System: "Health and API metadata.",
   Sources: "Registered source integrations and preview helpers.",
+  Connectors: "Connector library, runtime status, and credential transport metadata.",
   "Source Runtimes": "Persisted runtime configs, sync state, claims, evidence, and findings.",
   Findings: "Finding rules, finding detail, evidence, and evaluation runs.",
   GRC: "Dashboard, controls, audit packets, evidence, and GRC finding views.",
   Reports: "Report definitions and durable report runs.",
-  Workflow: "Workflow replay and knowledge event surfaces.",
+  Platform: "Platform knowledge and automation APIs.",
   Graph: "Graph neighborhoods, impact queries, ingest health, and ingest run status.",
 };
 
@@ -42,9 +43,24 @@ export const manualOperations: ManualOperation[] = [
     params: ["sourceID"],
   },
   {
+    tag: "Connectors",
+    path: "/connectors",
+    summary: "List available connectors and connection health",
+  },
+  {
+    tag: "Connectors",
+    path: "/connectors/credential-key",
+    summary: "Get the public credential transport key",
+  },
+  {
     tag: "Source Runtimes",
     path: "/source-runtimes",
     summary: "List source runtime configurations",
+  },
+  {
+    tag: "Source Runtimes",
+    path: "/source-runtimes/health",
+    summary: "List source runtime health, sync, watermark, graph, and finding-evaluation state",
   },
   {
     tag: "Source Runtimes",

@@ -29,10 +29,11 @@ const searchCommands = (query: string, askCerebro: (question: string) => void): 
     { id: "search-risk-inbox", label: `Search Risk Inbox for "${trimmed}"`, href: `/risk-inbox?q=${encoded}`, description: "Filter findings by title, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk"] },
     { id: "open-finding", label: `Open finding "${trimmed}"`, href: `/findings/${encoded}`, description: "Jump to a finding detail page by ID.", section: "Operator", keywords: ["finding", "detail"] },
     { id: "open-impact", label: `Open impact map for "${trimmed}"`, href: `/impact?root_urn=${encoded}`, description: "Use as entity URN or graph root.", section: "Operator", keywords: ["impact", "graph"] },
+    { id: "search-inventory", label: `Search inventory for "${trimmed}"`, href: `/inventory?q=${encoded}`, description: "Filter assets and resources by label, type, owner, or URN.", section: "Operator", keywords: ["inventory", "assets", "resources"] },
     { id: "search-controls", label: `Filter controls by "${trimmed}"`, href: `/controls?control=${encoded}`, description: "Find control IDs and mapped findings.", section: "Operator", keywords: ["controls", "framework"] },
     { id: "open-report", label: `Build audit packet for "${trimmed}"`, href: `/reports?finding_id=${encoded}`, description: "Use as a finding ID for an audit packet.", section: "Operator", keywords: ["reports", "audit"] },
     { id: "open-evidence", label: `Find evidence for "${trimmed}"`, href: `/evidence?finding_id=${encoded}`, description: "Use as a finding ID in the evidence register.", section: "Operator", keywords: ["evidence", "proof"] },
-    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?runtime_ids=${encoded}`, description: "Use as source runtime IDs.", section: "Operator", keywords: ["connectors", "runtimes"] },
+    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?runtime_id=${encoded}`, description: "Use as a source runtime ID.", section: "Operator", keywords: ["connectors", "runtimes"] },
   ];
 };
 
@@ -111,11 +112,11 @@ export default function CommandPalette() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 px-4 py-20 backdrop-blur-sm" onClick={dismiss}>
-      <div className="mx-auto max-w-2xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-slate-400">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+    <div className="fixed inset-0 z-50 bg-stone-950/45 px-4 py-20 backdrop-blur-sm" onClick={dismiss}>
+      <div className="surface-raised mx-auto max-w-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 border-b border-[color:var(--border)] px-4 py-3">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-5 w-5 text-[var(--primary)]">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.091-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.091L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.091 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.091Z" />
           </svg>
           <input
             ref={inputRef}
@@ -123,14 +124,14 @@ export default function CommandPalette() {
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             onKeyDown={onInputKeyDown}
             placeholder="Search findings, controls, evidence, connectors..."
-            className="flex-1 border-0 bg-transparent text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+            className="flex-1 border-0 bg-transparent text-[15px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
           />
-          <kbd className="rounded border border-slate-200 px-1.5 py-0.5 font-mono text-[11px] text-slate-400">ESC</kbd>
+          <kbd className="rounded border border-[color:var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">ESC</kbd>
         </div>
 
         <div className="max-h-[28rem] overflow-y-auto p-1.5">
           {commands.length === 0 ? (
-            <div className="flex items-center justify-center p-6 text-[13px] text-slate-500">No matching results.</div>
+            <div className="flex items-center justify-center p-6 text-[13px] text-[var(--text-muted)]">No matching results.</div>
           ) : (
             commands.map((command, index) => (
               <button
@@ -139,14 +140,14 @@ export default function CommandPalette() {
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => run(command)}
                 className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition ${
-                  index === safeActiveIndex ? "bg-indigo-50 text-indigo-900" : "text-slate-700 hover:bg-slate-50"
+                  index === safeActiveIndex ? "bg-[var(--primary-soft)] text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
                 }`}
               >
                 <span>
                   <span className="block text-[13px] font-medium">{command.label}</span>
-                  <span className="mt-0.5 block text-[12px] text-slate-500">{command.description}</span>
+                  <span className="mt-0.5 block text-[12px] text-[var(--text-muted)]">{command.description}</span>
                 </span>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                <span className="shrink-0 rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
                   {command.section}
                 </span>
               </button>
@@ -155,14 +156,14 @@ export default function CommandPalette() {
         </div>
 
         {query.trim().length >= 2 && (
-          <div className="border-t border-slate-100 px-4 py-2 text-[12px] text-slate-500">
+          <div className="border-t border-[color:var(--border)] px-4 py-2 text-[12px] text-[var(--text-muted)]">
             {liveSearch.loading && "Searching live data..."}
             {!liveSearch.loading && liveSearch.error && `Live search unavailable: ${liveSearch.error}`}
             {!liveSearch.loading && !liveSearch.error && liveSearch.searched && `${liveSearch.commands.length} live result${liveSearch.commands.length === 1 ? "" : "s"}`}
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2 text-[11px] text-slate-400">
+        <div className="flex items-center justify-between border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-2 text-[11px] text-[var(--text-muted)]">
           <span>↑↓ navigate &middot; Enter to open &middot; Esc to close</span>
           <span>⌘K</span>
         </div>

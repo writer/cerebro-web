@@ -6,6 +6,16 @@ Cerebro Web is a read-only Next.js console for a Cerebro API. It provides UI sur
 
 Maintained by WRITER on a best-effort basis. There are no support SLAs.
 
+## Cross-Repo Contract
+
+Cerebro Web mirrors the app-vs-deploy split used by Cerebro runtime:
+
+- `writer/cerebro-web` is authoritative for the read-only console app, shared UI behavior, generic source-readiness views, API proxy semantics, OpenAPI rendering, tests, and the source-linked web image.
+- The private web overlay is for Writer-only app data such as private producer registries, private labels, and private source/runtime mappings that would be unsafe or irrelevant in public.
+- The internal Cerebro deployment repository owns real deployment manifests, stack configuration, hostnames, identity wiring, source runtime schedules, secret references, image promotion, rollout, rollback, and operational verification.
+
+The handoff from this repo is the published web image plus documented environment/API contracts. Real deploy manifests do not belong in either web app repository; public examples must remain placeholder-only. The in-app contract lives at `/developer/repository-split` and the typed source of truth is `src/lib/repository-split.ts`.
+
 ## Requirements
 
 - Node.js 22+

@@ -2,7 +2,7 @@ export type NavigationEntry = {
   label: string;
   href: string;
   description: string;
-  section: "Operator" | "Advanced" | "Workflow";
+  section: "Operator" | "Advanced";
   keywords: string[];
 };
 
@@ -43,6 +43,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["claims", "events", "proof", "audit"],
   },
   {
+    label: "Inventory",
+    href: "/inventory",
+    description: "Browse assets, owners, scope, tests, vulnerabilities, and graph context.",
+    section: "Operator",
+    keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities"],
+  },
+  {
     label: "Impact map",
     href: "/impact",
     description: "Entity impact graph and related risk blast radius.",
@@ -57,11 +64,11 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["audit packet", "export", "report", "evidence"],
   },
   {
-    label: "Data connectors",
+    label: "Connectors",
     href: "/connectors",
-    description: "Source runtime freshness and ingestion health.",
+    description: "Connector library, credentials, source runtime freshness, and ingestion health.",
     section: "Operator",
-    keywords: ["runtimes", "sources", "connectors", "freshness"],
+    keywords: ["runtimes", "sources", "connectors", "freshness", "mission control"],
   },
 ];
 
@@ -73,62 +80,9 @@ export const utilityLinks: NavigationEntry[] = [
     section: "Advanced",
     keywords: ["openapi", "status", "developer", "api"],
   },
-  {
-    label: "Operations",
-    href: "/workflows",
-    description: "Source, runtime, finding, report, and graph workflow explorers.",
-    section: "Advanced",
-    keywords: ["workflow", "operations", "explorer"],
-  },
-];
-
-export const workflowLinks: NavigationEntry[] = [
-  {
-    label: "Security event timeline",
-    href: "/workflows/timeline",
-    description: "Replay and inspect canonical security finding events.",
-    section: "Workflow",
-    keywords: ["timeline", "events", "workflow", "event registry"],
-  },
-  {
-    label: "Workflow sources",
-    href: "/workflows/sources",
-    description: "Explore source catalog operations.",
-    section: "Workflow",
-    keywords: ["sources", "catalog", "workflow"],
-  },
-  {
-    label: "Workflow runtimes",
-    href: "/workflows/runtimes",
-    description: "Explore runtime configuration and sync workflows.",
-    section: "Workflow",
-    keywords: ["runtimes", "sync", "workflow"],
-  },
-  {
-    label: "Workflow findings",
-    href: "/workflows/findings",
-    description: "Explore finding operations and evaluations.",
-    section: "Workflow",
-    keywords: ["findings", "evaluation", "workflow"],
-  },
-  {
-    label: "Workflow reports",
-    href: "/workflows/reports",
-    description: "Explore report definition and run APIs.",
-    section: "Workflow",
-    keywords: ["reports", "runs", "workflow"],
-  },
-  {
-    label: "Workflow graph",
-    href: "/workflows/graph",
-    description: "Explore graph neighborhood and impact APIs.",
-    section: "Workflow",
-    keywords: ["graph", "impact", "workflow"],
-  },
 ];
 
 export const navigationEntries = [
   ...operatorNavLinks,
   ...utilityLinks,
-  ...workflowLinks,
 ];

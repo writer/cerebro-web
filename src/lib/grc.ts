@@ -76,6 +76,10 @@ export type GRCConnector = {
   tenant_id?: string;
   status: string;
   freshness: string;
+  sync_lag_seconds?: number;
+  checkpoint_watermark?: string;
+  watermark_lag_seconds?: number;
+  watermark_freshness?: string;
   last_synced_at?: string;
 };
 
@@ -97,6 +101,136 @@ export type GRCGraph = {
   root?: GRCGraphNode;
   neighbors?: GRCGraphNode[];
   relations?: GRCGraphRelation[];
+};
+
+export type GRCInventoryCategory = {
+  id: string;
+  label: string;
+  entity_types: string[];
+  count: number;
+};
+
+export type GRCInventoryAsset = {
+  urn: string;
+  entity_type: string;
+  label: string;
+  source_id?: string;
+  runtime_id?: string;
+  risk_score?: number;
+  risk_level?: string;
+  risk_reasons?: string[];
+  scope_state?: "in_scope" | "out_of_scope" | string;
+  scope_reason?: string;
+  scope_updated_at?: string;
+  asset_report_count?: number;
+  latest_asset_report_status?: string;
+  latest_asset_report_reason?: string;
+  latest_asset_report_updated_at?: string;
+  attributes?: Record<string, string>;
+};
+
+export type GRCInventoryAssetReport = {
+  id: string;
+  tenant_id: string;
+  asset_urn: string;
+  source_id?: string;
+  reason: string;
+  reporter?: string;
+  triage_status: "submitted" | "in_triage" | "accepted" | "rejected" | "resolved" | string;
+  triage_reason?: string;
+  triaged_by?: string;
+  triaged_at?: string;
+  attributes?: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GRCInventorySummary = {
+  total_assets: number;
+  in_scope_assets: number;
+  out_of_scope_assets: number;
+  high_risk_assets: number;
+  unassigned_assets: number;
+  org_groups: number;
+  public_assets: number;
+  scoped_coverage_pct: number;
+  assigned_coverage_pct: number;
+};
+
+export type GRCInventoryCategoriesResponse = {
+  categories: GRCInventoryCategory[];
+  generated_at: string;
+};
+
+export type GRCInventoryAssetsResponse = {
+  assets: GRCInventoryAsset[];
+  summary?: GRCInventorySummary;
+  generated_at: string;
+};
+
+export type GRCInventoryTest = {
+  name: string;
+  owner: string;
+  status: string;
+  due_at?: string;
+  control_id?: string;
+  framework?: string;
+  finding_id?: string;
+  finding_title?: string;
+};
+
+export type GRCInventoryVulnerability = {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  source_id?: string;
+  finding_id?: string;
+};
+
+export type GRCInventoryTimelineEvent = {
+  at?: string;
+  kind: string;
+  title: string;
+  description?: string;
+  status?: string;
+};
+
+export type GRCInventoryAction = {
+  title: string;
+  description: string;
+  priority: string;
+  href?: string;
+};
+
+export type GRCInventoryAssetDetail = {
+  asset: GRCInventoryAsset;
+  graph?: GRCGraph;
+  findings: GRCFinding[];
+  evidence: GRCEvidence[];
+  controls: GRCControl[];
+  tests: GRCInventoryTest[];
+  vulnerabilities: GRCInventoryVulnerability[];
+  asset_reports?: GRCInventoryAssetReport[];
+  timeline?: GRCInventoryTimelineEvent[];
+  actions?: GRCInventoryAction[];
+  generated_at: string;
+};
+
+export type GRCResourceScopeRuntime = {
+  runtime_id: string;
+  tenant_id?: string;
+  owner?: string;
+  family?: string;
+  status: string;
+};
+
+export type GRCResourceScopeResponse = {
+  source_id: string;
+  runtimes: GRCResourceScopeRuntime[];
+  resources: GRCInventoryAsset[];
+  summary?: GRCInventorySummary;
+  generated_at: string;
 };
 
 export type GRCDashboard = {
@@ -177,6 +311,26 @@ export const displayDate = (value?: string) => {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+};
+
+export const displayDurationSeconds = (value?: number) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  const seconds = Math.max(0, value);
+  if (seconds < 60) {
+    return `${Math.round(seconds)}s`;
+  }
+  const minutes = seconds / 60;
+  if (minutes < 60) {
+    return `${Math.round(minutes)}m`;
+  }
+  const hours = minutes / 60;
+  if (hours < 48) {
+    return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)}h`;
+  }
+  const days = hours / 24;
+  return `${days < 10 ? days.toFixed(1) : Math.round(days)}d`;
 };
 
 export const humanize = (value?: string) =>
