@@ -81,7 +81,7 @@ PROHIBITED_PATTERNS = [
     re.compile(r"ghcr\.io/writerinternal/"),
     re.compile(r"arn:aws:iam::\d{12}:"),
     re.compile(
-        r"\bWriterInternal/(security-tooling-map|trusted-endpoint|aurelius|seclift|npm-guard|vulnerabilities|security-reviewer|panopticon|dast|writer-vuln-miner|mender|tiresias|2password|huggingface-vanta-connector|strix)\b",
+        r"\bWriterInternal/(security-tooling-map|trusted-endpoint|aurelius|seclift|npm-guard|vulnerabilities|security-reviewer|panopticon|dast|writer-vuln-miner|mender|tiresias|2password|huggingface-[a-z0-9-]+-connector|strix)\b",
         re.IGNORECASE,
     ),
     re.compile(
