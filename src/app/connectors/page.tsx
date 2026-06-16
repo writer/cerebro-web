@@ -29,10 +29,12 @@ import {
   connectorDefinitionStatus,
   connectorDefinitionValidationLabel,
   connectorCatalogStatusLabel,
+  connectorAccessStatusLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
   connectorIsCatalogOnly,
   connectorRuntimeSurfaceLabel,
+  connectorSetupAllowed,
   normalizeCredentialStores,
 } from "@/lib/connectors";
 import {
@@ -147,8 +149,9 @@ function ConnectorLibraryRow({
   const healthy = connectorHealthyTotal(card);
   const attention = connectorAttentionTotal(card);
   const catalogOnly = connectorIsCatalogOnly(card);
+  const setupAllowed = connectorSetupAllowed(card);
   const primaryAction = connectorPrimaryAction(card);
-  const href = connectorPath(card.source_id, { tenant_id: tenantID, tab: status === "not_configured" && !catalogOnly ? "setup" : undefined });
+  const href = connectorPath(card.source_id, { tenant_id: tenantID, tab: status === "not_configured" && setupAllowed && !catalogOnly ? "setup" : undefined });
   const statusDescription = readinessDescriptions[status];
   const latestActivity = card.coverage?.latest_activity_at ? displayDate(card.coverage.latest_activity_at) : "Not observed";
 
@@ -189,6 +192,11 @@ function ConnectorLibraryRow({
                   {connectorRuntimeSurfaceLabel(card)}
                 </span>
               )}
+              {card.access_status && card.access_status !== "available" && (
+                <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-100">
+                  {connectorAccessStatusLabel(card.access_status)}
+                </span>
+              )}
               {capabilities.length === 0 && !meta.authBadge && !card.catalog_status && <span className="text-[12px] text-[var(--text-muted)]">No advertised capabilities</span>}
             </div>
           </div>
@@ -209,6 +217,11 @@ function ConnectorLibraryRow({
       {status !== "healthy" && status !== "not_configured" && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
           <span className="font-semibold">Next action:</span> {card.coverage?.next_action || card.nextAction || statusDescription}
+        </div>
+      )}
+      {!setupAllowed && card.access_reason && (
+        <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">Access:</span> {card.access_reason}
         </div>
       )}
     </article>

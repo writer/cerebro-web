@@ -4,6 +4,7 @@ import {
   connectorDisplayName,
   connectorIsCatalogOnly,
   connectorSearchText,
+  connectorSetupAllowed,
   connectorStatus,
 } from "@/lib/connectors";
 import type { SourceCoverageSummary, SourceReadiness } from "@/lib/mission-control";
@@ -84,6 +85,7 @@ export function connectorAttentionTotal(card: ConnectorCard) {
 
 export function connectorPrimaryAction(card: ConnectorCard) {
   if (connectorIsCatalogOnly(card)) return "Inspect";
+  if (!connectorSetupAllowed(card)) return card.requestable ? "Inspect" : "View";
   const status = compactConnectorStatus(card);
   if (status === "not_configured") return "Connect";
   if (status === "healthy") return "View";
@@ -165,7 +167,11 @@ export function buildConnectorCards(library: ConnectorCatalogEntry[], sources: S
       ...connector,
       coverage,
       readiness,
-      nextAction: coverage?.next_action ?? ((connector.configured_runtimes ?? 0) > 0 ? "Monitor connection health" : "Connect credential"),
+      nextAction: coverage?.next_action ?? (
+        !connectorSetupAllowed(connector)
+          ? (connector.access_reason || "Inspect connector availability")
+          : ((connector.configured_runtimes ?? 0) > 0 ? "Monitor connection health" : "Connect credential")
+      ),
     };
   });
   sources.forEach((source) => {
