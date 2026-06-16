@@ -49,9 +49,44 @@ describe("current user identity", () => {
     expect(user).toMatchObject({
       email: "first.last+dev@example.com",
       initials: "FL",
+      username: "first.last+dev@example.com",
       source: "headers",
     });
     expect(currentUserActor(user)).toBe("first.last+dev@example.com");
+  });
+
+  it("promotes email-shaped auth usernames into email and username fields", () => {
+    const user = currentUserFromHeaders(new Headers({
+      "x-auth-request-user": "Session.User@Example.COM",
+    }));
+
+    expect(user).toMatchObject({
+      displayName: "Session.User@Example.COM",
+      email: "session.user@example.com",
+      initials: "SU",
+      username: "Session.User@Example.COM",
+      source: "headers",
+    });
+    expect(currentUserActor(user)).toBe("session.user@example.com");
+  });
+
+  it("extracts Cloudflare Access identities backed by Okta", () => {
+    const user = currentUserFromHeaders(new Headers({
+      "cf-access-authenticated-user-email": "okta.person@example.com",
+      "cf-access-jwt-assertion": jwtWithPayload({
+        email: "okta.person@example.com",
+        name: "Okta Person",
+        sub: "okta-subject",
+      }),
+    }));
+
+    expect(user).toMatchObject({
+      displayName: "okta.person@example.com",
+      email: "okta.person@example.com",
+      initials: "OP",
+      username: "okta.person@example.com",
+      source: "headers",
+    });
   });
 
   it("sanitizes identity strings from headers", () => {
@@ -125,6 +160,25 @@ describe("current user identity", () => {
       email: "local.user@example.com",
       initials: "LU",
       username: "local.user",
+      source: "jwt",
+    });
+  });
+
+  it("promotes email-shaped JWT preferred usernames when email is absent", () => {
+    const user = currentUserFromHeaders(new Headers({
+      "cf-access-jwt-assertion": jwtWithPayload({
+        preferred_username: "okta.jwt@example.com",
+        name: "JWT User",
+        sub: "okta-jwt-subject",
+      }),
+    }));
+
+    expect(user).toMatchObject({
+      displayName: "JWT User",
+      email: "okta.jwt@example.com",
+      initials: "JU",
+      subject: "okta-jwt-subject",
+      username: "okta.jwt@example.com",
       source: "jwt",
     });
   });
