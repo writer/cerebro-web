@@ -10,12 +10,16 @@ import {
   connectorCredentialRotatePath,
   connectorCredentialsPath,
   connectorCredentialStatusLabel,
+  connectorDefinitionOriginLabel,
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStatus,
   connectorDisplayMetadata,
+  connectorIntegrationDepthLabel,
   connectorIsCatalogOnly,
   connectorMatchesSlug,
+  connectorReadinessStageLabel,
+  connectorRequestActionLabel,
   connectorRuntimeSurfaceLabel,
   connectorSearchText,
   connectorSetupAllowed,
@@ -142,9 +146,17 @@ describe("connector catalog metadata", () => {
       source_id: "auth0",
       name: "Auth0",
       catalog_status: "generateable",
+      catalog_schema_version: "cerebro.integration/v1",
+      catalog_source_path: "catalog/identity.yaml",
+      definition_origin: "builtin_catalog",
+      readiness_stage: "sourcegen_ready",
+      integration_depth: { level: "ready", score: 68, resource_families: 2, coverage_dimensions: 4 },
       access_status: "catalog_only",
       access_reason: "Catalog definition is sourcegen-ready, but setup is not enabled by this API.",
       setup_allowed: false,
+      requestable: true,
+      requestable_reason: "Catalog definition is sourcegen-ready, but setup is not enabled by this API.",
+      request_access_action: "Request connector",
       runtime_executable: true,
       auth_model: "oauth_client_credentials",
       verification_endpoint: "/users",
@@ -157,6 +169,10 @@ describe("connector catalog metadata", () => {
 
     expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Sourcegen ready");
     expect(connectorAccessStatusLabel(connector.access_status)).toBe("Catalog only");
+    expect(connectorReadinessStageLabel(connector.readiness_stage)).toBe("Sourcegen ready");
+    expect(connectorDefinitionOriginLabel(connector.definition_origin)).toBe("Built-in catalog");
+    expect(connectorIntegrationDepthLabel(connector)).toBe("Ready · 68/100");
+    expect(connectorRequestActionLabel(connector)).toBe("Request connector");
     expect(connectorSetupAllowed(connector)).toBe(false);
     expect(connectorIsCatalogOnly(connector)).toBe(true);
     expect(connectorRuntimeSurfaceLabel(connector)).toBe("Sourcegen ready");
@@ -167,6 +183,7 @@ describe("connector catalog metadata", () => {
     expect(connectorSearchText(connector)).toContain("oauth_client_credentials");
     expect(connectorSearchText(connector)).toContain("/roles");
     expect(connectorSearchText(connector)).toContain("sourcegen-ready");
+    expect(connectorSearchText(connector)).toContain("catalog/identity.yaml");
   });
 
   it("treats advertised connection methods as a live runtime surface", () => {
@@ -191,13 +208,20 @@ describe("connector catalog metadata", () => {
       catalog_status: "generateable",
       access_status: "restricted",
       access_reason: "limited preview",
+      readiness_stage: "api_restricted",
+      integration_depth: { level: "deep", score: 84 },
       setup_allowed: false,
       requestable: true,
+      requestable_reason: "limited preview",
+      request_access_action: "Request in Access Hub",
+      request_access_url: "https://access.example.com/request?source=aws",
       runtime_executable: true,
       connection_methods: [{ id: "encrypted_submission" }],
     };
 
     expect(connectorAccessStatusLabel(connector.access_status)).toBe("Restricted");
+    expect(connectorReadinessStageLabel(connector.readiness_stage)).toBe("API restricted");
+    expect(connectorRequestActionLabel(connector)).toBe("Request in Access Hub");
     expect(connectorSetupAllowed(connector)).toBe(false);
     expect(connectorRuntimeSurfaceLabel(connector)).toBe("Restricted");
     expect(connectorSearchText(connector)).toContain("limited preview");
