@@ -54,17 +54,17 @@ export default function ImpactPage() {
     <div className="space-y-6">
       <PageHeader
         title="Impact Map"
-        description="Entity impact graph and related risk blast radius."
+        description="Entity impact graph and affected risk paths."
         action={
           <div className="flex items-center gap-2">
             {selectedRoot && (
               <AskAboutLink
                 variant="button"
-                question={`What is the blast radius of ${selectedRoot} and which findings depend on it?`}
+                question={`Which entities are affected by ${selectedRoot} and which findings depend on it?`}
                 scopeUrn={selectedRoot}
                 title="Ask about this entity"
               >
-                Ask Cerebro
+                Ask
               </AskAboutLink>
             )}
             <button type="button" onClick={refreshImpact} disabled={!canRefresh} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600 disabled:opacity-50">

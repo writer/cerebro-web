@@ -48,7 +48,7 @@ export default function AskInput({
     <form onSubmit={onFormSubmit} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Ask Cerebro</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Ask graph</div>
           <p className="mt-1 text-[13px] text-slate-500">
             Best results come from a concrete entity, relationship, or finding question. Scope narrows graph access when provided.
           </p>

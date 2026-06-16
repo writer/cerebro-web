@@ -56,7 +56,7 @@ describe("Ask stream contract", () => {
 
   it("parses agent progress events", () => {
     const status = parseAskEventBlock(
-      'event: agent_status\ndata: {"stage":"connect","label":"Connecting to Cerebro MCP","mode":"agent"}',
+      'event: agent_status\ndata: {"stage":"connect","label":"Connecting to graph tools","mode":"agent"}',
     );
     const tool = parseAskEventBlock(
       'event: agent_tool\ndata: {"name":"cerebro.findings.search","status":"completed","detail":"Result received"}',
@@ -65,7 +65,7 @@ describe("Ask stream contract", () => {
 
     expect(status).toEqual({
       type: "agent_status",
-      data: { stage: "connect", label: "Connecting to Cerebro MCP", mode: "agent" },
+      data: { stage: "connect", label: "Connecting to graph tools", mode: "agent" },
     });
     expect(tool).toEqual({
       type: "agent_tool",
@@ -113,7 +113,7 @@ describe("Ask stream contract", () => {
       type: "error",
       data: {
         code: "stream_incomplete",
-        message: "Cerebro closed the stream before sending a done or error event.",
+        message: "The response stream ended before completion.",
         retryable: true,
       },
     });

@@ -45,7 +45,7 @@ const awsSecretStores: NormalizedCredentialStore[] = [{
   available: true,
   default: true,
   status: "ready",
-  detail: "native resolver ready",
+  detail: "server-side resolver ready",
   referencePrefixes: ["env:", "aws-sm:"],
   referenceNamespaceTemplate: "cerebro/<tenant>/<source>/<runtime>/credentials",
   referenceFieldTemplate: "aws-sm:<region>:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
@@ -57,9 +57,9 @@ const awsSecretStores: NormalizedCredentialStore[] = [{
 
 const vaultCredentialStores: NormalizedCredentialStore[] = [{
   id: "cerebro_vault",
-  label: "Cerebro Vault",
+  label: "Managed credential vault",
   shortLabel: "Vault",
-  provider: "Cerebro",
+  provider: "Backend",
   description: "Encrypted connector credential envelopes.",
   mode: "encrypted_submission",
   available: true,
@@ -244,7 +244,7 @@ describe("ConnectorSetupForm", () => {
     expect(secretKeyInput?.value).toBe("aws-sm:us-east-1:cerebro/writer/aws/writer-aws-connection/credentials#secret_access_key");
   });
 
-  it("lists stored Cerebro Vault credentials and revokes the selected record", async () => {
+  it("lists stored managed vault credentials and revokes the selected record", async () => {
     fetchCerebroMock.mockImplementation(async (path: string) => {
       if (path === "/connectors/anthropic/credentials?tenant_id=writer&runtime_id=writer-anthropic-connection") {
         return {

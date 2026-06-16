@@ -75,7 +75,7 @@ describe("product UI contract", () => {
     expect(statusSource).toContain("Runtime Health");
     expect(primitivesSource).toContain("RuntimeRecoveryBlock");
     expect(primitivesSource).toContain("/developer#quick-status");
-    expect(runtimeStateSource).toContain("Cerebro API unavailable");
+    expect(runtimeStateSource).toContain("API unavailable");
     expect(runtimeStateSource).toContain("metricDetailForState");
   });
 

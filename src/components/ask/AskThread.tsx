@@ -44,7 +44,7 @@ const guidanceForError = (turn: AskTurnState) => {
   const code = turn.error?.code ?? "";
   if (code === "aborted") return "Stopped locally. Retry when you are ready to continue.";
   if (code === "stream_incomplete") return "The stream ended early. Retry usually fixes transient upstream disconnects.";
-  if (code === "http_401" || code === "http_403") return "Check your Cerebro API key and tenant scope.";
+  if (code === "http_401" || code === "http_403") return "Check your API key and tenant scope.";
   if (code === "http_408" || code === "http_429" || code.startsWith("http_5")) return "This looks retryable. Try again or narrow the scope.";
   return "Review the trace and retry with a narrower question if needed.";
 };
@@ -193,7 +193,7 @@ export default function AskThread({ turns, activeTurnId, onRetry, onStop }: Prop
 
               {isStalled && !turn.error && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-800">
-                  Still waiting for Cerebro. You can stop this run and retry with a narrower scope.
+                  Still waiting for a response. You can stop this run and retry with a narrower scope.
                 </div>
               )}
 
@@ -244,7 +244,7 @@ export default function AskThread({ turns, activeTurnId, onRetry, onStop }: Prop
                   <CypherBlock cypher={turn.cypher.cypher} validator={turn.cypher.validator} />
                   {!turn.cypher.validator.ok && (
                     <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-[13px] text-rose-800">
-                      Cerebro refused to execute this query. Try asking for a read-only summary, adding an entity scope, or reducing the requested row count.
+                      Query execution was refused. Try asking for a read-only summary, adding an entity scope, or reducing the requested row count.
                     </div>
                   )}
                 </section>

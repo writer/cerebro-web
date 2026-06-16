@@ -61,7 +61,7 @@ export default function ControlsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Controls"
-        description="Control posture, failing objectives, and mapped findings."
+        description="Control status, failing objectives, mapped findings, and evidence gaps."
         action={
           <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
             Refresh

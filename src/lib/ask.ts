@@ -383,7 +383,7 @@ async function* streamAskEndpoint(
       type: "error",
       data: normalizeAskError(
         "stream_incomplete",
-        "Cerebro closed the stream before sending a done or error event.",
+        "The response stream ended before completion.",
         true,
       ),
     };

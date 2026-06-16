@@ -178,7 +178,7 @@ async function streamAgentRun(
 
   controller.enqueue(sse("agent_status", {
     stage: "connect",
-    label: "Connecting to Cerebro MCP",
+    label: "Connecting to graph tools",
     detail: new URL(mcpUrl).pathname,
     mode: "agent",
   }));
@@ -402,7 +402,7 @@ const emitAgentStreamEvent = (
       controller.enqueue(sse("agent_tool", {
         name: toolNameFromItem(event.item),
         status: "started",
-        detail: "Calling Cerebro MCP",
+        detail: "Calling graph tools",
       }));
     }
     if (event.name === "tool_output") {

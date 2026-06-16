@@ -811,10 +811,10 @@ const credentialStoreCatalog: Record<
 > = {
   cerebro_vault: {
     id: "cerebro_vault",
-    label: "Cerebro Vault",
+    label: "Managed credential vault",
     shortLabel: "Vault",
-    provider: "Cerebro",
-    description: "Cerebro-managed encrypted credential envelope for connector runtime secrets.",
+    provider: "Backend",
+    description: "Encrypted credential envelope for connector runtime secrets.",
     mode: "encrypted_submission",
   },
   google_secret_manager: {
@@ -1037,7 +1037,7 @@ export const connectionMethodsForConnector = (
           label: "AWS IAM Identity Center",
           shortLabel: "IAM Identity Center",
           status: availableEnvironmentStore ? "ready" as const : "unavailable" as const,
-          description: "Use the AWS CLI browser/device-code flow, then hand Cerebro a deployment-managed profile or role reference. No AWS secret key is typed into the browser.",
+          description: "Use the AWS CLI browser/device-code flow, then save a deployment-managed profile or role reference. No AWS secret key is typed into the browser.",
           credential_stores: ["environment_managed"],
           config_fields: [
             { key: "account_id", label: "Account ID", required: true },
@@ -1053,7 +1053,7 @@ export const connectionMethodsForConnector = (
             "aws sts get-caller-identity --profile cerebro-aws",
           ],
           steps: [
-            "Configure or select an AWS SSO profile for the account Cerebro should read.",
+            "Configure or select an AWS SSO profile for the account this source should read.",
             "Complete the CLI login in the browser or with a device code.",
             "Verify the caller identity, then store the profile/role reference in the selected secret store.",
           ],
@@ -1065,7 +1065,7 @@ export const connectionMethodsForConnector = (
       label: "Infisical CLI handoff",
       shortLabel: "Infisical",
       status: availableEnvironmentStore ? "ready" : "unavailable",
-      description: `Authenticate with Infisical locally and place ${displayName} connection material in an environment-managed path. Cerebro should consume the reference server-side.`,
+      description: `Authenticate with Infisical locally and place ${displayName} connection material in an environment-managed path. The backend should consume the reference server-side.`,
       credential_stores: ["environment_managed"],
       config_fields: fieldSetForConnector(connector.source_id).config,
       credential_fields: referenceFields(fieldSetForConnector(connector.source_id).credentials, connector.source_id),
@@ -1079,7 +1079,7 @@ export const connectionMethodsForConnector = (
       steps: [
         "Confirm the CLI session or complete SSO in Infisical.",
         "Choose the project, environment, and connector path that deployment automation will read.",
-        "Save only the reference metadata in Cerebro; do not paste Infisical tokens into this page.",
+        "Save only reference metadata; do not paste Infisical tokens into this page.",
       ],
       disabledReason: availableEnvironmentStore ? undefined : "Infisical handoff needs an environment-managed store advertised by the backend.",
     },
@@ -1088,14 +1088,14 @@ export const connectionMethodsForConnector = (
       label: "Secret store reference",
       shortLabel: "Secret store",
       status: availableReferenceStore ? "ready" : "unavailable",
-      description: "Point Cerebro at a deployment-owned secret store reference such as GSM, AWS Secrets Manager, Azure Key Vault, or environment-managed material.",
+      description: "Use a deployment-owned secret store reference such as GSM, AWS Secrets Manager, Azure Key Vault, or environment-managed material.",
       credential_stores: ["infisical", "google_secret_manager", "aws_secrets_manager", "azure_key_vault", "hashicorp_vault"],
       config_fields: fieldSetForConnector(connector.source_id).config,
       credential_fields: referenceFields(fieldSetForConnector(connector.source_id).credentials, connector.source_id),
       saveable: Boolean(availableReferenceStore),
       commands: [],
       steps: [
-        "Choose the store advertised by this Cerebro deployment.",
+        "Choose the store advertised by this deployment.",
         "Create or rotate secret material outside the browser.",
         "Submit non-secret connection metadata and let the backend resolve the reference.",
       ],
@@ -1116,7 +1116,7 @@ export const connectionMethodsForConnector = (
       steps: [
         "Select an available encrypted credential store.",
         "Enter only the credential fields required for the connector.",
-        "Cerebro stores the encrypted credential payload and never returns secret values to the frontend.",
+        "The backend stores the encrypted credential payload and never returns secret values to the frontend.",
       ],
       disabledReason: availableEncryptedStore ? undefined : "Encrypted submission is unavailable until Cerebro advertises a ready vault and transport key.",
     },
@@ -1222,7 +1222,7 @@ const connectionMethodSteps = (id: ConnectorConnectionMethodID): ConnectorSetupS
       return [
         { id: "authenticate", label: "Authenticate the AWS CLI profile on the server." },
         { id: "save_profile", label: "Save the profile and account configuration." },
-        { id: "validate", label: "Cerebro validates the source before persisting the runtime." },
+        { id: "validate", label: "Preflight validates the source before persisting the runtime." },
       ];
     case "infisical_cli":
       return [
@@ -1234,7 +1234,7 @@ const connectionMethodSteps = (id: ConnectorConnectionMethodID): ConnectorSetupS
       return [
         { id: "populate", label: "Populate the referenced environment values in the runtime." },
         { id: "submit", label: "Submit references and non-secret config." },
-        { id: "validate", label: "Cerebro validates before saving." },
+        { id: "validate", label: "Preflight validates before saving." },
       ];
     case "external_reference":
       return [
@@ -1246,8 +1246,8 @@ const connectionMethodSteps = (id: ConnectorConnectionMethodID): ConnectorSetupS
     default:
       return [
         { id: "enter", label: "Enter the required credential fields." },
-        { id: "encrypt", label: "The browser encrypts the payload with Cerebro's transit key." },
-        { id: "store", label: "Cerebro validates and stores a sealed credential reference." },
+        { id: "encrypt", label: "The browser encrypts the payload with the connector transit key." },
+        { id: "store", label: "Preflight validates and stores a sealed credential reference." },
       ];
   }
 };
@@ -1476,7 +1476,7 @@ export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | n
         ? detail || "Credential transport or vault is unavailable."
         : status === "needs_configuration"
           ? "Enable this store in the Cerebro backend configuration."
-          : "Not advertised by this Cerebro deployment.";
+          : "Not advertised by this deployment.";
     return {
       ...catalog,
       label,

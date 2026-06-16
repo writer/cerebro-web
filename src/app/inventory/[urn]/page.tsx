@@ -104,7 +104,7 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
             </p>
           </div>
           <div className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-5 py-3 text-[12px] font-medium text-[var(--text-secondary)]">
-            <span className="mr-2 text-[var(--primary)]">✦</span>Summarized by Cerebro
+            <span className="mr-2 text-[var(--primary)]">✦</span>Generated summary
           </div>
         </section>
 
