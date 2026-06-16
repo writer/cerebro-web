@@ -38,9 +38,13 @@ import type {
 import {
   connectorAccessStatusLabel,
   connectorCatalogStatusLabel,
+  connectorDefinitionOriginLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
+  connectorIntegrationDepthLabel,
   connectorIsCatalogOnly,
+  connectorReadinessStageLabel,
+  connectorRequestActionLabel,
   connectorRuntimeSurfaceLabel,
   connectorSetupAllowed,
   normalizeCredentialStores,
@@ -337,11 +341,11 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Readiness</div>
-          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connectorCatalogStatusLabel(connector.catalog_status)}</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connectorReadinessStageLabel(connector.readiness_stage || connector.catalog_status)}</div>
         </div>
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Auth</div>
-          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{humanize(connector.auth_model || "unknown")}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Depth</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"}</div>
         </div>
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Families</div>
@@ -350,6 +354,20 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Verification</div>
           <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.verification_endpoint || "Not advertised"}</div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Auth</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{humanize(connector.auth_model || "unknown")}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Origin</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connectorDefinitionOriginLabel(connector.definition_origin)}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Catalog path</div>
+          <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.catalog_source_path || connector.catalog_schema_version || "Not cataloged"}</div>
         </div>
       </div>
       {connector.missing_features && connector.missing_features.length > 0 && (
@@ -382,6 +400,7 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
 
 function CatalogSetupNotice({ connector }: { connector: ConnectorCatalogEntry }) {
   const accessLabel = connectorAccessStatusLabel(connector.access_status);
+  const requestHref = connector.request_access_url?.trim();
   const availabilityDetail = connector.access_reason || (
     connector.runtime_executable
       ? "Generate and register the source runtime before saving connections."
@@ -405,6 +424,17 @@ function CatalogSetupNotice({ connector }: { connector: ConnectorCatalogEntry })
             <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Classifier</div>
               <div className="mt-1 text-[var(--text-primary)]">{humanize(connector.classifier_output)}</div>
+            </div>
+          )}
+          {connector.requestable && (
+            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Request path</div>
+              <div className="mt-1 text-[var(--text-primary)]">{connector.requestable_reason || connector.access_reason || "This connector can be requested for this deployment."}</div>
+              {requestHref && (
+                <a href={requestHref} target="_blank" rel="noreferrer" className="primary-button mt-3 inline-flex px-3 py-2 text-[12px]">
+                  {connectorRequestActionLabel(connector)}
+                </a>
+              )}
             </div>
           )}
         </div>
@@ -669,6 +699,9 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               <div><span className="text-[var(--text-muted)]">Catalog</span><div>{connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"}</div></div>
               <div><span className="text-[var(--text-muted)]">Runtime surface</span><div>{connectorRuntimeSurfaceLabel(connector)}</div></div>
               <div><span className="text-[var(--text-muted)]">Access</span><div>{connectorAccessStatusLabel(connector.access_status)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Stage</span><div>{connectorReadinessStageLabel(connector.readiness_stage)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Depth</span><div>{connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"}</div></div>
+              <div><span className="text-[var(--text-muted)]">Origin</span><div>{connectorDefinitionOriginLabel(connector.definition_origin)}</div></div>
               <div><span className="text-[var(--text-muted)]">Auth model</span><div>{humanize(connector.auth_model || "unknown")}</div></div>
             </div>
           </details>
@@ -713,6 +746,8 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                 ["Catalog", connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"],
                 ["Runtime", connectorRuntimeSurfaceLabel(connector)],
                 ["Access", connectorAccessStatusLabel(connector.access_status)],
+                ["Stage", connectorReadinessStageLabel(connector.readiness_stage)],
+                ["Depth", connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"],
                 ["Provider", meta.provider],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4 border-b border-[color:var(--border)] pb-2 last:border-0 last:pb-0">

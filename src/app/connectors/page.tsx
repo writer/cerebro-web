@@ -30,6 +30,9 @@ import {
   connectorDefinitionValidationLabel,
   connectorCatalogStatusLabel,
   connectorAccessStatusLabel,
+  connectorIntegrationDepthLabel,
+  connectorReadinessStageLabel,
+  connectorRequestActionLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
   connectorIsCatalogOnly,
@@ -64,7 +67,7 @@ import {
 } from "@/lib/mission-control";
 import { useQueryParamState } from "@/lib/query-params";
 
-type LibraryTab = "all" | "attention" | "connected" | "available";
+type LibraryTab = "all" | "attention" | "connected" | "available" | "backlog";
 
 const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
@@ -73,6 +76,7 @@ const libraryTabs: Array<{ id: LibraryTab; label: string; icon: ReactNode }> = [
   { id: "connected", label: "Connected", icon: <CheckCircle2 className="h-4 w-4" /> },
   { id: "attention", label: "Needs attention", icon: <AlertTriangle className="h-4 w-4" /> },
   { id: "available", label: "Available", icon: <PlugZap className="h-4 w-4" /> },
+  { id: "backlog", label: "Backlog", icon: <Bot className="h-4 w-4" /> },
   { id: "all", label: "All", icon: <Database className="h-4 w-4" /> },
 ];
 
@@ -81,6 +85,7 @@ function tabMatchesCard(tab: LibraryTab, card: ConnectorCard) {
   if (tab === "attention") return status !== "healthy" && status !== "not_configured";
   if (tab === "connected") return connectorRuntimeTotal(card) > 0;
   if (tab === "available") return connectorRuntimeTotal(card) === 0;
+  if (tab === "backlog") return !connectorSetupAllowed(card) && Boolean(card.requestable);
   return true;
 }
 
@@ -152,6 +157,7 @@ function ConnectorLibraryRow({
   const setupAllowed = connectorSetupAllowed(card);
   const primaryAction = connectorPrimaryAction(card);
   const href = connectorPath(card.source_id, { tenant_id: tenantID, tab: status === "not_configured" && setupAllowed && !catalogOnly ? "setup" : undefined });
+  const requestHref = !setupAllowed && card.requestable ? card.request_access_url?.trim() : "";
   const statusDescription = readinessDescriptions[status];
   const latestActivity = card.coverage?.latest_activity_at ? displayDate(card.coverage.latest_activity_at) : "Not observed";
 
@@ -197,20 +203,38 @@ function ConnectorLibraryRow({
                   {connectorAccessStatusLabel(card.access_status)}
                 </span>
               )}
+              {card.readiness_stage && (
+                <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {connectorReadinessStageLabel(card.readiness_stage)}
+                </span>
+              )}
+              {card.integration_depth && (
+                <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {connectorIntegrationDepthLabel(card)}
+                </span>
+              )}
               {capabilities.length === 0 && !meta.authBadge && !card.catalog_status && <span className="text-[12px] text-[var(--text-muted)]">No advertised capabilities</span>}
             </div>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-          <Link href={href} className={`${status === "not_configured" ? "primary-button" : "secondary-button"} inline-flex items-center gap-1.5 px-3 py-2 text-[12px]`}>
-            {primaryAction}
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          {requestHref ? (
+            <a href={requestHref} target="_blank" rel="noreferrer" className="primary-button inline-flex items-center gap-1.5 px-3 py-2 text-[12px]">
+              {connectorRequestActionLabel(card)}
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </a>
+          ) : (
+            <Link href={href} className={`${status === "not_configured" ? "primary-button" : "secondary-button"} inline-flex items-center gap-1.5 px-3 py-2 text-[12px]`}>
+              {primaryAction}
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
         <SourceSignal label="Connections" value={total} attention={total === 0} />
         <SourceSignal label="Healthy" value={`${healthy}/${Math.max(total, 1)}`} attention={total > 0 && healthy < total} />
+        <SourceSignal label="Depth" value={card.integration_depth ? connectorIntegrationDepthLabel(card) : "Unknown"} />
         <SourceSignal label="Action" value={attention} attention={attention > 0} />
         <SourceSignal label="Last activity" value={latestActivity} />
       </div>
@@ -222,6 +246,11 @@ function ConnectorLibraryRow({
       {!setupAllowed && card.access_reason && (
         <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
           <span className="font-semibold text-[var(--text-primary)]">Access:</span> {card.access_reason}
+        </div>
+      )}
+      {!setupAllowed && card.requestable_reason && card.requestable_reason !== card.access_reason && (
+        <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">Request:</span> {card.requestable_reason}
         </div>
       )}
     </article>
@@ -482,6 +511,50 @@ function CustomConnectorPanel({
   );
 }
 
+function CatalogDemandPanel({ cards, tenantID }: { cards: ConnectorCard[]; tenantID: string }) {
+  const requestable = cards.filter((card) => !connectorSetupAllowed(card) && card.requestable);
+  const sourcegenReady = requestable.filter((card) => card.readiness_stage === "sourcegen_ready").length;
+  const authNeeded = requestable.filter((card) => card.readiness_stage === "auth_extension_required").length;
+  const runtimeNeeded = requestable.filter((card) => card.readiness_stage === "runtime_required").length;
+  return (
+    <Panel title="Catalog demand" action={<Badge value={`${requestable.length} requestable`} />}>
+      <div className="grid grid-cols-3 gap-2">
+        <SourceSignal label="Sourcegen" value={sourcegenReady} />
+        <SourceSignal label="Auth" value={authNeeded} attention={authNeeded > 0} />
+        <SourceSignal label="Runtime" value={runtimeNeeded} attention={runtimeNeeded > 0} />
+      </div>
+      <div className="mt-3 space-y-2">
+        {requestable.slice(0, 4).map((card) => {
+          const requestHref = card.request_access_url?.trim();
+          const detailHref = connectorPath(card.source_id, { tenant_id: tenantID });
+          return (
+            <div key={card.source_id} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(card)}</div>
+                  <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+                    {connectorReadinessStageLabel(card.readiness_stage)} · {card.integration_depth ? connectorIntegrationDepthLabel(card) : "Depth unknown"}
+                  </div>
+                </div>
+                {requestHref ? (
+                  <a href={requestHref} target="_blank" rel="noreferrer" className="secondary-button shrink-0 px-2.5 py-1.5 text-[11px]">
+                    {connectorRequestActionLabel(card)}
+                  </a>
+                ) : (
+                  <Link href={detailHref} className="secondary-button shrink-0 px-2.5 py-1.5 text-[11px]">
+                    Inspect
+                  </Link>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {requestable.length === 0 && <EmptyBlock label="No catalog-only or restricted connectors are requestable." />}
+      </div>
+    </Panel>
+  );
+}
+
 function ConnectorViewControls({
   libraryTab,
   tabCounts,
@@ -624,6 +697,7 @@ export default function ConnectorsPage() {
     return filterConnectorCards(scoped, sourceQuery, readinessFilter);
   }, [cards, debouncedSourceID, libraryTab, readinessFilter, sourceQuery]);
   const connectedCards = cards.filter((card) => connectorRuntimeTotal(card) > 0);
+  const requestableCards = cards.filter((card) => !connectorSetupAllowed(card) && Boolean(card.requestable));
   const customDefinitions = definitionsQuery.data?.definitions ?? [];
   const attentionCards = cards.filter((card) => {
     const status = compactConnectorStatus(card);
@@ -634,7 +708,6 @@ export default function ConnectorsPage() {
   const runtimeState = runtimeStateForError(libraryQuery.error);
   const metricState: RuntimeState = libraryQuery.error ? runtimeState : libraryLoading ? "loading" : "ready";
   const totalConnections = cards.reduce((sum, card) => sum + connectorRuntimeTotal(card), 0);
-  const healthyConnections = cards.reduce((sum, card) => sum + connectorHealthyTotal(card), 0);
   const actionConnections = cards.reduce((sum, card) => sum + connectorAttentionTotal(card), 0);
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
@@ -654,6 +727,7 @@ export default function ConnectorsPage() {
     all: { title: "All sources", detail: "Every advertised source, connected or not." },
     attention: { title: "Sources needing attention", detail: "Fix failing, stale, or incomplete runtime signals first." },
     available: { title: "Available sources", detail: "Sources that are ready to connect." },
+    backlog: { title: "Connector backlog", detail: "Catalog-only and restricted sources that can be requested or promoted into setup." },
     connected: { title: "Connected sources", detail: "Monitor active sources and open their runtime details." },
   };
   const currentView = viewCopy[libraryTab];
@@ -695,7 +769,7 @@ export default function ConnectorsPage() {
           <MetricCard label="Needs Attention" value={attentionCards.length} detail={`${actionConnections} connection signals`} intent={attentionCards.length > 0 ? "warning" : "success"} state={metricState} />
         </div>
         <div className="hidden md:block">
-          <MetricCard label="Healthy" value={healthyConnections} detail="healthy connections" intent={healthyConnections > 0 ? "success" : "neutral"} state={metricState} />
+          <MetricCard label="Backlog" value={requestableCards.length} detail="requestable catalog sources" intent={requestableCards.length > 0 ? "warning" : "neutral"} state={metricState} />
         </div>
         <div className="hidden md:block">
           <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
@@ -810,6 +884,7 @@ export default function ConnectorsPage() {
 
         <div className="space-y-5">
           <CredentialStorePanel library={libraryQuery.data ?? undefined} />
+          <CatalogDemandPanel cards={cards} tenantID={debouncedTenantID} />
           <CustomConnectorPanel definitions={customDefinitions} error={definitionsQuery.error} onRetry={() => void definitionsQuery.reload()} tenantID={debouncedTenantID} />
           <ReadinessMix counts={readinessCounts} filter={readinessFilter} onFilter={setReadinessFilter} />
         </div>

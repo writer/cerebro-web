@@ -18,16 +18,28 @@ export type ConnectorCatalogEntry = {
   needs_attention_runtimes?: number;
   connection_methods?: ConnectorConnectionMethodInput[];
   scope_options?: ConnectorScopeOption[];
+  catalog_schema_version?: string;
+  catalog_current_version?: number;
+  catalog_source_path?: string;
+  definition_origin?: string;
+  readiness_stage?: ConnectorReadinessStage | string;
+  integration_depth?: ConnectorIntegrationDepth;
   access_status?: ConnectorAccessStatus | string;
   access_reason?: string;
   setup_allowed?: boolean;
   requestable?: boolean;
+  requestable_reason?: string;
+  request_access_url?: string;
+  request_access_action?: string;
 };
 
 export type ConnectorLibraryResponse = {
   connectors?: ConnectorCatalogEntry[];
+  generated_at?: string;
   tenant_id?: string;
   runtime_store?: string;
+  catalog_version?: string;
+  catalog_source_commit?: string;
   credential_transport?: {
     available?: boolean;
     algorithm?: string;
@@ -50,6 +62,29 @@ export type ConnectorAccessStatus =
   | "available"
   | "catalog_only"
   | "restricted";
+
+export type ConnectorReadinessStage =
+  | "setup_enabled"
+  | "api_restricted"
+  | "sourcegen_ready"
+  | "catalog_ready"
+  | "auth_extension_required"
+  | "runtime_required"
+  | "runtime_unknown";
+
+export type ConnectorIntegrationDepth = {
+  level?: string;
+  score?: number;
+  auth_model?: string;
+  resource_families?: number;
+  emitted_kinds?: number;
+  coverage_dimensions?: number;
+  high_value_families?: number;
+  projection_templates?: number;
+  scope_options?: number;
+  runtime_executable?: boolean;
+  setup_enabled?: boolean;
+};
 
 export type ConnectorCatalogResourceFamily = {
   id: string;
@@ -1289,6 +1324,59 @@ export const connectorAccessStatusLabel = (status?: string) => {
   }
 };
 
+export const connectorReadinessStageLabel = (stage?: string) => {
+  switch (stage) {
+    case "setup_enabled":
+      return "Setup enabled";
+    case "api_restricted":
+      return "API restricted";
+    case "sourcegen_ready":
+    case "generateable":
+      return "Sourcegen ready";
+    case "catalog_ready":
+      return "Catalog ready";
+    case "auth_extension_required":
+    case "needs_auth_extension":
+      return "Auth extension needed";
+    case "runtime_required":
+    case "needs_bespoke_runtime":
+      return "Runtime needed";
+    case "runtime_unknown":
+      return "Runtime unknown";
+    default:
+      return stage?.trim() || "Stage unknown";
+  }
+};
+
+export const connectorDefinitionOriginLabel = (origin?: string) => {
+  switch (origin) {
+    case "compiled_source":
+      return "Compiled source";
+    case "builtin_catalog":
+      return "Built-in catalog";
+    default:
+      return origin?.trim() || "Origin unknown";
+  }
+};
+
+export const connectorIntegrationDepthLabel = (
+  connector: Pick<ConnectorCatalogEntry, "integration_depth">,
+) => {
+  const depth = connector.integration_depth;
+  if (!depth) return "Depth unknown";
+  const level = depth.level?.trim() || "basic";
+  const score = typeof depth.score === "number" ? `${depth.score}/100` : "unscored";
+  return `${level.slice(0, 1).toUpperCase()}${level.slice(1)} · ${score}`;
+};
+
+export const connectorRequestActionLabel = (
+  connector: Pick<ConnectorCatalogEntry, "request_access_action" | "access_status">,
+) => {
+  const configured = connector.request_access_action?.trim();
+  if (configured) return configured;
+  return connector.access_status === "catalog_only" ? "Request connector" : "Request access";
+};
+
 export const connectorIsCatalogOnly = (
   connector: Pick<ConnectorCatalogEntry, "catalog_status" | "connection_methods" | "configured_runtimes" | "setup_allowed">,
 ) => Boolean(connector.catalog_status && !connectorSetupAllowed(connector) && (connector.configured_runtimes ?? 0) === 0);
@@ -1311,10 +1399,18 @@ export const connectorSearchText = (connector: ConnectorCatalogEntry) =>
     connector.description,
     connector.status,
     connector.catalog_status,
+    connector.catalog_schema_version,
+    connector.catalog_source_path,
+    connector.definition_origin,
+    connector.readiness_stage,
     connector.access_status,
     connector.access_reason,
+    connector.requestable_reason,
+    connector.request_access_action,
     connector.auth_model,
     connector.verification_endpoint,
+    connector.integration_depth?.level,
+    connector.integration_depth?.score,
     connectorRuntimeSurfaceLabel(connector),
     ...(connector.emitted_kinds ?? []),
     ...(connector.catalog_categories ?? []),

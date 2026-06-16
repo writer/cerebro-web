@@ -94,6 +94,9 @@ describe("connector view model", () => {
           access_reason: "limited preview",
           setup_allowed: false,
           requestable: true,
+          requestable_reason: "limited preview",
+          request_access_action: "Request in Access Hub",
+          request_access_url: "https://access.example.com/request?source=aws",
           connection_methods: [{ id: "encrypted_submission" }],
         },
       ],
@@ -101,7 +104,7 @@ describe("connector view model", () => {
     );
 
     expect(cards[0]).toMatchObject({ source_id: "aws", nextAction: "limited preview" });
-    expect(connectorPrimaryAction(cards[0])).toBe("Inspect");
+    expect(connectorPrimaryAction(cards[0])).toBe("Request in Access Hub");
     expect(filterConnectorCards(cards, "limited preview", "all")).toHaveLength(1);
   });
 

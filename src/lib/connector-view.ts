@@ -3,6 +3,7 @@ import {
   connectorDisplayMetadata,
   connectorDisplayName,
   connectorIsCatalogOnly,
+  connectorRequestActionLabel,
   connectorSearchText,
   connectorSetupAllowed,
   connectorStatus,
@@ -84,6 +85,7 @@ export function connectorAttentionTotal(card: ConnectorCard) {
 }
 
 export function connectorPrimaryAction(card: ConnectorCard) {
+  if (!connectorSetupAllowed(card) && card.requestable && card.request_access_url) return connectorRequestActionLabel(card);
   if (connectorIsCatalogOnly(card)) return "Inspect";
   if (!connectorSetupAllowed(card)) return card.requestable ? "Inspect" : "View";
   const status = compactConnectorStatus(card);
@@ -169,7 +171,7 @@ export function buildConnectorCards(library: ConnectorCatalogEntry[], sources: S
       readiness,
       nextAction: coverage?.next_action ?? (
         !connectorSetupAllowed(connector)
-          ? (connector.access_reason || "Inspect connector availability")
+          ? (connector.requestable_reason || connector.access_reason || "Inspect connector availability")
           : ((connector.configured_runtimes ?? 0) > 0 ? "Monitor connection health" : "Connect credential")
       ),
     };
