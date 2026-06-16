@@ -8,7 +8,7 @@ export default function DeveloperIdentityPage() {
     <div className="space-y-6">
       <PageHeader
         title="Identity Contract"
-        description="Verify the current user source, topbar initials, actor value, and write-stamp fields."
+        description="Verify the current user source, deployment profile, actor identifier, entitlements, and write attribution."
       />
       <IdentityContractPanel />
     </div>

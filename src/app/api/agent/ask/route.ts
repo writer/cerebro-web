@@ -20,6 +20,9 @@ import {
   normalizeAskError,
   normalizeAskModel,
 } from "@/lib/ask";
+import { authorizationErrorResponse, authorizeCurrentUser } from "@/lib/authorization";
+import { resolveCurrentUserFromHeadersWithFallback } from "@/lib/identity";
+import { currentUserServerAuditFields } from "@/lib/identity-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -97,13 +100,17 @@ const normalizeContext = (value: unknown): AskAgentContext | undefined => {
 };
 
 export async function POST(request: NextRequest) {
-  let payload: NormalizedAgentRequest | null = null;
-  try {
-    payload = normalizePayload(await request.json());
-  } catch {
-    payload = null;
+  const [currentUser, rawPayload] = await Promise.all([
+    resolveCurrentUserFromHeadersWithFallback(request.headers),
+    request.json().catch(() => null),
+  ]);
+  const decision = authorizeCurrentUser(currentUser, "agent:ask");
+  if (!decision.allowed) {
+    console.warn("agent ask denied", currentUserServerAuditFields(currentUser));
+    return authorizationErrorResponse(decision);
   }
 
+  const payload = normalizePayload(rawPayload);
   if (!payload) {
     return NextResponse.json(
       { error: "Ask requires a non-empty question." },

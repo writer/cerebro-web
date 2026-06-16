@@ -49,6 +49,7 @@ export default function Topbar() {
   const apiKeyPosture = canUseClientKey ? (apiKey ? "Client key present" : "No client key") : "Server-managed";
   const runtimeHealthy = Boolean(connected && identity.state === "resolved");
   const runtimeWarning = !runtimeHealthy;
+  const identityAttention = Boolean(user?.conflicts?.length || user?.warnings?.length || user?.confidence === "unverified");
   const writeStampRows = [
     { label: "Asset report create", path: "grc/inventory/asset-reports" },
     { label: "Asset report triage", path: "grc/inventory/asset-reports/{id}/triage" },
@@ -166,6 +167,12 @@ export default function Topbar() {
               </div>
             ))}
           </div>
+
+          {identityAttention && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-[12px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+              Identity requires attention. Protected actions may be refused until the current-user signal is consistent and verified.
+            </div>
+          )}
 
           <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Write Attribution</div>

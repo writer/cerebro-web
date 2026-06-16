@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { useCurrentUser } from "@/components/providers";
-import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
+import { currentUserConfidenceLabel, identityPosture, type IdentityHealth } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 
 const writeStampRows = [
@@ -24,8 +25,29 @@ const joinValues = (values: string[] | undefined) => values?.filter(Boolean).joi
 
 export default function IdentityContractPanel({ compact = false }: { compact?: boolean }) {
   const { actor, error, loading, user } = useCurrentUser();
+  const [health, setHealth] = useState<IdentityHealth | null>(null);
   const identity = identityPosture({ error, loading, user });
-  const attentionItems = [...(user?.conflicts ?? []), ...(user?.warnings ?? [])];
+  const attentionItems = [
+    ...(user?.conflicts ?? []),
+    ...(user?.warnings ?? []),
+    ...(health?.issues ?? []),
+  ];
+
+  useEffect(() => {
+    let mounted = true;
+    const loadHealth = async () => {
+      try {
+        const response = await fetch("/api/identity/health", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json() as IdentityHealth;
+        if (mounted) setHealth(payload);
+      } catch {
+        return;
+      }
+    };
+    void loadHealth();
+    return () => { mounted = false; };
+  }, []);
 
   return (
     <section className="surface-panel">
@@ -67,6 +89,9 @@ export default function IdentityContractPanel({ compact = false }: { compact?: b
             <IdentityRow label="Headers" value={joinValues(user?.evidence?.headers)} />
             <IdentityRow label="Claims" value={joinValues(user?.evidence?.claims)} />
             <IdentityRow label="Inferred" value={joinValues(user?.evidence?.inferred)} />
+            <IdentityRow label="JWT algorithm" value={user?.evidence?.jwt?.algorithm ?? ""} />
+            <IdentityRow label="JWT key ID" value={user?.evidence?.jwt?.keyId ?? ""} />
+            <IdentityRow label="JWT signature" value={user?.evidence?.jwt?.signature ?? ""} />
             <IdentityRow label="Issuer" value={user?.evidence?.jwt?.issuer ?? ""} />
             <IdentityRow label="Audience" value={user?.evidence?.jwt?.audience ?? ""} />
             <IdentityRow label="Expires" value={user?.evidence?.jwt?.expiresAt ?? ""} />
@@ -78,7 +103,23 @@ export default function IdentityContractPanel({ compact = false }: { compact?: b
           )}
         </div>
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Write Stamps</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Deployment Contract</div>
+          <div className="mt-2 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-2">
+            <IdentityRow label="Status" value={health?.status ?? "loading"} />
+            <IdentityRow label="Profile" value={health?.config.profile ?? ""} />
+            <IdentityRow label="Required" value={health ? String(health.config.required) : ""} />
+            <IdentityRow label="Fallback" value={health ? String(health.config.fallbackEnabled) : ""} />
+            <IdentityRow label="Issuer" value={health ? (health.config.issuerConfigured ? "configured" : "not configured") : ""} />
+            <IdentityRow label="Audience" value={health ? (health.config.audienceConfigured ? "configured" : "not configured") : ""} />
+            <IdentityRow label="JWKS" value={health ? (health.config.jwksConfigured ? "configured" : "not configured") : ""} />
+            <IdentityRow label="Trusted headers" value={health ? joinValues(health.config.trustedHeaders) || "all recognized headers" : ""} />
+          </div>
+          {health?.status === "blocked" && (
+            <div className="mt-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-[12px] leading-5 text-red-900 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-100">
+              Identity enforcement is blocking requests that require a verified current user.
+            </div>
+          )}
+          <div className="mt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Write Stamps</div>
           <div className="mt-2 space-y-2">
             {writeStampRows.map((row) => (
               <div key={row.path} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">

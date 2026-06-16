@@ -1,28 +1,88 @@
-import { describe, expect, it } from "vitest";
+import { createSign, generateKeyPairSync } from "crypto";
+import type { KeyObject } from "crypto";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearIdentityJwksCache,
   currentUserActor,
   currentUserActorLabel,
   currentUserAuditFields,
   currentUserFromHeaders,
   currentUserFromHeadersWithFallback,
   currentUserSourceLabel,
+  identityHealthFromHeaders,
   identityPosture,
+  identityRuntimeConfig,
   localCurrentUserFallback,
+  resolveCurrentUserFromHeaders,
   type CurrentUser,
 } from "./identity";
+import cloudflareAccessFixture from "./fixtures/identity/cloudflare-access.json";
+import localIdentityFixture from "./fixtures/identity/local.json";
+import oktaProxyFixture from "./fixtures/identity/okta-proxy.json";
+
+const identityEnvNames = [
+  "CEREBRO_IDENTITY_AUDIENCE",
+  "CEREBRO_IDENTITY_ISSUER",
+  "CEREBRO_IDENTITY_JWKS_URL",
+  "CEREBRO_IDENTITY_PROFILE",
+  "CEREBRO_IDENTITY_REQUIRED",
+  "CEREBRO_LOCAL_IDENTITY_FALLBACK",
+  "CEREBRO_TRUSTED_IDENTITY_HEADERS",
+];
+
+const originalIdentityEnv = new Map(identityEnvNames.map((name) => [name, process.env[name]]));
+
+afterEach(() => {
+  for (const name of identityEnvNames) {
+    const original = originalIdentityEnv.get(name);
+    if (original === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = original;
+    }
+  }
+  clearIdentityJwksCache();
+  vi.restoreAllMocks();
+});
 
 const base64Json = (payload: Record<string, unknown>) => {
   const encoder = new TextEncoder();
   return globalThis.btoa(String.fromCharCode(...encoder.encode(JSON.stringify(payload))));
 };
 
-const jwtWithPayload = (payload: Record<string, unknown>) => {
-  const encodedPayload = base64Json(payload)
+const base64UrlJson = (payload: Record<string, unknown>) =>
+  base64Json(payload)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
-  return `header.${encodedPayload}.signature`;
+
+const jwtWithPayload = (payload: Record<string, unknown>) => {
+  return `${base64UrlJson({ alg: "none", typ: "JWT" })}.${base64UrlJson(payload)}.c2lnbmF0dXJl`;
+};
+
+const signedJwtWithPayload = (payload: Record<string, unknown>, privateKey: KeyObject, kid = "test-key") => {
+  const input = `${base64UrlJson({ alg: "RS256", kid, typ: "JWT" })}.${base64UrlJson(payload)}`;
+  const signature = createSign("RSA-SHA256").update(input).end().sign(privateKey, "base64url");
+  return `${input}.${signature}`;
+};
+
+const headersFromFixture = (fixture: {
+  headers: Record<string, string>;
+  jwtHeader?: string;
+  jwtPayload?: Record<string, unknown>;
+}) => {
+  const headers = new Headers(fixture.headers);
+  if (fixture.jwtHeader && fixture.jwtPayload) {
+    headers.set(fixture.jwtHeader, jwtWithPayload(fixture.jwtPayload));
+  }
+  return headers;
+};
+
+const applyEnv = (env: Record<string, string>) => {
+  for (const [key, value] of Object.entries(env)) {
+    process.env[key] = value;
+  }
 };
 
 describe("current user identity", () => {
@@ -328,6 +388,88 @@ describe("current user identity", () => {
     }
   });
 
+  it("honors deployment profile identity fixtures", () => {
+    for (const fixture of [oktaProxyFixture, cloudflareAccessFixture]) {
+      applyEnv(fixture.env);
+      const user = currentUserFromHeaders(headersFromFixture(fixture));
+      expect(user).toMatchObject(fixture.expected);
+    }
+  });
+
+  it("keeps bearer tokens out of proxy-header profiles unless explicitly allowed", () => {
+    process.env.CEREBRO_IDENTITY_PROFILE = "okta-proxy";
+    const user = currentUserFromHeaders(new Headers({
+      authorization: `Bearer ${jwtWithPayload({
+        email: "bearer.user@example.com",
+        sub: "bearer-subject",
+      })}`,
+      "x-user-email": "spoofed@example.com",
+    }));
+
+    expect(user).toBeNull();
+  });
+
+  it("uses configured JWKS to verify bearer JWT signatures", async () => {
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const publicJwk = publicKey.export({ format: "jwk" });
+    process.env.CEREBRO_IDENTITY_PROFILE = "oidc-bearer";
+    process.env.CEREBRO_IDENTITY_ISSUER = "https://login.example.com/oauth2/default";
+    process.env.CEREBRO_IDENTITY_AUDIENCE = "cerebro-web";
+    process.env.CEREBRO_IDENTITY_JWKS_URL = "https://login.example.com/oauth2/default/v1/keys";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      keys: [{ ...publicJwk, alg: "RS256", kid: "test-key", use: "sig" }],
+    })));
+
+    const user = await resolveCurrentUserFromHeaders(new Headers({
+      authorization: `Bearer ${signedJwtWithPayload({
+        aud: "cerebro-web",
+        email: "signed.user@example.com",
+        exp: Math.floor(Date.now() / 1000) + 60,
+        iss: "https://login.example.com/oauth2/default",
+        name: "Signed User",
+        sub: "signed-subject",
+      }, privateKey)}`,
+    }));
+
+    expect(user).toMatchObject({
+      actorId: "signed-subject",
+      confidence: "signature-verified",
+      provider: "bearer-jwt",
+    });
+    expect(user?.warnings).toBeUndefined();
+    expect(user?.evidence?.jwt).toMatchObject({
+      algorithm: "RS256",
+      keyId: "test-key",
+      signature: "verified",
+    });
+  });
+
+  it("downgrades JWT identity when JWKS signature verification fails", async () => {
+    const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const { privateKey: otherPrivateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const publicJwk = publicKey.export({ format: "jwk" });
+    process.env.CEREBRO_IDENTITY_PROFILE = "oidc-bearer";
+    process.env.CEREBRO_IDENTITY_JWKS_URL = "https://login.example.com/oauth2/default/v1/keys";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      keys: [{ ...publicJwk, alg: "RS256", kid: "test-key", use: "sig" }],
+    })));
+
+    const user = await resolveCurrentUserFromHeaders(new Headers({
+      authorization: `Bearer ${signedJwtWithPayload({
+        email: "signed.user@example.com",
+        name: "Signed User",
+        sub: "signed-subject",
+      }, otherPrivateKey)}`,
+    }));
+
+    expect(user).toMatchObject({
+      actorId: "signed-subject",
+      confidence: "unverified",
+    });
+    expect(user?.warnings).toContain("signature-invalid");
+    expect(user?.evidence?.jwt?.signature).toBe("failed");
+  });
+
   it("returns null when no current-user signal is available", () => {
     expect(currentUserFromHeaders(new Headers())).toBeNull();
   });
@@ -354,6 +496,32 @@ describe("current user identity", () => {
         process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK = previous;
       }
     }
+  });
+
+  it("uses the local identity fixture for local development fallback", () => {
+    applyEnv(localIdentityFixture.env);
+
+    expect(currentUserFromHeadersWithFallback(headersFromFixture(localIdentityFixture))).toMatchObject(localIdentityFixture.expected);
+    expect(identityRuntimeConfig()).toMatchObject({
+      fallbackEnabled: true,
+      profile: "local",
+    });
+  });
+
+  it("reports blocked identity health when fail-closed mode has no current user", async () => {
+    process.env.CEREBRO_IDENTITY_REQUIRED = "1";
+
+    await expect(identityHealthFromHeaders(new Headers())).resolves.toMatchObject({
+      config: {
+        required: true,
+      },
+      current: {
+        authenticated: false,
+        confidence: "none",
+      },
+      issues: ["identity-missing"],
+      status: "blocked",
+    });
   });
 
   it("uses the most stable available actor identifier", () => {

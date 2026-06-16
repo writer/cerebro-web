@@ -21,7 +21,22 @@ export type CurrentUserResponse = {
   user: CurrentUser | null;
 };
 
-export type IdentityConfidence = "trusted-proxy" | "claims-validated" | "unverified" | "conflict" | "fallback";
+export type IdentityConfidence =
+  | "trusted-proxy"
+  | "claims-validated"
+  | "signature-verified"
+  | "unverified"
+  | "conflict"
+  | "fallback";
+
+export type IdentityDeploymentProfile =
+  | "auto"
+  | "auth-proxy"
+  | "azure-client-principal"
+  | "cloudflare-access"
+  | "local"
+  | "oidc-bearer"
+  | "okta-proxy";
 
 export type IdentityProvider =
   | "alb-oidc"
@@ -40,10 +55,13 @@ export type IdentityEvidence = {
   headers?: string[];
   inferred?: string[];
   jwt?: {
+    algorithm?: string;
     audience?: string;
     expiresAt?: string;
     issuer?: string;
+    keyId?: string;
     notBefore?: string;
+    signature?: "verified" | "unverified" | "failed";
   };
 };
 
@@ -62,6 +80,33 @@ export type IdentityPosture = {
   sourceLabel: string;
   state: "loading" | "resolved" | "fallback" | "unavailable";
   tone: "success" | "warning" | "neutral";
+};
+
+export type IdentityRuntimeConfig = {
+  audienceConfigured: boolean;
+  fallbackEnabled: boolean;
+  issuerConfigured: boolean;
+  jwksConfigured: boolean;
+  profile: IdentityDeploymentProfile;
+  required: boolean;
+  trustedHeaders: string[];
+};
+
+export type IdentityHealth = {
+  checkedAt: string;
+  config: IdentityRuntimeConfig;
+  current: {
+    authenticated: boolean;
+    claimCount: number;
+    confidence: IdentityConfidence | "none";
+    conflictCount: number;
+    headerCount: number;
+    provider: IdentityProvider | "none";
+    source: CurrentUser["source"] | "none";
+    warningCount: number;
+  };
+  issues: string[];
+  status: "ready" | "degraded" | "blocked";
 };
 
 type IdentityClaims = {
@@ -151,6 +196,55 @@ const cleanStringList = (value: unknown, separator: RegExp = /[\s,]+/) => {
   return cleaned.split(separator).map((item) => cleanString(item)).filter(Boolean);
 };
 
+const parseBooleanEnv = (value: string | undefined) => {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return undefined;
+};
+
+const IDENTITY_PROFILES = [
+  "auto",
+  "auth-proxy",
+  "azure-client-principal",
+  "cloudflare-access",
+  "local",
+  "oidc-bearer",
+  "okta-proxy",
+] as const satisfies readonly IdentityDeploymentProfile[];
+
+const identityProfileDefaults: Record<IdentityDeploymentProfile, string[]> = {
+  auto: [],
+  "auth-proxy": [
+    "x-auth-request-email",
+    "x-auth-request-id-token",
+    "x-auth-request-name",
+    "x-auth-request-preferred-username",
+    "x-auth-request-subject",
+    "x-auth-request-user",
+  ],
+  "azure-client-principal": ["x-ms-client-principal", "x-ms-client-principal-name"],
+  "cloudflare-access": ["cf-access-authenticated-user-email", "cf-access-jwt-assertion"],
+  local: [],
+  "oidc-bearer": ["authorization"],
+  "okta-proxy": [
+    "x-okta-email",
+    "x-okta-id-token",
+    "x-okta-name",
+    "x-okta-user",
+  ],
+};
+
+const configuredIdentityProfile = (): IdentityDeploymentProfile => {
+  const configured = cleanString(process.env.CEREBRO_IDENTITY_PROFILE).toLowerCase();
+  return IDENTITY_PROFILES.includes(configured as IdentityDeploymentProfile)
+    ? configured as IdentityDeploymentProfile
+    : "auto";
+};
+
+const configuredJwksUrl = () => cleanString(process.env.CEREBRO_IDENTITY_JWKS_URL, 2048);
+
 const looksLikeEmail = (value: string) =>
   /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value);
 
@@ -161,17 +255,26 @@ const normalizeFederatedHeaderValue = (value: string) => {
   return value;
 };
 
-const configuredTrustedHeaderNames = () =>
-  (process.env.CEREBRO_TRUSTED_IDENTITY_HEADERS ?? "")
+const configuredTrustedHeaderNames = () => {
+  const explicit = (process.env.CEREBRO_TRUSTED_IDENTITY_HEADERS ?? "")
     .split(",")
     .map((name) => name.trim().toLowerCase())
     .filter(Boolean);
+  if (explicit.length > 0) return explicit;
+  return identityProfileDefaults[configuredIdentityProfile()];
+};
 
 const allowedHeaderNames = (names: string[]) => {
   const trusted = configuredTrustedHeaderNames();
   if (trusted.length === 0) return names;
   const trustedSet = new Set(trusted);
   return names.filter((name) => trustedSet.has(name.toLowerCase()));
+};
+
+const identityHeaderAllowed = (name: string) => {
+  const trusted = configuredTrustedHeaderNames();
+  if (trusted.length === 0) return true;
+  return trusted.includes(name.toLowerCase());
 };
 
 const firstHeaderMatch = (headers: Headers, names: string[], maxLength = 8000): HeaderMatch | null => {
@@ -339,11 +442,33 @@ const decodeBase64 = (value: string) => {
   return new TextDecoder().decode(bytes);
 };
 
-const parseJwtPayload = (token: string) => {
-  const payload = cleanString(token, 8000).split(".")[1];
-  if (!payload) return null;
+const decodeBase64Bytes = (value: string) => {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = globalThis.atob(padded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+};
+
+const arrayBufferFromBytes = (bytes: Uint8Array) =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+type ParsedJwt = {
+  header: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  signature: Uint8Array;
+  signingInput: string;
+};
+
+const parseJwt = (token: string): ParsedJwt | null => {
+  const [encodedHeader, encodedPayload, encodedSignature] = cleanString(token, 12000).split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
   try {
-    return JSON.parse(decodeBase64(payload)) as Record<string, unknown>;
+    return {
+      header: JSON.parse(decodeBase64(encodedHeader)) as Record<string, unknown>,
+      payload: JSON.parse(decodeBase64(encodedPayload)) as Record<string, unknown>,
+      signature: decodeBase64Bytes(encodedSignature),
+      signingInput: `${encodedHeader}.${encodedPayload}`,
+    };
   } catch {
     return null;
   }
@@ -386,28 +511,173 @@ const jwtEvidenceFromPayload = (payload: Record<string, unknown>) => ({
   notBefore: jwtDate(payload.nbf),
 });
 
-const jwtConfidence = (warnings: string[], provider: IdentityProvider): IdentityConfidence => {
+type JwtSignatureEvidence = NonNullable<IdentityEvidence["jwt"]>["signature"];
+
+const jwtEvidenceFromParts = (
+  payload: Record<string, unknown>,
+  header: Record<string, unknown>,
+  signature?: JwtSignatureEvidence,
+) => ({
+  ...jwtEvidenceFromPayload(payload),
+  algorithm: cleanString(header.alg),
+  keyId: cleanString(header.kid),
+  ...(signature ? { signature } : {}),
+});
+
+type JwtSignatureVerification = {
+  algorithm?: string;
+  keyId?: string;
+  verified: boolean;
+  warning?: string;
+};
+
+type IdentityJsonWebKey = JsonWebKey & {
+  alg?: string;
+  kid?: string;
+  use?: string;
+};
+
+type JsonWebKeySet = {
+  keys?: IdentityJsonWebKey[];
+};
+
+const JWKS_CACHE_TTL_MS = 5 * 60 * 1000;
+const jwksCache = new Map<string, { expiresAt: number; keys: IdentityJsonWebKey[] }>();
+
+export const clearIdentityJwksCache = () => {
+  jwksCache.clear();
+};
+
+const rsaJwtAlgorithms: Record<string, RsaHashedImportParams> = {
+  RS256: { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+  RS384: { name: "RSASSA-PKCS1-v1_5", hash: "SHA-384" },
+  RS512: { name: "RSASSA-PKCS1-v1_5", hash: "SHA-512" },
+};
+
+const fetchJwks = async (jwksUrl: string) => {
+  const cached = jwksCache.get(jwksUrl);
+  if (cached && cached.expiresAt > Date.now()) return cached.keys;
+
+  const response = await fetch(jwksUrl, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`jwks-fetch-failed-${response.status}`);
+  }
+  const payload = await response.json() as JsonWebKeySet;
+  const keys = Array.isArray(payload.keys) ? payload.keys : [];
+  jwksCache.set(jwksUrl, {
+    expiresAt: Date.now() + JWKS_CACHE_TTL_MS,
+    keys,
+  });
+  return keys;
+};
+
+const verifyJwtSignature = async (token: string, jwksUrl: string): Promise<JwtSignatureVerification> => {
+  const parsed = parseJwt(token);
+  if (!parsed) return { verified: false, warning: "token-unparseable" };
+  const algorithm = cleanString(parsed.header.alg);
+  const keyId = cleanString(parsed.header.kid);
+  const importParams = rsaJwtAlgorithms[algorithm];
+  if (!importParams) {
+    return { algorithm, keyId, verified: false, warning: "signature-algorithm-unsupported" };
+  }
+  if (!globalThis.crypto?.subtle) {
+    return { algorithm, keyId, verified: false, warning: "signature-verifier-unavailable" };
+  }
+
+  try {
+    const keys = await fetchJwks(jwksUrl);
+    const candidates = keys.filter((key) =>
+      key.kty === "RSA" &&
+      (!keyId || key.kid === keyId) &&
+      (!key.alg || key.alg === algorithm) &&
+      (!key.use || key.use === "sig"),
+    );
+    if (candidates.length === 0) {
+      return { algorithm, keyId, verified: false, warning: "signature-key-not-found" };
+    }
+
+    const signingInput = arrayBufferFromBytes(new TextEncoder().encode(parsed.signingInput));
+    const signature = arrayBufferFromBytes(parsed.signature);
+    for (const key of candidates) {
+      const cryptoKey = await globalThis.crypto.subtle.importKey(
+        "jwk",
+        key,
+        importParams,
+        false,
+        ["verify"],
+      );
+      const verified = await globalThis.crypto.subtle.verify(
+        importParams,
+        cryptoKey,
+        signature,
+        signingInput,
+      );
+      if (verified) return { algorithm, keyId, verified: true };
+    }
+    return { algorithm, keyId, verified: false, warning: "signature-invalid" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "signature-verification-failed";
+    return { algorithm, keyId, verified: false, warning: message };
+  }
+};
+
+const jwtConfidence = (
+  warnings: string[],
+  provider: IdentityProvider,
+  signatureVerified = false,
+): IdentityConfidence => {
   if (warnings.length > 0) return "unverified";
+  if (signatureVerified) return "signature-verified";
   if (process.env.CEREBRO_IDENTITY_ISSUER || process.env.CEREBRO_IDENTITY_AUDIENCE) return "claims-validated";
   if (provider === "bearer-jwt") return "unverified";
   return "trusted-proxy";
 };
 
 const currentUserFromJwt = (token: string, provider: IdentityProvider, source: CurrentUser["source"] = "jwt") => {
-  const payload = parseJwtPayload(token);
-  if (!payload) return null;
-  const { claims, claimNames } = identityClaimsFromRecord(payload);
-  const warnings = jwtValidationWarnings(payload);
+  const parsed = parseJwt(token);
+  if (!parsed) return null;
+  const { claims, claimNames } = identityClaimsFromRecord(parsed.payload);
+  const warnings = jwtValidationWarnings(parsed.payload);
   return currentUserFromCandidate({
     claims,
     confidence: jwtConfidence(warnings, provider),
     evidence: {
       claims: claimNames,
-      jwt: jwtEvidenceFromPayload(payload),
+      jwt: jwtEvidenceFromParts(parsed.payload, parsed.header, "unverified"),
     },
     provider,
     source,
     warnings,
+  });
+};
+
+const currentUserFromVerifiedJwt = async (token: string, provider: IdentityProvider, source: CurrentUser["source"] = "jwt") => {
+  const parsed = parseJwt(token);
+  if (!parsed) return null;
+  const { claims, claimNames } = identityClaimsFromRecord(parsed.payload);
+  const warnings = jwtValidationWarnings(parsed.payload);
+  const jwksUrl = configuredJwksUrl();
+  const signature = jwksUrl
+    ? await verifyJwtSignature(token, jwksUrl)
+    : { verified: false, warning: "jwks-not-configured" } satisfies JwtSignatureVerification;
+  const nextWarnings = [
+    ...warnings,
+    ...(signature.verified ? [] : [signature.warning ?? "signature-not-verified"]),
+  ];
+  return currentUserFromCandidate({
+    claims,
+    confidence: jwtConfidence(nextWarnings, provider, signature.verified),
+    evidence: {
+      claims: claimNames,
+      jwt: jwtEvidenceFromParts(parsed.payload, {
+        ...parsed.header,
+        ...(signature.algorithm ? { alg: signature.algorithm } : {}),
+        ...(signature.keyId ? { kid: signature.keyId } : {}),
+      }, signature.verified ? "verified" : "failed"),
+    },
+    provider,
+    source,
+    warnings: nextWarnings,
   });
 };
 
@@ -459,9 +729,25 @@ export const localCurrentUserFallback = (): CurrentUser => ({
   source: "local-fallback",
 });
 
+export const identityDeploymentProfile = () => configuredIdentityProfile();
+
+export const identityRequired = () =>
+  parseBooleanEnv(process.env.CEREBRO_IDENTITY_REQUIRED) ??
+  (process.env.NODE_ENV === "production" && identityDeploymentProfile() !== "local");
+
 export const localIdentityFallbackEnabled = () =>
-  process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK === "1" ||
-  (process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK !== "0" && process.env.NODE_ENV === "development");
+  parseBooleanEnv(process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK) ??
+  (identityDeploymentProfile() === "local" || process.env.NODE_ENV === "development");
+
+export const identityRuntimeConfig = (): IdentityRuntimeConfig => ({
+  audienceConfigured: Boolean(process.env.CEREBRO_IDENTITY_AUDIENCE),
+  fallbackEnabled: localIdentityFallbackEnabled(),
+  issuerConfigured: Boolean(process.env.CEREBRO_IDENTITY_ISSUER),
+  jwksConfigured: Boolean(configuredJwksUrl()),
+  profile: identityDeploymentProfile(),
+  required: identityRequired(),
+  trustedHeaders: configuredTrustedHeaderNames(),
+});
 
 export const currentUserSourceLabel = (source: CurrentUser["source"] | null | undefined) => {
   switch (source) {
@@ -484,6 +770,8 @@ export const currentUserConfidenceLabel = (confidence: IdentityConfidence | null
       return "Trusted proxy";
     case "claims-validated":
       return "Claims validated";
+    case "signature-verified":
+      return "Signature verified";
     case "unverified":
       return "Unverified claims";
     case "conflict":
@@ -519,6 +807,8 @@ export const currentUserConfidenceDetail = (user: CurrentUser | null | undefined
       return "Identity was supplied by configured proxy or platform headers.";
     case "claims-validated":
       return "JWT claims matched the configured issuer, audience, and time window. Signature verification is not performed in this UI layer.";
+    case "signature-verified":
+      return "JWT signature verification and configured claim checks passed.";
     case "unverified":
       return "JWT claims were decoded for display. Treat them as diagnostic unless the upstream proxy enforces token verification.";
     case "fallback":
@@ -705,20 +995,22 @@ export const currentUserFromHeaders = (headers: Headers): CurrentUser | null => 
   const directUser = directHeaderCandidate(headers);
   if (directUser) candidates.push(directUser);
 
-  const azurePrincipal = firstHeader(headers, ["x-ms-client-principal"]);
+  const azurePrincipal = firstHeader(headers, allowedHeaderNames(["x-ms-client-principal"]));
   if (azurePrincipal) {
     const user = currentUserFromAzureClientPrincipal(azurePrincipal);
     if (user) candidates.push(user);
   }
 
-  for (const header of JWT_HEADERS) {
+  for (const header of allowedHeaderNames(JWT_HEADERS)) {
     const token = headers.get(header);
     if (!token) continue;
     const user = currentUserFromJwt(token, providerForHeader([header]) ?? "auth-proxy");
     if (user) candidates.push(user);
   }
 
-  const authorizationToken = bearerToken(headers.get("authorization"));
+  const authorizationToken = identityHeaderAllowed("authorization")
+    ? bearerToken(headers.get("authorization"))
+    : "";
   if (authorizationToken) {
     const user = currentUserFromJwt(authorizationToken, "bearer-jwt");
     if (user) candidates.push(user);
@@ -731,3 +1023,74 @@ export const currentUserFromHeaders = (headers: Headers): CurrentUser | null => 
 
 export const currentUserFromHeadersWithFallback = (headers: Headers): CurrentUser | null =>
   currentUserFromHeaders(headers) ?? (localIdentityFallbackEnabled() ? localCurrentUserFallback() : null);
+
+export const resolveCurrentUserFromHeaders = async (headers: Headers): Promise<CurrentUser | null> => {
+  if (!configuredJwksUrl()) return currentUserFromHeaders(headers);
+
+  const candidates: CurrentUser[] = [];
+  const directUser = directHeaderCandidate(headers);
+  if (directUser) candidates.push(directUser);
+
+  const azurePrincipal = firstHeader(headers, allowedHeaderNames(["x-ms-client-principal"]));
+  if (azurePrincipal) {
+    const user = currentUserFromAzureClientPrincipal(azurePrincipal);
+    if (user) candidates.push(user);
+  }
+
+  for (const header of allowedHeaderNames(JWT_HEADERS)) {
+    const token = headers.get(header);
+    if (!token) continue;
+    const user = await currentUserFromVerifiedJwt(token, providerForHeader([header]) ?? "auth-proxy");
+    if (user) candidates.push(user);
+  }
+
+  const authorizationToken = identityHeaderAllowed("authorization")
+    ? bearerToken(headers.get("authorization"))
+    : "";
+  if (authorizationToken) {
+    const user = await currentUserFromVerifiedJwt(authorizationToken, "bearer-jwt");
+    if (user) candidates.push(user);
+  }
+
+  const preferred = candidates[0];
+  if (!preferred) return null;
+  return withCandidateConflicts(mergeComplementaryCandidates(preferred, candidates.slice(1)), candidates.slice(1));
+};
+
+export const resolveCurrentUserFromHeadersWithFallback = async (headers: Headers): Promise<CurrentUser | null> =>
+  await resolveCurrentUserFromHeaders(headers) ?? (localIdentityFallbackEnabled() ? localCurrentUserFallback() : null);
+
+export const identityHealthFromHeaders = async (headers: Headers): Promise<IdentityHealth> => {
+  const user = await resolveCurrentUserFromHeadersWithFallback(headers);
+  const audit = currentUserAuditFields(user);
+  const issues = [
+    ...(!user ? ["identity-missing"] : []),
+    ...(user?.source === "local-fallback" && identityRequired() ? ["local-fallback-disabled-by-required-identity"] : []),
+    ...(user?.confidence === "unverified" && identityRequired() ? ["unverified-identity-blocked"] : []),
+    ...(user?.conflicts?.length ? ["identity-conflict"] : []),
+    ...(user?.warnings ?? []),
+  ];
+  const blocked = identityRequired() && (
+    !user ||
+    user.source === "local-fallback" ||
+    user.confidence === "conflict" ||
+    user.confidence === "unverified" ||
+    Boolean(user.warnings?.length)
+  );
+  return {
+    checkedAt: new Date().toISOString(),
+    config: identityRuntimeConfig(),
+    current: {
+      authenticated: audit.authenticated,
+      claimCount: audit.claimCount,
+      confidence: user?.confidence ?? "none",
+      conflictCount: audit.conflictCount,
+      headerCount: audit.headerCount,
+      provider: user?.provider ?? "none",
+      source: user?.source ?? "none",
+      warningCount: audit.warningCount,
+    },
+    issues,
+    status: blocked ? "blocked" : issues.length > 0 ? "degraded" : "ready",
+  };
+};
