@@ -103,6 +103,64 @@ export type ConnectorCredentialKey = {
   jwk: JsonWebKey;
 };
 
+export type ConnectorCredentialStatus = "pending" | "valid" | "invalid" | "revoked" | "rotating" | string;
+
+export type ConnectorCredential = {
+  id: string;
+  tenant_id: string;
+  source_id: string;
+  runtime_id: string;
+  credential_store_id: ConnectorCredentialStoreID | string;
+  auth_method: ConnectorConnectionMethodID | string;
+  status: ConnectorCredentialStatus;
+  key_id: string;
+  fields: string[];
+  created_by?: string;
+  updated_by?: string;
+  revoked_by?: string;
+  previous_credential_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  revoked_at?: string;
+  last_used_at?: string;
+  last_validated_at?: string;
+};
+
+export type ConnectorCredentialAuditEvent = {
+  id: string;
+  credential_id: string;
+  tenant_id: string;
+  source_id: string;
+  runtime_id: string;
+  event_type: "stored" | "rotated" | "revoked" | "used" | "validated" | string;
+  actor?: string;
+  status?: string;
+  detail?: string;
+  created_at?: string;
+};
+
+export type ConnectorCredentialListResponse = {
+  source_id: string;
+  tenant_id: string;
+  runtime_id?: string;
+  credentials: ConnectorCredential[];
+};
+
+export type ConnectorCredentialDetailResponse = {
+  source_id: string;
+  credential: ConnectorCredential;
+  audit?: ConnectorCredentialAuditEvent[];
+};
+
+export type ConnectorCredentialBrokerResponse = {
+  source_id: string;
+  tenant_id: string;
+  runtime_id: string;
+  status: "stored" | "rotated" | "existing" | string;
+  credential: ConnectorCredential;
+  credential_references: Record<string, string>;
+};
+
 export type ConnectorScopeResource = {
   urn?: string;
   type?: string;
@@ -1182,6 +1240,65 @@ export const connectorSubmitErrorMessage = (status?: number) => {
   if (status === 404) return "Connector source was not found.";
   if (status === 503) return "Credential storage or runtime services are unavailable.";
   return "Connection failed. No credential details were displayed.";
+};
+
+export const connectorCredentialErrorMessage = (status?: number) => {
+  if (status === 400) return "Credential request was not accepted. Check tenant, connection ID, and required fields.";
+  if (status === 401 || status === 403) return "You do not have permission to manage credentials for this tenant.";
+  if (status === 404) return "Credential or connector source was not found.";
+  if (status === 503) return "Credential broker is unavailable.";
+  return "Credential request failed. Secret values were not displayed.";
+};
+
+const withCredentialQuery = (path: string, params: Record<string, string | undefined> = {}) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value?.trim()) query.set(key, value.trim());
+  });
+  const queryString = query.toString();
+  return queryString ? `${path}?${queryString}` : path;
+};
+
+export const connectorCredentialsPath = (
+  sourceID: string,
+  params: { tenantID?: string; runtimeID?: string; status?: ConnectorCredentialStatus } = {},
+) => withCredentialQuery(`/connectors/${encodeURIComponent(sourceID)}/credentials`, {
+  tenant_id: params.tenantID,
+  runtime_id: params.runtimeID,
+  status: params.status,
+});
+
+export const connectorCredentialPath = (sourceID: string, credentialID: string) =>
+  `/connectors/${encodeURIComponent(sourceID)}/credentials/${encodeURIComponent(credentialID)}`;
+
+export const connectorCredentialRotatePath = (sourceID: string, credentialID: string) =>
+  `${connectorCredentialPath(sourceID, credentialID)}/rotate`;
+
+export const connectorCredentialRevokePath = (sourceID: string, credentialID: string) =>
+  `${connectorCredentialPath(sourceID, credentialID)}/revoke`;
+
+export const connectorCredentialStatusLabel = (status?: ConnectorCredentialStatus) => {
+  switch (status) {
+    case "valid":
+      return "Valid";
+    case "revoked":
+      return "Revoked";
+    case "invalid":
+      return "Invalid";
+    case "rotating":
+      return "Rotating";
+    case "pending":
+      return "Pending";
+    default:
+      return status?.trim() || "Unknown";
+  }
+};
+
+export const connectorCredentialHealth = (credential?: Pick<ConnectorCredential, "status" | "last_used_at" | "updated_at"> | null) => {
+  if (!credential) return "unknown";
+  if (credential.status === "revoked" || credential.status === "invalid") return "bad";
+  if (credential.status === "pending" || credential.status === "rotating") return "warning";
+  return "healthy";
 };
 
 const uniqueClean = (values: string[], lower = true) => {

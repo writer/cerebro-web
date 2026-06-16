@@ -55,6 +55,23 @@ const awsSecretStores: NormalizedCredentialStore[] = [{
   requiredConfig: [],
 }];
 
+const vaultCredentialStores: NormalizedCredentialStore[] = [{
+  id: "cerebro_vault",
+  label: "Cerebro Vault",
+  shortLabel: "Vault",
+  provider: "Cerebro",
+  description: "Encrypted connector credential envelopes.",
+  mode: "encrypted_submission",
+  available: true,
+  default: true,
+  status: "ready",
+  detail: "Ready",
+  referencePrefixes: [],
+  nativeResolutionAvailable: true,
+  setupSteps: [],
+  requiredConfig: [],
+}];
+
 function awsConnector(): ConnectorCatalogEntry {
   return {
     source_id: "aws",
@@ -102,6 +119,26 @@ function awsExternalReferenceConnector(): ConnectorCatalogEntry {
         { key: "access_key_id", label: "Access key ID", required: true, reference_only: true },
         { key: "secret_access_key", label: "Secret access key", required: true, reference_only: true },
       ],
+    }],
+  };
+}
+
+function tokenConnector(): ConnectorCatalogEntry {
+  return {
+    source_id: "anthropic",
+    name: "Anthropic",
+    display_name: "Anthropic",
+    scope_options: [],
+    connection_methods: [{
+      id: "encrypted_submission",
+      label: "Encrypted credential submission",
+      short_label: "Vault",
+      category: "Managed",
+      description: "Store a brokered token.",
+      credential_stores: ["cerebro_vault"],
+      saveable: true,
+      config_fields: [],
+      credential_fields: [{ key: "token", label: "Token", type: "password", required: true, secret: true }],
     }],
   };
 }
@@ -205,5 +242,51 @@ describe("ConnectorSetupForm", () => {
 
     expect(accessKeyInput?.value).toBe("aws-sm:us-east-1:cerebro/writer/aws/writer-aws-connection/credentials#access_key_id");
     expect(secretKeyInput?.value).toBe("aws-sm:us-east-1:cerebro/writer/aws/writer-aws-connection/credentials#secret_access_key");
+  });
+
+  it("lists stored Cerebro Vault credentials and revokes the selected record", async () => {
+    fetchCerebroMock.mockImplementation(async (path: string) => {
+      if (path === "/connectors/anthropic/credentials?tenant_id=writer&runtime_id=writer-anthropic-connection") {
+        return {
+          ok: true,
+          status: 200,
+          data: {
+            source_id: "anthropic",
+            tenant_id: "writer",
+            runtime_id: "writer-anthropic-connection",
+            credentials: [{
+              id: "cred_1234567890",
+              tenant_id: "writer",
+              source_id: "anthropic",
+              runtime_id: "writer-anthropic-connection",
+              credential_store_id: "cerebro_vault",
+              auth_method: "encrypted_submission",
+              status: "valid",
+              key_id: "connector-vault-test",
+              fields: ["token"],
+              updated_at: "2026-06-15T12:00:00Z",
+            }],
+          },
+        } as never;
+      }
+      return { ok: true, status: 200, data: {} } as never;
+    });
+
+    await renderForm(tokenConnector(), vaultCredentialStores);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    expect(container.textContent).toContain("Credential broker");
+    expect(container.textContent).toContain("Valid");
+
+    const revokeButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes("Revoke"));
+    expect(revokeButton).toBeDefined();
+    await act(async () => {
+      revokeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    expect(fetchCerebroMock.mock.calls.some((call) => call[0] === "/connectors/anthropic/credentials/cred_1234567890/revoke")).toBe(true);
   });
 });

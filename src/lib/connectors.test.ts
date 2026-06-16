@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   connectionMethodsForConnector,
+  connectorCredentialHealth,
+  connectorCredentialPath,
+  connectorCredentialRevokePath,
+  connectorCredentialRotatePath,
+  connectorCredentialsPath,
+  connectorCredentialStatusLabel,
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStatus,
@@ -134,6 +140,16 @@ describe("connector credential transport", () => {
   it("uses sanitized submit errors", () => {
     expect(connectorSubmitErrorMessage(400)).not.toContain("token");
     expect(connectorSubmitErrorMessage(503)).toContain("unavailable");
+  });
+
+  it("builds credential lifecycle paths and labels statuses", () => {
+    expect(connectorCredentialsPath("aws", { tenantID: "tenant-a", runtimeID: "runtime-a" })).toBe("/connectors/aws/credentials?tenant_id=tenant-a&runtime_id=runtime-a");
+    expect(connectorCredentialPath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123");
+    expect(connectorCredentialRotatePath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123/rotate");
+    expect(connectorCredentialRevokePath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123/revoke");
+    expect(connectorCredentialStatusLabel("valid")).toBe("Valid");
+    expect(connectorCredentialHealth({ status: "valid" })).toBe("healthy");
+    expect(connectorCredentialHealth({ status: "revoked" })).toBe("bad");
   });
 });
 
