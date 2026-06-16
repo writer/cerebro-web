@@ -38,6 +38,7 @@ The handoff from this repo is the published web image plus documented environmen
 | `CEREBRO_AGENT_MODEL` | Optional OpenAI model override for the Cerebro AI agent. Defaults to `gpt-5.4-mini`. |
 | `CEREBRO_MCP_URL` | Optional Cerebro MCP Streamable HTTP endpoint. Defaults to `/api/v1/mcp` on `CEREBRO_API_BASE`. |
 | `CEREBRO_MCP_BEARER_TOKEN`, `CEREBRO_MCP_TOKEN` | Optional bearer token used specifically for Cerebro MCP. |
+| `NEXT_PUBLIC_CEREBRO_WEB_VERSION`, `NEXT_PUBLIC_APP_VERSION`, `CEREBRO_WEB_VERSION`, `APP_VERSION`, `RELEASE_VERSION`, `IMAGE_TAG` | Build-time version stamp for the sidebar. Without an explicit value, local builds fall back to Git metadata and then `package.json`. |
 
 `/api/cerebro/*` keeps a small process-local cache for high-traffic GRC reads. Responses expose `x-cerebro-cache` for the web proxy cache state and `x-cerebro-upstream-cache` when the API also reports a shared backend cache state. Manual refreshes send `Cache-Control: no-cache` through the proxy so the API can bypass both layers.
 
