@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
-import { identityPosture } from "@/lib/identity";
+import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 
 type ConsoleConfig = {
@@ -148,9 +148,12 @@ export default function Topbar() {
           <div className="mt-3 grid gap-2 text-[12px]">
             {[
               ["Actor", identity.actor || "Not resolved"],
+              ["Actor label", user?.actorLabel ?? "—"],
               ["Email", user?.email ?? "—"],
               ["Username", user?.username ?? "—"],
               ["Subject", user?.subject ?? "—"],
+              ["Provider", user?.provider ?? "—"],
+              ["Confidence", user ? currentUserConfidenceLabel(user.confidence) : "—"],
               ["Auth mode", authLabel],
               ["API key posture", apiKeyPosture],
             ].map(([label, value]) => (
@@ -202,12 +205,20 @@ export default function Topbar() {
               </div>
               <div className="mt-2 grid gap-1.5 text-[12px] text-[var(--text-muted)]">
                 <div className="flex justify-between gap-3">
-                  <span>Actor</span>
+                  <span>Actor ID</span>
                   <span className="break-all text-right font-mono text-[var(--text-secondary)]">{identity.actor || "Not resolved"}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Actor label</span>
+                  <span className="break-all text-right font-mono text-[var(--text-secondary)]">{user?.actorLabel ?? "—"}</span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span>Identity source</span>
                   <span className="text-right text-[var(--text-secondary)]">{identity.sourceLabel}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Confidence</span>
+                  <span className="text-right text-[var(--text-secondary)]">{user ? currentUserConfidenceLabel(user.confidence) : "—"}</span>
                 </div>
               </div>
             </div>

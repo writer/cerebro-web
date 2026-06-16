@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   currentUserActor,
+  currentUserActorLabel,
   currentUserFromHeaders,
   currentUserFromHeadersWithFallback,
   currentUserSourceLabel,
@@ -32,13 +33,18 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
+      actorId: "person@example.com",
+      actorLabel: "person@example.com",
+      confidence: "trusted-proxy",
       displayName: "Example Person",
       email: "person@example.com",
       initials: "EP",
+      provider: "okta",
       username: "person",
       source: "headers",
     });
     expect(currentUserActor(user)).toBe("person@example.com");
+    expect(currentUserActorLabel(user)).toBe("person@example.com");
   });
 
   it("derives useful initials from email-only identities", () => {
@@ -47,6 +53,9 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
+      actorId: "first.last+dev@example.com",
+      actorLabel: "first.last+dev@example.com",
+      confidence: "trusted-proxy",
       email: "first.last+dev@example.com",
       initials: "FL",
       username: "first.last+dev@example.com",
@@ -61,6 +70,9 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
+      actorId: "session.user@example.com",
+      actorLabel: "session.user@example.com",
+      confidence: "trusted-proxy",
       displayName: "Session.User@Example.COM",
       email: "session.user@example.com",
       initials: "SU",
@@ -81,12 +93,20 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
-      displayName: "okta.person@example.com",
+      actorId: "okta-subject",
+      actorLabel: "okta.person@example.com",
+      confidence: "trusted-proxy",
+      displayName: "Okta Person",
       email: "okta.person@example.com",
       initials: "OP",
+      provider: "cloudflare-access",
+      subject: "okta-subject",
       username: "okta.person@example.com",
       source: "headers",
     });
+    expect(user?.evidence?.headers).toContain("cf-access-authenticated-user-email");
+    expect(user?.evidence?.claims).toContain("sub");
+    expect(currentUserActor(user)).toBe("okta-subject");
   });
 
   it("sanitizes identity strings from headers", () => {
@@ -116,13 +136,18 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
+      actorId: "azure-subject",
+      actorLabel: "azure.person@example.com",
+      confidence: "trusted-proxy",
       displayName: "Azure Person",
       email: "azure.person@example.com",
       initials: "AP",
+      provider: "azure",
       subject: "azure-subject",
       username: "azure.person",
       source: "azure-client-principal",
     });
+    expect(currentUserActor(user)).toBe("azure-subject");
   });
 
   it("extracts the current user from ALB OIDC claim headers", () => {
@@ -136,13 +161,18 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
+      actorId: "00u123",
+      actorLabel: "alex.example@example.com",
+      confidence: "trusted-proxy",
       displayName: "Alex Example",
       email: "alex.example@example.com",
       initials: "AE",
+      provider: "alb-oidc",
       subject: "00u123",
       username: "alex.example",
       source: "jwt",
     });
+    expect(currentUserActor(user)).toBe("00u123");
   });
 
   it("falls back to bearer JWT claims", () => {
@@ -156,9 +186,13 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
+      actorId: "local.user@example.com",
+      actorLabel: "local.user@example.com",
+      confidence: "unverified",
       displayName: "Local User",
       email: "local.user@example.com",
       initials: "LU",
+      provider: "bearer-jwt",
       username: "local.user",
       source: "jwt",
     });
@@ -174,13 +208,101 @@ describe("current user identity", () => {
     }));
 
     expect(user).toMatchObject({
+      actorId: "okta-jwt-subject",
+      actorLabel: "okta.jwt@example.com",
+      confidence: "trusted-proxy",
       displayName: "JWT User",
       email: "okta.jwt@example.com",
       initials: "JU",
+      provider: "cloudflare-access",
       subject: "okta-jwt-subject",
       username: "okta.jwt@example.com",
       source: "jwt",
     });
+    expect(currentUserActor(user)).toBe("okta-jwt-subject");
+  });
+
+  it("validates configured JWT issuer and audience claims without overstating signature verification", () => {
+    const previousIssuer = process.env.CEREBRO_IDENTITY_ISSUER;
+    const previousAudience = process.env.CEREBRO_IDENTITY_AUDIENCE;
+    process.env.CEREBRO_IDENTITY_ISSUER = "https://login.example.com/oauth2/default";
+    process.env.CEREBRO_IDENTITY_AUDIENCE = "cerebro-web";
+    try {
+      const user = currentUserFromHeaders(new Headers({
+        authorization: `Bearer ${jwtWithPayload({
+          aud: "cerebro-web",
+          email: "claims.user@example.com",
+          exp: Math.floor(Date.now() / 1000) + 60,
+          iss: "https://login.example.com/oauth2/default",
+          name: "Claims User",
+          sub: "claims-subject",
+        })}`,
+      }));
+
+      expect(user).toMatchObject({
+        actorId: "claims-subject",
+        confidence: "claims-validated",
+        provider: "bearer-jwt",
+      });
+      expect(user?.warnings).toBeUndefined();
+      expect(user?.evidence?.jwt?.issuer).toBe("https://login.example.com/oauth2/default");
+      expect(user?.evidence?.jwt?.audience).toBe("cerebro-web");
+    } finally {
+      if (previousIssuer === undefined) {
+        delete process.env.CEREBRO_IDENTITY_ISSUER;
+      } else {
+        process.env.CEREBRO_IDENTITY_ISSUER = previousIssuer;
+      }
+      if (previousAudience === undefined) {
+        delete process.env.CEREBRO_IDENTITY_AUDIENCE;
+      } else {
+        process.env.CEREBRO_IDENTITY_AUDIENCE = previousAudience;
+      }
+    }
+  });
+
+  it("flags conflicting direct and token identity signals", () => {
+    const user = currentUserFromHeaders(new Headers({
+      "x-okta-email": "alice@example.com",
+      "x-okta-id-token": jwtWithPayload({
+        email: "bob@example.com",
+        name: "Bob Example",
+        sub: "bob-subject",
+      }),
+    }));
+
+    expect(user).toMatchObject({
+      actorId: "alice@example.com",
+      confidence: "conflict",
+      email: "alice@example.com",
+      provider: "okta",
+    });
+    expect(user?.conflicts?.join(" ")).toContain("alice@example.com");
+    expect(user?.conflicts?.join(" ")).toContain("bob@example.com");
+  });
+
+  it("honors configured trusted identity header allowlists", () => {
+    const previous = process.env.CEREBRO_TRUSTED_IDENTITY_HEADERS;
+    process.env.CEREBRO_TRUSTED_IDENTITY_HEADERS = "x-okta-email";
+    try {
+      const user = currentUserFromHeaders(new Headers({
+        "x-okta-email": "trusted@example.com",
+        "x-user-email": "spoofed@example.com",
+      }));
+
+      expect(user).toMatchObject({
+        actorId: "trusted@example.com",
+        email: "trusted@example.com",
+        provider: "okta",
+      });
+      expect(user?.evidence?.headers).toEqual(["x-okta-email"]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CEREBRO_TRUSTED_IDENTITY_HEADERS;
+      } else {
+        process.env.CEREBRO_TRUSTED_IDENTITY_HEADERS = previous;
+      }
+    }
   });
 
   it("returns null when no current-user signal is available", () => {
@@ -192,8 +314,11 @@ describe("current user identity", () => {
     process.env.CEREBRO_LOCAL_IDENTITY_FALLBACK = "1";
     try {
       expect(currentUserFromHeadersWithFallback(new Headers())).toMatchObject({
+        actorId: "local-developer",
+        confidence: "fallback",
         displayName: "Local developer",
         initials: "LD",
+        provider: "local",
         username: "local-developer",
         source: "local-fallback",
       });
@@ -210,6 +335,9 @@ describe("current user identity", () => {
 
   it("uses the most stable available actor identifier", () => {
     const baseUser = {
+      actorId: "subject-123",
+      actorLabel: "display.user",
+      confidence: "trusted-proxy",
       displayName: "Display User",
       initials: "DU",
       source: "headers",
@@ -217,10 +345,11 @@ describe("current user identity", () => {
       username: "display.user",
     } satisfies CurrentUser;
 
-    expect(currentUserActor({ ...baseUser, email: "display.user@example.com" })).toBe("display.user@example.com");
-    expect(currentUserActor(baseUser)).toBe("display.user");
-    expect(currentUserActor({ ...baseUser, username: undefined })).toBe("Display User");
-    expect(currentUserActor({ ...baseUser, displayName: "", username: undefined })).toBe("subject-123");
+    expect(currentUserActor({ ...baseUser, email: "display.user@example.com" })).toBe("subject-123");
+    expect(currentUserActor(baseUser)).toBe("subject-123");
+    expect(currentUserActorLabel({ ...baseUser, email: "display.user@example.com", actorLabel: "display.user@example.com" })).toBe("display.user@example.com");
+    expect(currentUserActor({ ...baseUser, actorId: "", subject: undefined })).toBe("display.user");
+    expect(currentUserActor({ ...baseUser, actorId: "", displayName: "", subject: undefined, username: undefined })).toBe("");
   });
 
   it("summarizes identity posture for product UI", () => {
@@ -236,6 +365,22 @@ describe("current user identity", () => {
       label: "Local identity",
       sourceLabel: "Local fallback",
       state: "fallback",
+      tone: "warning",
+    });
+
+    expect(identityPosture({
+      user: {
+        actorId: "subject-1",
+        actorLabel: "person@example.com",
+        confidence: "unverified",
+        displayName: "Person Example",
+        initials: "PE",
+        source: "jwt",
+        subject: "subject-1",
+      },
+    })).toMatchObject({
+      actor: "subject-1",
+      label: "Unverified claims",
       tone: "warning",
     });
 

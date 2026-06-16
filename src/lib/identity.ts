@@ -1,16 +1,49 @@
 export type CurrentUser = {
+  actorId: string;
+  actorLabel: string;
+  confidence: IdentityConfidence;
   displayName: string;
   initials: string;
   email?: string;
   username?: string;
   subject?: string;
+  provider?: IdentityProvider;
   source: "headers" | "jwt" | "azure-client-principal" | "local-fallback";
+  evidence?: IdentityEvidence;
+  conflicts?: string[];
+  warnings?: string[];
 };
 
 export type CurrentUserResponse = {
   authenticated: boolean;
   fallback?: boolean;
   user: CurrentUser | null;
+};
+
+export type IdentityConfidence = "trusted-proxy" | "claims-validated" | "unverified" | "conflict" | "fallback";
+
+export type IdentityProvider =
+  | "alb-oidc"
+  | "auth-proxy"
+  | "authentik"
+  | "azure"
+  | "bearer-jwt"
+  | "cloudflare-access"
+  | "google-iap"
+  | "okta"
+  | "oauth2-proxy"
+  | "local";
+
+export type IdentityEvidence = {
+  claims?: string[];
+  headers?: string[];
+  inferred?: string[];
+  jwt?: {
+    audience?: string;
+    expiresAt?: string;
+    issuer?: string;
+    notBefore?: string;
+  };
 };
 
 export type IdentityPosture = {
@@ -29,6 +62,20 @@ type IdentityClaims = {
   name?: string;
   subject?: string;
   username?: string;
+};
+
+type IdentityCandidate = {
+  claims: IdentityClaims;
+  confidence: IdentityConfidence;
+  evidence: IdentityEvidence;
+  provider?: IdentityProvider;
+  source: CurrentUser["source"];
+  warnings?: string[];
+};
+
+type HeaderMatch = {
+  name: string;
+  value: string;
 };
 
 const DISPLAY_NAME_HEADERS = [
@@ -99,13 +146,42 @@ const normalizeFederatedHeaderValue = (value: string) => {
   return value;
 };
 
-const firstHeader = (headers: Headers, names: string[], maxLength = 8000) => {
+const configuredTrustedHeaderNames = () =>
+  (process.env.CEREBRO_TRUSTED_IDENTITY_HEADERS ?? "")
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+
+const allowedHeaderNames = (names: string[]) => {
+  const trusted = configuredTrustedHeaderNames();
+  if (trusted.length === 0) return names;
+  const trustedSet = new Set(trusted);
+  return names.filter((name) => trustedSet.has(name.toLowerCase()));
+};
+
+const firstHeaderMatch = (headers: Headers, names: string[], maxLength = 8000): HeaderMatch | null => {
   for (const name of names) {
     const value = headers.get(name);
     const first = cleanString(value?.split(",")[0], maxLength);
-    if (first) return normalizeFederatedHeaderValue(first);
+    if (first) return { name, value: normalizeFederatedHeaderValue(first) };
   }
-  return "";
+  return null;
+};
+
+const firstHeader = (headers: Headers, names: string[], maxLength = 8000) =>
+  firstHeaderMatch(headers, names, maxLength)?.value ?? "";
+
+const providerForHeader = (headerNames: string[]): IdentityProvider | undefined => {
+  const names = headerNames.map((name) => name.toLowerCase());
+  if (names.some((name) => name.startsWith("cf-access-"))) return "cloudflare-access";
+  if (names.some((name) => name.startsWith("x-okta-"))) return "okta";
+  if (names.some((name) => name.startsWith("x-auth-request-"))) return "oauth2-proxy";
+  if (names.some((name) => name.startsWith("x-authentik-"))) return "authentik";
+  if (names.some((name) => name.startsWith("x-amzn-oidc-"))) return "alb-oidc";
+  if (names.some((name) => name.startsWith("x-ms-client-principal"))) return "azure";
+  if (names.some((name) => name.startsWith("x-goog-"))) return "google-iap";
+  if (names.length > 0) return "auth-proxy";
+  return undefined;
 };
 
 const decodeURIComponentSafe = (value: string) => {
@@ -142,10 +218,14 @@ const displayNameFrom = (claims: IdentityClaims) =>
     claims.subject,
   );
 
-const currentUserFromClaims = (
-  claims: IdentityClaims,
-  source: CurrentUser["source"],
-): CurrentUser | null => {
+const actorLabelFrom = (claims: IdentityClaims, email: string, username: string) =>
+  firstNonEmpty(email, username, claims.name, claims.subject);
+
+const actorIdFrom = (claims: IdentityClaims, email: string, username: string) =>
+  firstNonEmpty(claims.subject, email, username, claims.name);
+
+const currentUserFromCandidate = (candidate: IdentityCandidate): CurrentUser | null => {
+  const { claims } = candidate;
   const displayName = displayNameFrom(claims);
   if (!displayName) return null;
 
@@ -154,36 +234,68 @@ const currentUserFromClaims = (
   const email = (rawEmail || (looksLikeEmail(rawUsername) ? rawUsername : "")).toLowerCase();
   const username = rawUsername || email;
   const subject = cleanString(claims.subject);
+  const actorId = actorIdFrom({ ...claims, subject }, email, username);
+  const actorLabel = actorLabelFrom(claims, email, username);
+  if (!actorId) return null;
+
+  const inferred = [
+    ...(candidate.evidence.inferred ?? []),
+    ...(!rawEmail && email ? ["email-from-username"] : []),
+    ...(!rawUsername && email ? ["username-from-email"] : []),
+  ];
 
   return {
+    actorId,
+    actorLabel,
+    confidence: candidate.confidence,
     displayName,
     initials: initialsFrom(displayName, email, username),
     ...(email ? { email } : {}),
     ...(username ? { username } : {}),
     ...(subject ? { subject } : {}),
-    source,
+    ...(candidate.provider ? { provider: candidate.provider } : {}),
+    source: candidate.source,
+    evidence: {
+      ...candidate.evidence,
+      ...(inferred.length > 0 ? { inferred } : {}),
+    },
+    ...(candidate.warnings?.length ? { warnings: candidate.warnings } : {}),
   };
 };
 
-const claimString = (claims: Record<string, unknown>, keys: string[]) => {
+const claimMatch = (claims: Record<string, unknown>, keys: string[]) => {
   for (const key of keys) {
     const value = cleanString(claims[key]);
-    if (value) return value;
+    if (value) return { key, value };
   }
-  return "";
+  return null;
 };
 
-const identityClaimsFromRecord = (claims: Record<string, unknown>): IdentityClaims => {
-  const givenName = claimString(claims, ["given_name", "first_name"]);
-  const familyName = claimString(claims, ["family_name", "last_name"]);
+const identityClaimsFromRecord = (claims: Record<string, unknown>): { claims: IdentityClaims; claimNames: string[] } => {
+  const givenName = claimMatch(claims, ["given_name", "first_name"]);
+  const familyName = claimMatch(claims, ["family_name", "last_name"]);
+  const email = claimMatch(claims, ["email", "preferred_email", "email_address", "upn"]);
+  const name = claimMatch(claims, ["name", "display_name", "full_name"]);
+  const subject = claimMatch(claims, ["sub", "subject", "uid", "oid"]);
+  const username = claimMatch(claims, ["preferred_username", "username", "login", "nickname", "cognito:username"]);
+  const derivedName = [givenName?.value, familyName?.value].filter(Boolean).join(" ");
+  const claimNames = [
+    email?.key,
+    name?.key,
+    givenName?.key,
+    familyName?.key,
+    subject?.key,
+    username?.key,
+  ].filter((key): key is string => Boolean(key));
+
   return {
-    email: claimString(claims, ["email", "preferred_email", "email_address", "upn"]),
-    name: firstNonEmpty(
-      claimString(claims, ["name", "display_name", "full_name"]),
-      [givenName, familyName].filter(Boolean).join(" "),
-    ),
-    subject: claimString(claims, ["sub", "subject", "uid", "oid"]),
-    username: claimString(claims, ["preferred_username", "username", "login", "nickname", "cognito:username"]),
+    claims: {
+      email: email?.value,
+      name: firstNonEmpty(name?.value, derivedName),
+      subject: subject?.value,
+      username: username?.value,
+    },
+    claimNames,
   };
 };
 
@@ -210,10 +322,61 @@ const bearerToken = (authorization: string | null) => {
   return match?.[1] ?? "";
 };
 
-const currentUserFromJwt = (token: string) => {
+const jwtDate = (value: unknown) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return new Date(value * 1000).toISOString();
+};
+
+const audienceMatches = (claim: unknown, expected: string) => {
+  if (Array.isArray(claim)) return claim.some((value) => cleanString(value) === expected);
+  return cleanString(claim) === expected;
+};
+
+const jwtValidationWarnings = (payload: Record<string, unknown>) => {
+  const warnings: string[] = [];
+  const nowSeconds = Date.now() / 1000;
+  const issuer = process.env.CEREBRO_IDENTITY_ISSUER;
+  const audience = process.env.CEREBRO_IDENTITY_AUDIENCE;
+  const exp = typeof payload.exp === "number" ? payload.exp : null;
+  const nbf = typeof payload.nbf === "number" ? payload.nbf : null;
+
+  if (issuer && cleanString(payload.iss) !== issuer) warnings.push("issuer-mismatch");
+  if (audience && !audienceMatches(payload.aud, audience)) warnings.push("audience-mismatch");
+  if (exp && exp < nowSeconds) warnings.push("token-expired");
+  if (nbf && nbf > nowSeconds) warnings.push("token-not-yet-valid");
+  return warnings;
+};
+
+const jwtEvidenceFromPayload = (payload: Record<string, unknown>) => ({
+  audience: Array.isArray(payload.aud) ? payload.aud.map((value) => cleanString(value)).filter(Boolean).join(",") : cleanString(payload.aud),
+  expiresAt: jwtDate(payload.exp),
+  issuer: cleanString(payload.iss),
+  notBefore: jwtDate(payload.nbf),
+});
+
+const jwtConfidence = (warnings: string[], provider: IdentityProvider): IdentityConfidence => {
+  if (warnings.length > 0) return "unverified";
+  if (process.env.CEREBRO_IDENTITY_ISSUER || process.env.CEREBRO_IDENTITY_AUDIENCE) return "claims-validated";
+  if (provider === "bearer-jwt") return "unverified";
+  return "trusted-proxy";
+};
+
+const currentUserFromJwt = (token: string, provider: IdentityProvider, source: CurrentUser["source"] = "jwt") => {
   const payload = parseJwtPayload(token);
   if (!payload) return null;
-  return currentUserFromClaims(identityClaimsFromRecord(payload), "jwt");
+  const { claims, claimNames } = identityClaimsFromRecord(payload);
+  const warnings = jwtValidationWarnings(payload);
+  return currentUserFromCandidate({
+    claims,
+    confidence: jwtConfidence(warnings, provider),
+    evidence: {
+      claims: claimNames,
+      jwt: jwtEvidenceFromPayload(payload),
+    },
+    provider,
+    source,
+    warnings,
+  });
 };
 
 const currentUserFromAzureClientPrincipal = (value: string) => {
@@ -231,18 +394,35 @@ const currentUserFromAzureClientPrincipal = (value: string) => {
       const key = cleanString(claim.typ);
       if (key) claims[key] = claim.val;
     }
-    return currentUserFromClaims(identityClaimsFromRecord(claims), "azure-client-principal");
+    const normalized = identityClaimsFromRecord(claims);
+    return currentUserFromCandidate({
+      claims: normalized.claims,
+      confidence: "trusted-proxy",
+      evidence: {
+        claims: normalized.claimNames,
+        headers: ["x-ms-client-principal"],
+      },
+      provider: "azure",
+      source: "azure-client-principal",
+    });
   } catch {
     return null;
   }
 };
 
 export const currentUserActor = (user: CurrentUser | null | undefined) =>
-  firstNonEmpty(user?.email, user?.username, user?.displayName, user?.subject);
+  firstNonEmpty(user?.actorId, user?.subject, user?.email, user?.username, user?.displayName);
+
+export const currentUserActorLabel = (user: CurrentUser | null | undefined) =>
+  firstNonEmpty(user?.actorLabel, user?.email, user?.username, user?.displayName, user?.subject);
 
 export const localCurrentUserFallback = (): CurrentUser => ({
+  actorId: "local-developer",
+  actorLabel: "local-developer",
+  confidence: "fallback",
   displayName: "Local developer",
   initials: "LD",
+  provider: "local",
   username: "local-developer",
   source: "local-fallback",
 });
@@ -266,6 +446,23 @@ export const currentUserSourceLabel = (source: CurrentUser["source"] | null | un
   }
 };
 
+export const currentUserConfidenceLabel = (confidence: IdentityConfidence | null | undefined) => {
+  switch (confidence) {
+    case "trusted-proxy":
+      return "Trusted proxy";
+    case "claims-validated":
+      return "Claims validated";
+    case "unverified":
+      return "Unverified claims";
+    case "conflict":
+      return "Conflicting signals";
+    case "fallback":
+      return "Fallback";
+    default:
+      return "Unknown";
+  }
+};
+
 export const currentUserSourceDetail = (source: CurrentUser["source"] | null | undefined) => {
   switch (source) {
     case "headers":
@@ -278,6 +475,24 @@ export const currentUserSourceDetail = (source: CurrentUser["source"] | null | u
       return "No upstream identity header was present, so local development uses a stable fallback identity.";
     default:
       return "No current-user signal was found on the request.";
+  }
+};
+
+export const currentUserConfidenceDetail = (user: CurrentUser | null | undefined) => {
+  if (!user) return "No current-user signal was found on the request.";
+  if (user.conflicts?.length) return `Conflicting identity signals: ${user.conflicts.join("; ")}.`;
+  if (user.warnings?.length) return `Identity claims need attention: ${user.warnings.join(", ")}.`;
+  switch (user.confidence) {
+    case "trusted-proxy":
+      return "Identity was supplied by configured proxy or platform headers.";
+    case "claims-validated":
+      return "JWT claims matched the configured issuer, audience, and time window. Signature verification is not performed in this UI layer.";
+    case "unverified":
+      return "JWT claims were decoded for display. Treat them as diagnostic unless the upstream proxy enforces token verification.";
+    case "fallback":
+      return "No upstream identity header was present, so local development uses a stable fallback identity.";
+    default:
+      return currentUserSourceDetail(user.source);
   }
 };
 
@@ -318,50 +533,146 @@ export const identityPosture = ({
 
   const actor = currentUserActor(user);
   const sourceLabel = currentUserSourceLabel(user.source);
+  const warning = Boolean(user.conflicts?.length || user.warnings?.length || user.confidence === "unverified");
   return {
     actor,
-    detail: currentUserSourceDetail(user.source),
+    detail: currentUserConfidenceDetail(user),
     displayName: user.displayName,
     initials: user.initials,
-    label: user.source === "local-fallback" ? "Local identity" : "Identity verified",
+    label: user.source === "local-fallback" ? "Local identity" : warning ? currentUserConfidenceLabel(user.confidence) : "Identity verified",
     sourceLabel,
     state: user.source === "local-fallback" ? "fallback" : "resolved",
-    tone: user.source === "local-fallback" ? "warning" : "success",
+    tone: user.source === "local-fallback" || warning ? "warning" : "success",
   };
 };
 
-export const currentUserFromHeaders = (headers: Headers): CurrentUser | null => {
-  const directUser = currentUserFromClaims(
-    {
-      email: decodeURIComponentSafe(firstHeader(headers, EMAIL_HEADERS)),
-      name: decodeURIComponentSafe(firstHeader(headers, DISPLAY_NAME_HEADERS)),
-      subject: firstHeader(headers, SUBJECT_HEADERS),
-      username: decodeURIComponentSafe(firstHeader(headers, USERNAME_HEADERS)),
+const candidateConflict = (primary: CurrentUser, secondary: CurrentUser) => {
+  const conflicts: string[] = [];
+  if (primary.email && secondary.email && primary.email.toLowerCase() !== secondary.email.toLowerCase()) {
+    conflicts.push(`email ${primary.email} != ${secondary.email}`);
+  }
+  if (primary.subject && secondary.subject && primary.subject !== secondary.subject) {
+    conflicts.push(`subject ${primary.subject} != ${secondary.subject}`);
+  }
+  if (primary.username && secondary.username && primary.username.toLowerCase() !== secondary.username.toLowerCase()) {
+    conflicts.push(`username ${primary.username} != ${secondary.username}`);
+  }
+  return conflicts;
+};
+
+const withCandidateConflicts = (primary: CurrentUser, alternates: CurrentUser[]) => {
+  const conflicts = alternates.flatMap((alternate) => candidateConflict(primary, alternate));
+  if (conflicts.length === 0) return primary;
+  return {
+    ...primary,
+    confidence: "conflict" as const,
+    conflicts: [...(primary.conflicts ?? []), ...conflicts],
+  };
+};
+
+const uniqueStrings = (...values: (string[] | undefined)[]) =>
+  Array.from(new Set(values.flatMap((value) => value ?? []).filter(Boolean)));
+
+const shouldPreferAlternateDisplayName = (primary: CurrentUser, alternate: CurrentUser) => {
+  const primaryDisplay = primary.displayName.toLowerCase();
+  const generatedDisplays = [
+    primary.email,
+    primary.username,
+    primary.subject,
+    primary.actorId,
+    primary.actorLabel,
+  ].map((value) => value?.toLowerCase());
+  const alternateDisplay = alternate.displayName.toLowerCase();
+  const alternateGeneratedDisplays = [
+    alternate.email,
+    alternate.username,
+    alternate.subject,
+    alternate.actorId,
+    alternate.actorLabel,
+  ].map((value) => value?.toLowerCase());
+
+  return generatedDisplays.includes(primaryDisplay) && !alternateGeneratedDisplays.includes(alternateDisplay);
+};
+
+const mergeComplementaryCandidates = (primary: CurrentUser, alternates: CurrentUser[]) =>
+  alternates.reduce((merged, alternate) => {
+    if (candidateConflict(merged, alternate).length > 0) return merged;
+
+    const email = merged.email || alternate.email;
+    const username = merged.username || alternate.username || email;
+    const subject = merged.subject || alternate.subject;
+    const displayName = shouldPreferAlternateDisplayName(merged, alternate) ? alternate.displayName : merged.displayName;
+    const actorLabel = firstNonEmpty(email, username, displayName, subject);
+    const actorId = firstNonEmpty(subject, email, username, displayName);
+
+    return {
+      ...merged,
+      actorId,
+      actorLabel,
+      displayName,
+      email,
+      evidence: {
+        claims: uniqueStrings(merged.evidence?.claims, alternate.evidence?.claims),
+        headers: uniqueStrings(merged.evidence?.headers, alternate.evidence?.headers),
+        inferred: uniqueStrings(merged.evidence?.inferred, alternate.evidence?.inferred),
+        jwt: merged.evidence?.jwt ?? alternate.evidence?.jwt,
+      },
+      initials: initialsFrom(displayName, email, username),
+      subject,
+      username,
+      warnings: uniqueStrings(merged.warnings, alternate.warnings),
+    };
+  }, primary);
+
+const directHeaderCandidate = (headers: Headers): CurrentUser | null => {
+  const matches = [
+    firstHeaderMatch(headers, allowedHeaderNames(EMAIL_HEADERS)),
+    firstHeaderMatch(headers, allowedHeaderNames(DISPLAY_NAME_HEADERS)),
+    firstHeaderMatch(headers, allowedHeaderNames(SUBJECT_HEADERS)),
+    firstHeaderMatch(headers, allowedHeaderNames(USERNAME_HEADERS)),
+  ];
+  const headerNames = matches.map((match) => match?.name).filter((name): name is string => Boolean(name));
+  return currentUserFromCandidate({
+    claims: {
+      email: decodeURIComponentSafe(matches[0]?.value ?? ""),
+      name: decodeURIComponentSafe(matches[1]?.value ?? ""),
+      subject: matches[2]?.value ?? "",
+      username: decodeURIComponentSafe(matches[3]?.value ?? ""),
     },
-    "headers",
-  );
-  if (directUser) return directUser;
+    confidence: "trusted-proxy",
+    evidence: { headers: headerNames },
+    provider: providerForHeader(headerNames),
+    source: "headers",
+  });
+};
+
+export const currentUserFromHeaders = (headers: Headers): CurrentUser | null => {
+  const candidates: CurrentUser[] = [];
+  const directUser = directHeaderCandidate(headers);
+  if (directUser) candidates.push(directUser);
 
   const azurePrincipal = firstHeader(headers, ["x-ms-client-principal"]);
   if (azurePrincipal) {
     const user = currentUserFromAzureClientPrincipal(azurePrincipal);
-    if (user) return user;
+    if (user) candidates.push(user);
   }
 
   for (const header of JWT_HEADERS) {
     const token = headers.get(header);
     if (!token) continue;
-    const user = currentUserFromJwt(token);
-    if (user) return user;
+    const user = currentUserFromJwt(token, providerForHeader([header]) ?? "auth-proxy");
+    if (user) candidates.push(user);
   }
 
   const authorizationToken = bearerToken(headers.get("authorization"));
   if (authorizationToken) {
-    const user = currentUserFromJwt(authorizationToken);
-    if (user) return user;
+    const user = currentUserFromJwt(authorizationToken, "bearer-jwt");
+    if (user) candidates.push(user);
   }
 
-  return null;
+  const preferred = candidates[0];
+  if (!preferred) return null;
+  return withCandidateConflicts(mergeComplementaryCandidates(preferred, candidates.slice(1)), candidates.slice(1));
 };
 
 export const currentUserFromHeadersWithFallback = (headers: Headers): CurrentUser | null =>
