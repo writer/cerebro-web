@@ -20,12 +20,12 @@ type Command = Omit<NavigationEntry, "section"> & {
 const commandText = (command: Command) =>
   [command.label, command.description, command.href, command.section, ...command.keywords].join(" ").toLowerCase();
 
-const searchCommands = (query: string, askCerebro: (question: string) => void): Command[] => {
+const searchCommands = (query: string, askGraph: (question: string) => void): Command[] => {
   const trimmed = query.trim();
   if (!trimmed) return [];
   const encoded = encodeURIComponent(trimmed);
   return [
-    { id: "ask-cerebro", label: `Ask Cerebro: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Send this question to the Cerebro agent.", section: "Operator", keywords: ["ask", "agent", "graph", "cypher"], onRun: () => askCerebro(trimmed) },
+    { id: "ask-graph", label: `Ask graph: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Send this question to the graph query panel.", section: "Operator", keywords: ["ask", "agent", "graph", "cypher"], onRun: () => askGraph(trimmed) },
     { id: "search-risk-inbox", label: `Search Risk Inbox for "${trimmed}"`, href: `/risk-inbox?q=${encoded}`, description: "Filter findings by title, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk"] },
     { id: "open-finding", label: `Open finding "${trimmed}"`, href: `/findings/${encoded}`, description: "Jump to a finding detail page by ID.", section: "Operator", keywords: ["finding", "detail"] },
     { id: "open-impact", label: `Open impact map for "${trimmed}"`, href: `/impact?root_urn=${encoded}`, description: "Use as entity URN or graph root.", section: "Operator", keywords: ["impact", "graph"] },
@@ -52,7 +52,7 @@ export default function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const liveSearch = useLiveSearchCommands(query, isCommandPaletteOpen);
 
-  const askCerebro = useMemo(
+  const askGraph = useMemo(
     () => (question: string) => openAgent({ question, autoSubmit: true }),
     [openAgent],
   );
@@ -61,8 +61,8 @@ export default function CommandPalette() {
     const base = navigationEntries.map((e) => ({ ...e, id: `nav:${e.href}` }));
     const q = query.trim().toLowerCase();
     const filtered = q ? base.filter((c) => commandText(c).includes(q)) : base;
-    return [...liveSearch.commands, ...searchCommands(query, askCerebro), ...filtered];
-  }, [askCerebro, liveSearch.commands, query]);
+    return [...liveSearch.commands, ...searchCommands(query, askGraph), ...filtered];
+  }, [askGraph, liveSearch.commands, query]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {

@@ -586,7 +586,7 @@ function SecretStoreIntegrationPanel({ store, method }: { store?: NormalizedCred
             {store.available ? store.detail : store.disabledReason}
           </span>
           {store.nativeResolutionAvailable && (
-            <span className="rounded-md bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-100">native resolver</span>
+            <span className="rounded-md bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-100">server-side resolver</span>
           )}
         </div>
       </div>
@@ -769,7 +769,7 @@ function CredentialReferencePlan({
   const hasUnresolvedReferences = namespace.includes("<") || rows.some((row) => row.reference.includes("<"));
   const planText = rows.map((row) => `${row.field}=${row.reference}`).join("\n");
   const nativeLabel = store.nativeResolutionAvailable || preflight?.credential_boundary?.native_resolution_available
-    ? "native resolution"
+    ? "server-side resolution"
     : store.id === "aws_secrets_manager"
       ? "region in reference"
       : "env projection";
@@ -787,7 +787,7 @@ function CredentialReferencePlan({
               <div className="mt-1 max-w-3xl text-[12px] leading-5 opacity-80">
                 {method.id === "aws_sso_profile"
                   ? "AWS SSO uses a server-side shared config profile. Keep that profile authenticated on the backend host and preflight will verify access before save."
-                  : "This method only needs non-secret runtime configuration. Cerebro still validates the selected store boundary before saving."}
+                  : "This method only needs non-secret runtime configuration. Preflight still validates the selected store boundary before saving."}
               </div>
             </div>
           </div>
@@ -809,7 +809,7 @@ function CredentialReferencePlan({
               <FileJson className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Credential reference recipe</div>
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Credential reference plan</div>
               <div className="text-[12px] text-[var(--text-muted)]">{store.label} · {nativeLabel}</div>
             </div>
           </div>
@@ -1004,7 +1004,7 @@ function OnboardingBrief({
               <PackageCheck className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Connection command center</div>
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Connection setup</div>
               <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">
                 {nextRow ? `Next: ${nextRow.detail}` : "All setup gates are satisfied. Run preflight once more before saving if config changed."}
               </div>
@@ -1068,7 +1068,7 @@ function OnboardingBrief({
               {sendsSecrets
                 ? "Secret material is encrypted in browser transit, sealed at rest, and never returned by connector reads."
                 : store?.nativeResolutionAvailable
-                  ? "The browser submits only runtime-bound references; Cerebro resolves them inside the backend."
+                  ? "The browser submits only runtime-bound references; the backend resolves them inside the runtime boundary."
                   : "The browser submits only references; deployment automation projects the material into the backend runtime."}
             </p>
           </div>
@@ -1105,7 +1105,7 @@ function ConnectionPathSummary({
     ? "The UI encrypts credential material before transit and clears fields after every attempt."
     : referenceOnly && store?.nativeResolutionAvailable
       ? "The UI submits a non-secret pointer; the backend resolves it inside the runtime boundary."
-      : "The UI submits a non-secret pointer; deployment wiring supplies the material to Cerebro.";
+      : "The UI submits a non-secret pointer; deployment wiring supplies the material to the backend runtime.";
   const resolverTitle = store?.label ?? "Choose a credential store";
   const resolverDetail = store
     ? store.nativeResolutionAvailable
@@ -1115,13 +1115,13 @@ function ConnectionPathSummary({
         : "External store values are projected into env references."
     : "Pick where credential material lives before preflight.";
   const preflightTitle = preflight ? preflightStatusLabel(preflight.status) : "Preflight required";
-  const preflightDetail = preflight?.summary ?? "Cerebro validates method, credentials, source access, and collection policy before save.";
+  const preflightDetail = preflight?.summary ?? "Preflight validates method, credentials, source access, and collection policy before save.";
 
   const items = [
     {
       label: "Auth method",
       title: method?.label || method?.shortLabel || "Choose method",
-      detail: method?.category ?? "Select the identity path Cerebro should use.",
+      detail: method?.category ?? "Select the identity path for this source.",
       icon: <KeyRound className="h-4 w-4" />,
     },
     {
@@ -1264,7 +1264,7 @@ function PreflightCockpit({
             {preflightStatusLabel(status)}
           </div>
           <p className="mt-1 max-w-3xl text-[12px] leading-5 opacity-80">
-            {preflight?.summary ?? "Run preflight before saving. Cerebro will validate the method, credential boundary, source config, and collection policy without storing the runtime."}
+            {preflight?.summary ?? "Run preflight before saving. The check validates method, credential boundary, source config, and collection policy without storing the runtime."}
           </p>
         </div>
         <div className="flex items-center gap-2 text-[12px] font-semibold">
@@ -1788,7 +1788,7 @@ function CredentialBrokerPanel({
         <div className="min-w-0">
           {!enabled && (
             <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
-              Select Cerebro Vault, tenant, and connection ID to manage stored credentials.
+              Select a credential vault, tenant, and connection ID to manage stored credentials.
             </div>
           )}
           {error && <div className="mb-3"><ErrorBlock error={error} /></div>}
@@ -1846,7 +1846,7 @@ function CredentialBrokerPanel({
               <div className="text-[13px] font-semibold text-[var(--text-primary)]">
                 {activeCredentials.length > 0 ? "Replace credential" : "Store credential"}
               </div>
-              <div className="mt-1 text-[12px] text-[var(--text-muted)]">{store?.label ?? "Cerebro Vault"}</div>
+              <div className="mt-1 text-[12px] text-[var(--text-muted)]">{store?.label ?? "Managed credential vault"}</div>
             </div>
             {selectedCredential && <Badge value={connectorCredentialStatusLabel(selectedCredential.status)} />}
           </div>

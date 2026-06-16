@@ -11,7 +11,7 @@ export default function DeveloperAgentPlatformPage() {
     <div className="space-y-6">
       <PageHeader
         title="Agent Platform"
-        description="Cerebro-native principles for runtime contracts, evals, capabilities, execution ports, replay, connector identity, and knowledge provenance."
+        description="Runtime contracts, evals, capabilities, execution ports, replay, connector identity, and knowledge provenance."
       />
 
       <Panel title="Contract Version">

@@ -76,7 +76,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="ml-2 max-md:hidden">
             <span className="block text-[15px] font-semibold text-[var(--text-primary)]">Cerebro</span>
-            <span className="block text-[11px] text-[var(--sidebar-muted)]">GRC control plane</span>
+            <span className="block text-[11px] text-[var(--sidebar-muted)]">Controls and evidence</span>
           </div>
         )}
       </div>

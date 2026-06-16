@@ -27,7 +27,7 @@ const agentMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Cerebro",
-  description: "Security posture, findings, controls, and evidence.",
+  description: "Findings, controls, evidence, and connector health.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

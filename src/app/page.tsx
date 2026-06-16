@@ -102,7 +102,7 @@ export default function Home() {
     <div className="space-y-6">
       <PageHeader
         title="Overview"
-        description="Security posture, open risk, evidence freshness, and connector health."
+        description="Open findings, failing controls, evidence freshness, and connector health."
         action={
           <div className="flex items-center gap-2">
             <Link

@@ -22,16 +22,16 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["findings", "risk", "sla", "triage", "owner"],
   },
   {
-    label: "Ask Cerebro",
+    label: "Ask graph",
     href: "/ask",
-    description: "Ask the graph in natural language. Cypher is drafted, validated, run, and cited.",
+    description: "Ask graph questions. Review drafted Cypher, rows, summaries, and citations.",
     section: "Operator",
     keywords: ["ask", "graph", "cypher", "nlq", "query", "search"],
   },
   {
     label: "Controls",
     href: "/controls",
-    description: "Control posture, failing objectives, and mapped findings.",
+    description: "Control status, failing objectives, mapped findings, and evidence gaps.",
     section: "Operator",
     keywords: ["soc2", "iso", "framework", "control", "audit"],
   },
@@ -52,9 +52,9 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Impact map",
     href: "/impact",
-    description: "Entity impact graph and related risk blast radius.",
+    description: "Entity impact graph and affected risk paths.",
     section: "Operator",
-    keywords: ["graph", "entity", "impact", "blast radius"],
+    keywords: ["graph", "entity", "impact", "affected entities"],
   },
   {
     label: "Reports",
@@ -68,7 +68,7 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/connectors",
     description: "Connector library, credentials, source runtime freshness, and ingestion health.",
     section: "Operator",
-    keywords: ["runtimes", "sources", "connectors", "freshness", "mission control"],
+    keywords: ["runtimes", "sources", "connectors", "freshness", "credentials"],
   },
 ];
 
