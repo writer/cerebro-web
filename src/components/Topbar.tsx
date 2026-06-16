@@ -154,6 +154,9 @@ export default function Topbar() {
               ["Subject", user?.subject ?? "—"],
               ["Provider", user?.provider ?? "—"],
               ["Confidence", user ? currentUserConfidenceLabel(user.confidence) : "—"],
+              ["Groups", user?.entitlements?.groups?.join(", ") ?? "—"],
+              ["Roles", user?.entitlements?.roles?.join(", ") ?? "—"],
+              ["Scopes", user?.entitlements?.scopes?.join(", ") ?? "—"],
               ["Auth mode", authLabel],
               ["API key posture", apiKeyPosture],
             ].map(([label, value]) => (

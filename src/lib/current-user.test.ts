@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   currentUserActor,
   currentUserActorLabel,
+  currentUserAuditFields,
   currentUserFromHeaders,
   currentUserFromHeadersWithFallback,
   currentUserSourceLabel,
@@ -261,6 +262,28 @@ describe("current user identity", () => {
     }
   });
 
+  it("extracts groups, roles, and scopes from identity claims", () => {
+    const user = currentUserFromHeaders(new Headers({
+      authorization: `Bearer ${jwtWithPayload({
+        email: "entitled.user@example.com",
+        groups: ["security", "grc"],
+        roles: "admin analyst",
+        scope: "controls:read evidence:write",
+        sub: "entitled-subject",
+      })}`,
+    }));
+
+    expect(user).toMatchObject({
+      actorId: "entitled-subject",
+      entitlements: {
+        groups: ["security", "grc"],
+        roles: ["admin", "analyst"],
+        scopes: ["controls:read", "evidence:write"],
+      },
+    });
+    expect(user?.evidence?.claims).toEqual(expect.arrayContaining(["groups", "roles", "scope"]));
+  });
+
   it("flags conflicting direct and token identity signals", () => {
     const user = currentUserFromHeaders(new Headers({
       "x-okta-email": "alice@example.com",
@@ -388,6 +411,34 @@ describe("current user identity", () => {
       detail: "missing headers",
       label: "Identity unavailable",
       state: "unavailable",
+    });
+  });
+
+  it("summarizes identity telemetry without raw actor values", () => {
+    expect(currentUserAuditFields({
+      actorId: "subject-1",
+      actorLabel: "person@example.com",
+      confidence: "conflict",
+      conflicts: ["email mismatch"],
+      displayName: "Person Example",
+      entitlements: { groups: ["security"], scopes: ["controls:read"] },
+      evidence: { claims: ["email", "groups"], headers: ["x-okta-email"] },
+      initials: "PE",
+      provider: "okta",
+      source: "headers",
+      warnings: ["issuer-mismatch"],
+    })).toEqual({
+      authenticated: true,
+      claimCount: 2,
+      confidence: "conflict",
+      conflictCount: 1,
+      groupCount: 1,
+      headerCount: 1,
+      provider: "okta",
+      roleCount: 0,
+      scopeCount: 1,
+      source: "headers",
+      warningCount: 1,
     });
   });
 });

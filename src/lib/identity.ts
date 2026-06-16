@@ -9,6 +9,7 @@ export type CurrentUser = {
   subject?: string;
   provider?: IdentityProvider;
   source: "headers" | "jwt" | "azure-client-principal" | "local-fallback";
+  entitlements?: IdentityEntitlements;
   evidence?: IdentityEvidence;
   conflicts?: string[];
   warnings?: string[];
@@ -46,6 +47,12 @@ export type IdentityEvidence = {
   };
 };
 
+export type IdentityEntitlements = {
+  groups?: string[];
+  roles?: string[];
+  scopes?: string[];
+};
+
 export type IdentityPosture = {
   actor: string;
   detail: string;
@@ -59,6 +66,7 @@ export type IdentityPosture = {
 
 type IdentityClaims = {
   email?: string;
+  entitlements?: IdentityEntitlements;
   name?: string;
   subject?: string;
   username?: string;
@@ -135,6 +143,13 @@ const cleanString = (value: unknown, maxLength = 160) => {
 };
 
 const firstNonEmpty = (...values: unknown[]) => values.map((value) => cleanString(value)).find(Boolean) ?? "";
+
+const cleanStringList = (value: unknown, separator: RegExp = /[\s,]+/) => {
+  if (Array.isArray(value)) return value.map((item) => cleanString(item)).filter(Boolean);
+  const cleaned = cleanString(value, 4000);
+  if (!cleaned) return [];
+  return cleaned.split(separator).map((item) => cleanString(item)).filter(Boolean);
+};
 
 const looksLikeEmail = (value: string) =>
   /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value);
@@ -224,6 +239,9 @@ const actorLabelFrom = (claims: IdentityClaims, email: string, username: string)
 const actorIdFrom = (claims: IdentityClaims, email: string, username: string) =>
   firstNonEmpty(claims.subject, email, username, claims.name);
 
+const hasEntitlements = (entitlements: IdentityEntitlements | undefined) =>
+  Boolean(entitlements?.groups?.length || entitlements?.roles?.length || entitlements?.scopes?.length);
+
 const currentUserFromCandidate = (candidate: IdentityCandidate): CurrentUser | null => {
   const { claims } = candidate;
   const displayName = displayNameFrom(claims);
@@ -255,6 +273,7 @@ const currentUserFromCandidate = (candidate: IdentityCandidate): CurrentUser | n
     ...(subject ? { subject } : {}),
     ...(candidate.provider ? { provider: candidate.provider } : {}),
     source: candidate.source,
+    ...(hasEntitlements(claims.entitlements) ? { entitlements: claims.entitlements } : {}),
     evidence: {
       ...candidate.evidence,
       ...(inferred.length > 0 ? { inferred } : {}),
@@ -278,6 +297,9 @@ const identityClaimsFromRecord = (claims: Record<string, unknown>): { claims: Id
   const name = claimMatch(claims, ["name", "display_name", "full_name"]);
   const subject = claimMatch(claims, ["sub", "subject", "uid", "oid"]);
   const username = claimMatch(claims, ["preferred_username", "username", "login", "nickname", "cognito:username"]);
+  const groups = cleanStringList(claims.groups ?? claims.group ?? claims["cognito:groups"]);
+  const roles = cleanStringList(claims.roles ?? claims.role);
+  const scopes = cleanStringList(claims.scope ?? claims.scp);
   const derivedName = [givenName?.value, familyName?.value].filter(Boolean).join(" ");
   const claimNames = [
     email?.key,
@@ -286,11 +308,21 @@ const identityClaimsFromRecord = (claims: Record<string, unknown>): { claims: Id
     familyName?.key,
     subject?.key,
     username?.key,
+    groups.length > 0 ? "groups" : undefined,
+    roles.length > 0 ? "roles" : undefined,
+    scopes.length > 0 ? (claims.scope ? "scope" : "scp") : undefined,
   ].filter((key): key is string => Boolean(key));
 
   return {
     claims: {
       email: email?.value,
+      ...(groups.length > 0 || roles.length > 0 || scopes.length > 0 ? {
+        entitlements: {
+          ...(groups.length > 0 ? { groups } : {}),
+          ...(roles.length > 0 ? { roles } : {}),
+          ...(scopes.length > 0 ? { scopes } : {}),
+        },
+      } : {}),
       name: firstNonEmpty(name?.value, derivedName),
       subject: subject?.value,
       username: username?.value,
@@ -496,6 +528,20 @@ export const currentUserConfidenceDetail = (user: CurrentUser | null | undefined
   }
 };
 
+export const currentUserAuditFields = (user: CurrentUser | null | undefined) => ({
+  authenticated: Boolean(user && user.source !== "local-fallback"),
+  claimCount: user?.evidence?.claims?.length ?? 0,
+  confidence: user?.confidence ?? "none",
+  conflictCount: user?.conflicts?.length ?? 0,
+  groupCount: user?.entitlements?.groups?.length ?? 0,
+  headerCount: user?.evidence?.headers?.length ?? 0,
+  provider: user?.provider ?? "none",
+  roleCount: user?.entitlements?.roles?.length ?? 0,
+  scopeCount: user?.entitlements?.scopes?.length ?? 0,
+  source: user?.source ?? "none",
+  warningCount: user?.warnings?.length ?? 0,
+});
+
 export const identityPosture = ({
   error,
   loading = false,
@@ -604,6 +650,9 @@ const mergeComplementaryCandidates = (primary: CurrentUser, alternates: CurrentU
     const displayName = shouldPreferAlternateDisplayName(merged, alternate) ? alternate.displayName : merged.displayName;
     const actorLabel = firstNonEmpty(email, username, displayName, subject);
     const actorId = firstNonEmpty(subject, email, username, displayName);
+    const groups = uniqueStrings(merged.entitlements?.groups, alternate.entitlements?.groups);
+    const roles = uniqueStrings(merged.entitlements?.roles, alternate.entitlements?.roles);
+    const scopes = uniqueStrings(merged.entitlements?.scopes, alternate.entitlements?.scopes);
 
     return {
       ...merged,
@@ -611,6 +660,11 @@ const mergeComplementaryCandidates = (primary: CurrentUser, alternates: CurrentU
       actorLabel,
       displayName,
       email,
+      entitlements: {
+        ...(groups.length > 0 ? { groups } : {}),
+        ...(roles.length > 0 ? { roles } : {}),
+        ...(scopes.length > 0 ? { scopes } : {}),
+      },
       evidence: {
         claims: uniqueStrings(merged.evidence?.claims, alternate.evidence?.claims),
         headers: uniqueStrings(merged.evidence?.headers, alternate.evidence?.headers),
