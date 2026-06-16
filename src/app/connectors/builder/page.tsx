@@ -12,6 +12,7 @@ import {
   DatabaseZap,
   FileJson2,
   KeyRound,
+  Lock,
   Plus,
   Save,
   Search,
@@ -232,8 +233,9 @@ function ConnectorBuilderContent() {
   const detailQuery = useGRCQuery<ConnectorDefinitionResponse>(selectedDefinitionID ? `/connector-definitions/${encodeURIComponent(selectedDefinitionID)}` : null);
   const loadedDefinition = detailQuery.data?.definition;
   const draft = draftOverride ?? loadedDefinition ?? defaultDraft;
-  const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: draft.tenant_id }));
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: draft.tenant_id }));
+  const scopedTenantID = draft.tenant_id.trim();
+  const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(scopedTenantID ? withQuery("/connector-definitions", { tenant_id: scopedTenantID }) : null);
+  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID }));
   const definitions = useMemo(() => definitionsQuery.data?.definitions ?? [], [definitionsQuery.data?.definitions]);
   const credentialStores = normalizeCredentialStores(libraryQuery.data ?? undefined);
   const availableStores = credentialStores.filter((store) => store.available);
@@ -242,6 +244,7 @@ function ConnectorBuilderContent() {
   const selectedUnavailableStores = selectedStoreRecords.filter((store) => !store.available).length;
   const nextStage = connectorDefinitionNextStage(draft);
   const blockingChecks = connectorDefinitionBlockingChecks(draft);
+  const tenantScoped = Boolean(scopedTenantID);
   const runtimeState: RuntimeState = selectedDefinitionID && detailQuery.loading ? "loading" : "ready";
 
   const loadDefinition = (definition: ConnectorDefinition) => {
@@ -346,7 +349,6 @@ function ConnectorBuilderContent() {
   const secretStoreDetail = selectedUnavailableStores > 0 ? `${selectedUnavailableStores} selected unavailable` : `${availableStores.length} available`;
   const secretStoreIntent = selectedStores.length > 0 && selectedUnavailableStores === 0 ? "success" : "warning";
   const filterChips = [
-    { label: "Tenant", value: draft.tenant_id, onClear: () => updateDraft({ tenant_id: "" }) },
     { label: "Definition", value: selectedDefinitionID, onClear: () => setSelectedDefinitionID("") },
   ];
 
@@ -398,7 +400,17 @@ function ConnectorBuilderContent() {
         <div className="space-y-5">
           <Panel title="Definition">
             <div className="grid gap-3 md:grid-cols-2">
-              <label className={labelClass}>Tenant<input value={draft.tenant_id} onChange={(event) => updateDraft({ tenant_id: event.target.value })} placeholder="tenant-a" className={inputClass} /></label>
+              <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3 md:col-span-2">
+                <div className={labelClass}>Tenant scope</div>
+                <div className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                  <Lock className="h-4 w-4 text-[var(--primary)]" />
+                  <span>{draft.tenant_id || "No tenant selected"}</span>
+                  <Badge value={tenantScoped ? "ready" : "blocked"} />
+                </div>
+                <div className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">
+                  {tenantScoped ? "Bound to the current request scope." : "Choose a tenant-scoped library view before saving."}
+                </div>
+              </div>
               <label className={labelClass}>Source ID<input value={draft.source_id} onChange={(event) => updateDraft({ source_id: normalizeConnectorDefinitionID(event.target.value), id: undefined })} placeholder="custom_api" className={inputClass} /></label>
               <label className={labelClass}>Display name<input value={draft.display_name} onChange={(event) => updateDraft({ display_name: event.target.value })} placeholder="Custom API" className={inputClass} /></label>
               <label className={labelClass}>
@@ -457,11 +469,11 @@ function ConnectorBuilderContent() {
                   <FileJson2 className="h-4 w-4" />
                   {working === "validate" ? "Validating..." : "Validate"}
                 </button>
-                <button type="button" onClick={saveDefinition} disabled={Boolean(working)} className="primary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" onClick={saveDefinition} disabled={Boolean(working) || !tenantScoped} className="primary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50">
                   <Save className="h-4 w-4" />
                   {working === "save" ? "Saving..." : "Save definition"}
                 </button>
-                <button type="button" onClick={promoteDefinition} disabled={Boolean(working) || !draft.id || !nextStage || blockingChecks > 0} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" onClick={promoteDefinition} disabled={Boolean(working) || !tenantScoped || !draft.id || !nextStage || blockingChecks > 0} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50">
                   <ArrowRight className="h-4 w-4" />
                   {working === "promote" ? "Promoting..." : nextStage ? `Promote to ${stageLabel(nextStage)}` : "No promotion available"}
                 </button>
