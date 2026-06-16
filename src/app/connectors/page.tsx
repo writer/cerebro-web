@@ -10,15 +10,16 @@ import {
   Database,
   FileJson2,
   PlugZap,
+  Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
 } from "lucide-react";
 
 import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
-import { withQuery } from "@/lib/cerebro-data";
+import { extractRecords, withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { displayDate } from "@/lib/grc";
+import { displayDate, shortEntity } from "@/lib/grc";
+import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 import {
   ConnectorCatalogEntry,
   ConnectorDefinition,
@@ -49,9 +50,14 @@ import {
   type ConnectorCard,
   type ReadinessFilter,
 } from "@/lib/connector-view";
-import type { SourceReadiness } from "@/lib/mission-control";
+import {
+  formatDuration,
+  normalizeRuntime,
+  sourceHealthBreakdown,
+  type MissionControlRuntime,
+  type SourceReadiness,
+} from "@/lib/mission-control";
 import { useQueryParamState } from "@/lib/query-params";
-import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 type LibraryTab = "all" | "attention" | "connected" | "available";
 
@@ -59,10 +65,10 @@ const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
 
 const libraryTabs: Array<{ id: LibraryTab; label: string; icon: ReactNode }> = [
-  { id: "all", label: "All", icon: <Database className="h-4 w-4" /> },
-  { id: "attention", label: "Needs attention", icon: <AlertTriangle className="h-4 w-4" /> },
   { id: "connected", label: "Connected", icon: <CheckCircle2 className="h-4 w-4" /> },
+  { id: "attention", label: "Needs attention", icon: <AlertTriangle className="h-4 w-4" /> },
   { id: "available", label: "Available", icon: <PlugZap className="h-4 w-4" /> },
+  { id: "all", label: "All", icon: <Database className="h-4 w-4" /> },
 ];
 
 function tabMatchesCard(tab: LibraryTab, card: ConnectorCard) {
@@ -125,12 +131,10 @@ function ConnectorLibraryRow({
   card,
   active,
   tenantID,
-  onFocusSource,
 }: {
   card: ConnectorCard;
   active: boolean;
   tenantID: string;
-  onFocusSource: () => void;
 }) {
   const status = compactConnectorStatus(card);
   const meta = connectorDisplayMetadata(card);
@@ -141,6 +145,8 @@ function ConnectorLibraryRow({
   const attention = connectorAttentionTotal(card);
   const primaryAction = connectorPrimaryAction(card);
   const href = connectorPath(card.source_id, { tenant_id: tenantID, tab: status === "not_configured" ? "setup" : undefined });
+  const statusDescription = readinessDescriptions[status];
+  const latestActivity = card.coverage?.latest_activity_at ? displayDate(card.coverage.latest_activity_at) : "Not observed";
 
   return (
     <article className={`surface-panel border-l-[3px] ${readinessRowClass[status]} p-4 transition hover:border-[color:var(--border-strong)] hover:shadow-[var(--shadow-md)] ${active ? "ring-2 ring-[color:var(--ring)]" : ""}`}>
@@ -149,14 +155,14 @@ function ConnectorLibraryRow({
           <ProviderMark connector={card} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-[15px] font-semibold text-[var(--text-primary)]">{displayName}</h3>
+              <h3 className="text-[15px] font-semibold leading-5 text-[var(--text-primary)]">{displayName}</h3>
               <Badge value={status} />
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
               <span>{meta.category}</span>
             </div>
-            <p className="mt-3 max-w-3xl text-[13px] leading-5 text-[var(--text-secondary)]">
-              {card.coverage?.next_action || card.description || readinessDescriptions[status]}
+            <p className="mt-2 max-w-3xl text-[13px] leading-5 text-[var(--text-secondary)]">
+              {card.description || statusDescription}
             </p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {capabilities.map((capability) => (
@@ -169,76 +175,179 @@ function ConnectorLibraryRow({
                   {meta.authBadge}
                 </span>
               )}
+              {capabilities.length === 0 && !meta.authBadge && <span className="text-[12px] text-[var(--text-muted)]">No advertised capabilities</span>}
             </div>
           </div>
         </div>
-        <div className="grid min-w-[260px] gap-2 sm:grid-cols-3 lg:max-w-[360px]">
-          <SourceSignal label="Connections" value={total} attention={total === 0} />
-          <SourceSignal label="Healthy" value={`${healthy}/${Math.max(total, 1)}`} attention={total > 0 && healthy < total} />
-          <SourceSignal label="Action" value={attention} attention={attention > 0} />
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--border)] pt-3">
-        <div className="text-[12px] text-[var(--text-muted)]">
-          {card.coverage?.latest_activity_at ? `Last activity ${displayDate(card.coverage.latest_activity_at)}` : readinessDescriptions[status]}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={onFocusSource} className="secondary-button inline-flex items-center gap-1.5 px-3 py-2 text-[12px]">
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Scope
-          </button>
+        <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
           <Link href={href} className={`${status === "not_configured" ? "primary-button" : "secondary-button"} inline-flex items-center gap-1.5 px-3 py-2 text-[12px]`}>
             {primaryAction}
             <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <SourceSignal label="Connections" value={total} attention={total === 0} />
+        <SourceSignal label="Healthy" value={`${healthy}/${Math.max(total, 1)}`} attention={total > 0 && healthy < total} />
+        <SourceSignal label="Action" value={attention} attention={attention > 0} />
+        <SourceSignal label="Last activity" value={latestActivity} />
+      </div>
+      {status !== "healthy" && status !== "not_configured" && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+          <span className="font-semibold">Next action:</span> {card.coverage?.next_action || card.nextAction || statusDescription}
+        </div>
+      )}
     </article>
   );
 }
 
-function AttentionQueue({
+function runtimeNeedsAction(runtime: MissionControlRuntime) {
+  return runtime.health !== "healthy" ||
+    runtime.graph_freshness !== "current" ||
+    runtime.cursor_state === "pending" ||
+    runtime.schedule_context_configured === false;
+}
+
+function runtimeIssueTitle(runtime: MissionControlRuntime) {
+  if (runtime.graph_freshness === "failed") return "Graph projection failed";
+  if (runtime.health === "degraded") return "Sync degraded";
+  if (runtime.health === "stale") return "Sync is stale";
+  if (runtime.cursor_state === "pending") return "Cursor is pending";
+  if (runtime.graph_freshness === "behind") return "Graph projection is behind";
+  if (runtime.graph_freshness === "not_observed" || runtime.graph_freshness === "unknown") return "Graph telemetry is missing";
+  if (runtime.schedule_context_configured === false) return "Schedule context missing";
+  return "Runtime needs review";
+}
+
+function RuntimeIssueQueue({
   cards,
+  runtimes,
   tenantID,
-  onFocusSource,
 }: {
   cards: ConnectorCard[];
+  runtimes: MissionControlRuntime[];
   tenantID: string;
-  onFocusSource: (sourceID: string) => void;
 }) {
-  const priorityCards = cards.filter((card) => {
-    const status = compactConnectorStatus(card);
-    return status !== "healthy" && status !== "not_configured";
-  }).slice(0, 5);
+  const runtimesBySource = useMemo(() => {
+    const grouped = new Map<string, MissionControlRuntime[]>();
+    runtimes.filter(runtimeNeedsAction).forEach((runtime) => {
+      const sourceID = runtime.source_id || "unknown";
+      grouped.set(sourceID, [...(grouped.get(sourceID) ?? []), runtime]);
+    });
+    return grouped;
+  }, [runtimes]);
+
+  if (cards.length === 0) {
+    return <EmptyBlock label="No connector issues match these filters." />;
+  }
 
   return (
-    <Panel title="Attention queue" action={<span className="text-[12px] text-[var(--text-muted)]">{priorityCards.length} sources</span>}>
-      <div className="space-y-2">
-        {priorityCards.map((card) => {
-          const status = compactConnectorStatus(card);
+    <div className="space-y-3">
+      {cards.map((card) => {
+        const sourceRuntimes = runtimesBySource.get(card.source_id) ?? [];
+        const displayName = connectorDisplayName(card);
+        const sourceStatus = compactConnectorStatus(card);
+        const sourceAction = card.coverage?.next_action || card.nextAction || readinessDescriptions[sourceStatus];
+        const sourceHref = connectorPath(card.source_id, { tenant_id: tenantID, tab: sourceStatus === "not_configured" ? "setup" : "connections" });
+
+        if (sourceRuntimes.length === 0) {
           return (
-            <div key={card.source_id} className={`rounded-lg border-l-[3px] ${readinessRowClass[status]} border-y border-r border-[color:var(--border)] bg-[var(--surface)] p-3`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(card)}</div>
-                  <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{card.nextAction}</div>
+            <article key={card.source_id} className={`surface-panel border-l-[3px] ${readinessRowClass[sourceStatus]} p-4`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 gap-3">
+                  <ProviderMark connector={card} />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{displayName}</h3>
+                      <Badge value={sourceStatus} />
+                    </div>
+                    <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">{sourceAction}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <SourceSignal label="Connections affected" value={connectorAttentionTotal(card)} attention />
+                      <SourceSignal label="Healthy" value={`${connectorHealthyTotal(card)}/${Math.max(connectorRuntimeTotal(card), 1)}`} attention={connectorHealthyTotal(card) < connectorRuntimeTotal(card)} />
+                      <SourceSignal label="Last activity" value={card.coverage?.latest_activity_at ? displayDate(card.coverage.latest_activity_at) : "Not observed"} />
+                    </div>
+                  </div>
                 </div>
-                <Badge value={status} />
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button type="button" onClick={() => onFocusSource(card.source_id)} className="secondary-button px-2.5 py-1.5 text-[12px]">
-                  Scope
-                </button>
-                <Link href={connectorPath(card.source_id, { tenant_id: tenantID })} className="secondary-button px-2.5 py-1.5 text-[12px]">
-                  Open
+                <Link href={sourceHref} className="secondary-button inline-flex shrink-0 items-center justify-center gap-1.5 px-3 py-2 text-[12px]">
+                  Fix source
+                  <ArrowUpRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
-            </div>
+            </article>
           );
-        })}
-        {priorityCards.length === 0 && <EmptyBlock label="No connector health gaps in this scope." />}
+        }
+
+        return sourceRuntimes.map((runtime) => {
+          const href = connectorPath(runtime.source_id || card.source_id, {
+            tenant_id: tenantID || runtime.tenant_id,
+            tab: "connections",
+            runtime_id: runtime.runtime_id,
+          });
+          const issueTitle = runtimeIssueTitle(runtime);
+          const detail = runtime.latest_graph_run?.error ||
+            runtime.latest_finding_evaluation?.error ||
+            (runtime.watermark_lag_seconds ? `${formatDuration(runtime.watermark_lag_seconds)} watermark lag` : "") ||
+            readinessDescriptions[sourceStatus];
+          return (
+            <article key={`${card.source_id}:${runtime.runtime_id}`} className={`surface-panel border-l-[3px] ${readinessRowClass[sourceStatus]} p-4`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 gap-3">
+                  <ProviderMark connector={card} />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{displayName}</h3>
+                      <Badge value={runtime.health} />
+                      <Badge value={runtime.graph_freshness} />
+                    </div>
+                    <div className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">{shortEntity(runtime.runtime_id)}</div>
+                    <p className="mt-2 text-[13px] font-semibold text-[var(--text-primary)]">{issueTitle}</p>
+                    <p className="mt-0.5 text-[12px] leading-5 text-[var(--text-secondary)]">{detail}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <SourceSignal label="Family" value={runtime.family || "Default"} />
+                      <SourceSignal label="Cursor" value={runtime.cursor_state} attention={runtime.cursor_state !== "caught_up"} />
+                      <SourceSignal label="Last activity" value={runtime.last_activity_at ? displayDate(runtime.last_activity_at) : "Not observed"} attention={!runtime.last_activity_at} />
+                      <SourceSignal label="Graph" value={runtime.graph_status || runtime.graph_freshness} attention={runtime.graph_freshness !== "current"} />
+                    </div>
+                  </div>
+                </div>
+                <Link href={href} className="secondary-button inline-flex shrink-0 items-center justify-center gap-1.5 px-3 py-2 text-[12px]">
+                  Inspect runtime
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </article>
+          );
+        });
+      })}
+    </div>
+  );
+}
+
+function AttentionNotice({
+  actionConnections,
+  attentionCount,
+  onViewIssues,
+}: {
+  actionConnections: number;
+  attentionCount: number;
+  onViewIssues: () => void;
+}) {
+  if (attentionCount === 0) return null;
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[13px] font-semibold">Some sources need attention</div>
+          <div className="mt-0.5 text-[12px] leading-5">
+            {attentionCount} source{attentionCount === 1 ? "" : "s"} have {actionConnections} connection signal{actionConnections === 1 ? "" : "s"} to resolve.
+          </div>
+        </div>
+        <button type="button" onClick={onViewIssues} className="secondary-button bg-white/80 px-3 py-2 text-[12px] dark:bg-black/10">
+          View issues
+        </button>
       </div>
-    </Panel>
+    </div>
   );
 }
 
@@ -346,11 +455,90 @@ function CustomConnectorPanel({
   );
 }
 
+function ConnectorViewControls({
+  libraryTab,
+  tabCounts,
+  readinessCounts,
+  readinessFilter,
+  onTab,
+  onReadiness,
+}: {
+  libraryTab: LibraryTab;
+  tabCounts: Record<LibraryTab, number>;
+  readinessCounts: Record<SourceReadiness, number>;
+  readinessFilter: ReadinessFilter;
+  onTab: (tab: LibraryTab) => void;
+  onReadiness: (filter: ReadinessFilter) => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {libraryTabs.map((tab) => (
+          <LibraryTabButton
+            key={tab.id}
+            id={tab.id}
+            active={libraryTab === tab.id}
+            count={tabCounts[tab.id]}
+            onClick={() => onTab(tab.id)}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {(["all", ...readinessOrder] as ReadinessFilter[]).map((filter) => (
+          <button
+            key={filter}
+            type="button"
+            onClick={() => onReadiness(filter)}
+            className={`rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition ${
+              readinessFilter === filter
+                ? "border-[color:var(--border-strong)] bg-[var(--surface-hover)] text-[var(--text-primary)]"
+                : "border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[color:var(--border-strong)]"
+            }`}
+          >
+            {readinessLabels[filter]} {filter === "all" ? tabCounts.all : readinessCounts[filter]}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ConnectorResultList({
+  libraryTab,
+  visibleCards,
+  sourceRuntimes,
+  tenantID,
+  activeSourceID,
+}: {
+  libraryTab: LibraryTab;
+  visibleCards: ConnectorCard[];
+  sourceRuntimes: MissionControlRuntime[];
+  tenantID: string;
+  activeSourceID: string;
+}) {
+  if (libraryTab === "attention") {
+    return <RuntimeIssueQueue cards={visibleCards} runtimes={sourceRuntimes} tenantID={tenantID} />;
+  }
+  return (
+    <div className="space-y-3">
+      {visibleCards.map((card) => (
+        <ConnectorLibraryRow
+          key={card.source_id}
+          card={card}
+          active={activeSourceID === card.source_id}
+          tenantID={tenantID}
+        />
+      ))}
+      {visibleCards.length === 0 && <EmptyBlock label="No connectors match these filters." />}
+    </div>
+  );
+}
+
 export default function ConnectorsPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
   const [sourceQuery, setSourceQuery] = useQueryParamState("q");
-  const [libraryTabValue, setLibraryTab] = useQueryParamState("tab", "all");
+  const [libraryTabValue, setLibraryTab] = useQueryParamState("tab", "connected");
   const [readinessFilterValue, setReadinessFilter] = useQueryParamState("readiness", "all");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
@@ -358,11 +546,20 @@ export default function ConnectorsPage() {
   const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
   const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: debouncedTenantID }));
 
+  const sourceRuntimes = useMemo(
+    () =>
+      extractRecords(libraryQuery.data, ["runtimes", "source_runtimes"])
+        .map((runtime) => normalizeRuntime(runtime))
+        .filter((runtime) => runtime.runtime_id && runtime.source_id),
+    [libraryQuery.data],
+  );
+
   const connectorView = useMemo(() => {
     const library = libraryQuery.data?.connectors ?? [];
-    const cards = buildConnectorCards(library, []);
+    const sources = sourceRuntimes.length > 0 ? sourceHealthBreakdown(sourceRuntimes) : [];
+    const cards = buildConnectorCards(library, sources);
     return { cards };
-  }, [libraryQuery.data]);
+  }, [libraryQuery.data, sourceRuntimes]);
 
   const { cards } = connectorView;
   const libraryTab = (libraryTabs.some((tab) => tab.id === libraryTabValue) ? libraryTabValue : "all") as LibraryTab;
@@ -388,7 +585,13 @@ export default function ConnectorsPage() {
   const visibleCards = useMemo(() => {
     const scoped = cards.filter((card) => {
       if (!tabMatchesCard(libraryTab, card)) return false;
-      if (debouncedSourceID && card.source_id !== debouncedSourceID) return false;
+      const sourceFilter = debouncedSourceID.toLowerCase();
+      if (sourceFilter) {
+        const sourceMatches = [card.source_id, card.name, connectorDisplayName(card)]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(sourceFilter));
+        if (!sourceMatches) return false;
+      }
       return true;
     });
     return filterConnectorCards(scoped, sourceQuery, readinessFilter);
@@ -410,24 +613,42 @@ export default function ConnectorsPage() {
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Source", value: sourceID, onClear: () => setSourceID("") },
     { label: "Search", value: sourceQuery, onClear: () => setSourceQuery("") },
-    { label: "View", value: libraryTab === "all" ? "" : libraryTabs.find((tab) => tab.id === libraryTab)?.label ?? libraryTab, onClear: () => setLibraryTab("all") },
+    { label: "View", value: libraryTab === "connected" ? "" : libraryTabs.find((tab) => tab.id === libraryTab)?.label ?? libraryTab, onClear: () => setLibraryTab("connected") },
     { label: "Readiness", value: readinessFilter === "all" ? "" : readinessLabels[readinessFilter], onClear: () => setReadinessFilter("all") },
   ];
   const clearFilters = () => {
     setTenantID("");
     setSourceID("");
     setSourceQuery("");
-    setLibraryTab("all");
+    setLibraryTab("connected");
     setReadinessFilter("all");
   };
+  const viewCopy: Record<LibraryTab, { title: string; detail: string }> = {
+    all: { title: "All sources", detail: "Every advertised source, connected or not." },
+    attention: { title: "Sources needing attention", detail: "Fix failing, stale, or incomplete runtime signals first." },
+    available: { title: "Available sources", detail: "Sources that are ready to connect." },
+    connected: { title: "Connected sources", detail: "Monitor active sources and open their runtime details." },
+  };
+  const currentView = viewCopy[libraryTab];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Connectors"
-        description="Connector library, credential stores, setup readiness, and connection health."
+        description="Connect sources, check runtime health, and control what gets collected."
         action={
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setLibraryTab("available");
+                setReadinessFilter("all");
+              }}
+              className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]"
+            >
+              <Plus className="h-4 w-4" />
+              Add source
+            </button>
             <Link href={`/connectors/builder${debouncedTenantID ? `?tenant_id=${encodeURIComponent(debouncedTenantID)}` : ""}`} className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
               <FileJson2 className="h-4 w-4" />
               Build custom
@@ -440,21 +661,50 @@ export default function ConnectorsPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-6">
         <MetricCard label="Available" value={cards.length} detail="library connectors" state={metricState} />
         <MetricCard label="Connected" value={connectedCards.length} detail={`${totalConnections} runtime mappings`} intent="success" state={metricState} />
-        <MetricCard label="Needs Attention" value={attentionCards.length} detail={`${actionConnections} connection signals`} intent={attentionCards.length > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Healthy" value={healthyConnections} detail="healthy connections" intent={healthyConnections > 0 ? "success" : "neutral"} state={metricState} />
-        <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
-        <MetricCard label="Custom" value={customDefinitions.length} detail="dynamic definitions" intent={customDefinitions.length > 0 ? "success" : "neutral"} state={definitionsQuery.error ? runtimeStateForError(definitionsQuery.error) : definitionsQuery.loading ? "loading" : "ready"} />
+        <div className="hidden md:block">
+          <MetricCard label="Needs Attention" value={attentionCards.length} detail={`${actionConnections} connection signals`} intent={attentionCards.length > 0 ? "warning" : "success"} state={metricState} />
+        </div>
+        <div className="hidden md:block">
+          <MetricCard label="Healthy" value={healthyConnections} detail="healthy connections" intent={healthyConnections > 0 ? "success" : "neutral"} state={metricState} />
+        </div>
+        <div className="hidden md:block">
+          <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
+        </div>
+        <div className="hidden md:block">
+          <MetricCard label="Custom" value={customDefinitions.length} detail="dynamic definitions" intent={customDefinitions.length > 0 ? "success" : "neutral"} state={definitionsQuery.error ? runtimeStateForError(definitionsQuery.error) : definitionsQuery.loading ? "loading" : "ready"} />
+        </div>
       </div>
 
       <section className="surface-panel p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(160px,0.8fr)_minmax(160px,0.8fr)_minmax(220px,1.2fr)]">
-          <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
-          <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="All sources" className={inputClass} /></label>
+        <div className="space-y-3 md:hidden">
           <label className={labelClass}>
-            Search library
+            Search connectors
+            <div className="relative mt-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                value={sourceQuery}
+                onChange={(event) => setSourceQuery(event.target.value)}
+                placeholder="Provider, source, capability"
+                className="control-input w-full px-9 py-2 text-[13px]"
+              />
+            </div>
+          </label>
+          <details className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+            <summary className="cursor-pointer text-[12px] font-semibold text-[var(--text-secondary)]">Tenant and source filters</summary>
+            <div className="mt-3 grid gap-3">
+              <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
+              <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="Name or source ID" className={inputClass} /></label>
+            </div>
+          </details>
+        </div>
+        <div className="hidden gap-3 md:grid lg:grid-cols-[minmax(160px,0.8fr)_minmax(160px,0.8fr)_minmax(220px,1.2fr)]">
+          <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
+          <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="Name or source ID" className={inputClass} /></label>
+          <label className={labelClass}>
+            Search connectors
             <div className="relative mt-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
@@ -474,79 +724,69 @@ export default function ConnectorsPage() {
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
         <Panel
-          title="Connector library"
+          title={currentView.title}
           action={<span className="text-[12px] text-[var(--text-muted)]">{visibleCards.length} shown</span>}
         >
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {libraryTabs.map((tab) => (
-                <LibraryTabButton
-                  key={tab.id}
-                  id={tab.id}
-                  active={libraryTab === tab.id}
-                  count={tabCounts[tab.id]}
-                  onClick={() => setLibraryTab(tab.id)}
-                />
-              ))}
+            {libraryTab !== "attention" && (
+              <AttentionNotice
+                actionConnections={actionConnections}
+                attentionCount={attentionCards.length}
+                onViewIssues={() => {
+                  setLibraryTab("attention");
+                  setReadinessFilter("all");
+                }}
+              />
+            )}
+            <div className="space-y-3 md:hidden">
+              <ConnectorResultList
+                libraryTab={libraryTab}
+                visibleCards={visibleCards}
+                sourceRuntimes={sourceRuntimes}
+                tenantID={debouncedTenantID}
+                activeSourceID={debouncedSourceID}
+              />
+              <details className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                <summary className="cursor-pointer text-[12px] font-semibold text-[var(--text-secondary)]">View and readiness filters</summary>
+                <div className="mt-3 space-y-3">
+                  <ConnectorViewControls
+                    libraryTab={libraryTab}
+                    tabCounts={tabCounts}
+                    readinessCounts={readinessCounts}
+                    readinessFilter={readinessFilter}
+                    onTab={setLibraryTab}
+                    onReadiness={setReadinessFilter}
+                  />
+                </div>
+              </details>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {(["all", ...readinessOrder] as ReadinessFilter[]).map((filter) => (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => setReadinessFilter(filter)}
-                  className={`rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition ${
-                    readinessFilter === filter
-                      ? "border-[color:var(--border-strong)] bg-[var(--surface-hover)] text-[var(--text-primary)]"
-                      : "border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[color:var(--border-strong)]"
-                  }`}
-                >
-                  {readinessLabels[filter]} {filter === "all" ? cards.length : readinessCounts[filter]}
-                </button>
-              ))}
-            </div>
-            <div className="space-y-3">
-              {visibleCards.map((card) => (
-                <ConnectorLibraryRow
-                  key={card.source_id}
-                  card={card}
-                  active={debouncedSourceID === card.source_id}
-                  tenantID={debouncedTenantID}
-                  onFocusSource={() => setSourceID(card.source_id)}
-                />
-              ))}
-              {visibleCards.length === 0 && <EmptyBlock label="No connectors match this scope." />}
+            <div className="hidden space-y-4 md:block">
+              <div className="text-[12px] leading-5 text-[var(--text-muted)]">{currentView.detail}</div>
+              <ConnectorViewControls
+                libraryTab={libraryTab}
+                tabCounts={tabCounts}
+                readinessCounts={readinessCounts}
+                readinessFilter={readinessFilter}
+                onTab={setLibraryTab}
+                onReadiness={setReadinessFilter}
+              />
+              <ConnectorResultList
+                libraryTab={libraryTab}
+                visibleCards={visibleCards}
+                sourceRuntimes={sourceRuntimes}
+                tenantID={debouncedTenantID}
+                activeSourceID={debouncedSourceID}
+              />
             </div>
           </div>
         </Panel>
 
         <div className="space-y-5">
-          <AttentionQueue cards={cards} tenantID={debouncedTenantID} onFocusSource={setSourceID} />
-          <CustomConnectorPanel definitions={customDefinitions} error={definitionsQuery.error} onRetry={() => void definitionsQuery.reload()} tenantID={debouncedTenantID} />
           <CredentialStorePanel library={libraryQuery.data ?? undefined} />
+          <CustomConnectorPanel definitions={customDefinitions} error={definitionsQuery.error} onRetry={() => void definitionsQuery.reload()} tenantID={debouncedTenantID} />
           <ReadinessMix counts={readinessCounts} filter={readinessFilter} onFilter={setReadinessFilter} />
         </div>
       </div>
-
-      <Panel title="Connected runtimes" action={<span className="text-[12px] text-[var(--text-muted)]">{connectedCards.length} sources observed</span>}>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {connectedCards.map((card) => {
-            const status = compactConnectorStatus(card);
-            return (
-              <Link key={card.source_id} href={connectorPath(card.source_id, { tenant_id: debouncedTenantID })} className={`surface-panel border-l-[3px] ${readinessRowClass[status]} p-3 transition hover:border-[color:var(--border-strong)]`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(card)}</div>
-                    <div className="mt-1 text-[12px] text-[var(--text-muted)]">{connectorRuntimeTotal(card)} runtime mappings</div>
-                  </div>
-                  <Badge value={status} />
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-        {connectedCards.length === 0 && <EmptyBlock label="No connections match this scope." />}
-      </Panel>
     </div>
   );
 }

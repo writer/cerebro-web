@@ -128,7 +128,7 @@ function DefinitionList({
             </div>
           </button>
         ))}
-        {definitions.length === 0 && <EmptyBlock label="No custom connector definitions in this scope." />}
+        {definitions.length === 0 && <EmptyBlock label="No custom connector definitions for this tenant." />}
       </div>
     </Panel>
   );
@@ -401,14 +401,14 @@ function ConnectorBuilderContent() {
           <Panel title="Definition">
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3 md:col-span-2">
-                <div className={labelClass}>Tenant scope</div>
+                <div className={labelClass}>Tenant boundary</div>
                 <div className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
                   <Lock className="h-4 w-4 text-[var(--primary)]" />
                   <span>{draft.tenant_id || "No tenant selected"}</span>
                   <Badge value={tenantScoped ? "ready" : "blocked"} />
                 </div>
                 <div className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">
-                  {tenantScoped ? "Bound to the current request scope." : "Choose a tenant-scoped library view before saving."}
+                  {tenantScoped ? "Bound to the selected tenant." : "Choose a tenant-bound library view before saving."}
                 </div>
               </div>
               <label className={labelClass}>Source ID<input value={draft.source_id} onChange={(event) => updateDraft({ source_id: normalizeConnectorDefinitionID(event.target.value), id: undefined })} placeholder="custom_api" className={inputClass} /></label>
