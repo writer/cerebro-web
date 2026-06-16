@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   connectionMethodsForConnector,
+  connectorDefinitionBlockingChecks,
+  connectorDefinitionNextStage,
+  connectorDefinitionStatus,
   connectorScopeOptionFamilies,
   connectorSubmitErrorMessage,
+  defaultConnectorDefinitionDraft,
   defaultCredentialStoreID,
   encryptConnectorCredentials,
   normalizeCredentialStores,
@@ -176,5 +180,47 @@ describe("connector resource scope policy", () => {
       families: [" s3_bucket ", "AWS.S3_BUCKET"],
     })).toEqual(["aws.s3_bucket", "s3_bucket"]);
     expect(connectorScopeOptionFamilies({ id: "gcp.project", label: "Projects" })).toEqual(["gcp.project"]);
+  });
+});
+
+describe("dynamic connector definitions", () => {
+  it("creates a reference-only JSON API draft by default", () => {
+    const draft = defaultConnectorDefinitionDraft("tenant-a");
+
+    expect(draft).toMatchObject({
+      tenant_id: "tenant-a",
+      runtime: "json_api",
+      stage: "draft",
+      auth: {
+        model: "bearer_token",
+        requires_references: true,
+      },
+    });
+    expect(draft.config_fields?.[0]).toMatchObject({ key: "base_url", required: true });
+    expect(draft.auth.credential_fields?.[0]).toMatchObject({ key: "token", secret: true, reference_only: true });
+    expect(draft.resource_families?.[0]).toMatchObject({ id: "assets", method: "GET", id_field: "id" });
+  });
+
+  it("derives lifecycle and validation status from backend gates", () => {
+    const definition = {
+      tenant_id: "tenant-a",
+      source_id: "example",
+      display_name: "Example",
+      runtime: "json_api",
+      stage: "draft",
+      auth: { model: "bearer_token" },
+      validation: {
+        status: "blocked",
+        checks: [
+          { id: "auth", label: "Auth", status: "ready", severity: "info" },
+          { id: "resources", label: "Resources", status: "blocked", severity: "error", blocking: true },
+        ],
+      },
+      promotion: { eligible_stages: ["sandbox"] },
+    } as const;
+
+    expect(connectorDefinitionStatus(definition)).toBe("blocked");
+    expect(connectorDefinitionBlockingChecks(definition)).toBe(1);
+    expect(connectorDefinitionNextStage(definition)).toBe("sandbox");
   });
 });

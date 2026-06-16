@@ -6,6 +6,7 @@ const routeLabels: Record<string, string> = {
   "/impact": "Impact map",
   "/evidence": "Evidence register",
   "/controls": "Controls",
+  "/connectors/builder": "Connector builder",
   "/connectors": "Connectors",
   "/developer": "Developer Tools",
   "/developer/evals": "Ask evals",
