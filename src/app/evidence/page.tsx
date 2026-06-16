@@ -81,6 +81,7 @@ export default function EvidencePage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        contractId="evidence"
         title="Evidence"
         description="Audit evidence linked to findings, rules, runs, and graph roots."
         action={

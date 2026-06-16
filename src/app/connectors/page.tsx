@@ -735,6 +735,7 @@ export default function ConnectorsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        contractId="connectors"
         title="Connectors"
         description="Connect sources, check runtime health, and control what gets collected."
         action={

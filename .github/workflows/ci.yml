@@ -30,65 +30,12 @@ jobs:
 
       - name: Resolve expensive validation scope
         id: scope
-        shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          run_full=false
-          range=""
-          zero="0000000000000000000000000000000000000000"
-          case "${EVENT_NAME}" in
-            pull_request)
-              range="${BASE_SHA}...${HEAD_SHA}"
-              ;;
-            push)
-              run_full=true
-              ;;
-            workflow_dispatch)
-              run_full=true
-              ;;
-            *)
-              range="origin/main...HEAD"
-              ;;
-          esac
-
-          if [ "${run_full}" = "true" ]; then
-            needs_e2e=true
-            needs_docker=true
-            echo "Running full expensive validation for ${EVENT_NAME}."
-          else
-            if [ -z "${range}" ] || [[ "${range}" == "${zero}"* ]]; then
-              base="$(git merge-base origin/main "${AFTER_SHA}" 2>/dev/null || true)"
-              if [ -n "${base}" ]; then
-                range="${base}...${AFTER_SHA}"
-              else
-                range="origin/main...HEAD"
-              fi
-            fi
-            changed_files="$(git diff --name-only "${range}")"
-            printf '%s\n' "${changed_files}"
-            expensive_pattern='^(src/.*|public/.*|scripts/local-grc-e2e\.mjs|package(-lock)?\.json|next\.config\.ts|tsconfig\.json|Dockerfile|\.dockerignore)$'
-            docker_pattern='^(src/.*|public/.*|package(-lock)?\.json|next\.config\.ts|Dockerfile|\.dockerignore)$'
-            if grep -Eq "${expensive_pattern}" <<< "${changed_files}"; then
-              needs_e2e=true
-            else
-              needs_e2e=false
-            fi
-            if grep -Eq "${docker_pattern}" <<< "${changed_files}"; then
-              needs_docker=true
-            else
-              needs_docker=false
-            fi
-          fi
-          {
-            echo "needs_e2e=${needs_e2e}"
-            echo "needs_docker=${needs_docker}"
-          } >> "$GITHUB_OUTPUT"
+        run: node scripts/resolve-ci-scope.mjs
 
   node-validation:
     name: Node validation
@@ -173,6 +120,17 @@ jobs:
         env:
           CEREBRO_REPO: ${{ github.workspace }}/cerebro
           CEREBRO_GRC_E2E_BROWSER_PROVIDER: playwright
+
+      - name: Upload Local GRC E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-grc-e2e-artifacts
+          path: |
+            /tmp/cerebro-grc-e2e-*/logs/**
+            /tmp/cerebro-grc-e2e-*/*.png
+          if-no-files-found: ignore
+          retention-days: 7
 
   docker-build:
     name: Docker build

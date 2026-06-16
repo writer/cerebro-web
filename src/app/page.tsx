@@ -101,6 +101,7 @@ export default function Home() {
   return (
     <div className="space-y-6">
       <PageHeader
+        contractId="overview"
         title="Overview"
         description="Open findings, failing controls, evidence freshness, and connector health."
         action={
