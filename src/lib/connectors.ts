@@ -458,7 +458,7 @@ const credentialStoreCatalog: Record<
   aws_secrets_manager: {
     id: "aws_secrets_manager",
     label: "AWS Secrets Manager",
-    shortLabel: "ASM",
+    shortLabel: "AWS SM",
     provider: "Amazon Web Services",
     description: "Deployment-backed AWS Secrets Manager storage for connector credentials.",
     mode: "reference",
@@ -487,7 +487,7 @@ const credentialStoreCatalog: Record<
   },
   environment_managed: {
     id: "environment_managed",
-    label: "Environment managed",
+    label: "Environment-managed credentials",
     shortLabel: "Env",
     provider: "Deployment",
     description: "Credentials are supplied by the deployment environment, not entered in this console.",
@@ -615,7 +615,7 @@ export const connectionMethodsForConnector = (
       ? [{
           id: "aws_sso_profile" as const,
           label: "AWS IAM Identity Center",
-          shortLabel: "AWS SSO",
+          shortLabel: "IAM Identity Center",
           status: availableEnvironmentStore ? "ready" as const : "unavailable" as const,
           description: "Use the AWS CLI browser/device-code flow, then hand Cerebro a deployment-managed profile or role reference. No AWS secret key is typed into the browser.",
           credential_stores: ["environment_managed"],
@@ -666,7 +666,7 @@ export const connectionMethodsForConnector = (
     {
       id: "external_reference",
       label: "Secret store reference",
-      shortLabel: "Store ref",
+      shortLabel: "Secret store",
       status: availableReferenceStore ? "ready" : "unavailable",
       description: "Point Cerebro at a deployment-owned secret store reference such as GSM, AWS Secrets Manager, Azure Key Vault, or environment-managed material.",
       credential_stores: ["infisical", "google_secret_manager", "aws_secrets_manager", "azure_key_vault", "hashicorp_vault"],
@@ -760,13 +760,13 @@ const normalizeConnectionMethodSteps = (steps?: Array<string | ConnectorSetupSte
 const connectionMethodShortLabel = (id: ConnectorConnectionMethodID) => {
   switch (id) {
     case "aws_sso_profile":
-      return "AWS SSO";
+      return "AWS IAM Identity Center";
     case "infisical_cli":
       return "Infisical";
     case "environment_managed":
-      return "Env";
+      return "Environment-managed credentials";
     case "external_reference":
-      return "Store ref";
+      return "Secret store reference";
     case "encrypted_submission":
     default:
       return "Manual";
@@ -931,6 +931,7 @@ export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | n
       : catalog.mode) as ConnectorCredentialStoreMode;
     const status = server?.status?.trim() || (available ? "ready" : "needs_configuration");
     const referencePrefixes = safeStringList(server?.reference_prefixes);
+    const label = id === "environment_managed" ? catalog.label : server?.label?.trim() || catalog.label;
     const disabledReason = available
       ? undefined
       : id === "cerebro_vault"
@@ -940,7 +941,7 @@ export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | n
           : "Not advertised by this Cerebro deployment.";
     return {
       ...catalog,
-      label: server?.label?.trim() || catalog.label,
+      label,
       provider: server?.provider?.trim() || catalog.provider,
       description: server?.description?.trim() || catalog.description,
       mode,

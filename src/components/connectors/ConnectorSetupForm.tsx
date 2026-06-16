@@ -119,7 +119,7 @@ function MethodTabs({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <div className="text-[14px] font-semibold text-[var(--text-primary)]">{method.shortLabel}</div>
+                    <div className="text-[14px] font-semibold text-[var(--text-primary)]">{method.label || method.shortLabel}</div>
                     {method.recommended && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:ring-emerald-500/25">Recommended</span>}
                   </div>
                   <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{method.category}</div>
@@ -184,9 +184,10 @@ function SetupStep({
 
 function StepRail({ method, storeLabel }: { method?: ConnectorConnectionMethod; storeLabel?: string }) {
   const setupSteps = [
-    ["Method", method?.shortLabel || "Choose auth"],
+    ["Method", method?.label || method?.shortLabel || "Choose auth"],
+    ["Identity", "Tenant and connection ID"],
     ["Store", storeLabel || "Choose store"],
-    ["Config", "Runtime metadata"],
+    ["Config", "Source settings"],
     ["Scope", "Skip excluded assets"],
     ["Validate", "Test before saving"],
   ];
@@ -503,55 +504,63 @@ function SecretStoreIntegrationPanel({ store, method }: { store?: NormalizedCred
       </div>
 
       {referenceMode && (
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(280px,1fr)]">
-          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Accepted prefixes</div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {store.referencePrefixes.map((prefix) => (
-                <code key={prefix} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                  {prefix}
-                </code>
-              ))}
+        <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Accepted prefixes</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {store.referencePrefixes.map((prefix) => (
+                  <code key={prefix} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                    {prefix}
+                  </code>
+                ))}
+              </div>
             </div>
             {store.referencePlaceholder && (
-              <code className="mt-3 block overflow-x-auto rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">
+              <code className="max-w-full overflow-x-auto rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)] sm:max-w-[50%]">
                 {store.referencePlaceholder}
               </code>
             )}
           </div>
-
-          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Backend config</div>
-            {requiredConfig.length > 0 ? (
-              <div className="mt-2 grid gap-2">
-                {requiredConfig.map((field) => (
-                  <div key={field.env || field.label} className="flex items-start justify-between gap-3 border-t border-[color:var(--border)] pt-2 first:border-t-0 first:pt-0">
-                    <div>
-                      <div className="text-[12px] font-semibold text-[var(--text-primary)]">{field.label || field.env}</div>
-                      {field.description && <div className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{field.description}</div>}
-                    </div>
-                    {field.env && <code className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">{field.env}</code>}
+          <details className="mt-3 rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+            <summary className="cursor-pointer text-[12px] font-semibold text-[var(--text-secondary)]">Deployment setup details</summary>
+            <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Backend config</div>
+                {requiredConfig.length > 0 ? (
+                  <div className="mt-2 grid gap-2">
+                    {requiredConfig.map((field) => (
+                      <div key={field.env || field.label} className="flex items-start justify-between gap-3 border-t border-[color:var(--border)] pt-2 first:border-t-0 first:pt-0">
+                        <div>
+                          <div className="text-[12px] font-semibold text-[var(--text-primary)]">{field.label || field.env}</div>
+                          {field.description && <div className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{field.description}</div>}
+                        </div>
+                        {field.env && <code className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">{field.env}</code>}
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  <div className="mt-2 text-[12px] text-[var(--text-muted)]">No additional backend configuration advertised.</div>
+                )}
               </div>
-            ) : (
-              <div className="mt-2 text-[12px] text-[var(--text-muted)]">No additional backend configuration advertised.</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {setupSteps.length > 0 && (
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {setupSteps.map((step, index) => (
-            <div key={step.id || step.label || index} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
-              <div className="text-[12px] font-semibold text-[var(--text-primary)]">{step.label}</div>
-              {step.description && <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{step.description}</div>}
-              {step.command && (
-                <code className="mt-2 block overflow-x-auto rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{step.command}</code>
+              {setupSteps.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Setup steps</div>
+                  <div className="mt-2 grid gap-2">
+                    {setupSteps.map((step, index) => (
+                      <div key={step.id || step.label || index} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
+                        <div className="text-[12px] font-semibold text-[var(--text-primary)]">{step.label}</div>
+                        {step.description && <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{step.description}</div>}
+                        {step.command && (
+                          <code className="mt-2 block overflow-x-auto rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{step.command}</code>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
-          ))}
+          </details>
         </div>
       )}
     </div>
@@ -670,22 +679,49 @@ function CredentialReferencePlan({
   const namespace = referenceNamespaceLabel(store, connector, tenantID, runtimeID, preflight);
   const hasRows = rows.length > 0;
   const hasUnresolvedReferences = namespace.includes("<") || rows.some((row) => row.reference.includes("<"));
+  const planText = rows.map((row) => `${row.field}=${row.reference}`).join("\n");
   const nativeLabel = store.nativeResolutionAvailable || preflight?.credential_boundary?.native_resolution_available
     ? "native resolution"
     : store.id === "aws_secrets_manager"
       ? "region in reference"
       : "env projection";
 
+  if (!hasRows) {
+    return (
+      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-emerald-950 shadow-[var(--shadow-sm)] dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-100">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 gap-3">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold">No credential references required</div>
+              <div className="mt-1 max-w-3xl text-[12px] leading-5 opacity-80">
+                {method.id === "aws_sso_profile"
+                  ? "AWS SSO uses a server-side shared config profile. Keep that profile authenticated on the backend host and preflight will verify access before save."
+                  : "This method only needs non-secret runtime configuration. Cerebro still validates the selected store boundary before saving."}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] font-semibold text-emerald-800 dark:bg-black/15 dark:text-emerald-100">{store.label}</span>
+            <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] font-semibold text-emerald-800 dark:bg-black/15 dark:text-emerald-100">{nativeLabel}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
-      <div className="grid gap-3 border-b border-[color:var(--border)] bg-[var(--surface-muted)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid gap-4 border-b border-[color:var(--border)] bg-[var(--surface-raised)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[var(--surface)] text-[var(--primary)]">
               <FileJson className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Credential reference plan</div>
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Credential reference recipe</div>
               <div className="text-[12px] text-[var(--text-muted)]">{store.label} · {nativeLabel}</div>
             </div>
           </div>
@@ -694,31 +730,58 @@ function CredentialReferencePlan({
               ? "Generate the non-secret references that this connection should submit. The backend still validates prefixes, store compatibility, and runtime scoping before it resolves anything."
               : "This method does not require credential reference fields. Runtime config stays non-secret and backend validation still runs before save."}
           </div>
+          <div className="mt-3 grid gap-1.5 text-[11px]">
+            {[
+              ["1", "Create store values"],
+              ["2", "Submit references only"],
+              ["3", "Preflight validates scope"],
+            ].map(([step, detail]) => (
+              <div key={step} className="flex items-center gap-2 rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[var(--text-muted)]">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[10px] font-bold text-[var(--primary)]">{step}</span>
+                <span className="leading-4">{detail}</span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap items-start justify-end gap-2">
           <span className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
             {preflight?.credential_boundary?.store_status || store.status}
           </span>
-          {hasRows && (
-            <button
-              type="button"
-              disabled={hasUnresolvedReferences}
-              onClick={() => onApply(rows)}
-              className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              <Clipboard className="h-3.5 w-3.5" />
-              {hasUnresolvedReferences ? "Set tenant first" : "Apply references"}
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={hasUnresolvedReferences}
+            onClick={() => void navigator.clipboard?.writeText(planText)}
+            className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            <Clipboard className="h-3.5 w-3.5" />
+            Copy plan
+          </button>
+          <button
+            type="button"
+            disabled={hasUnresolvedReferences}
+            onClick={() => onApply(rows)}
+            className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            <Clipboard className="h-3.5 w-3.5" />
+            {hasUnresolvedReferences ? "Set tenant first" : "Apply references"}
+          </button>
         </div>
       </div>
 
       <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,0.48fr)_minmax(0,1fr)]">
         <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Namespace</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Namespace</div>
+            <Badge value={store.nativeResolutionAvailable ? "backend reads store" : "projected env"} />
+          </div>
           <code className="mt-2 block overflow-x-auto rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">
             {namespace || "Set tenant and connection ID to preview namespace"}
           </code>
+          {hasUnresolvedReferences && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+              Set tenant and connection ID before applying generated references.
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {(preflight?.credential_boundary?.reference_prefixes ?? store.referencePrefixes).map((prefix) => (
               <span key={prefix} className="rounded-md bg-[var(--surface)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--text-muted)]">
@@ -780,22 +843,26 @@ function OnboardingBrief({
   basicsReady,
   fieldsReady,
   scopeCount,
+  preflight,
 }: {
   method?: ConnectorConnectionMethod;
   store?: NormalizedCredentialStore;
   basicsReady: boolean;
   fieldsReady: boolean;
   scopeCount: number;
+  preflight: ConnectorPreflightResponse | null;
 }) {
   const configRequired = requirementCount(method?.config_fields);
   const credentialRequired = requirementCount(method?.credential_fields);
   const requiredFields = configRequired + credentialRequired;
   const requiresPreflight = (method?.commands?.length ?? 0) > 0;
   const sendsSecrets = method?.id === "encrypted_submission";
+  const preflightReady = preflight?.status === "ready" || preflight?.status === "warning";
+  const preflightBlocked = preflight?.status === "blocked";
   const rows = [
     {
       label: "Method",
-      detail: method ? `${method.shortLabel} selected` : "Choose a supported authentication method",
+      detail: method ? `${method.label || method.shortLabel} selected` : "Choose a supported authentication method",
       ready: Boolean(method && method.status !== "unavailable" && method.saveable !== false),
     },
     {
@@ -810,8 +877,12 @@ function OnboardingBrief({
     },
     {
       label: "Preflight",
-      detail: requiresPreflight ? "Run the CLI checks before testing" : "No CLI preflight required",
-      ready: true,
+      detail: preflight
+        ? preflight.summary
+        : requiresPreflight
+          ? "Run CLI checks, then validate before save"
+          : "Validate the runtime before save",
+      ready: preflightReady,
     },
     {
       label: "Fields",
@@ -824,38 +895,196 @@ function OnboardingBrief({
       ready: true,
     },
   ];
+  const completed = rows.filter((row) => row.ready).length;
+  const progress = Math.round((completed / rows.length) * 100);
+  const nextRow = rows.find((row) => !row.ready);
+  const statusTone = preflightBlocked
+    ? "text-red-700 dark:text-red-200"
+    : preflightReady
+      ? "text-emerald-700 dark:text-emerald-100"
+      : "text-[var(--text-secondary)]";
+  const statusLabel = preflight?.status
+    ? preflightStatusLabel(preflight.status)
+    : "Ready for setup";
 
   return (
-    <div className="grid gap-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
-      <div>
-        <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
-          <ListChecks className="h-4 w-4 text-[var(--text-muted)]" />
-          Onboarding checklist
-        </div>
-        <div className="grid gap-2 md:grid-cols-2">
-          {rows.map((row) => (
-            <div key={row.label} className="flex items-start gap-2 border-t border-[color:var(--border)] pt-2 first:border-t-0 first:pt-0 md:first:border-t md:first:pt-2">
-              {row.ready ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />}
-              <div>
-                <div className="text-[12px] font-semibold text-[var(--text-primary)]">{row.label}</div>
-                <div className="text-[11px] leading-4 text-[var(--text-muted)]">{row.detail}</div>
+    <section className="overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+      <div className="grid gap-4 border-b border-[color:var(--border)] bg-[var(--surface-raised)] p-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[var(--surface)] text-[var(--primary)]">
+              <PackageCheck className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Connection command center</div>
+              <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">
+                {nextRow ? `Next: ${nextRow.detail}` : "All setup gates are satisfied. Run preflight once more before saving if config changed."}
               </div>
             </div>
-          ))}
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+            <div
+              className={`h-full rounded-full ${preflightBlocked ? "bg-red-500" : preflightReady ? "bg-emerald-500" : "bg-[var(--primary)]"}`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            {rows.map((row, index) => (
+              <div
+                key={row.label}
+                className={`min-w-0 rounded-lg border p-3 ${
+                  row.ready
+                    ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/25 dark:bg-emerald-500/10"
+                    : "border-[color:var(--border)] bg-[var(--surface)]"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
+                    row.ready
+                      ? "bg-emerald-600 text-white"
+                      : "bg-[var(--surface-muted)] text-[var(--text-muted)]"
+                  }`}>
+                    {row.ready ? <CheckCircle2 className="h-3 w-3" /> : index + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-semibold text-[var(--text-primary)]">{row.label}</div>
+                    <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[var(--text-muted)]">{row.detail}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Readiness</div>
+            <span className={`text-[12px] font-semibold ${statusTone}`}>{statusLabel}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-md bg-[var(--surface-muted)] p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Method</div>
+              <div className="mt-1 truncate text-[13px] font-semibold text-[var(--text-primary)]">{method?.label || method?.shortLabel || "Choose"}</div>
+            </div>
+            <div className="rounded-md bg-[var(--surface-muted)] p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Store</div>
+              <div className="mt-1 truncate text-[13px] font-semibold text-[var(--text-primary)]">{store?.shortLabel ?? "Choose"}</div>
+            </div>
+          </div>
+          <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+            <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-primary)]">
+              <ShieldCheck className="h-4 w-4 text-[var(--text-muted)]" />
+              Credential boundary
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">
+              {sendsSecrets
+                ? "Secret material is encrypted in browser transit, sealed at rest, and never returned by connector reads."
+                : store?.nativeResolutionAvailable
+                  ? "The browser submits only scoped references; Cerebro resolves them inside the backend."
+                  : "The browser submits only references; deployment automation projects the material into the backend runtime."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge value={`${completed}/${rows.length} gates`} />
+            <Badge value={scopeCount > 0 ? `${scopeCount} scoped out` : "all resources in scope"} />
+            {preflight?.next_action && <Badge value={preflight.next_action.replaceAll("_", " ")} />}
+          </div>
         </div>
       </div>
-      <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
-        <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-primary)]">
-          <ShieldCheck className="h-4 w-4 text-[var(--text-muted)]" />
-          Credential boundary
+    </section>
+  );
+}
+
+function ConnectionPathSummary({
+  method,
+  store,
+  scopeCount,
+  preflight,
+}: {
+  method?: ConnectorConnectionMethod;
+  store?: NormalizedCredentialStore;
+  scopeCount: number;
+  preflight: ConnectorPreflightResponse | null;
+}) {
+  const sendsSecrets = method?.id === "encrypted_submission";
+  const referenceOnly = Boolean(method && method.id !== "encrypted_submission");
+  const boundaryTitle = sendsSecrets
+    ? "Browser-encrypted secret envelope"
+    : store?.nativeResolutionAvailable
+      ? "Scoped backend reference"
+      : "Deployment-projected reference";
+  const boundaryDetail = sendsSecrets
+    ? "The UI encrypts credential material before transit and clears fields after every attempt."
+    : referenceOnly && store?.nativeResolutionAvailable
+      ? "The UI submits a non-secret pointer; the backend resolves it inside the runtime boundary."
+      : "The UI submits a non-secret pointer; deployment wiring supplies the material to Cerebro.";
+  const resolverTitle = store?.label ?? "Choose a credential store";
+  const resolverDetail = store
+    ? store.nativeResolutionAvailable
+      ? "Native resolver is configured for this backend."
+      : store.mode === "environment_managed"
+        ? "Values must exist in the runtime environment."
+        : "External store values are projected into env references."
+    : "Pick where credential material lives before preflight.";
+  const preflightTitle = preflight ? preflightStatusLabel(preflight.status) : "Preflight required";
+  const preflightDetail = preflight?.summary ?? "Cerebro validates method, credentials, source access, and scope before save.";
+
+  const items = [
+    {
+      label: "Auth method",
+      title: method?.label || method?.shortLabel || "Choose method",
+      detail: method?.category ?? "Select the identity path Cerebro should use.",
+      icon: <KeyRound className="h-4 w-4" />,
+    },
+    {
+      label: "Secret boundary",
+      title: boundaryTitle,
+      detail: boundaryDetail,
+      icon: sendsSecrets ? <LockKeyhole className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />,
+    },
+    {
+      label: "Credential store",
+      title: resolverTitle,
+      detail: resolverDetail,
+      icon: <FileJson className="h-4 w-4" />,
+    },
+    {
+      label: "Runtime gate",
+      title: preflightTitle,
+      detail: scopeCount > 0 ? `${preflightDetail} ${scopeCount} resource exclusion${scopeCount === 1 ? "" : "s"} will short-circuit collection.` : preflightDetail,
+      icon: <SlidersHorizontal className="h-4 w-4" />,
+    },
+  ];
+
+  return (
+    <section className="rounded-xl border border-[color:var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow-sm)]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+        <div>
+          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Connection path</div>
+          <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Identity, credential boundary, resolver, and scope are validated as one runtime contract.</div>
         </div>
-        <p className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">
-          {sendsSecrets
-            ? "Secret material is encrypted before submission, cleared after each attempt, and never returned by connector reads."
-            : "This path stores only backend-resolvable references; paste references here, not secret values."}
-        </p>
+        <Badge value={preflight ? preflightStatusLabel(preflight.status) : "not tested"} />
       </div>
-    </div>
+      <div className="grid gap-2 lg:grid-cols-4">
+        {items.map((item, index) => (
+          <div key={item.label} className="relative rounded-lg border border-[color:var(--border)] bg-[var(--surface-raised)] p-3">
+            {index < items.length - 1 && (
+              <ArrowRight className="absolute -right-3 top-5 z-10 hidden h-4 w-4 rounded-full border border-[color:var(--border)] bg-[var(--surface)] p-0.5 text-[var(--text-muted)] lg:block" />
+            )}
+            <div className="flex items-start gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[var(--primary)]">
+                {item.icon}
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">{item.label}</div>
+                <div className="mt-1 text-[12px] font-semibold text-[var(--text-primary)]">{item.title}</div>
+                <div className="mt-1 line-clamp-3 text-[11px] leading-4 text-[var(--text-muted)]">{item.detail}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -957,7 +1186,7 @@ function PreflightCockpit({
       </div>
 
       <div className="grid gap-3 bg-[var(--surface-muted)] p-4 md:grid-cols-2 xl:grid-cols-4">
-        <PreflightTile label="Method" value={method?.shortLabel ?? "Choose method"} detail={method?.category ?? "Connection"} />
+        <PreflightTile label="Method" value={method?.label || method?.shortLabel || "Choose method"} detail={method?.category ?? "Connection"} />
         <PreflightTile label="Credential Store" value={store?.label ?? "Choose store"} detail={boundary?.reference_only ? "references only" : boundary?.sends_secrets ? "encrypted submission" : store?.detail} />
         <PreflightTile
           label="Scope"
@@ -1555,7 +1784,7 @@ export default function ConnectorSetupForm({
               Choose the authentication path, select where credentials live, validate access, then save the runtime.
             </p>
           </div>
-          {selectedMethod && <Badge value={selectedMethod.shortLabel} />}
+          {selectedMethod && <Badge value={selectedMethod.label || selectedMethod.shortLabel} />}
         </div>
       </div>
 
@@ -1572,8 +1801,9 @@ export default function ConnectorSetupForm({
               </div>
             </div>
           )}
-          <OnboardingBrief method={selectedMethod} store={selectedStore} basicsReady={basicsReady} fieldsReady={requiredFieldsReady} scopeCount={scopeCount} />
-          <PreflightCockpit preflight={preflight} method={selectedMethod} store={selectedStore} scopeCount={scopeCount} />
+          <OnboardingBrief method={selectedMethod} store={selectedStore} basicsReady={basicsReady} fieldsReady={requiredFieldsReady} scopeCount={scopeCount} preflight={preflight} />
+          <ConnectionPathSummary method={selectedMethod} store={selectedStore} scopeCount={scopeCount} preflight={preflight} />
+          {preflight && <PreflightCockpit preflight={preflight} method={selectedMethod} store={selectedStore} scopeCount={scopeCount} />}
           <SetupGuidancePanel method={selectedMethod} />
 
           <SetupStep index={1} title="Choose authentication method" icon={<KeyRound className="h-4 w-4" />}>
@@ -1583,7 +1813,20 @@ export default function ConnectorSetupForm({
             <MethodTabs methods={methods} selectedID={effectiveSelectedMethodID ?? "encrypted_submission"} onSelect={changeMethod} />
           </SetupStep>
 
-          <SetupStep index={2} title="Choose credential store" icon={<LockKeyhole className="h-4 w-4" />}>
+          <SetupStep index={2} title="Name connection" icon={<TerminalSquare className="h-4 w-4" />}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className={labelClass}>
+                Tenant
+                <input name="tenant_id" defaultValue={tenantID} required placeholder="tenant" className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                Connection ID
+                <input name="runtime_id" defaultValue={defaultRuntimeID} required placeholder="tenant-source" className={inputClass} />
+              </label>
+            </div>
+          </SetupStep>
+
+          <SetupStep index={3} title="Choose credential store" icon={<LockKeyhole className="h-4 w-4" />}>
             {selectedMethod && (
               <>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -1615,20 +1858,9 @@ export default function ConnectorSetupForm({
             )}
           </SetupStep>
 
-          <SetupStep index={3} title="Configure runtime" icon={<TerminalSquare className="h-4 w-4" />}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className={labelClass}>
-                Tenant
-                <input name="tenant_id" defaultValue={tenantID} required placeholder="tenant" className={inputClass} />
-              </label>
-              <label className={labelClass}>
-                Connection ID
-                <input name="runtime_id" defaultValue={defaultRuntimeID} required placeholder="tenant-source" className={inputClass} />
-              </label>
-            </div>
-
+          <SetupStep index={4} title="Configure source" icon={<TerminalSquare className="h-4 w-4" />}>
             {selectedMethod?.commands && selectedMethod.commands.length > 0 && (
-              <div className="mt-4 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+              <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
                 <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
                   <TerminalSquare className="h-4 w-4 text-[var(--text-muted)]" />
                   CLI preflight
@@ -1686,7 +1918,7 @@ export default function ConnectorSetupForm({
             )}
           </SetupStep>
 
-          <SetupStep index={4} title="Set resource scope" icon={<SlidersHorizontal className="h-4 w-4" />}>
+          <SetupStep index={5} title="Set resource scope" icon={<SlidersHorizontal className="h-4 w-4" />}>
             <div className="space-y-4">
               <ProductGroupSelector
                 groups={selectedMethod?.product_groups ?? []}
@@ -1694,27 +1926,59 @@ export default function ConnectorSetupForm({
                 onDisableFamilies={(families) => updateScopeFamilies(families, true)}
                 onEnableFamilies={(families) => updateScopeFamilies(families, false)}
               />
-              <ScopePolicyBuilder
-                connector={connector}
-                selectedFamilies={excludedFamilies}
-                protectedFamilies={protectedProductFamilies}
-                onDisableFamilies={(families) => updateScopeFamilies(families, true)}
-                onEnableFamilies={(families) => updateScopeFamilies(families, false)}
-                resourceURNs={resourceURNs}
-                onResourceURNsChange={updateResourceURNs}
-                resources={excludedResources}
-                onResourcesChange={updateExcludedResources}
-              />
+              <details className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4" open={scopeEdited || scopeCount > defaultExcludedProductFamilies.length}>
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-semibold text-[var(--text-primary)]">Customize resource types</div>
+                      <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">
+                        Recommended source families are already selected. Open this when you need to search, skip, or add exact assets before collection.
+                      </div>
+                    </div>
+                    <Badge value={scopeCount > 0 ? `${scopeCount} scoped out` : "recommended"} />
+                  </div>
+                </summary>
+                <div className="mt-4">
+                  <ScopePolicyBuilder
+                    connector={connector}
+                    selectedFamilies={excludedFamilies}
+                    protectedFamilies={protectedProductFamilies}
+                    onDisableFamilies={(families) => updateScopeFamilies(families, true)}
+                    onEnableFamilies={(families) => updateScopeFamilies(families, false)}
+                    resourceURNs={resourceURNs}
+                    onResourceURNsChange={updateResourceURNs}
+                    resources={excludedResources}
+                    onResourcesChange={updateExcludedResources}
+                  />
+                </div>
+              </details>
             </div>
           </SetupStep>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-5 pb-28 pt-4 sm:pb-4 lg:pr-[18rem] xl:pr-5">
-        <button type="button" onClick={resetForm} className="secondary-button w-full px-3 py-2 text-[13px] sm:w-auto">
-          Reset
-        </button>
+      <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--border)] bg-[var(--surface)] px-5 py-4 shadow-[0_-16px_36px_rgba(15,23,42,0.08)]">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)]">
+            <PreflightIcon status={preflight?.status} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold text-[var(--text-primary)]">
+              {preflight ? preflightStatusLabel(preflight.status) : canSubmit ? "Ready for preflight" : "Complete setup fields"}
+            </div>
+            <div aria-live="polite" className="mt-0.5 max-w-3xl text-[12px] leading-5 text-[var(--text-muted)]">
+            {preflight
+              ? `${preflightStatusLabel(preflight.status)} · ${preflight.summary}`
+              : canSave
+                ? "Preflight passed. Save when ready."
+                : "Run preflight before saving."}
+            </div>
+          </div>
+        </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <button type="button" onClick={resetForm} className="secondary-button w-full px-3 py-2 text-[13px] sm:w-auto">
+            Reset
+          </button>
           <button
             type="button"
             disabled={!canSubmit || submitting !== null}

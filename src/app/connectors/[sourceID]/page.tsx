@@ -373,12 +373,26 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
   );
 }
 
-export default function ConnectorDetailPage() {
+function setupHref(sourceID: string, tenantID: string) {
+  const params = new URLSearchParams();
+  if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
+  const query = params.toString();
+  return `/connectors/${encodeURIComponent(sourceID)}/setup${query ? `?${query}` : ""}`;
+}
+
+function detailHref(sourceID: string, tenantID: string) {
+  const params = new URLSearchParams();
+  if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
+  const query = params.toString();
+  return `/connectors/${encodeURIComponent(sourceID)}${query ? `?${query}` : ""}`;
+}
+
+export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: boolean }) {
   const params = useParams<{ sourceID: string }>();
   const searchParams = useSearchParams();
   const { apiKey } = useApiKey();
   const sourceID = useMemo(() => decodeURIComponent(params.sourceID ?? ""), [params.sourceID]);
-  const initialTab = (searchParams.get("tab") as DetailTab | null) ?? "overview";
+  const initialTab = setupOnly ? "setup" : (searchParams.get("tab") as DetailTab | null) ?? "overview";
   const [activeTab, setActiveTab] = useState<DetailTab>(tabs.some((tab) => tab.id === initialTab) ? initialTab : "overview");
   const [tenantID, setTenantID] = useState(searchParams.get("tenant_id") ?? "");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
@@ -417,6 +431,83 @@ export default function ConnectorDetailPage() {
   const readyStores = credentialStores.filter((store) => store.available);
   const capabilityLabels = connectorCapabilities(connector, 4);
 
+  if (setupOnly) {
+    const setupStats = [
+      { label: "Ready stores", value: String(readyStores.length) },
+      { label: "Source", value: meta.category },
+      { label: "Connections", value: String(connections.length) },
+    ];
+
+    return (
+      <div className="space-y-5">
+        <section className="overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+          <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0">
+              <Link href={detailHref(sourceID, tenantID)} className="mb-4 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to {displayName}
+              </Link>
+              <div className="flex items-start gap-3">
+                <ProviderMark connector={connector} />
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Connect {displayName}</h1>
+                  <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[var(--text-muted)]">
+                    Choose identity, bind credentials to a backend store, validate access, then save a scoped collector runtime.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {capabilityLabels.map((capability) => (
+                      <span key={capability} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                        {connectorCapabilityLabel(capability)}
+                      </span>
+                    ))}
+                    {capabilityLabels.length === 0 && <Badge value="connector runtime" />}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-3">
+              <div className="grid overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] text-center sm:grid-cols-3">
+                {setupStats.map((item) => (
+                  <div key={item.label} className="border-t border-[color:var(--border)] px-3 py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:first:border-l-0">
+                    <div className="truncate text-[15px] font-semibold text-[var(--text-primary)]">{item.value}</div>
+                    <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+                <span className="font-semibold text-[var(--text-primary)]">Setup loop:</span>
+                <span className="ml-1">method → store → config → scope → preflight → save.</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 border-t border-[color:var(--border)] bg-[var(--surface-muted)] p-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,1fr)_auto]">
+            <label className={labelClass}>
+              Tenant scope
+              <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} />
+            </label>
+            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+              <span className="font-semibold text-[var(--text-primary)]">Dedicated setup:</span>
+              <span className="ml-1">monitoring and activity remain on the connector detail page.</span>
+            </div>
+            <button type="button" onClick={() => void Promise.all([detailQuery.reload(), libraryQuery.reload()])} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px]">
+              <RefreshCw className="h-4 w-4" />
+              Refresh metadata
+            </button>
+          </div>
+        </section>
+
+        <ConnectorSetupForm
+          connector={connector}
+          tenantID={tenantID.trim()}
+          apiKey={apiKey}
+          credentialStores={credentialStores}
+          onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -445,9 +536,9 @@ export default function ConnectorDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setActiveTab("setup")} className="secondary-button px-3 py-2 text-[13px]">
+          <Link href={setupHref(sourceID, tenantID)} className="secondary-button px-3 py-2 text-[13px]">
             Add connection
-          </button>
+          </Link>
           <button type="button" onClick={() => void Promise.all([detailQuery.reload(), libraryQuery.reload()])} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -556,4 +647,8 @@ export default function ConnectorDetailPage() {
       )}
     </div>
   );
+}
+
+export default function ConnectorDetailPage() {
+  return <ConnectorDetailContent />;
 }
