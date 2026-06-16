@@ -34,6 +34,7 @@ type IdentityClaims = {
 const DISPLAY_NAME_HEADERS = [
   "x-okta-name",
   "x-auth-request-name",
+  "x-authentik-name",
   "x-forwarded-name",
   "x-user-display-name",
   "x-user-full-name",
@@ -43,18 +44,25 @@ const DISPLAY_NAME_HEADERS = [
 const EMAIL_HEADERS = [
   "x-okta-email",
   "x-auth-request-email",
+  "x-authentik-email",
+  "x-forwarded-user-email",
   "x-forwarded-email",
   "x-user-email",
   "x-email",
   "x-ms-client-principal-name",
   "x-goog-authenticated-user-email",
+  "cf-access-authenticated-user-email",
 ];
 
 const USERNAME_HEADERS = [
   "x-okta-user",
   "x-auth-request-user",
+  "x-auth-request-preferred-username",
+  "x-authentik-username",
   "x-forwarded-user",
+  "x-forwarded-preferred-username",
   "x-remote-user",
+  "x-preferred-username",
   "x-user",
   "x-webauth-user",
 ];
@@ -71,6 +79,7 @@ const JWT_HEADERS = [
   "x-id-token",
   "x-auth-request-id-token",
   "x-okta-id-token",
+  "cf-access-jwt-assertion",
 ];
 
 const cleanString = (value: unknown, maxLength = 160) => {
@@ -79,6 +88,9 @@ const cleanString = (value: unknown, maxLength = 160) => {
 };
 
 const firstNonEmpty = (...values: unknown[]) => values.map((value) => cleanString(value)).find(Boolean) ?? "";
+
+const looksLikeEmail = (value: string) =>
+  /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value);
 
 const normalizeFederatedHeaderValue = (value: string) => {
   if (value.startsWith("accounts.google.com:")) {
@@ -137,8 +149,10 @@ const currentUserFromClaims = (
   const displayName = displayNameFrom(claims);
   if (!displayName) return null;
 
-  const email = cleanString(claims.email).toLowerCase();
-  const username = cleanString(claims.username);
+  const rawEmail = cleanString(claims.email);
+  const rawUsername = cleanString(claims.username);
+  const email = (rawEmail || (looksLikeEmail(rawUsername) ? rawUsername : "")).toLowerCase();
+  const username = rawUsername || email;
   const subject = cleanString(claims.subject);
 
   return {
