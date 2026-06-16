@@ -189,7 +189,7 @@ def check_repository_split(root: Path) -> list[str]:
     if "export const securityProducers: SecurityProducer[] = [" in text:
         findings.append("src/lib/security-producers.ts: public repo must stay config-driven, not hardcode producer registries")
     if "WriterInternal/" in text:
-        findings.append("src/lib/security-producers.ts: private producer repositories belong in the private web overlay")
+        findings.append("src/lib/security-producers.ts: private producer repositories belong in the internal deployment mirror")
     return findings
 
 
