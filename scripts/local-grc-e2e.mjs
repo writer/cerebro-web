@@ -8,6 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { grcBrowserRouteContracts } from "./grc-route-contract.mjs";
+
 const args = new Set(process.argv.slice(2));
 const withBrowser = args.has("--browser") || process.env.CEREBRO_GRC_E2E_BROWSER === "1";
 const keepServices = args.has("--keep") || process.env.CEREBRO_GRC_E2E_KEEP === "1";
@@ -378,8 +380,7 @@ async function validateConcurrentProxyRequests() {
 }
 
 async function validateRoutes() {
-  const routes = ["/", "/risk-inbox", "/controls", "/evidence", "/connectors", "/impact", "/reports"];
-  for (const route of routes) {
+  for (const { route } of grcBrowserRouteContracts({ adminURN })) {
     const page = await request(`${webBase}${route}`);
     expect(page.status === 200, `${route} status ${page.status}`);
     expect(page.body.includes("Cerebro"), `${route} missing app shell`);
@@ -400,35 +401,17 @@ async function validatePlaywrightBrowser() {
   browserUsed = true;
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    const pages = {
-      "/": ["Overview", "Open findings", "Priority Findings"],
-      "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
-      "/controls": ["Controls", "Framework", "Control"],
-      "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-      "/connectors": ["Connectors", "Connected sources", "Needs attention"],
-      [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
-      "/reports": ["Reports"],
-    };
-    for (const [route, expectedTexts] of Object.entries(pages)) {
+    for (const { route, pageId } of grcBrowserRouteContracts({ adminURN })) {
       await page.goto(`${webBase}${route}`, { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+      const pageContract = `[data-grc-page="${pageId}"]`;
       try {
-        await page.waitForFunction(
-          (texts) => {
-            const body = document.body.innerText.toLowerCase();
-            return texts.every((text) => body.includes(text.toLowerCase()));
-          },
-          expectedTexts,
-          { timeout: 15_000 },
-        );
+        await page.locator(pageContract).waitFor({ state: "visible", timeout: 15_000 });
       } catch (error) {
         const body = await page.locator("body").innerText().catch(() => "");
-        throw new Error(`${route} missing expected browser text ${expectedTexts.join(", ")}: ${body.slice(0, 500)}`, { cause: error });
+        throw new Error(`${route} missing browser page contract ${pageContract}: ${body.slice(0, 500)}`, { cause: error });
       }
       const body = await page.locator("body").innerText();
-      for (const expected of expectedTexts) {
-        expect(includesText(body, expected), `${route} missing ${expected}`);
-      }
       expect(!/Application error|Unhandled Runtime Error|Cerebro request failed \([45][0-9][0-9]\)/i.test(body), `${route} contains error text`);
       await page.screenshot({ path: path.join(workDir, `${safeRouteName(route)}.png`), fullPage: true });
     }
@@ -442,24 +425,13 @@ async function validateAgentBrowser() {
   await run("agent-browser", ["--version"], { quiet: true });
   browserUsed = true;
   await run("agent-browser", ["set", "viewport", "1440", "1000"], { quiet: true });
-  const pages = {
-    "/": ["Overview", "Open findings", "Priority Findings"],
-    "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
-    "/controls": ["Controls", "Framework", "Control"],
-    "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-    "/connectors": ["Connectors", "Connected sources", "Needs attention"],
-    [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
-    "/reports": ["Reports"],
-  };
-  for (const [route, expectedTexts] of Object.entries(pages)) {
+  for (const { route, heading } of grcBrowserRouteContracts({ adminURN })) {
     await run("agent-browser", ["open", `${webBase}${route}`], { quiet: true });
     await run("agent-browser", ["wait", "--load", "networkidle"], { quiet: true });
-    await run("agent-browser", ["wait", "--text", expectedTexts[0]], { quiet: true });
+    await run("agent-browser", ["wait", "--text", heading], { quiet: true });
     await run("agent-browser", ["screenshot", path.join(workDir, `${safeRouteName(route)}.png`), "--annotate"], { quiet: true });
     const { stdout } = await run("agent-browser", ["get", "text", "body"], { quiet: true });
-    for (const expected of expectedTexts) {
-      expect(includesText(stdout, expected), `${route} missing ${expected}`);
-    }
+    expect(includesText(stdout, heading), `${route} missing ${heading}`);
     expect(!/Application error|Unhandled Runtime Error|Cerebro request failed \([45][0-9][0-9]\)/i.test(stdout), `${route} contains error text`);
   }
 }

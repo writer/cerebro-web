@@ -54,6 +54,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        contractId="reports"
         title="Reports"
         description="Build audit packets with evidence, controls, and impact proof."
         action={

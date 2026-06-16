@@ -82,6 +82,7 @@ export default function RiskInboxPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        contractId="risk-inbox"
         title="Risk Inbox"
         description="Triage findings by risk, severity, owner, entity, and SLA."
         action={

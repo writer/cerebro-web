@@ -278,13 +278,15 @@ export function PageHeader({
   title,
   description,
   action,
+  contractId,
 }: {
   title: string;
   description: string;
   action?: ReactNode;
+  contractId?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 pb-6">
+    <div className="flex flex-wrap items-start justify-between gap-4 pb-6" data-grc-page={contractId}>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">{title}</h1>
         <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[var(--text-muted)]">{description}</p>

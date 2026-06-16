@@ -53,6 +53,7 @@ export default function ImpactPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        contractId="impact-map"
         title="Impact Map"
         description="Entity impact graph and affected risk paths."
         action={

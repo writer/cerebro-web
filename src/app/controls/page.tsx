@@ -60,6 +60,7 @@ export default function ControlsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        contractId="controls"
         title="Controls"
         description="Control status, failing objectives, mapped findings, and evidence gaps."
         action={
