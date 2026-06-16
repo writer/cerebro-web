@@ -155,6 +155,8 @@ export type ConnectorCredentialStore = {
   detail?: string;
   description?: string;
   reference_prefixes?: string[];
+  reference_namespace_template?: string;
+  reference_field_template?: string;
   reference_placeholder?: string;
   native_resolution_available?: boolean;
   setup_steps?: ConnectorCredentialStoreSetupStep[];
@@ -187,6 +189,8 @@ export type NormalizedCredentialStore = {
   status: string;
   detail: string;
   referencePrefixes: string[];
+  referenceNamespaceTemplate?: string;
+  referenceFieldTemplate?: string;
   referencePlaceholder?: string;
   nativeResolutionAvailable: boolean;
   setupSteps: ConnectorCredentialStoreSetupStep[];
@@ -354,9 +358,23 @@ export type ConnectorScopePreview = {
 export type ConnectorCredentialBoundary = {
   mode?: ConnectorConnectionMethodID | string;
   credential_store_id?: ConnectorCredentialStoreID | string;
+  store_status?: string;
+  store_detail?: string;
   sends_secrets?: boolean;
   reference_only?: boolean;
+  reference_namespace?: string;
+  reference_prefixes?: string[];
+  native_resolution_available?: boolean;
   fields_accepted?: string[];
+  reference_templates?: ConnectorReferenceTemplate[];
+};
+
+export type ConnectorReferenceTemplate = {
+  field: string;
+  label?: string;
+  required?: boolean;
+  reference: string;
+  description?: string;
 };
 
 export type ConnectorPreflightResponse = {
@@ -424,6 +442,8 @@ const credentialStoreCatalog: Record<
     provider: "Google Cloud Platform",
     description: "Deployment-backed Google Secret Manager storage for connector credentials.",
     mode: "reference",
+    referenceNamespaceTemplate: "CEREBRO_SOURCE_<SOURCE>_*",
+    referenceFieldTemplate: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
   },
   infisical: {
     id: "infisical",
@@ -432,6 +452,8 @@ const credentialStoreCatalog: Record<
     provider: "Infisical",
     description: "Deployment-backed Infisical project and environment path for connector credentials.",
     mode: "reference",
+    referenceNamespaceTemplate: "CEREBRO_SOURCE_<SOURCE>_*",
+    referenceFieldTemplate: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
   },
   aws_secrets_manager: {
     id: "aws_secrets_manager",
@@ -440,6 +462,8 @@ const credentialStoreCatalog: Record<
     provider: "Amazon Web Services",
     description: "Deployment-backed AWS Secrets Manager storage for connector credentials.",
     mode: "reference",
+    referenceNamespaceTemplate: "cerebro/<tenant>/<source>/<runtime>/credentials",
+    referenceFieldTemplate: "aws-sm:<region>:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
   },
   azure_key_vault: {
     id: "azure_key_vault",
@@ -448,6 +472,8 @@ const credentialStoreCatalog: Record<
     provider: "Microsoft Azure",
     description: "Deployment-backed Azure Key Vault storage for connector credentials.",
     mode: "reference",
+    referenceNamespaceTemplate: "CEREBRO_SOURCE_<SOURCE>_*",
+    referenceFieldTemplate: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
   },
   hashicorp_vault: {
     id: "hashicorp_vault",
@@ -456,6 +482,8 @@ const credentialStoreCatalog: Record<
     provider: "HashiCorp",
     description: "Deployment-backed HashiCorp Vault storage for connector credentials.",
     mode: "reference",
+    referenceNamespaceTemplate: "CEREBRO_SOURCE_<SOURCE>_*",
+    referenceFieldTemplate: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
   },
   environment_managed: {
     id: "environment_managed",
@@ -464,6 +492,8 @@ const credentialStoreCatalog: Record<
     provider: "Deployment",
     description: "Credentials are supplied by the deployment environment, not entered in this console.",
     mode: "environment_managed",
+    referenceNamespaceTemplate: "CEREBRO_SOURCE_<SOURCE>_*",
+    referenceFieldTemplate: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
   },
 };
 
@@ -919,6 +949,8 @@ export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | n
       status,
       detail: detail || (available ? "Ready" : "Unavailable"),
       referencePrefixes: referencePrefixes.length > 0 ? referencePrefixes : defaultReferencePrefixes(id, mode),
+      referenceNamespaceTemplate: server?.reference_namespace_template?.trim() || undefined,
+      referenceFieldTemplate: server?.reference_field_template?.trim() || undefined,
       referencePlaceholder: server?.reference_placeholder?.trim() || defaultReferencePlaceholder(id, mode),
       nativeResolutionAvailable: Boolean(server?.native_resolution_available),
       setupSteps: Array.isArray(server?.setup_steps) ? server.setup_steps : [],

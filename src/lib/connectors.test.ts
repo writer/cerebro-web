@@ -40,6 +40,8 @@ describe("connector credential store normalization", () => {
           detail: "deployment managed",
           status: "ready",
           reference_prefixes: ["env:", "aws-sm:"],
+          reference_namespace_template: "cerebro/<tenant>/<source>/<runtime>/credentials",
+          reference_field_template: "aws-sm:<region>:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
           reference_placeholder: "aws-sm:us-east-1:cerebro/tenant-a/aws/runtime-a/credentials#token",
           native_resolution_available: true,
           required_config: [{ env: "CEREBRO_CONNECTOR_SECRET_STORES", label: "Enabled stores", required: true }],
@@ -55,6 +57,8 @@ describe("connector credential store normalization", () => {
       mode: "reference",
       status: "ready",
       referencePrefixes: ["env:", "aws-sm:"],
+      referenceNamespaceTemplate: "cerebro/<tenant>/<source>/<runtime>/credentials",
+      referenceFieldTemplate: "aws-sm:<region>:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
       referencePlaceholder: "aws-sm:us-east-1:cerebro/tenant-a/aws/runtime-a/credentials#token",
       nativeResolutionAvailable: true,
     });
