@@ -401,7 +401,7 @@ async function validatePlaywrightBrowser() {
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const pages = {
-      "/": ["Overview", "Security posture", "Priority Findings"],
+      "/": ["Overview", "Open findings", "Priority Findings"],
       "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
       "/controls": ["Controls", "Framework", "Control"],
       "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
@@ -443,7 +443,7 @@ async function validateAgentBrowser() {
   browserUsed = true;
   await run("agent-browser", ["set", "viewport", "1440", "1000"], { quiet: true });
   const pages = {
-    "/": ["Overview", "Security posture", "Priority Findings"],
+    "/": ["Overview", "Open findings", "Priority Findings"],
     "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
     "/controls": ["Controls", "Framework", "Control"],
     "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
