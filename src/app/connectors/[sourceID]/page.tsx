@@ -475,8 +475,8 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                 ))}
               </div>
               <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-3 text-[12px] leading-5 text-[var(--text-secondary)]">
-                <span className="font-semibold text-[var(--text-primary)]">Setup loop:</span>
-                <span className="ml-1">method → store → config → scope → preflight → save.</span>
+                <span className="font-semibold text-[var(--text-primary)]">Credentials:</span>
+                <span className="ml-1">encrypted submit or backend references only.</span>
               </div>
             </div>
           </div>

@@ -474,6 +474,85 @@ function StoreReadinessChecklist({ stores }: { stores: NormalizedCredentialStore
   );
 }
 
+function SetupCheckpointStrip({
+  method,
+  store,
+  basicsReady,
+  fieldsReady,
+  scopeCount,
+  preflight,
+  canSubmit,
+}: {
+  method?: ConnectorConnectionMethod;
+  store?: NormalizedCredentialStore;
+  basicsReady: boolean;
+  fieldsReady: boolean;
+  scopeCount: number;
+  preflight: ConnectorPreflightResponse | null;
+  canSubmit: boolean;
+}) {
+  const checkpoints = [
+    {
+      label: "Method",
+      value: method?.shortLabel || method?.label || "Choose",
+      ready: Boolean(method),
+      detail: method?.status === "guided" ? "guided" : method?.saveable === false ? "blocked" : "ready",
+    },
+    {
+      label: "Store",
+      value: store?.shortLabel || store?.label || "Choose",
+      ready: Boolean(store?.available),
+      detail: store?.available ? store.detail : store?.disabledReason || "not ready",
+    },
+    {
+      label: "Config",
+      value: basicsReady && fieldsReady ? "Complete" : "Missing",
+      ready: basicsReady && fieldsReady,
+      detail: basicsReady ? "required fields" : "tenant and ID",
+    },
+    {
+      label: "Scope",
+      value: scopeCount > 0 ? `${scopeCount} skipped` : "All enabled",
+      ready: true,
+      detail: "source-time policy",
+    },
+    {
+      label: "Preflight",
+      value: preflight ? preflightStatusLabel(preflight.status) : canSubmit ? "Ready" : "Waiting",
+      ready: preflight?.status === "ready" || preflight?.status === "warning",
+      detail: preflight?.summary || "required before save",
+    },
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+      <div className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-[13px] font-semibold text-[var(--text-primary)]">Setup checkpoints</div>
+            <div className="mt-0.5 text-[12px] leading-5 text-[var(--text-muted)]">
+              Secret values never persist in the browser.
+            </div>
+          </div>
+          <Badge value={canSubmit ? "preflight ready" : "complete required fields"} />
+        </div>
+      </div>
+      <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-5">
+        {checkpoints.map((checkpoint) => (
+          <div key={checkpoint.label} className={`rounded-lg border p-3 ${checkpoint.ready ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/25 dark:bg-emerald-500/10" : "border-[color:var(--border)] bg-[var(--surface-muted)]"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">{checkpoint.label}</div>
+              {checkpoint.ready ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-[var(--text-muted)]" />}
+            </div>
+            <div className="mt-2 truncate text-[13px] font-semibold text-[var(--text-primary)]">{checkpoint.value}</div>
+            <div className="mt-0.5 truncate text-[11px] text-[var(--text-muted)]">{checkpoint.detail}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SecretStoreIntegrationPanel({ store, method }: { store?: NormalizedCredentialStore; method?: ConnectorConnectionMethod }) {
   if (!store || !method) return null;
   const referenceMode = method.id !== "encrypted_submission";
@@ -1802,6 +1881,15 @@ export default function ConnectorSetupForm({
             </div>
           )}
           <OnboardingBrief method={selectedMethod} store={selectedStore} basicsReady={basicsReady} fieldsReady={requiredFieldsReady} scopeCount={scopeCount} preflight={preflight} />
+          <SetupCheckpointStrip
+            method={selectedMethod}
+            store={selectedStore}
+            basicsReady={basicsReady}
+            fieldsReady={requiredFieldsReady}
+            scopeCount={scopeCount}
+            preflight={preflight}
+            canSubmit={canSubmit}
+          />
           <ConnectionPathSummary method={selectedMethod} store={selectedStore} scopeCount={scopeCount} preflight={preflight} />
           {preflight && <PreflightCockpit preflight={preflight} method={selectedMethod} store={selectedStore} scopeCount={scopeCount} />}
           <SetupGuidancePanel method={selectedMethod} />
@@ -1926,32 +2014,28 @@ export default function ConnectorSetupForm({
                 onDisableFamilies={(families) => updateScopeFamilies(families, true)}
                 onEnableFamilies={(families) => updateScopeFamilies(families, false)}
               />
-              <details className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4" open={scopeEdited || scopeCount > defaultExcludedProductFamilies.length}>
-                <summary className="cursor-pointer list-none">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[13px] font-semibold text-[var(--text-primary)]">Customize resource types</div>
-                      <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">
-                        Recommended source families are already selected. Open this when you need to search, skip, or add exact assets before collection.
-                      </div>
+              <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">Resource types</div>
+                    <div className="mt-0.5 max-w-3xl text-[12px] leading-5 text-[var(--text-muted)]">
+                      Source-advertised classes. Disabled families become source-time exclusions.
                     </div>
-                    <Badge value={scopeCount > 0 ? `${scopeCount} scoped out` : "recommended"} />
                   </div>
-                </summary>
-                <div className="mt-4">
-                  <ScopePolicyBuilder
-                    connector={connector}
-                    selectedFamilies={excludedFamilies}
-                    protectedFamilies={protectedProductFamilies}
-                    onDisableFamilies={(families) => updateScopeFamilies(families, true)}
-                    onEnableFamilies={(families) => updateScopeFamilies(families, false)}
-                    resourceURNs={resourceURNs}
-                    onResourceURNsChange={updateResourceURNs}
-                    resources={excludedResources}
-                    onResourcesChange={updateExcludedResources}
-                  />
+                  <Badge value={scopeCount > 0 ? `${scopeCount} scoped out` : "all enabled"} />
                 </div>
-              </details>
+                <ScopePolicyBuilder
+                  connector={connector}
+                  selectedFamilies={excludedFamilies}
+                  protectedFamilies={protectedProductFamilies}
+                  onDisableFamilies={(families) => updateScopeFamilies(families, true)}
+                  onEnableFamilies={(families) => updateScopeFamilies(families, false)}
+                  resourceURNs={resourceURNs}
+                  onResourceURNsChange={updateResourceURNs}
+                  resources={excludedResources}
+                  onResourcesChange={updateExcludedResources}
+                />
+              </div>
             </div>
           </SetupStep>
         </div>
