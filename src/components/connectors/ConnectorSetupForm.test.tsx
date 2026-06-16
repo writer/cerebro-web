@@ -27,8 +27,30 @@ const credentialStores: NormalizedCredentialStore[] = [{
   status: "ready",
   detail: "Ready",
   referencePrefixes: ["env:"],
+  referenceNamespaceTemplate: "CEREBRO_SOURCE_<SOURCE>_*",
+  referenceFieldTemplate: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
   referencePlaceholder: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
   nativeResolutionAvailable: false,
+  setupSteps: [],
+  requiredConfig: [],
+}];
+
+const awsSecretStores: NormalizedCredentialStore[] = [{
+  id: "aws_secrets_manager",
+  label: "AWS Secrets Manager",
+  shortLabel: "ASM",
+  provider: "Amazon Web Services",
+  description: "Runtime-managed AWS Secrets Manager references.",
+  mode: "reference",
+  available: true,
+  default: true,
+  status: "ready",
+  detail: "native resolver ready",
+  referencePrefixes: ["env:", "aws-sm:"],
+  referenceNamespaceTemplate: "cerebro/<tenant>/<source>/<runtime>/credentials",
+  referenceFieldTemplate: "aws-sm:<region>:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
+  referencePlaceholder: "aws-sm:us-east-1:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
+  nativeResolutionAvailable: true,
   setupSteps: [],
   requiredConfig: [],
 }];
@@ -59,6 +81,31 @@ function awsConnector(): ConnectorCatalogEntry {
   };
 }
 
+function awsExternalReferenceConnector(): ConnectorCatalogEntry {
+  return {
+    source_id: "aws",
+    name: "AWS",
+    display_name: "Amazon Web Services",
+    scope_options: [],
+    connection_methods: [{
+      id: "external_reference",
+      label: "External secret-store reference",
+      short_label: "Store ref",
+      category: "Reference",
+      description: "Use AWS Secrets Manager references.",
+      credential_stores: ["aws_secrets_manager"],
+      saveable: true,
+      config_fields: [
+        { key: "account_id", label: "Account ID", required: true },
+      ],
+      credential_fields: [
+        { key: "access_key_id", label: "Access key ID", required: true, reference_only: true },
+        { key: "secret_access_key", label: "Secret access key", required: true, reference_only: true },
+      ],
+    }],
+  };
+}
+
 describe("ConnectorSetupForm", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -80,14 +127,14 @@ describe("ConnectorSetupForm", () => {
     fetchCerebroMock.mockReset();
   });
 
-  async function renderForm(connector: ConnectorCatalogEntry) {
+  async function renderForm(connector: ConnectorCatalogEntry, stores: NormalizedCredentialStore[] = credentialStores) {
     await act(async () => {
       root.render(
         <ConnectorSetupForm
           connector={connector}
           tenantID="writer"
           apiKey="test-key"
-          credentialStores={credentialStores}
+          credentialStores={stores}
           onConnected={onConnected}
         />,
       );
@@ -141,5 +188,22 @@ describe("ConnectorSetupForm", () => {
     expect(connectionCall).toBeDefined();
     const payload = JSON.parse(String(connectionCall?.[2]?.body ?? "{}"));
     expect(payload.scope_policy?.excluded_families ?? []).not.toContain("aws.identity_center");
+  });
+
+  it("applies generated AWS Secrets Manager references to credential fields", async () => {
+    await renderForm(awsExternalReferenceConnector(), awsSecretStores);
+
+    const applyButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes("Apply references"));
+    expect(applyButton).toBeDefined();
+
+    await act(async () => {
+      applyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    const accessKeyInput = container.querySelector<HTMLInputElement>('input[name="credential:access_key_id"]');
+    const secretKeyInput = container.querySelector<HTMLInputElement>('input[name="credential:secret_access_key"]');
+
+    expect(accessKeyInput?.value).toBe("aws-sm:us-east-1:cerebro/writer/aws/writer-aws-connection/credentials#access_key_id");
+    expect(secretKeyInput?.value).toBe("aws-sm:us-east-1:cerebro/writer/aws/writer-aws-connection/credentials#secret_access_key");
   });
 });

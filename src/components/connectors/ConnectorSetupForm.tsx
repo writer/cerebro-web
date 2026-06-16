@@ -558,6 +558,218 @@ function SecretStoreIntegrationPanel({ store, method }: { store?: NormalizedCred
   );
 }
 
+type CredentialReferencePlanRow = {
+  field: string;
+  label: string;
+  required?: boolean;
+  reference: string;
+  description?: string;
+  source: "backend" | "suggested";
+};
+
+function referencePathSegment(value: string) {
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function envComponent(value: string) {
+  const component = value.trim().replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
+  return component || "CONFIG";
+}
+
+function replaceReferenceTemplate(template: string, connector: ConnectorCatalogEntry, tenantID: string, runtimeID: string, field: string) {
+  const tenant = referencePathSegment(tenantID) || "<tenant>";
+  const source = referencePathSegment(connector.source_id) || "<source>";
+  const runtime = referencePathSegment(runtimeID) || "<runtime>";
+  return template
+    .replaceAll("<tenant>", tenant)
+    .replaceAll("<source>", source)
+    .replaceAll("<runtime>", runtime)
+    .replaceAll("<SOURCE>", envComponent(connector.source_id))
+    .replaceAll("<FIELD>", envComponent(field))
+    .replaceAll("<field>", field)
+    .replaceAll("<region>", "us-east-1");
+}
+
+function fallbackReferenceTemplate(store: NormalizedCredentialStore) {
+  if (store.referenceFieldTemplate) return store.referenceFieldTemplate;
+  if (store.referencePlaceholder) return store.referencePlaceholder;
+  if (store.id === "aws_secrets_manager") return "aws-sm:us-east-1:cerebro/<tenant>/<source>/<runtime>/credentials#<field>";
+  return "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>";
+}
+
+function credentialReferenceRows({
+  connector,
+  method,
+  store,
+  tenantID,
+  runtimeID,
+  preflight,
+}: {
+  connector: ConnectorCatalogEntry;
+  method?: ConnectorConnectionMethod;
+  store?: NormalizedCredentialStore;
+  tenantID: string;
+  runtimeID: string;
+  preflight: ConnectorPreflightResponse | null;
+}): CredentialReferencePlanRow[] {
+  if (!method || !store || method.id === "encrypted_submission") return [];
+  const backendTemplates = preflight?.credential_boundary?.reference_templates ?? [];
+  if (backendTemplates.length > 0 && preflight?.credential_store_id === store.id) {
+    return backendTemplates.map((template) => ({
+      field: template.field,
+      label: template.label || template.field,
+      required: template.required,
+      reference: template.reference,
+      description: template.description,
+      source: "backend" as const,
+    }));
+  }
+  const template = fallbackReferenceTemplate(store);
+  return (method.credential_fields ?? []).map((field) => ({
+    field: field.key,
+    label: field.label || field.key,
+    required: field.required,
+    reference: replaceReferenceTemplate(template, connector, tenantID, runtimeID, field.key),
+    description: store.id === "aws_secrets_manager"
+      ? "Scoped to this connection namespace; backend validation rejects unscoped aws-sm references."
+      : "Projected into the backend runtime environment before source validation.",
+    source: "suggested" as const,
+  }));
+}
+
+function referenceNamespaceLabel(store: NormalizedCredentialStore | undefined, connector: ConnectorCatalogEntry, tenantID: string, runtimeID: string, preflight: ConnectorPreflightResponse | null) {
+  const backendNamespace = preflight?.credential_boundary?.reference_namespace;
+  if (backendNamespace) return backendNamespace;
+  if (!store) return "";
+  const template = store.referenceNamespaceTemplate || (store.id === "aws_secrets_manager" ? "cerebro/<tenant>/<source>/<runtime>/credentials" : "CEREBRO_SOURCE_<SOURCE>_*");
+  return replaceReferenceTemplate(template, connector, tenantID, runtimeID, "*");
+}
+
+function CredentialReferencePlan({
+  connector,
+  method,
+  store,
+  tenantID,
+  runtimeID,
+  preflight,
+  onApply,
+}: {
+  connector: ConnectorCatalogEntry;
+  method?: ConnectorConnectionMethod;
+  store?: NormalizedCredentialStore;
+  tenantID: string;
+  runtimeID: string;
+  preflight: ConnectorPreflightResponse | null;
+  onApply: (rows: CredentialReferencePlanRow[]) => void;
+}) {
+  if (!method || !store || method.id === "encrypted_submission") return null;
+  const rows = credentialReferenceRows({ connector, method, store, tenantID, runtimeID, preflight });
+  const namespace = referenceNamespaceLabel(store, connector, tenantID, runtimeID, preflight);
+  const hasRows = rows.length > 0;
+  const hasUnresolvedReferences = namespace.includes("<") || rows.some((row) => row.reference.includes("<"));
+  const nativeLabel = store.nativeResolutionAvailable || preflight?.credential_boundary?.native_resolution_available
+    ? "native resolution"
+    : store.id === "aws_secrets_manager"
+      ? "region in reference"
+      : "env projection";
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+      <div className="grid gap-3 border-b border-[color:var(--border)] bg-[var(--surface-muted)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">
+              <FileJson className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Credential reference plan</div>
+              <div className="text-[12px] text-[var(--text-muted)]">{store.label} · {nativeLabel}</div>
+            </div>
+          </div>
+          <div className="mt-3 max-w-3xl text-[12px] leading-5 text-[var(--text-muted)]">
+            {hasRows
+              ? "Generate the non-secret references that this connection should submit. The backend still validates prefixes, store compatibility, and runtime scoping before it resolves anything."
+              : "This method does not require credential reference fields. Runtime config stays non-secret and backend validation still runs before save."}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <span className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+            {preflight?.credential_boundary?.store_status || store.status}
+          </span>
+          {hasRows && (
+            <button
+              type="button"
+              disabled={hasUnresolvedReferences}
+              onClick={() => onApply(rows)}
+              className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-55"
+            >
+              <Clipboard className="h-3.5 w-3.5" />
+              {hasUnresolvedReferences ? "Set tenant first" : "Apply references"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,0.48fr)_minmax(0,1fr)]">
+        <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Namespace</div>
+          <code className="mt-2 block overflow-x-auto rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">
+            {namespace || "Set tenant and connection ID to preview namespace"}
+          </code>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {(preflight?.credential_boundary?.reference_prefixes ?? store.referencePrefixes).map((prefix) => (
+              <span key={prefix} className="rounded-md bg-[var(--surface)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--text-muted)]">
+                {prefix}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-[color:var(--border)]">
+          {hasRows ? rows.map((row) => (
+            <div key={row.field} className="grid gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] p-3 last:border-b-0 lg:grid-cols-[150px_minmax(0,1fr)_auto]">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-primary)]">
+                  {row.label}
+                  {row.required && <span className="text-[var(--status-danger)]">*</span>}
+                </div>
+                <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{row.source === "backend" ? "preflight plan" : "suggested plan"}</div>
+              </div>
+              <code className="min-w-0 overflow-x-auto rounded-md bg-[var(--surface-muted)] px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">
+                {row.reference}
+              </code>
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(row.reference)}
+                className="secondary-button inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11px]"
+              >
+                <Clipboard className="h-3.5 w-3.5" />
+                Copy
+              </button>
+              {row.description && <div className="text-[11px] leading-4 text-[var(--text-muted)] lg:col-start-2 lg:col-end-4">{row.description}</div>}
+            </div>
+          )) : (
+            <div className="flex items-start gap-3 bg-[var(--surface)] p-4">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+              <div>
+                <div className="text-[13px] font-semibold text-[var(--text-primary)]">No credential references required</div>
+                <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
+                  {method.id === "aws_sso_profile"
+                    ? "AWS SSO uses a server-side shared config profile. Keep the profile authenticated on the backend host."
+                    : "This method only needs non-secret runtime configuration."}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function requirementCount(fields: ConnectorField[] | undefined) {
   return (fields ?? []).filter((field) => field.required).length;
 }
@@ -1141,6 +1353,8 @@ export default function ConnectorSetupForm({
   }), [excludedFamilies, excludedResources, protectedProductFamilies, resourceURNs]);
   const scopeCount = scopePolicyExclusionCount(scopePolicy);
   const canSave = canSubmit && (preflight?.status === "ready" || preflight?.status === "warning");
+  const planTenantID = formValues.tenant_id || tenantID;
+  const planRuntimeID = formValues.runtime_id || defaultRuntimeID;
 
   const changeMethod = (methodID: ConnectorConnectionMethodID) => {
     const nextMethod = methods.find((method) => method.id === methodID);
@@ -1179,6 +1393,20 @@ export default function ConnectorSetupForm({
     setExcludedResources(resources);
     setScopeEdited(true);
     setPreflight(null);
+  };
+
+  const applyCredentialReferenceRows = (rows: CredentialReferencePlanRow[]) => {
+    const form = formRef.current;
+    if (!form) return;
+    rows.forEach((row) => {
+      const element = form.elements.namedItem(credentialInputName(row.field));
+      if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+        element.value = row.reference;
+      }
+    });
+    setPreflight(null);
+    setSuccess(null);
+    updateFormValues();
   };
 
   const resetForm = () => {
@@ -1374,6 +1602,15 @@ export default function ConnectorSetupForm({
                   compact
                 />
                 <SecretStoreIntegrationPanel store={selectedStore} method={selectedMethod} />
+                <CredentialReferencePlan
+                  connector={connector}
+                  method={selectedMethod}
+                  store={selectedStore}
+                  tenantID={planTenantID}
+                  runtimeID={planRuntimeID}
+                  preflight={preflight}
+                  onApply={applyCredentialReferenceRows}
+                />
               </>
             )}
           </SetupStep>
