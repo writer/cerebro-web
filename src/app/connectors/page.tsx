@@ -5,8 +5,10 @@ import { useMemo, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
+  Bot,
   CheckCircle2,
   Database,
+  FileJson2,
   PlugZap,
   RefreshCw,
   Search,
@@ -19,7 +21,12 @@ import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { displayDate } from "@/lib/grc";
 import {
   ConnectorCatalogEntry,
+  ConnectorDefinition,
+  ConnectorDefinitionListResponse,
   ConnectorLibraryResponse,
+  connectorDefinitionBlockingChecks,
+  connectorDefinitionStatus,
+  connectorDefinitionValidationLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
   normalizeCredentialStores,
@@ -287,6 +294,58 @@ function ReadinessMix({
   );
 }
 
+function CustomConnectorPanel({
+  definitions,
+  error,
+  onRetry,
+  tenantID,
+}: {
+  definitions: ConnectorDefinition[];
+  error: string | null;
+  onRetry: () => void;
+  tenantID: string;
+}) {
+  return (
+    <Panel
+      title="Custom connectors"
+      action={
+        <Link href={`/connectors/builder${tenantID ? `?tenant_id=${encodeURIComponent(tenantID)}` : ""}`} className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px]">
+          <Bot className="h-3.5 w-3.5" />
+          Build
+        </Link>
+      }
+    >
+      <div className="space-y-2">
+        {error && <ErrorBlock error={error} onRetry={onRetry} recoveryDetail="Dynamic connector definitions require backend support." />}
+        {!error && definitions.slice(0, 5).map((definition) => {
+          const status = connectorDefinitionStatus(definition);
+          const blocking = connectorDefinitionBlockingChecks(definition);
+          return (
+            <Link
+              key={definition.id ?? definition.source_id}
+              href={`/connectors/builder?definition_id=${encodeURIComponent(definition.id ?? "")}${tenantID ? `&tenant_id=${encodeURIComponent(tenantID)}` : ""}`}
+              className="block rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3 transition hover:border-[color:var(--border-strong)]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{definition.display_name}</div>
+                  <div className="mt-1 text-[11px] text-[var(--text-muted)]">{definition.source_id} · {definition.resource_families?.length ?? 0} families</div>
+                </div>
+                <Badge value={definition.stage || "draft"} />
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-[var(--text-muted)]">
+                <span>{connectorDefinitionValidationLabel(status)}</span>
+                <span>{blocking} blockers</span>
+              </div>
+            </Link>
+          );
+        })}
+        {!error && definitions.length === 0 && <EmptyBlock label="No custom connector definitions yet." />}
+      </div>
+    </Panel>
+  );
+}
+
 export default function ConnectorsPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
@@ -297,6 +356,7 @@ export default function ConnectorsPage() {
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
   const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
+  const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: debouncedTenantID }));
 
   const connectorView = useMemo(() => {
     const library = libraryQuery.data?.connectors ?? [];
@@ -334,6 +394,7 @@ export default function ConnectorsPage() {
     return filterConnectorCards(scoped, sourceQuery, readinessFilter);
   }, [cards, debouncedSourceID, libraryTab, readinessFilter, sourceQuery]);
   const connectedCards = cards.filter((card) => connectorRuntimeTotal(card) > 0);
+  const customDefinitions = definitionsQuery.data?.definitions ?? [];
   const attentionCards = cards.filter((card) => {
     const status = compactConnectorStatus(card);
     return status !== "healthy" && status !== "not_configured";
@@ -366,19 +427,26 @@ export default function ConnectorsPage() {
         title="Connectors"
         description="Connector library, credential stores, setup readiness, and connection health."
         action={
-          <button type="button" onClick={() => void libraryQuery.reload()} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/connectors/builder${debouncedTenantID ? `?tenant_id=${encodeURIComponent(debouncedTenantID)}` : ""}`} className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
+              <FileJson2 className="h-4 w-4" />
+              Build custom
+            </Link>
+            <button type="button" onClick={() => { void libraryQuery.reload(); void definitionsQuery.reload(); }} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+          </div>
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard label="Available" value={cards.length} detail="library connectors" state={metricState} />
         <MetricCard label="Connected" value={connectedCards.length} detail={`${totalConnections} runtime mappings`} intent="success" state={metricState} />
         <MetricCard label="Needs Attention" value={attentionCards.length} detail={`${actionConnections} connection signals`} intent={attentionCards.length > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Healthy" value={healthyConnections} detail="healthy connections" intent={healthyConnections > 0 ? "success" : "neutral"} state={metricState} />
         <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
+        <MetricCard label="Custom" value={customDefinitions.length} detail="dynamic definitions" intent={customDefinitions.length > 0 ? "success" : "neutral"} state={definitionsQuery.error ? runtimeStateForError(definitionsQuery.error) : definitionsQuery.loading ? "loading" : "ready"} />
       </div>
 
       <section className="surface-panel p-4">
@@ -454,6 +522,7 @@ export default function ConnectorsPage() {
 
         <div className="space-y-5">
           <AttentionQueue cards={cards} tenantID={debouncedTenantID} onFocusSource={setSourceID} />
+          <CustomConnectorPanel definitions={customDefinitions} error={definitionsQuery.error} onRetry={() => void definitionsQuery.reload()} tenantID={debouncedTenantID} />
           <CredentialStorePanel library={libraryQuery.data ?? undefined} />
           <ReadinessMix counts={readinessCounts} filter={readinessFilter} onFilter={setReadinessFilter} />
         </div>

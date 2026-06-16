@@ -392,8 +392,212 @@ export type ConnectorPreflightResponse = {
   credential_boundary?: ConnectorCredentialBoundary;
 };
 
+export type ConnectorDefinitionStage = "draft" | "sandbox" | "pilot" | "approved" | "certified";
+export type ConnectorDefinitionValidationStatus = "ready" | "warning" | "blocked";
+
+export type ConnectorDefinitionField = {
+  key: string;
+  label?: string;
+  required?: boolean;
+  secret?: boolean;
+  reference_only?: boolean;
+  help?: string;
+  placeholder?: string;
+};
+
+export type ConnectorDefinitionResourceFamily = {
+  id: string;
+  label?: string;
+  path: string;
+  method?: "GET" | string;
+  list_key?: string;
+  id_field: string;
+  name_field?: string;
+  updated_at_field?: string;
+  event_kind?: string;
+  default_enabled?: boolean;
+};
+
+export type ConnectorDefinitionScopeOption = {
+  id?: string;
+  label?: string;
+  families?: string[];
+  default_enabled?: boolean;
+  permission_note?: string;
+  needs_user_review?: boolean;
+  unsupported_notes?: string[];
+};
+
+export type ConnectorDefinitionCheck = {
+  id: string;
+  label: string;
+  status: ConnectorDefinitionValidationStatus | string;
+  severity: "info" | "warning" | "error" | string;
+  detail?: string;
+  next_action?: string;
+  blocking?: boolean;
+};
+
+export type ConnectorDefinitionValidation = {
+  status?: ConnectorDefinitionValidationStatus | string;
+  summary?: string;
+  checks?: ConnectorDefinitionCheck[];
+  observed_at?: string;
+};
+
+export type ConnectorDefinitionPromotion = {
+  eligible_stages?: ConnectorDefinitionStage[];
+  required_gates?: string[];
+  last_target?: string;
+  next_action?: string;
+};
+
+export type ConnectorDefinition = {
+  id?: string;
+  tenant_id: string;
+  source_id: string;
+  display_name: string;
+  description?: string;
+  runtime: "json_api" | string;
+  stage: ConnectorDefinitionStage | string;
+  current_version?: number;
+  config_fields?: ConnectorDefinitionField[];
+  auth: {
+    model: "none" | "api_key" | "bearer_token" | "basic" | "oauth_client_credentials" | string;
+    credential_fields?: ConnectorDefinitionField[];
+    supported_store_ids?: string[];
+    requires_references?: boolean;
+  };
+  resource_families?: ConnectorDefinitionResourceFamily[];
+  scope_options?: ConnectorDefinitionScopeOption[];
+  validation?: ConnectorDefinitionValidation;
+  promotion?: ConnectorDefinitionPromotion;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ConnectorDefinitionListResponse = {
+  generated_at?: string;
+  tenant_id?: string;
+  runtime_store?: string;
+  definitions?: ConnectorDefinition[];
+};
+
+export type ConnectorDefinitionResponse = {
+  generated_at?: string;
+  definition?: ConnectorDefinition;
+};
+
+export type ConnectorDefinitionValidationResponse = {
+  generated_at?: string;
+  definition?: ConnectorDefinition;
+  validation?: ConnectorDefinitionValidation;
+  promotion?: ConnectorDefinitionPromotion;
+};
+
+export type ConnectorDefinitionPromotionResponse = {
+  generated_at?: string;
+  result?: {
+    definition?: ConnectorDefinition;
+    promoted?: boolean;
+    target_stage?: ConnectorDefinitionStage | string;
+    next_action?: string;
+  };
+};
+
 export const CONNECTOR_CREDENTIAL_TRANSPORT_ALGORITHM = "RSA-OAEP-256+A256GCM";
 export const CONNECTOR_CREDENTIAL_TRANSIT_JWK_ALGORITHM = "RSA-OAEP-256";
+
+export const connectorDefinitionStages: ConnectorDefinitionStage[] = ["draft", "sandbox", "pilot", "approved", "certified"];
+
+export const connectorDefinitionStageLabels: Record<ConnectorDefinitionStage, string> = {
+  draft: "Draft",
+  sandbox: "Sandbox",
+  pilot: "Pilot",
+  approved: "Approved",
+  certified: "Certified",
+};
+
+export const connectorDefinitionStageDescription: Record<ConnectorDefinitionStage, string> = {
+  draft: "Shape the manifest with docs, auth, resources, and scope.",
+  sandbox: "Run bounded probes and sample mapping checks before durable ingestion.",
+  pilot: "Use with one workspace or tenant under visible limits.",
+  approved: "Make available inside the organization connector library.",
+  certified: "Eligible for hardened source/code promotion.",
+};
+
+export const connectorDefinitionValidationLabel = (status?: string) => {
+  if (status === "ready") return "Ready";
+  if (status === "warning") return "Needs review";
+  if (status === "blocked") return "Blocked";
+  return "Not validated";
+};
+
+export const connectorDefinitionBlockingChecks = (definition?: Pick<ConnectorDefinition, "validation"> | null) =>
+  definition?.validation?.checks?.filter((check) => check.blocking || check.status === "blocked").length ?? 0;
+
+export const connectorDefinitionNextStage = (definition?: Pick<ConnectorDefinition, "stage" | "promotion"> | null) => {
+  const advertised = definition?.promotion?.eligible_stages?.find((stage): stage is ConnectorDefinitionStage =>
+    connectorDefinitionStages.includes(stage as ConnectorDefinitionStage),
+  );
+  if (advertised) return advertised;
+  const index = connectorDefinitionStages.indexOf(definition?.stage as ConnectorDefinitionStage);
+  if (index >= 0 && index + 1 < connectorDefinitionStages.length) return connectorDefinitionStages[index + 1];
+  return undefined;
+};
+
+export const connectorDefinitionStatus = (definition?: Pick<ConnectorDefinition, "validation"> | null) => {
+  const status = definition?.validation?.status;
+  if (status === "ready" || status === "warning" || status === "blocked") return status;
+  return "not_configured";
+};
+
+export const normalizeConnectorDefinitionID = (value: string) =>
+  value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^[-_]+|[-_]+$/g, "");
+
+export const defaultConnectorDefinitionDraft = (tenantID = ""): ConnectorDefinition => ({
+  tenant_id: tenantID,
+  source_id: "custom_api",
+  display_name: "Custom API",
+  description: "Read-only connector definition for a custom API.",
+  runtime: "json_api",
+  stage: "draft",
+  config_fields: [
+    {
+      key: "base_url",
+      label: "Base URL",
+      required: true,
+      help: "Stored as runtime configuration; do not put API tokens here.",
+      placeholder: "https://api.example.com",
+    },
+  ],
+  auth: {
+    model: "bearer_token",
+    requires_references: true,
+    supported_store_ids: ["cerebro_vault"],
+    credential_fields: [
+      {
+        key: "token",
+        label: "Bearer token",
+        required: true,
+        secret: true,
+        reference_only: true,
+      },
+    ],
+  },
+  resource_families: [
+    {
+      id: "assets",
+      label: "Assets",
+      path: "/v1/assets",
+      method: "GET",
+      list_key: "items",
+      id_field: "id",
+      name_field: "name",
+      default_enabled: true,
+    },
+  ],
+});
 
 const sourceAliases: Record<string, string[]> = {
   aws: ["aws", "amazon", "amazon-web-services"],
