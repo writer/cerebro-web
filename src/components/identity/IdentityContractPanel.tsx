@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { useCurrentUser } from "@/components/providers";
-import { identityPosture } from "@/lib/identity";
+import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 
 const writeStampRows = [
@@ -20,9 +20,12 @@ function IdentityRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+const joinValues = (values: string[] | undefined) => values?.filter(Boolean).join(", ") ?? "";
+
 export default function IdentityContractPanel({ compact = false }: { compact?: boolean }) {
   const { actor, error, loading, user } = useCurrentUser();
   const identity = identityPosture({ error, loading, user });
+  const attentionItems = [...(user?.conflicts ?? []), ...(user?.warnings ?? [])];
 
   return (
     <section className="surface-panel">
@@ -47,13 +50,29 @@ export default function IdentityContractPanel({ compact = false }: { compact?: b
             </div>
           </div>
           <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-2">
-            <IdentityRow label="Actor" value={actor} />
+            <IdentityRow label="Actor ID" value={actor} />
+            <IdentityRow label="Actor label" value={user?.actorLabel ?? ""} />
             <IdentityRow label="Email" value={user?.email ?? ""} />
             <IdentityRow label="Username" value={user?.username ?? ""} />
             <IdentityRow label="Subject" value={user?.subject ?? ""} />
+            <IdentityRow label="Provider" value={user?.provider ?? ""} />
+            <IdentityRow label="Confidence" value={user ? currentUserConfidenceLabel(user.confidence) : ""} />
             <IdentityRow label="Source" value={identity.sourceLabel} />
           </div>
           <p className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">{identity.detail}</p>
+          <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-2">
+            <IdentityRow label="Headers" value={joinValues(user?.evidence?.headers)} />
+            <IdentityRow label="Claims" value={joinValues(user?.evidence?.claims)} />
+            <IdentityRow label="Inferred" value={joinValues(user?.evidence?.inferred)} />
+            <IdentityRow label="Issuer" value={user?.evidence?.jwt?.issuer ?? ""} />
+            <IdentityRow label="Audience" value={user?.evidence?.jwt?.audience ?? ""} />
+            <IdentityRow label="Expires" value={user?.evidence?.jwt?.expiresAt ?? ""} />
+          </div>
+          {attentionItems.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[12px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+              {attentionItems.join("; ")}
+            </div>
+          )}
         </div>
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Write Stamps</div>
