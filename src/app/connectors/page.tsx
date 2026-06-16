@@ -28,8 +28,11 @@ import {
   connectorDefinitionBlockingChecks,
   connectorDefinitionStatus,
   connectorDefinitionValidationLabel,
+  connectorCatalogStatusLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
+  connectorIsCatalogOnly,
+  connectorRuntimeSurfaceLabel,
   normalizeCredentialStores,
 } from "@/lib/connectors";
 import {
@@ -143,8 +146,9 @@ function ConnectorLibraryRow({
   const total = connectorRuntimeTotal(card);
   const healthy = connectorHealthyTotal(card);
   const attention = connectorAttentionTotal(card);
+  const catalogOnly = connectorIsCatalogOnly(card);
   const primaryAction = connectorPrimaryAction(card);
-  const href = connectorPath(card.source_id, { tenant_id: tenantID, tab: status === "not_configured" ? "setup" : undefined });
+  const href = connectorPath(card.source_id, { tenant_id: tenantID, tab: status === "not_configured" && !catalogOnly ? "setup" : undefined });
   const statusDescription = readinessDescriptions[status];
   const latestActivity = card.coverage?.latest_activity_at ? displayDate(card.coverage.latest_activity_at) : "Not observed";
 
@@ -175,7 +179,17 @@ function ConnectorLibraryRow({
                   {meta.authBadge}
                 </span>
               )}
-              {capabilities.length === 0 && !meta.authBadge && <span className="text-[12px] text-[var(--text-muted)]">No advertised capabilities</span>}
+              {card.catalog_status && (
+                <span className="rounded-md bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-800 dark:bg-blue-500/15 dark:text-blue-100">
+                  {connectorCatalogStatusLabel(card.catalog_status)}
+                </span>
+              )}
+              {card.catalog_status && (
+                <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {connectorRuntimeSurfaceLabel(card)}
+                </span>
+              )}
+              {capabilities.length === 0 && !meta.authBadge && !card.catalog_status && <span className="text-[12px] text-[var(--text-muted)]">No advertised capabilities</span>}
             </div>
           </div>
         </div>

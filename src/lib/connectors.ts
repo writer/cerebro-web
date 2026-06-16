@@ -5,6 +5,14 @@ export type ConnectorCatalogEntry = {
   description?: string;
   emitted_kinds?: string[];
   status?: "available" | "connected" | "degraded" | "needs_attention" | string;
+  catalog_status?: ConnectorCatalogStatus | string;
+  classifier_output?: string;
+  auth_model?: string;
+  runtime_executable?: boolean;
+  missing_features?: string[];
+  catalog_categories?: string[];
+  verification_endpoint?: string;
+  resource_families?: ConnectorCatalogResourceFamily[];
   configured_runtimes?: number;
   healthy_runtimes?: number;
   needs_attention_runtimes?: number;
@@ -26,6 +34,23 @@ export type ConnectorLibraryResponse = {
     detail?: string;
   };
   credential_stores?: ConnectorCredentialStore[];
+};
+
+export type ConnectorCatalogStatus =
+  | "catalog_ready"
+  | "generateable"
+  | "needs_auth_extension"
+  | "needs_bespoke_runtime";
+
+export type ConnectorCatalogResourceFamily = {
+  id: string;
+  label?: string;
+  path?: string;
+  event_kind?: string;
+  schema_ref?: string;
+  projection_template?: string;
+  coverage?: string[];
+  high_value?: boolean;
 };
 
 export type ConnectorOperationsSummary = {
@@ -1131,6 +1156,37 @@ export const connectorStatus = (connector: ConnectorCatalogEntry) => {
   return connector.status || "available";
 };
 
+export const connectorCatalogStatusLabel = (status?: string) => {
+  switch (status) {
+    case "catalog_ready":
+      return "Catalog ready";
+    case "generateable":
+      return "Sourcegen ready";
+    case "needs_auth_extension":
+      return "Auth extension needed";
+    case "needs_bespoke_runtime":
+      return "Bespoke runtime needed";
+    default:
+      return status?.trim() || "No catalog status";
+  }
+};
+
+export const connectorHasAdvertisedSetup = (connector: Pick<ConnectorCatalogEntry, "connection_methods">) =>
+  (connector.connection_methods?.length ?? 0) > 0;
+
+export const connectorIsCatalogOnly = (
+  connector: Pick<ConnectorCatalogEntry, "catalog_status" | "connection_methods" | "configured_runtimes">,
+) => Boolean(connector.catalog_status && !connectorHasAdvertisedSetup(connector) && (connector.configured_runtimes ?? 0) === 0);
+
+export const connectorRuntimeSurfaceLabel = (
+  connector: Pick<ConnectorCatalogEntry, "catalog_status" | "runtime_executable" | "connection_methods">,
+) => {
+  if (connectorHasAdvertisedSetup(connector)) return "Runtime supported";
+  if (connector.runtime_executable) return "Sourcegen ready";
+  if (connector.catalog_status) return connectorCatalogStatusLabel(connector.catalog_status);
+  return "Runtime unknown";
+};
+
 export const connectorSearchText = (connector: ConnectorCatalogEntry) =>
   [
     connector.source_id,
@@ -1138,7 +1194,13 @@ export const connectorSearchText = (connector: ConnectorCatalogEntry) =>
     connector.display_name,
     connector.description,
     connector.status,
+    connector.catalog_status,
+    connector.auth_model,
+    connector.verification_endpoint,
+    connectorRuntimeSurfaceLabel(connector),
     ...(connector.emitted_kinds ?? []),
+    ...(connector.catalog_categories ?? []),
+    ...(connector.resource_families ?? []).flatMap((family) => [family.id, family.label, family.path, family.event_kind]),
   ]
     .filter(Boolean)
     .join("\n")

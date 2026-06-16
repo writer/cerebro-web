@@ -36,8 +36,11 @@ import type {
   ConnectorScopePolicy,
 } from "@/lib/connectors";
 import {
+  connectorCatalogStatusLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
+  connectorIsCatalogOnly,
+  connectorRuntimeSurfaceLabel,
   normalizeCredentialStores,
   scopePolicyExclusionCount,
 } from "@/lib/connectors";
@@ -322,6 +325,86 @@ function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
   );
 }
 
+function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntry }) {
+  const families = connector.resource_families ?? [];
+  if (!connector.catalog_status && families.length === 0) return null;
+  return (
+    <Panel title="Catalog definition" action={<Badge value={connectorRuntimeSurfaceLabel(connector)} />}>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Readiness</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connectorCatalogStatusLabel(connector.catalog_status)}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Auth</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{humanize(connector.auth_model || "unknown")}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Families</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{families.length}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Verification</div>
+          <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.verification_endpoint || "Not advertised"}</div>
+        </div>
+      </div>
+      {connector.missing_features && connector.missing_features.length > 0 && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+          <span className="font-semibold">Missing runtime features:</span> {connector.missing_features.join(", ")}
+        </div>
+      )}
+      {families.length > 0 && (
+        <div className="mt-4 grid gap-2 lg:grid-cols-2">
+          {families.map((family) => (
+            <div key={family.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">{family.label || humanize(family.id)}</div>
+                  <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{family.path || family.event_kind || family.id}</div>
+                </div>
+                {family.high_value && <Badge value="high_value" />}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {family.projection_template && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)]">{family.projection_template}</span>}
+                {family.event_kind && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{family.event_kind}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function CatalogSetupNotice({ connector }: { connector: ConnectorCatalogEntry }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <CatalogDefinitionPanel connector={connector} />
+      <Panel title="Runtime status" action={<Badge value={connector.catalog_status || "catalog"} />}>
+        <div className="space-y-3 text-[13px] leading-5 text-[var(--text-secondary)]">
+          <p>
+            This catalog definition is not currently advertised by the backend as a live setup target.
+          </p>
+          <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Next backend move</div>
+            <div className="mt-1 text-[var(--text-primary)]">
+              {connector.runtime_executable
+                ? "Generate and register the source runtime before saving connections."
+                : connectorCatalogStatusLabel(connector.catalog_status)}
+            </div>
+          </div>
+          {connector.classifier_output && (
+            <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Classifier</div>
+              <div className="mt-1 text-[var(--text-primary)]">{humanize(connector.classifier_output)}</div>
+            </div>
+          )}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntry; connections: ConnectorConnectionSummary[] }) {
   const capabilities = connectorCapabilities(connector, 8);
   const scopeOptions = connector.scope_options ?? [];
@@ -431,6 +514,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const meta = connectorDisplayMetadata(connector);
   const readyStores = credentialStores.filter((store) => store.available);
   const capabilityLabels = connectorCapabilities(connector, 4);
+  const catalogOnly = connectorIsCatalogOnly(connector);
 
   if (setupOnly) {
     const setupStats = [
@@ -498,13 +582,17 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
           </div>
         </section>
 
-        <ConnectorSetupForm
-          connector={connector}
-          tenantID={tenantID.trim()}
-          apiKey={apiKey}
-          credentialStores={credentialStores}
-          onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
-        />
+        {catalogOnly ? (
+          <CatalogSetupNotice connector={connector} />
+        ) : (
+          <ConnectorSetupForm
+            connector={connector}
+            tenantID={tenantID.trim()}
+            apiKey={apiKey}
+            credentialStores={credentialStores}
+            onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
+          />
+        )}
       </div>
     );
   }
@@ -537,9 +625,11 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={setupHref(sourceID, tenantID)} className="secondary-button px-3 py-2 text-[13px]">
-            Add connection
-          </Link>
+          {!catalogOnly && (
+            <Link href={setupHref(sourceID, tenantID)} className="secondary-button px-3 py-2 text-[13px]">
+              Add connection
+            </Link>
+          )}
           <button type="button" onClick={() => void Promise.all([detailQuery.reload(), libraryQuery.reload()])} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -562,6 +652,9 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               <div><span className="text-[var(--text-muted)]">Source ID</span><div className="font-mono">{connector.source_id}</div></div>
               <div><span className="text-[var(--text-muted)]">Generated</span><div>{displayDate(detailQuery.data?.generated_at)}</div></div>
               <div><span className="text-[var(--text-muted)]">Credential stores</span><div>{readyStores.map((store) => store.shortLabel).join(", ") || "none"}</div></div>
+              <div><span className="text-[var(--text-muted)]">Catalog</span><div>{connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"}</div></div>
+              <div><span className="text-[var(--text-muted)]">Runtime surface</span><div>{connectorRuntimeSurfaceLabel(connector)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Auth model</span><div>{humanize(connector.auth_model || "unknown")}</div></div>
             </div>
           </details>
         </div>
@@ -602,6 +695,8 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                 ["Last activity", summary.last_activity_at ? displayDate(summary.last_activity_at) : "None"],
                 ["Sync frequency", summary.sync_frequency_seconds ? `Every ${formatDuration(summary.sync_frequency_seconds)}` : "Deployment managed"],
                 ["Secret stores", readyStores.map((store) => store.label).join(", ") || "None advertised"],
+                ["Catalog", connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"],
+                ["Runtime", connectorRuntimeSurfaceLabel(connector)],
                 ["Provider", meta.provider],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4 border-b border-[color:var(--border)] pb-2 last:border-0 last:pb-0">
@@ -611,13 +706,16 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               ))}
             </div>
           </Panel>
+          <CatalogDefinitionPanel connector={connector} />
           <Panel title="Recent activity" action={<span className="text-[12px] text-[var(--text-muted)]">{activity.slice(0, 5).length} events</span>}>
             <ConnectorActivityTable activity={activity.slice(0, 5)} />
           </Panel>
         </div>
       )}
 
-      {activeTab === "setup" && (
+      {activeTab === "setup" && (catalogOnly ? (
+        <CatalogSetupNotice connector={connector} />
+      ) : (
         <ConnectorSetupForm
           connector={connector}
           tenantID={tenantID.trim()}
@@ -625,7 +723,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
           credentialStores={credentialStores}
           onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
         />
-      )}
+      ))}
 
       {activeTab === "connections" && (
         <Panel title="Connections" action={<span className="text-[12px] text-[var(--text-muted)]">{connections.length} shown</span>}>
