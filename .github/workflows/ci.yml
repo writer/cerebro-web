@@ -72,8 +72,8 @@ jobs:
             fi
             changed_files="$(git diff --name-only "${range}")"
             printf '%s\n' "${changed_files}"
-            expensive_pattern='^(src/|public/|scripts/local-grc-e2e\.mjs|package(-lock)?\.json|next\.config\.ts|tsconfig\.json|Dockerfile|\.dockerignore)$'
-            docker_pattern='^(src/|public/|package(-lock)?\.json|next\.config\.ts|Dockerfile|\.dockerignore)$'
+            expensive_pattern='^(src/.*|public/.*|scripts/local-grc-e2e\.mjs|package(-lock)?\.json|next\.config\.ts|tsconfig\.json|Dockerfile|\.dockerignore)$'
+            docker_pattern='^(src/.*|public/.*|package(-lock)?\.json|next\.config\.ts|Dockerfile|\.dockerignore)$'
             if grep -Eq "${expensive_pattern}" <<< "${changed_files}"; then
               needs_e2e=true
             else
