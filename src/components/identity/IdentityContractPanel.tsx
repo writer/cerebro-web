@@ -58,6 +58,9 @@ export default function IdentityContractPanel({ compact = false }: { compact?: b
             <IdentityRow label="Provider" value={user?.provider ?? ""} />
             <IdentityRow label="Confidence" value={user ? currentUserConfidenceLabel(user.confidence) : ""} />
             <IdentityRow label="Source" value={identity.sourceLabel} />
+            <IdentityRow label="Groups" value={joinValues(user?.entitlements?.groups)} />
+            <IdentityRow label="Roles" value={joinValues(user?.entitlements?.roles)} />
+            <IdentityRow label="Scopes" value={joinValues(user?.entitlements?.scopes)} />
           </div>
           <p className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">{identity.detail}</p>
           <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-2">
