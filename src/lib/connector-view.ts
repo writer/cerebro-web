@@ -1,5 +1,11 @@
 import type { ConnectorCatalogEntry } from "@/lib/connectors";
-import { connectorDisplayMetadata, connectorDisplayName, connectorSearchText, connectorStatus } from "@/lib/connectors";
+import {
+  connectorDisplayMetadata,
+  connectorDisplayName,
+  connectorIsCatalogOnly,
+  connectorSearchText,
+  connectorStatus,
+} from "@/lib/connectors";
 import type { SourceCoverageSummary, SourceReadiness } from "@/lib/mission-control";
 
 export type ReadinessFilter = SourceReadiness | "all";
@@ -51,6 +57,10 @@ const runtimeAttentionCount = (source: SourceCoverageSummary) =>
 export function compactConnectorStatus(card: ConnectorCatalogEntry | ConnectorCard): SourceReadiness {
   const cardWithCoverage = card as ConnectorCard;
   if (cardWithCoverage.coverage) return cardWithCoverage.coverage.performance;
+  if (connectorIsCatalogOnly(card)) {
+    if (card.catalog_status === "generateable" || card.catalog_status === "catalog_ready") return "not_configured";
+    return "poor";
+  }
   const status = connectorStatus(card);
   if (["bad", "needs_refresh", "poor", "healthy", "not_configured"].includes(status)) {
     return status as SourceReadiness;
@@ -73,6 +83,7 @@ export function connectorAttentionTotal(card: ConnectorCard) {
 }
 
 export function connectorPrimaryAction(card: ConnectorCard) {
+  if (connectorIsCatalogOnly(card)) return "Inspect";
   const status = compactConnectorStatus(card);
   if (status === "not_configured") return "Connect";
   if (status === "healthy") return "View";

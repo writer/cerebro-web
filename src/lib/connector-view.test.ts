@@ -5,6 +5,7 @@ import {
   connectorAttentionTotal,
   connectorCapabilityLabel,
   connectorPath,
+  connectorPrimaryAction,
   filterConnectorCards,
 } from "./connector-view";
 import { connectorDisplayName } from "./connectors";
@@ -61,6 +62,25 @@ describe("connector view model", () => {
 
   it("builds shareable connector routes without leaking extra state", () => {
     expect(connectorPath("github", { runtime_id: "example-runtime", tenant_id: "" })).toBe("/connectors/github?runtime_id=example-runtime");
+  });
+
+  it("keeps catalog-only executable definitions in inspection mode", () => {
+    const cards = buildConnectorCards(
+      [
+        {
+          source_id: "auth0",
+          name: "Auth0",
+          status: "generateable",
+          catalog_status: "generateable",
+          runtime_executable: true,
+        },
+      ],
+      [],
+    );
+
+    expect(cards[0]).toMatchObject({ source_id: "auth0", readiness: "not_configured" });
+    expect(connectorPrimaryAction(cards[0])).toBe("Inspect");
+    expect(filterConnectorCards(cards, "sourcegen", "all")).toHaveLength(1);
   });
 
   it("renders provider capability labels with full public names", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   connectionMethodsForConnector,
+  connectorCatalogStatusLabel,
   connectorCredentialHealth,
   connectorCredentialPath,
   connectorCredentialRevokePath,
@@ -11,6 +12,9 @@ import {
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStatus,
+  connectorIsCatalogOnly,
+  connectorRuntimeSurfaceLabel,
+  connectorSearchText,
   connectorScopeOptionFamilies,
   connectorSubmitErrorMessage,
   defaultConnectorDefinitionDraft,
@@ -125,6 +129,44 @@ describe("connector credential store normalization", () => {
     expect(methods[0].deployment_guides[0]).toMatchObject({ id: "trust" });
     expect(methods[0].region_guidance?.supports_global).toBe(true);
     expect(methods[0].security_notes).toEqual(["No AWS secret key is returned."]);
+  });
+});
+
+describe("connector catalog metadata", () => {
+  it("labels catalog-only executable definitions without advertising live setup", () => {
+    const connector = {
+      source_id: "auth0",
+      name: "Auth0",
+      catalog_status: "generateable",
+      runtime_executable: true,
+      auth_model: "oauth_client_credentials",
+      verification_endpoint: "/users",
+      catalog_categories: ["identity"],
+      resource_families: [
+        { id: "users", label: "Users", path: "/users", event_kind: "auth0.users", high_value: true },
+        { id: "roles", label: "Roles", path: "/roles", event_kind: "auth0.roles", high_value: true },
+      ],
+    };
+
+    expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Sourcegen ready");
+    expect(connectorIsCatalogOnly(connector)).toBe(true);
+    expect(connectorRuntimeSurfaceLabel(connector)).toBe("Sourcegen ready");
+    expect(connectorSearchText(connector)).toContain("oauth_client_credentials");
+    expect(connectorSearchText(connector)).toContain("/roles");
+  });
+
+  it("treats advertised connection methods as a live runtime surface", () => {
+    expect(connectorIsCatalogOnly({
+      source_id: "aws",
+      name: "AWS",
+      catalog_status: "generateable",
+      connection_methods: [{ id: "encrypted_submission" }],
+    })).toBe(false);
+    expect(connectorRuntimeSurfaceLabel({
+      catalog_status: "generateable",
+      runtime_executable: true,
+      connection_methods: [{ id: "encrypted_submission" }],
+    })).toBe("Runtime supported");
   });
 });
 
