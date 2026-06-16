@@ -84,6 +84,27 @@ describe("connector view model", () => {
     expect(filterConnectorCards(cards, "sourcegen", "all")).toHaveLength(1);
   });
 
+  it("keeps restricted API-owned connectors visible without setup actions", () => {
+    const cards = buildConnectorCards(
+      [
+        {
+          source_id: "aws",
+          name: "AWS",
+          access_status: "restricted",
+          access_reason: "limited preview",
+          setup_allowed: false,
+          requestable: true,
+          connection_methods: [{ id: "encrypted_submission" }],
+        },
+      ],
+      [],
+    );
+
+    expect(cards[0]).toMatchObject({ source_id: "aws", nextAction: "limited preview" });
+    expect(connectorPrimaryAction(cards[0])).toBe("Inspect");
+    expect(filterConnectorCards(cards, "limited preview", "all")).toHaveLength(1);
+  });
+
   it("renders provider capability labels with full public names", () => {
     expect(connectorCapabilityLabel("aws")).toBe("Amazon Web Services");
     expect(connectorCapabilityLabel("gcp")).toBe("Google Cloud Platform");

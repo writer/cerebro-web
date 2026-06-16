@@ -18,6 +18,10 @@ export type ConnectorCatalogEntry = {
   needs_attention_runtimes?: number;
   connection_methods?: ConnectorConnectionMethodInput[];
   scope_options?: ConnectorScopeOption[];
+  access_status?: ConnectorAccessStatus | string;
+  access_reason?: string;
+  setup_allowed?: boolean;
+  requestable?: boolean;
 };
 
 export type ConnectorLibraryResponse = {
@@ -41,6 +45,11 @@ export type ConnectorCatalogStatus =
   | "generateable"
   | "needs_auth_extension"
   | "needs_bespoke_runtime";
+
+export type ConnectorAccessStatus =
+  | "available"
+  | "catalog_only"
+  | "restricted";
 
 export type ConnectorCatalogResourceFamily = {
   id: string;
@@ -1263,14 +1272,32 @@ export const connectorCatalogStatusLabel = (status?: string) => {
 export const connectorHasAdvertisedSetup = (connector: Pick<ConnectorCatalogEntry, "connection_methods">) =>
   (connector.connection_methods?.length ?? 0) > 0;
 
+export const connectorSetupAllowed = (
+  connector: Pick<ConnectorCatalogEntry, "setup_allowed" | "connection_methods">,
+) => connector.setup_allowed ?? connectorHasAdvertisedSetup(connector);
+
+export const connectorAccessStatusLabel = (status?: string) => {
+  switch (status) {
+    case "available":
+      return "Setup available";
+    case "catalog_only":
+      return "Catalog only";
+    case "restricted":
+      return "Restricted";
+    default:
+      return status?.trim() || "Access unknown";
+  }
+};
+
 export const connectorIsCatalogOnly = (
-  connector: Pick<ConnectorCatalogEntry, "catalog_status" | "connection_methods" | "configured_runtimes">,
-) => Boolean(connector.catalog_status && !connectorHasAdvertisedSetup(connector) && (connector.configured_runtimes ?? 0) === 0);
+  connector: Pick<ConnectorCatalogEntry, "catalog_status" | "connection_methods" | "configured_runtimes" | "setup_allowed">,
+) => Boolean(connector.catalog_status && !connectorSetupAllowed(connector) && (connector.configured_runtimes ?? 0) === 0);
 
 export const connectorRuntimeSurfaceLabel = (
-  connector: Pick<ConnectorCatalogEntry, "catalog_status" | "runtime_executable" | "connection_methods">,
+  connector: Pick<ConnectorCatalogEntry, "catalog_status" | "runtime_executable" | "connection_methods" | "access_status" | "setup_allowed">,
 ) => {
-  if (connectorHasAdvertisedSetup(connector)) return "Runtime supported";
+  if (connectorSetupAllowed(connector)) return "Runtime supported";
+  if (connector.access_status === "restricted") return "Restricted";
   if (connector.runtime_executable) return "Sourcegen ready";
   if (connector.catalog_status) return connectorCatalogStatusLabel(connector.catalog_status);
   return "Runtime unknown";
@@ -1284,6 +1311,8 @@ export const connectorSearchText = (connector: ConnectorCatalogEntry) =>
     connector.description,
     connector.status,
     connector.catalog_status,
+    connector.access_status,
+    connector.access_reason,
     connector.auth_model,
     connector.verification_endpoint,
     connectorRuntimeSurfaceLabel(connector),

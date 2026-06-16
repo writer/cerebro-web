@@ -36,11 +36,13 @@ import type {
   ConnectorScopePolicy,
 } from "@/lib/connectors";
 import {
+  connectorAccessStatusLabel,
   connectorCatalogStatusLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
   connectorIsCatalogOnly,
   connectorRuntimeSurfaceLabel,
+  connectorSetupAllowed,
   normalizeCredentialStores,
   scopePolicyExclusionCount,
 } from "@/lib/connectors";
@@ -185,7 +187,7 @@ function OperationsSummary({
   );
 }
 
-function AttentionNotice({ summary, onSetup }: { summary: ConnectorOperationsSummary; onSetup: () => void }) {
+function AttentionNotice({ summary, setupAllowed, onSetup }: { summary: ConnectorOperationsSummary; setupAllowed: boolean; onSetup: () => void }) {
   if (summary.status === "healthy") {
     return null;
   }
@@ -200,9 +202,11 @@ function AttentionNotice({ summary, onSetup }: { summary: ConnectorOperationsSum
           <div className="text-[12px] leading-5">{detail}</div>
         </div>
       </div>
-      <button type="button" onClick={onSetup} className="secondary-button px-3 py-2 text-[12px]">
-        {summary.status === "not_configured" ? "Configure" : "Review setup"}
-      </button>
+      {setupAllowed && (
+        <button type="button" onClick={onSetup} className="secondary-button px-3 py-2 text-[12px]">
+          {summary.status === "not_configured" ? "Configure" : "Review setup"}
+        </button>
+      )}
     </div>
   );
 }
@@ -377,21 +381,25 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
 }
 
 function CatalogSetupNotice({ connector }: { connector: ConnectorCatalogEntry }) {
+  const accessLabel = connectorAccessStatusLabel(connector.access_status);
+  const availabilityDetail = connector.access_reason || (
+    connector.runtime_executable
+      ? "Generate and register the source runtime before saving connections."
+      : connectorCatalogStatusLabel(connector.catalog_status)
+  );
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
       <CatalogDefinitionPanel connector={connector} />
-      <Panel title="Runtime status" action={<Badge value={connector.catalog_status || "catalog"} />}>
+      <Panel title="Runtime status" action={<Badge value={connector.access_status ? accessLabel : connector.catalog_status || "catalog"} />}>
         <div className="space-y-3 text-[13px] leading-5 text-[var(--text-secondary)]">
           <p>
-            This catalog definition is not currently advertised by the backend as a live setup target.
+            {connector.access_reason
+              ? "Connector metadata is visible, but setup is not enabled by this API."
+              : "This catalog definition is not currently advertised by the backend as a live setup target."}
           </p>
           <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Next backend move</div>
-            <div className="mt-1 text-[var(--text-primary)]">
-              {connector.runtime_executable
-                ? "Generate and register the source runtime before saving connections."
-                : connectorCatalogStatusLabel(connector.catalog_status)}
-            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Availability</div>
+            <div className="mt-1 text-[var(--text-primary)]">{availabilityDetail}</div>
           </div>
           {connector.classifier_output && (
             <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
@@ -515,6 +523,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const readyStores = credentialStores.filter((store) => store.available);
   const capabilityLabels = connectorCapabilities(connector, 4);
   const catalogOnly = connectorIsCatalogOnly(connector);
+  const setupAllowed = connectorSetupAllowed(connector);
 
   if (setupOnly) {
     const setupStats = [
@@ -582,7 +591,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
           </div>
         </section>
 
-        {catalogOnly ? (
+        {!setupAllowed ? (
           <CatalogSetupNotice connector={connector} />
         ) : (
           <ConnectorSetupForm
@@ -615,6 +624,11 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge value={summary.status || "not_configured"} />
                 <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">{meta.category}</span>
+                {connector.access_status && connector.access_status !== "available" && (
+                  <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-100">
+                    {connectorAccessStatusLabel(connector.access_status)}
+                  </span>
+                )}
                 {capabilityLabels.map((capability) => (
                   <span key={capability} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
                     {connectorCapabilityLabel(capability)}
@@ -625,7 +639,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!catalogOnly && (
+          {setupAllowed && !catalogOnly && (
             <Link href={setupHref(sourceID, tenantID)} className="secondary-button px-3 py-2 text-[13px]">
               Add connection
             </Link>
@@ -638,7 +652,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
       </div>
 
       <OperationsSummary connector={connector} summary={summary} secretStoreCount={readyStores.length} />
-      <AttentionNotice summary={summary} onSetup={() => setActiveTab("setup")} />
+      <AttentionNotice summary={summary} setupAllowed={setupAllowed} onSetup={() => setActiveTab("setup")} />
 
       <section className="surface-panel p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(220px,0.6fr)_minmax(0,1fr)]">
@@ -654,6 +668,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               <div><span className="text-[var(--text-muted)]">Credential stores</span><div>{readyStores.map((store) => store.shortLabel).join(", ") || "none"}</div></div>
               <div><span className="text-[var(--text-muted)]">Catalog</span><div>{connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"}</div></div>
               <div><span className="text-[var(--text-muted)]">Runtime surface</span><div>{connectorRuntimeSurfaceLabel(connector)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Access</span><div>{connectorAccessStatusLabel(connector.access_status)}</div></div>
               <div><span className="text-[var(--text-muted)]">Auth model</span><div>{humanize(connector.auth_model || "unknown")}</div></div>
             </div>
           </details>
@@ -697,6 +712,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                 ["Secret stores", readyStores.map((store) => store.label).join(", ") || "None advertised"],
                 ["Catalog", connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"],
                 ["Runtime", connectorRuntimeSurfaceLabel(connector)],
+                ["Access", connectorAccessStatusLabel(connector.access_status)],
                 ["Provider", meta.provider],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4 border-b border-[color:var(--border)] pb-2 last:border-0 last:pb-0">
@@ -704,6 +720,11 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                   <span className="text-right text-[var(--text-primary)]">{value}</span>
                 </div>
               ))}
+              {!setupAllowed && connector.access_reason && (
+                <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                  <span className="font-semibold text-[var(--text-primary)]">Availability:</span> {connector.access_reason}
+                </div>
+              )}
             </div>
           </Panel>
           <CatalogDefinitionPanel connector={connector} />
@@ -713,7 +734,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
         </div>
       )}
 
-      {activeTab === "setup" && (catalogOnly ? (
+      {activeTab === "setup" && (!setupAllowed ? (
         <CatalogSetupNotice connector={connector} />
       ) : (
         <ConnectorSetupForm

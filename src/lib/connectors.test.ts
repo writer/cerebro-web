@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   connectionMethodsForConnector,
+  connectorAccessStatusLabel,
   connectorCatalogStatusLabel,
   connectorCredentialHealth,
   connectorCredentialPath,
@@ -17,6 +18,7 @@ import {
   connectorMatchesSlug,
   connectorRuntimeSurfaceLabel,
   connectorSearchText,
+  connectorSetupAllowed,
   connectorScopeOptionFamilies,
   connectorSubmitErrorMessage,
   defaultConnectorDefinitionDraft,
@@ -140,6 +142,9 @@ describe("connector catalog metadata", () => {
       source_id: "auth0",
       name: "Auth0",
       catalog_status: "generateable",
+      access_status: "catalog_only",
+      access_reason: "Catalog definition is sourcegen-ready, but setup is not enabled by this API.",
+      setup_allowed: false,
       runtime_executable: true,
       auth_model: "oauth_client_credentials",
       verification_endpoint: "/users",
@@ -151,6 +156,8 @@ describe("connector catalog metadata", () => {
     };
 
     expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Sourcegen ready");
+    expect(connectorAccessStatusLabel(connector.access_status)).toBe("Catalog only");
+    expect(connectorSetupAllowed(connector)).toBe(false);
     expect(connectorIsCatalogOnly(connector)).toBe(true);
     expect(connectorRuntimeSurfaceLabel(connector)).toBe("Sourcegen ready");
     expect(connectorDisplayMetadata(connector)).toMatchObject({
@@ -159,6 +166,7 @@ describe("connector catalog metadata", () => {
     });
     expect(connectorSearchText(connector)).toContain("oauth_client_credentials");
     expect(connectorSearchText(connector)).toContain("/roles");
+    expect(connectorSearchText(connector)).toContain("sourcegen-ready");
   });
 
   it("treats advertised connection methods as a live runtime surface", () => {
@@ -173,6 +181,26 @@ describe("connector catalog metadata", () => {
       runtime_executable: true,
       connection_methods: [{ id: "encrypted_submission" }],
     })).toBe("Runtime supported");
+  });
+
+  it("treats restricted connector setup as inspectable metadata", () => {
+    const connector = {
+      source_id: "aws",
+      name: "AWS",
+      display_name: "Amazon Web Services",
+      catalog_status: "generateable",
+      access_status: "restricted",
+      access_reason: "limited preview",
+      setup_allowed: false,
+      requestable: true,
+      runtime_executable: true,
+      connection_methods: [{ id: "encrypted_submission" }],
+    };
+
+    expect(connectorAccessStatusLabel(connector.access_status)).toBe("Restricted");
+    expect(connectorSetupAllowed(connector)).toBe(false);
+    expect(connectorRuntimeSurfaceLabel(connector)).toBe("Restricted");
+    expect(connectorSearchText(connector)).toContain("limited preview");
   });
 
   it("matches friendly slugs for catalog sources with punctuation or spaces", () => {
