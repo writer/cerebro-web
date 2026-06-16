@@ -188,7 +188,7 @@ function StepRail({ method, storeLabel }: { method?: ConnectorConnectionMethod; 
     ["Identity", "Tenant and connection ID"],
     ["Store", storeLabel || "Choose store"],
     ["Config", "Source settings"],
-    ["Scope", "Skip excluded assets"],
+    ["Collected resources", "Collection exclusions"],
     ["Validate", "Test before saving"],
   ];
   return (
@@ -357,7 +357,7 @@ function ProductGroupSelector({
           Product and permission groups
         </div>
         <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
-          Groups are translated into resource-family scope. Turning one off skips those families before source collection where supported.
+          Turning a group off excludes those resource families from collection where supported.
         </p>
       </div>
       <div className="grid min-w-0 gap-3 p-4 md:grid-cols-2">
@@ -511,10 +511,10 @@ function SetupCheckpointStrip({
       detail: basicsReady ? "required fields" : "tenant and ID",
     },
     {
-      label: "Scope",
-      value: scopeCount > 0 ? `${scopeCount} skipped` : "All enabled",
+      label: "Collected resources",
+      value: scopeCount > 0 ? `${scopeCount} excluded` : "All collected",
       ready: true,
-      detail: "source-time policy",
+      detail: "collection policy",
     },
     {
       label: "Preflight",
@@ -722,7 +722,7 @@ function credentialReferenceRows({
     required: field.required,
     reference: replaceReferenceTemplate(template, connector, tenantID, runtimeID, field.key),
     description: store.id === "aws_secrets_manager"
-      ? "Scoped to this connection namespace; backend validation rejects unscoped aws-sm references."
+      ? "Bound to this connection namespace; backend validation rejects aws-sm references outside it."
       : "Projected into the backend runtime environment before source validation.",
     source: "suggested" as const,
   }));
@@ -806,14 +806,14 @@ function CredentialReferencePlan({
           </div>
           <div className="mt-3 max-w-3xl text-[12px] leading-5 text-[var(--text-muted)]">
             {hasRows
-              ? "Generate the non-secret references that this connection should submit. The backend still validates prefixes, store compatibility, and runtime scoping before it resolves anything."
+              ? "Generate the non-secret references that this connection should submit. The backend still validates prefixes, store compatibility, and runtime namespace before it resolves anything."
               : "This method does not require credential reference fields. Runtime config stays non-secret and backend validation still runs before save."}
           </div>
           <div className="mt-3 grid gap-1.5 text-[11px]">
             {[
               ["1", "Create store values"],
               ["2", "Submit references only"],
-              ["3", "Preflight validates scope"],
+              ["3", "Preflight validates boundary"],
             ].map(([step, detail]) => (
               <div key={step} className="flex items-center gap-2 rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[var(--text-muted)]">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[10px] font-bold text-[var(--primary)]">{step}</span>
@@ -969,8 +969,8 @@ function OnboardingBrief({
       ready: fieldsReady,
     },
     {
-      label: "Scope",
-      detail: scopeCount > 0 ? `${scopeCount} exclusion${scopeCount === 1 ? "" : "s"} configured` : "All discovered resources are in scope",
+      label: "Collected resources",
+      detail: scopeCount > 0 ? `${scopeCount} collection exclusion${scopeCount === 1 ? "" : "s"}` : "Collect all resources",
       ready: true,
     },
   ];
@@ -1059,13 +1059,13 @@ function OnboardingBrief({
               {sendsSecrets
                 ? "Secret material is encrypted in browser transit, sealed at rest, and never returned by connector reads."
                 : store?.nativeResolutionAvailable
-                  ? "The browser submits only scoped references; Cerebro resolves them inside the backend."
+                  ? "The browser submits only runtime-bound references; Cerebro resolves them inside the backend."
                   : "The browser submits only references; deployment automation projects the material into the backend runtime."}
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <Badge value={`${completed}/${rows.length} gates`} />
-            <Badge value={scopeCount > 0 ? `${scopeCount} scoped out` : "all resources in scope"} />
+            <Badge value={scopeCount > 0 ? `${scopeCount} excluded from collection` : "all resources collected"} />
             {preflight?.next_action && <Badge value={preflight.next_action.replaceAll("_", " ")} />}
           </div>
         </div>
@@ -1090,7 +1090,7 @@ function ConnectionPathSummary({
   const boundaryTitle = sendsSecrets
     ? "Browser-encrypted secret envelope"
     : store?.nativeResolutionAvailable
-      ? "Scoped backend reference"
+      ? "Runtime-bound backend reference"
       : "Deployment-projected reference";
   const boundaryDetail = sendsSecrets
     ? "The UI encrypts credential material before transit and clears fields after every attempt."
@@ -1106,7 +1106,7 @@ function ConnectionPathSummary({
         : "External store values are projected into env references."
     : "Pick where credential material lives before preflight.";
   const preflightTitle = preflight ? preflightStatusLabel(preflight.status) : "Preflight required";
-  const preflightDetail = preflight?.summary ?? "Cerebro validates method, credentials, source access, and scope before save.";
+  const preflightDetail = preflight?.summary ?? "Cerebro validates method, credentials, source access, and collection policy before save.";
 
   const items = [
     {
@@ -1130,7 +1130,7 @@ function ConnectionPathSummary({
     {
       label: "Runtime gate",
       title: preflightTitle,
-      detail: scopeCount > 0 ? `${preflightDetail} ${scopeCount} resource exclusion${scopeCount === 1 ? "" : "s"} will short-circuit collection.` : preflightDetail,
+      detail: scopeCount > 0 ? `${preflightDetail} ${scopeCount} resource exclusion${scopeCount === 1 ? "" : "s"} will be skipped before collection.` : preflightDetail,
       icon: <SlidersHorizontal className="h-4 w-4" />,
     },
   ];
@@ -1140,7 +1140,7 @@ function ConnectionPathSummary({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
         <div>
           <div className="text-[13px] font-semibold text-[var(--text-primary)]">Connection path</div>
-          <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Identity, credential boundary, resolver, and scope are validated as one runtime contract.</div>
+          <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Identity, credential boundary, resolver, and collection policy are validated as one runtime contract.</div>
         </div>
         <Badge value={preflight ? preflightStatusLabel(preflight.status) : "not tested"} />
       </div>
@@ -1255,7 +1255,7 @@ function PreflightCockpit({
             {preflightStatusLabel(status)}
           </div>
           <p className="mt-1 max-w-3xl text-[12px] leading-5 opacity-80">
-            {preflight?.summary ?? "Run preflight before saving. Cerebro will validate the method, credential boundary, source config, and resource scope without storing the runtime."}
+            {preflight?.summary ?? "Run preflight before saving. Cerebro will validate the method, credential boundary, source config, and collection policy without storing the runtime."}
           </p>
         </div>
         <div className="flex items-center gap-2 text-[12px] font-semibold">
@@ -1268,9 +1268,9 @@ function PreflightCockpit({
         <PreflightTile label="Method" value={method?.label || method?.shortLabel || "Choose method"} detail={method?.category ?? "Connection"} />
         <PreflightTile label="Credential Store" value={store?.label ?? "Choose store"} detail={boundary?.reference_only ? "references only" : boundary?.sends_secrets ? "encrypted submission" : store?.detail} />
         <PreflightTile
-          label="Scope"
+          label="Collection"
           value={scopePreview ? `${scopePreview.enabled_resource_types ?? 0} on / ${scopePreview.disabled_resource_types ?? 0} off` : `${scopeCount} exclusions`}
-          detail={scopePreview ? `${scopePreview.exact_resource_count ?? 0} exact resources` : "pending preflight preview"}
+          detail={scopePreview ? `${scopePreview.exact_resource_count ?? 0} exact resources` : "pending collection preview"}
         />
         <PreflightTile label="Checks" value={preflight ? `${checks.length - blocking}/${checks.length} passing` : "Not run"} detail={warnings > 0 ? `${warnings} warnings` : fieldsAccepted > 0 ? `${fieldsAccepted} credential fields` : "source check pending"} />
       </div>
@@ -2006,7 +2006,7 @@ export default function ConnectorSetupForm({
             )}
           </SetupStep>
 
-          <SetupStep index={5} title="Set resource scope" icon={<SlidersHorizontal className="h-4 w-4" />}>
+          <SetupStep index={5} title="Choose collected resources" icon={<SlidersHorizontal className="h-4 w-4" />}>
             <div className="space-y-4">
               <ProductGroupSelector
                 groups={selectedMethod?.product_groups ?? []}
@@ -2017,12 +2017,12 @@ export default function ConnectorSetupForm({
               <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">Resource types</div>
+                    <div className="text-[13px] font-semibold text-[var(--text-primary)]">Resource types to collect</div>
                     <div className="mt-0.5 max-w-3xl text-[12px] leading-5 text-[var(--text-muted)]">
-                      Source-advertised classes. Disabled families become source-time exclusions.
+                      Source-advertised classes. Disabled families are skipped before collection where supported.
                     </div>
                   </div>
-                  <Badge value={scopeCount > 0 ? `${scopeCount} scoped out` : "all enabled"} />
+                  <Badge value={scopeCount > 0 ? `${scopeCount} excluded` : "all collected"} />
                 </div>
                 <ScopePolicyBuilder
                   connector={connector}

@@ -49,7 +49,7 @@ const tabs: Array<{ id: DetailTab; label: string; icon: ReactNode }> = [
   { id: "setup", label: "Setup", icon: <KeyRound className="h-4 w-4" /> },
   { id: "connections", label: "Connections", icon: <ListChecks className="h-4 w-4" /> },
   { id: "activity", label: "Activity", icon: <RefreshCw className="h-4 w-4" /> },
-  { id: "scope", label: "Scope", icon: <Layers3 className="h-4 w-4" /> },
+  { id: "scope", label: "Collected resources", icon: <Layers3 className="h-4 w-4" /> },
   { id: "data", label: "Data", icon: <Database className="h-4 w-4" /> },
 ];
 
@@ -204,8 +204,8 @@ function AttentionNotice({ summary, onSetup }: { summary: ConnectorOperationsSum
   );
 }
 
-function ConnectionsTable({ connections }: { connections: ConnectorConnectionSummary[] }) {
-  if (connections.length === 0) return <EmptyBlock label="No connections match this scope." />;
+function ConnectionsTable({ connections, activeRuntimeID = "" }: { connections: ConnectorConnectionSummary[]; activeRuntimeID?: string }) {
+  if (connections.length === 0) return <EmptyBlock label="No connections match these filters." />;
   return (
     <div className="overflow-x-auto rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
       <table className="data-table">
@@ -216,14 +216,14 @@ function ConnectionsTable({ connections }: { connections: ConnectorConnectionSum
             <th>Graph</th>
             <th>Records</th>
             <th>Projected</th>
-            <th>Scope</th>
+            <th>Collected resources</th>
             <th>Last Activity</th>
             <th>Next Action</th>
           </tr>
         </thead>
         <tbody>
           {connections.map((connection) => (
-            <tr key={connection.runtime_id}>
+            <tr key={connection.runtime_id} className={activeRuntimeID === connection.runtime_id ? "bg-[var(--surface-hover)]" : undefined}>
               <td>
                 <div className="font-medium text-[var(--text-primary)]">{connection.family || "Default"}</div>
                 <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{connection.runtime_id}</div>
@@ -238,7 +238,7 @@ function ConnectionsTable({ connections }: { connections: ConnectorConnectionSum
                 <div>{connection.entities_projected ?? 0} entities</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{connection.links_projected ?? 0} links</div>
               </td>
-              <td><Badge value={scopePolicyExclusionCount(connection.scope_policy) > 0 ? `${scopePolicyExclusionCount(connection.scope_policy)} excluded` : "all in scope"} /></td>
+              <td><Badge value={scopePolicyExclusionCount(connection.scope_policy) > 0 ? `${scopePolicyExclusionCount(connection.scope_policy)} excluded` : "all collected"} /></td>
               <td>
                 <div>{displayDate(connection.last_activity_at)}</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{formatDuration(connection.watermark_lag_seconds)} lag</div>
@@ -272,11 +272,11 @@ function ScopePolicyCard({ connection }: { connection: ConnectorConnectionSummar
           <div className="text-[13px] font-semibold text-[var(--text-primary)]">{connection.family || "Default family"}</div>
           <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{connection.runtime_id}</div>
         </div>
-        <Badge value={count > 0 ? `${count} excluded` : "all in scope"} />
+        <Badge value={count > 0 ? `${count} excluded` : "all collected"} />
       </div>
       {count === 0 ? (
         <div className="mt-3 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
-          This connection has no source-time exclusions. The runtime will attempt every configured family.
+          This connection has no collection exclusions. The runtime will attempt to collect every configured family.
         </div>
       ) : (
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -328,15 +328,15 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
   const excludedConnections = connections.filter((connection) => scopePolicyExclusionCount(connection.scope_policy) > 0);
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <Panel title="Source-time resource scope">
+      <Panel title="Collection policy">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-lg bg-[var(--surface-muted)] p-3">
             <div className="text-xl font-semibold text-[var(--text-primary)]">{scopeOptions.length}</div>
-            <div className="text-[11px] text-[var(--text-muted)]">available scope classes</div>
+            <div className="text-[11px] text-[var(--text-muted)]">available classes</div>
           </div>
           <div className="rounded-lg bg-[var(--surface-muted)] p-3">
             <div className="text-xl font-semibold text-[var(--text-primary)]">{excludedConnections.length}</div>
-            <div className="text-[11px] text-[var(--text-muted)]">connections scoped down</div>
+            <div className="text-[11px] text-[var(--text-muted)]">connections with exclusions</div>
           </div>
           <div className="rounded-lg bg-[var(--surface-muted)] p-3">
             <div className="text-xl font-semibold text-[var(--text-primary)]">{connections.reduce((sum, connection) => sum + scopePolicyExclusionCount(connection.scope_policy), 0)}</div>
@@ -344,7 +344,7 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
           </div>
         </div>
         <div className="mt-4 space-y-3">
-          {connections.length === 0 && <EmptyBlock label="Connect this source before resource scope can be evaluated." />}
+          {connections.length === 0 && <EmptyBlock label="Connect this source before collection exclusions can be evaluated." />}
           {connections.map((connection) => (
             <ScopePolicyCard key={connection.runtime_id} connection={connection} />
           ))}
@@ -392,7 +392,8 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const searchParams = useSearchParams();
   const { apiKey } = useApiKey();
   const sourceID = useMemo(() => decodeURIComponent(params.sourceID ?? ""), [params.sourceID]);
-  const initialTab = setupOnly ? "setup" : (searchParams.get("tab") as DetailTab | null) ?? "overview";
+  const runtimeID = searchParams.get("runtime_id") ?? "";
+  const initialTab = setupOnly ? "setup" : (searchParams.get("tab") as DetailTab | null) ?? (runtimeID ? "connections" : "overview");
   const [activeTab, setActiveTab] = useState<DetailTab>(tabs.some((tab) => tab.id === initialTab) ? initialTab : "overview");
   const [tenantID, setTenantID] = useState(searchParams.get("tenant_id") ?? "");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
@@ -452,7 +453,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                 <div className="min-w-0">
                   <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Connect {displayName}</h1>
                   <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[var(--text-muted)]">
-                    Choose identity, bind credentials to a backend store, validate access, then save a scoped collector runtime.
+                    Choose identity, bind credentials to a backend store, validate access, then save a collector runtime with optional collection exclusions.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {capabilityLabels.map((capability) => (
@@ -469,7 +470,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               <div className="grid overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] text-center sm:grid-cols-3">
                 {setupStats.map((item) => (
                   <div key={item.label} className="border-t border-[color:var(--border)] px-3 py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:first:border-l-0">
-                    <div className="truncate text-[15px] font-semibold text-[var(--text-primary)]">{item.value}</div>
+                    <div className="text-[15px] font-semibold leading-5 text-[var(--text-primary)]">{item.value}</div>
                     <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">{item.label}</div>
                   </div>
                 ))}
@@ -483,7 +484,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
 
           <div className="grid gap-3 border-t border-[color:var(--border)] bg-[var(--surface-muted)] p-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,1fr)_auto]">
             <label className={labelClass}>
-              Tenant scope
+              Tenant
               <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} />
             </label>
             <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
@@ -552,7 +553,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
       <section className="surface-panel p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(220px,0.6fr)_minmax(0,1fr)]">
           <label className={labelClass}>
-            Tenant scope
+            Tenant filter
             <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} />
           </label>
           <details className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
@@ -628,7 +629,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
 
       {activeTab === "connections" && (
         <Panel title="Connections" action={<span className="text-[12px] text-[var(--text-muted)]">{connections.length} shown</span>}>
-          <ConnectionsTable connections={connections} />
+          <ConnectionsTable connections={connections} activeRuntimeID={runtimeID} />
         </Panel>
       )}
 

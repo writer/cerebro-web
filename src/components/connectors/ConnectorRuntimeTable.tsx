@@ -15,7 +15,7 @@ export default function ConnectorRuntimeTable({
   showSource?: boolean;
 }) {
   if (runtimes.length === 0) {
-    return <EmptyBlock label="No connections match this scope." />;
+    return <EmptyBlock label="No connections match these filters." />;
   }
 
   return (
@@ -57,7 +57,7 @@ export default function ConnectorRuntimeTable({
               </td>
               <td>
                 <Link
-                  href={`/connectors/${encodeURIComponent(runtime.source_id || "unknown")}?runtime_id=${encodeURIComponent(runtime.runtime_id)}`}
+                  href={`/connectors/${encodeURIComponent(runtime.source_id || "unknown")}?tab=connections&runtime_id=${encodeURIComponent(runtime.runtime_id)}`}
                   className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]"
                 >
                   Inspect
