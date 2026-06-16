@@ -91,12 +91,24 @@ export function connectorPrimaryAction(card: ConnectorCard) {
   return "Fix";
 }
 
-export function connectorCapabilities(card: Pick<ConnectorCatalogEntry, "emitted_kinds">, limit = 3) {
+export function connectorCapabilities(card: Pick<ConnectorCatalogEntry, "emitted_kinds" | "resource_families" | "catalog_categories">, limit = 3) {
   const seen = new Set<string>();
-  (card.emitted_kinds ?? []).forEach((kind) => {
-    const prefix = kind.split(".")[0]?.trim();
-    if (prefix) seen.add(prefix);
+  (card.resource_families ?? []).forEach((family) => {
+    const label = family.label?.trim() || family.id?.trim();
+    if (label) seen.add(label);
   });
+  if (seen.size === 0) {
+    (card.catalog_categories ?? []).forEach((category) => {
+      const normalized = category.trim();
+      if (normalized) seen.add(normalized);
+    });
+  }
+  if (seen.size === 0) {
+    (card.emitted_kinds ?? []).forEach((kind) => {
+      const prefix = kind.split(".")[0]?.trim();
+      if (prefix) seen.add(prefix);
+    });
+  }
   return [...seen].slice(0, limit);
 }
 
@@ -106,11 +118,19 @@ const connectorCapabilityLabels: Record<string, string> = {
   aws: "Amazon Web Services",
   azure: "Microsoft Azure",
   cloudflare: "Cloudflare",
+  grc: "GRC",
   gcp: "Google Cloud Platform",
   github: "GitHub",
   google_workspace: "Google Workspace",
+  iac: "IaC",
+  itsm: "ITSM",
+  mdm: "MDM",
   okta: "Okta",
   openai: "OpenAI",
+  saas: "SaaS",
+  sca: "SCA",
+  siem: "SIEM",
+  soar: "SOAR",
 };
 
 export function connectorCapabilityLabel(capability: string) {

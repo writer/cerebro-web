@@ -12,7 +12,9 @@ import {
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStatus,
+  connectorDisplayMetadata,
   connectorIsCatalogOnly,
+  connectorMatchesSlug,
   connectorRuntimeSurfaceLabel,
   connectorSearchText,
   connectorScopeOptionFamilies,
@@ -151,6 +153,10 @@ describe("connector catalog metadata", () => {
     expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Sourcegen ready");
     expect(connectorIsCatalogOnly(connector)).toBe(true);
     expect(connectorRuntimeSurfaceLabel(connector)).toBe("Sourcegen ready");
+    expect(connectorDisplayMetadata(connector)).toMatchObject({
+      category: "Identity and access",
+      provider: "Auth0",
+    });
     expect(connectorSearchText(connector)).toContain("oauth_client_credentials");
     expect(connectorSearchText(connector)).toContain("/roles");
   });
@@ -167,6 +173,17 @@ describe("connector catalog metadata", () => {
       runtime_executable: true,
       connection_methods: [{ id: "encrypted_submission" }],
     })).toBe("Runtime supported");
+  });
+
+  it("matches friendly slugs for catalog sources with punctuation or spaces", () => {
+    const connector = {
+      source_id: "microsoft_365",
+      name: "Microsoft 365",
+      display_name: "Microsoft 365",
+    };
+
+    expect(connectorMatchesSlug(connector, "microsoft-365")).toBe(true);
+    expect(connectorMatchesSlug(connector, "microsoft_365")).toBe(true);
   });
 });
 

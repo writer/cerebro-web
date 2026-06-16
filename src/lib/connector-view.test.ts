@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildConnectorCards,
   connectorAttentionTotal,
+  connectorCapabilities,
   connectorCapabilityLabel,
   connectorPath,
   connectorPrimaryAction,
@@ -86,5 +87,18 @@ describe("connector view model", () => {
   it("renders provider capability labels with full public names", () => {
     expect(connectorCapabilityLabel("aws")).toBe("Amazon Web Services");
     expect(connectorCapabilityLabel("gcp")).toBe("Google Cloud Platform");
+    expect(connectorCapabilityLabel("grc")).toBe("GRC");
+  });
+
+  it("prefers catalog resource families as capability chips for sourcegen entries", () => {
+    expect(connectorCapabilities({
+      emitted_kinds: ["crowdstrike_falcon.findings"],
+      catalog_categories: ["security", "endpoint"],
+      resource_families: [
+        { id: "endpoint_devices", label: "Endpoint devices" },
+        { id: "findings", label: "Findings" },
+        { id: "vulnerabilities", label: "Vulnerabilities" },
+      ],
+    }, 2)).toEqual(["Endpoint devices", "Findings"]);
   });
 });
