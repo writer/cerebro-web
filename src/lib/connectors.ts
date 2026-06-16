@@ -690,6 +690,57 @@ const sourceAliases: Record<string, string[]> = {
   okta: ["okta"],
 };
 
+const connectorCategoryDisplayCatalog: Record<string, Pick<ConnectorDisplayMetadata, "category" | "accentClass">> = {
+  access: { category: "Access management", accentClass: "bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-100 dark:ring-indigo-500/25" },
+  artifacts: { category: "Artifact registry", accentClass: "bg-cyan-50 text-cyan-700 ring-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-100 dark:ring-cyan-500/25" },
+  asm: { category: "Attack surface management", accentClass: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-100 dark:ring-red-500/25" },
+  audit: { category: "Audit management", accentClass: "bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-100 dark:ring-violet-500/25" },
+  background_checks: { category: "Background checks", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  business: { category: "Business system", accentClass: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-500/15 dark:text-fuchsia-100 dark:ring-fuchsia-500/25" },
+  ci: { category: "CI/CD", accentClass: "bg-lime-50 text-lime-800 ring-lime-200 dark:bg-lime-500/15 dark:text-lime-100 dark:ring-lime-500/25" },
+  cloud: { category: "Cloud security", accentClass: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-100 dark:ring-blue-500/25" },
+  code: { category: "Code hosting", accentClass: "bg-zinc-100 text-zinc-800 ring-zinc-200 dark:bg-zinc-500/15 dark:text-zinc-100 dark:ring-zinc-500/25" },
+  code_quality: { category: "Code quality", accentClass: "bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-100 dark:ring-teal-500/25" },
+  code_scanning: { category: "Code scanning", accentClass: "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-100 dark:ring-rose-500/25" },
+  collaboration: { category: "Collaboration", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  compliance: { category: "Compliance", accentClass: "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:ring-emerald-500/25" },
+  containers: { category: "Container security", accentClass: "bg-cyan-50 text-cyan-700 ring-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-100 dark:ring-cyan-500/25" },
+  crm: { category: "CRM", accentClass: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-500/15 dark:text-fuchsia-100 dark:ring-fuchsia-500/25" },
+  customer_data: { category: "Customer data", accentClass: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-100 dark:ring-blue-500/25" },
+  data: { category: "Data platform", accentClass: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-100 dark:ring-blue-500/25" },
+  database: { category: "Database", accentClass: "bg-cyan-50 text-cyan-700 ring-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-100 dark:ring-cyan-500/25" },
+  design: { category: "Design collaboration", accentClass: "bg-pink-50 text-pink-700 ring-pink-200 dark:bg-pink-500/15 dark:text-pink-100 dark:ring-pink-500/25" },
+  dev: { category: "Developer platform", accentClass: "bg-lime-50 text-lime-800 ring-lime-200 dark:bg-lime-500/15 dark:text-lime-100 dark:ring-lime-500/25" },
+  document_management: { category: "Document management", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  endpoint: { category: "Endpoint security", accentClass: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-100 dark:ring-red-500/25" },
+  erp: { category: "ERP", accentClass: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-500/15 dark:text-fuchsia-100 dark:ring-fuchsia-500/25" },
+  feature_flags: { category: "Feature flags", accentClass: "bg-lime-50 text-lime-800 ring-lime-200 dark:bg-lime-500/15 dark:text-lime-100 dark:ring-lime-500/25" },
+  finance: { category: "Finance", accentClass: "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200 dark:bg-fuchsia-500/15 dark:text-fuchsia-100 dark:ring-fuchsia-500/25" },
+  grc: { category: "GRC", accentClass: "bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-100 dark:ring-violet-500/25" },
+  hr: { category: "HR system", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  iac: { category: "Infrastructure as code", accentClass: "bg-lime-50 text-lime-800 ring-lime-200 dark:bg-lime-500/15 dark:text-lime-100 dark:ring-lime-500/25" },
+  identity: { category: "Identity and access", accentClass: "bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-100 dark:ring-indigo-500/25" },
+  incident: { category: "Incident management", accentClass: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25" },
+  itsm: { category: "ITSM", accentClass: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25" },
+  knowledge: { category: "Knowledge management", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  mdm: { category: "MDM", accentClass: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-100 dark:ring-red-500/25" },
+  observability: { category: "Observability", accentClass: "bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-100 dark:ring-teal-500/25" },
+  privacy: { category: "Privacy", accentClass: "bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-100 dark:ring-violet-500/25" },
+  productivity: { category: "Productivity suite", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  project: { category: "Project management", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  saas: { category: "SaaS application", accentClass: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-500/25" },
+  sca: { category: "Software composition analysis", accentClass: "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-100 dark:ring-rose-500/25" },
+  secrets: { category: "Secrets management", accentClass: "bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-100 dark:ring-indigo-500/25" },
+  security: { category: "Security platform", accentClass: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-100 dark:ring-red-500/25" },
+  security_training: { category: "Security training", accentClass: "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-100 dark:ring-emerald-500/25" },
+  siem: { category: "SIEM", accentClass: "bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-100 dark:ring-teal-500/25" },
+  soar: { category: "SOAR", accentClass: "bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-100 dark:ring-teal-500/25" },
+  support: { category: "Support operations", accentClass: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25" },
+  threat_intel: { category: "Threat intelligence", accentClass: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-100 dark:ring-red-500/25" },
+  vulnerability: { category: "Vulnerability management", accentClass: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/15 dark:text-red-100 dark:ring-red-500/25" },
+  warehouse: { category: "Data warehouse", accentClass: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-100 dark:ring-blue-500/25" },
+};
+
 const connectorDisplayCatalog: Record<string, ConnectorDisplayMetadata> = {
   anthropic: { logoText: "A", category: "AI platform", provider: "Anthropic", accentClass: "bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-100 dark:ring-orange-500/25" },
   aws: { logoText: "AWS", category: "Cloud provider", provider: "Amazon Web Services", accentClass: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25", authBadge: "SSO ready" },
@@ -851,7 +902,8 @@ const connectorFieldSets: Record<string, ConnectorFieldSet> = {
 export const fieldSetForConnector = (sourceID: string): ConnectorFieldSet =>
   connectorFieldSets[sourceID] ?? defaultFieldSet;
 
-export const connectorSlug = (sourceID: string) => sourceID.trim().toLowerCase().replaceAll("_", "-");
+export const connectorSlug = (sourceID: string) =>
+  sourceID.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 export const connectorAliasCandidates = (connector: Pick<ConnectorCatalogEntry, "source_id" | "name" | "display_name">) => {
   const sourceID = connector.source_id.trim().toLowerCase();
@@ -865,16 +917,53 @@ export const connectorMatchesSlug = (connector: Pick<ConnectorCatalogEntry, "sou
   return connectorAliasCandidates(connector).has(normalizedSlug);
 };
 
-export const connectorDisplayMetadata = (connector: Pick<ConnectorCatalogEntry, "source_id" | "name" | "emitted_kinds">): ConnectorDisplayMetadata => {
+const humanizeConnectorToken = (value: string) =>
+  value
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const connectorCategoryMetadata = (categories?: string[]) => {
+  for (const category of categories ?? []) {
+    const normalized = category.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const match = connectorCategoryDisplayCatalog[normalized];
+    if (match) return match;
+  }
+  const first = categories?.find((category) => category.trim());
+  if (!first) return undefined;
+  return {
+    category: humanizeConnectorToken(first),
+    accentClass: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-100 dark:ring-slate-500/25",
+  };
+};
+
+const connectorLabelText = (connector: Pick<ConnectorCatalogEntry, "source_id" | "name" | "display_name">) =>
+  connector.display_name?.trim()
+  || connector.name?.trim()
+  || humanizeConnectorToken(connector.source_id);
+
+const connectorLogoText = (connector: Pick<ConnectorCatalogEntry, "source_id" | "name" | "display_name">) => {
+  const label = connectorLabelText(connector);
+  const words = label.replace(/([a-z])([A-Z])/g, "$1 $2").split(/[^a-z0-9]+/i).filter(Boolean);
+  if (words.length >= 2) return words.slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+  return label.replace(/[^a-z0-9]/gi, "").slice(0, 3).toUpperCase() || "?";
+};
+
+export const connectorDisplayMetadata = (
+  connector: Pick<ConnectorCatalogEntry, "source_id" | "name" | "display_name" | "emitted_kinds" | "catalog_categories">,
+): ConnectorDisplayMetadata => {
   const catalog = connectorDisplayCatalog[connector.source_id];
   if (catalog) return catalog;
+  const categoryMetadata = connectorCategoryMetadata(connector.catalog_categories);
   const emittedPrefix = connector.emitted_kinds?.[0]?.split(".")[0];
-  const label = (connector.name || connector.source_id || "?").replace(/[^a-z0-9]/gi, "").slice(0, 3).toUpperCase() || "?";
   return {
-    logoText: label,
-    category: emittedPrefix ? `${emittedPrefix} source` : "Connector",
-    provider: connector.name || connector.source_id,
-    accentClass: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-100 dark:ring-slate-500/25",
+    logoText: connectorLogoText(connector),
+    category: categoryMetadata?.category || (emittedPrefix ? `${humanizeConnectorToken(emittedPrefix)} source` : "Connector"),
+    provider: connectorLabelText(connector),
+    accentClass: categoryMetadata?.accentClass || "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-100 dark:ring-slate-500/25",
   };
 };
 
