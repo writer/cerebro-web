@@ -125,6 +125,7 @@ export const isCacheableCerebroPath = (path: string) => {
   return [
     "grc/dashboard",
     "grc/controls",
+    "grc/control-packets",
     "grc/findings",
     "grc/evidence",
     "grc/inventory/categories",
