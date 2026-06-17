@@ -39,6 +39,11 @@ import {
   normalizeScopePolicy,
   scopePolicyExclusionCount,
 } from "@/lib/connectors";
+import {
+  connectorScopeOptionMatchesFrameworkSegment,
+  frameworkSegmentFor,
+  supportedGRCFrameworkNames,
+} from "@/lib/grc-frameworks";
 
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
 const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
@@ -1316,7 +1321,7 @@ function PreflightCockpit({
   );
 }
 
-type ResourceTypeFilter = "all" | "enabled" | "disabled" | "high_value";
+type ResourceTypeFilter = "all" | "enabled" | "disabled" | "high_value" | "framework";
 
 function scopeOptionSearchText(option: ConnectorScopeOption, families: string[]) {
   return [option.label, option.id, option.type, option.support, ...families].filter(Boolean).join(" ").toLowerCase();
@@ -1326,6 +1331,7 @@ function ScopePolicyBuilder({
   connector,
   selectedFamilies,
   protectedFamilies,
+  initialFramework,
   onDisableFamilies,
   onEnableFamilies,
   resourceURNs,
@@ -1336,6 +1342,7 @@ function ScopePolicyBuilder({
   connector: ConnectorCatalogEntry;
   selectedFamilies: Set<string>;
   protectedFamilies: Set<string>;
+  initialFramework?: string;
   onDisableFamilies: (families: string[]) => void;
   onEnableFamilies: (families: string[]) => void;
   resourceURNs: string;
@@ -1344,7 +1351,9 @@ function ScopePolicyBuilder({
   onResourcesChange: (resources: ConnectorScopeResource[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<ResourceTypeFilter>("all");
+  const initialFrameworkSegment = frameworkSegmentFor(initialFramework ?? "");
+  const [framework, setFramework] = useState(initialFramework ?? "");
+  const [filter, setFilter] = useState<ResourceTypeFilter>(initialFrameworkSegment ? "framework" : "all");
   const [resourceType, setResourceType] = useState("");
   const [resourceID, setResourceID] = useState("");
   const [resourceReason, setResourceReason] = useState("");
@@ -1362,6 +1371,10 @@ function ScopePolicyBuilder({
     };
   }), [options, protectedFamilies, selectedFamilies]);
   const disabledRows = rows.filter((row) => row.disabled);
+  const frameworkSegment = frameworkSegmentFor(framework);
+  const frameworkRows = frameworkSegment
+    ? rows.filter((row) => connectorScopeOptionMatchesFrameworkSegment(row.option, framework, connector.source_id))
+    : [];
   const enabledCount = Math.max(rows.length - disabledRows.length, 0);
   const selectedURNs = splitScopeValues(resourceURNs);
   const exactCount = selectedURNs.length + resources.length;
@@ -1372,13 +1385,22 @@ function ScopePolicyBuilder({
       filter === "all" ||
       (filter === "enabled" && !row.disabled) ||
       (filter === "disabled" && row.disabled) ||
-      (filter === "high_value" && row.option.high_value);
+      (filter === "high_value" && row.option.high_value) ||
+      (filter === "framework" && frameworkRows.some((frameworkRow) => frameworkRow.option.id === row.option.id));
     return matchesQuery && matchesFilter;
   });
   const shownRows = visibleRows.slice(0, 80);
   const mutableShownRows = shownRows.filter((row) => !row.protectedRow);
   const allVisibleDisabled = mutableShownRows.length > 0 && mutableShownRows.every((row) => row.disabled);
   const visibleFamilies = mutableShownRows.flatMap((row) => row.families).filter((family) => !protectedFamilies.has(family));
+  const frameworkFamilies = frameworkRows
+    .filter((row) => !row.protectedRow)
+    .flatMap((row) => row.families)
+    .filter((family) => !protectedFamilies.has(family));
+  const outsideFrameworkFamilies = rows
+    .filter((row) => frameworkSegment && !row.protectedRow && !frameworkRows.some((frameworkRow) => frameworkRow.option.id === row.option.id))
+    .flatMap((row) => row.families)
+    .filter((family) => !protectedFamilies.has(family));
   const exampleFamily = rows[0]?.families[0] ?? `${connector.source_id}.resource`;
   const exampleResourceType = exampleFamily.includes(".") || exampleFamily.startsWith(`${connector.source_id}_`)
     ? exampleFamily.replace(`${connector.source_id}_`, `${connector.source_id}.`)
@@ -1398,7 +1420,14 @@ function ScopePolicyBuilder({
     { id: "enabled", label: "Collecting", count: enabledCount },
     { id: "disabled", label: "Skipped", count: disabledRows.length },
     { id: "high_value", label: "High value", count: rows.filter((row) => row.option.high_value).length },
+    ...(frameworkSegment ? [{ id: "framework" as const, label: "Framework", count: frameworkRows.length }] : []),
   ];
+  const applyFrameworkLens = () => {
+    if (!frameworkSegment) return;
+    onEnableFamilies(frameworkFamilies);
+    onDisableFamilies(outsideFrameworkFamilies);
+    setFilter("framework");
+  };
 
   return (
     <div className="space-y-4">
@@ -1427,6 +1456,22 @@ function ScopePolicyBuilder({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--border)] px-4 py-3">
+          <label className="min-w-[220px] flex-1">
+            <span className="sr-only">Framework lens</span>
+            <input
+              value={framework}
+              onChange={(event) => {
+                setFramework(event.target.value);
+                setFilter(event.target.value.trim() ? "framework" : "all");
+              }}
+              placeholder="Framework lens"
+              list="connector-framework-options"
+              className="control-input w-full px-3 py-2 text-[13px]"
+            />
+            <datalist id="connector-framework-options">
+              {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+            </datalist>
+          </label>
           <label className="relative min-w-[240px] flex-1">
             <span className="sr-only">Search resource types</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -1457,6 +1502,17 @@ function ScopePolicyBuilder({
             <RotateCcw className="h-3.5 w-3.5" />
             {allVisibleDisabled ? "Enable visible" : "Disable visible"}
           </button>
+          {frameworkSegment && (
+            <button
+              type="button"
+              onClick={applyFrameworkLens}
+              disabled={frameworkRows.length === 0}
+              className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              Collect lens only
+            </button>
+          )}
         </div>
 
         <div className="max-h-[430px] overflow-y-auto">
@@ -1917,12 +1973,14 @@ export default function ConnectorSetupForm({
   tenantID,
   apiKey,
   credentialStores,
+  initialFramework = "",
   onConnected,
 }: {
   connector: ConnectorCatalogEntry;
   tenantID: string;
   apiKey?: string;
   credentialStores: NormalizedCredentialStore[];
+  initialFramework?: string;
   onConnected: () => Promise<void> | void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -2364,6 +2422,7 @@ export default function ConnectorSetupForm({
                   connector={connector}
                   selectedFamilies={excludedFamilies}
                   protectedFamilies={protectedProductFamilies}
+                  initialFramework={initialFramework}
                   onDisableFamilies={(families) => updateScopeFamilies(families, true)}
                   onEnableFamilies={(families) => updateScopeFamilies(families, false)}
                   resourceURNs={resourceURNs}

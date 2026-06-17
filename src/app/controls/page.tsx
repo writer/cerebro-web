@@ -7,6 +7,7 @@ import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
 import { GRCControl, riskSort } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { controlMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -34,7 +35,7 @@ export default function ControlsPage() {
     const visible: GRCControl[] = [];
     let failing = 0, openFindings = 0, critical = 0;
     (data?.controls ?? []).forEach((c) => {
-      if (fw && !c.framework_name.toLowerCase().includes(fw)) return;
+      if (fw && !controlMatchesFrameworkSegment(c, framework)) return;
       if (cf && !c.control_id.toLowerCase().includes(cf)) return;
       visible.push(c);
       if (c.status === "failing") failing += 1;
@@ -46,6 +47,13 @@ export default function ControlsPage() {
   const { controls, critical, failing, openFindings } = controlView;
   const visibleControls = showAllControls ? controls : controls.slice(0, INITIAL_CONTROL_RENDER_LIMIT);
   const hiddenControlCount = controls.length - visibleControls.length;
+  const frameworkOptions = useMemo(
+    () => Array.from(new Set([
+      ...supportedGRCFrameworkNames,
+      ...(data?.controls ?? []).map((control) => control.framework_name).filter(Boolean),
+    ])),
+    [data?.controls],
+  );
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Framework", value: framework, onClear: () => setFramework("") },
@@ -73,7 +81,13 @@ export default function ControlsPage() {
       <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
         <div className="grid gap-3 md:grid-cols-3">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All tenants" className={inputClass} /></label>
-          <label className={labelClass}>Framework<input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="SOC 2, ISO 27001" className={inputClass} /></label>
+          <label className={labelClass}>
+            Framework
+            <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="SOC 2, DORA, FedRAMP Rev. 5" list="grc-framework-options" className={inputClass} />
+            <datalist id="grc-framework-options">
+              {frameworkOptions.map((name) => <option key={name} value={name} />)}
+            </datalist>
+          </label>
           <label className={labelClass}>Control<input value={controlID} onChange={(e) => setControlID(e.target.value)} placeholder="CC6.1" className={inputClass} /></label>
         </div>
         <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />

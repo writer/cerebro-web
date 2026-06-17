@@ -6,6 +6,7 @@ import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { GRCFinding, riskSort } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { findingMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -21,6 +22,7 @@ export default function RiskInboxPage() {
   const [sourceID, setSourceID] = useQueryParamState("source_id");
   const [severity, setSeverity] = useQueryParamState("severity");
   const [status, setStatus] = useQueryParamState("status", "open");
+  const [framework, setFramework] = useQueryParamState("framework");
   const [query, setQuery] = useQueryParamState("q");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
@@ -44,12 +46,20 @@ export default function RiskInboxPage() {
     const q = query.trim().toLowerCase();
     return (data?.findings ?? [])
       .filter((f) => {
+        if (!findingMatchesFrameworkSegment(f, framework)) return false;
         if (!q) return true;
         return [f.id, f.title, f.summary, f.severity, f.status, f.owner, f.sla_status, f.entity, f.runtime_id, f.source_id, f.rule_id, f.policy_id, f.policy_name, f.risk_score, f.likelihood_score, f.impact_score, f.confidence_score, f.likelihood_level, f.impact_level, ...(f.risk_reasons ?? []), ...(f.resource_urns ?? []), ...(f.controls ?? []).map((c) => `${c.framework_name} ${c.control_id}`)].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
       })
       .slice()
       .sort(riskSort);
-  }, [data?.findings, query]);
+  }, [data?.findings, framework, query]);
+  const frameworkOptions = useMemo(
+    () => Array.from(new Set([
+      ...supportedGRCFrameworkNames,
+      ...(data?.findings ?? []).flatMap((finding) => finding.controls?.map((control) => control.framework_name) ?? []).filter(Boolean),
+    ])),
+    [data?.findings],
+  );
   const metrics = useMemo(() => {
     let critical = 0, high = 0, criticalRisk = 0, overdue = 0, scored = 0, riskTotal = 0, unassigned = 0;
     findings.forEach((f) => {
@@ -67,6 +77,7 @@ export default function RiskInboxPage() {
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Runtime", value: runtimeID, onClear: () => setRuntimeID("") },
     { label: "Source", value: sourceID, onClear: () => setSourceID("") },
+    { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Severity", value: severity, onClear: () => setSeverity("") },
     { label: "Status", value: status === "open" ? "" : status, onClear: () => setStatus("open") },
   ];
@@ -75,6 +86,7 @@ export default function RiskInboxPage() {
     setTenantID("");
     setRuntimeID("");
     setSourceID("");
+    setFramework("");
     setSeverity("");
     setStatus("open");
   };
@@ -93,7 +105,7 @@ export default function RiskInboxPage() {
       />
 
       <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
-        <div className="grid gap-3 md:grid-cols-7">
+        <div className="grid gap-3 md:grid-cols-8">
           <div className="md:col-span-2">
             <label className={labelClass}>
               Search
@@ -108,6 +120,13 @@ export default function RiskInboxPage() {
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Runtime<input value={runtimeID} onChange={(e) => setRuntimeID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(e) => setSourceID(e.target.value)} placeholder="All" className={inputClass} /></label>
+          <label className={labelClass}>
+            Framework
+            <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="DORA" list="risk-framework-options" className={inputClass} />
+            <datalist id="risk-framework-options">
+              {frameworkOptions.map((name) => <option key={name} value={name} />)}
+            </datalist>
+          </label>
           <label className={labelClass}>Severity<select value={severity} onChange={(e) => setSeverity(e.target.value)} className={selectClass}><option value="">All</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select></label>
           <label className={labelClass}>Status<select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}><option value="open">Open</option><option value="resolved">Resolved</option><option value="all">All</option></select></label>
         </div>

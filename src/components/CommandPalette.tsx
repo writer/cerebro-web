@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
 import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
 import { useCommandPalette } from "@/components/providers";
+import { findSupportedGRCFramework } from "@/lib/grc-frameworks";
 import { LiveSearchCommand, useLiveSearchCommands } from "@/lib/live-search";
 import { NavigationEntry, navigationEntries } from "@/lib/navigation";
 
@@ -24,13 +25,26 @@ const searchCommands = (query: string, askGraph: (question: string) => void): Co
   const trimmed = query.trim();
   if (!trimmed) return [];
   const encoded = encodeURIComponent(trimmed);
+  const frameworkMatch = findSupportedGRCFramework(trimmed);
+  const riskInboxHref = frameworkMatch
+    ? `/risk-inbox?framework=${encodeURIComponent(frameworkMatch.name)}`
+    : `/risk-inbox?q=${encoded}`;
+  const inventoryHref = frameworkMatch
+    ? `/inventory?framework=${encodeURIComponent(frameworkMatch.name)}`
+    : `/inventory?q=${encoded}`;
+  const controlsHref = frameworkMatch
+    ? `/controls?framework=${encodeURIComponent(frameworkMatch.name)}`
+    : `/controls?control=${encoded}`;
+  const controlsLabel = frameworkMatch
+    ? `Filter controls by ${frameworkMatch.name}`
+    : `Filter controls by "${trimmed}"`;
   return [
     { id: "ask-graph", label: `Ask graph: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Send this question to the graph query panel.", section: "Operator", keywords: ["ask", "agent", "graph", "cypher"], onRun: () => askGraph(trimmed) },
-    { id: "search-risk-inbox", label: `Search Risk Inbox for "${trimmed}"`, href: `/risk-inbox?q=${encoded}`, description: "Filter findings by title, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk"] },
+    { id: "search-risk-inbox", label: `Search Risk Inbox for "${trimmed}"`, href: riskInboxHref, description: "Filter findings by title, framework, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk", "framework"] },
     { id: "open-finding", label: `Open finding "${trimmed}"`, href: `/findings/${encoded}`, description: "Jump to a finding detail page by ID.", section: "Operator", keywords: ["finding", "detail"] },
     { id: "open-impact", label: `Open impact map for "${trimmed}"`, href: `/impact?root_urn=${encoded}`, description: "Use as entity URN or graph root.", section: "Operator", keywords: ["impact", "graph"] },
-    { id: "search-inventory", label: `Search inventory for "${trimmed}"`, href: `/inventory?q=${encoded}`, description: "Filter assets and resources by label, type, owner, or URN.", section: "Operator", keywords: ["inventory", "assets", "resources"] },
-    { id: "search-controls", label: `Filter controls by "${trimmed}"`, href: `/controls?control=${encoded}`, description: "Find control IDs and mapped findings.", section: "Operator", keywords: ["controls", "framework"] },
+    { id: "search-inventory", label: `Search inventory for "${trimmed}"`, href: inventoryHref, description: "Filter assets and resources by framework, label, type, owner, or URN.", section: "Operator", keywords: ["inventory", "assets", "resources", "framework", "scope"] },
+    { id: "search-controls", label: controlsLabel, href: controlsHref, description: "Find framework names, control IDs, and mapped findings.", section: "Operator", keywords: ["controls", "framework"] },
     { id: "open-report", label: `Build audit packet for "${trimmed}"`, href: `/reports?finding_id=${encoded}`, description: "Use as a finding ID for an audit packet.", section: "Operator", keywords: ["reports", "audit"] },
     { id: "open-evidence", label: `Find evidence for "${trimmed}"`, href: `/evidence?finding_id=${encoded}`, description: "Use as a finding ID in the evidence register.", section: "Operator", keywords: ["evidence", "proof"] },
     { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?runtime_id=${encoded}`, description: "Use as a source runtime ID.", section: "Operator", keywords: ["connectors", "runtimes"] },

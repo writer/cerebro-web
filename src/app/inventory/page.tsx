@@ -18,6 +18,7 @@ import {
   shortEntity,
 } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { inventoryAssetMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { metricDetailForState, metricValueForState, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -91,11 +92,13 @@ function ScopeToggle({
 function ScopeModal({
   onClose,
   onScopeChange,
+  framework,
   response,
   savingURN,
 }: {
   onClose: () => void;
   onScopeChange: (asset: GRCInventoryAsset, state: "in_scope" | "out_of_scope") => void;
+  framework: string;
   response: GRCResourceScopeResponse | null;
   savingURN: string | null;
 }) {
@@ -103,19 +106,21 @@ function ScopeModal({
   const resources = useMemo(() => response?.resources ?? [], [response?.resources]);
   const summary = response?.summary;
   const [query, setQuery] = useState("");
+  const [frameworkQuery, setFrameworkQuery] = useState(framework);
   const [scopeView, setScopeView] = useState("all");
   const filteredResources = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return resources.filter((asset) => {
       const state = scopeState(asset);
       const matchesScope = scopeView === "all" || state === scopeView;
+      const matchesFramework = inventoryAssetMatchesFrameworkSegment(asset, frameworkQuery);
       const matchesQuery = !normalizedQuery || [asset.label, asset.entity_type, asset.urn, asset.source_id]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
-      return matchesScope && matchesQuery;
+      return matchesScope && matchesFramework && matchesQuery;
     });
-  }, [query, resources, scopeView]);
+  }, [frameworkQuery, query, resources, scopeView]);
 
   return (
     <div className="fixed inset-0 z-50 bg-stone-950/45 px-4 py-12 backdrop-blur-sm" onClick={onClose}>
@@ -128,7 +133,14 @@ function ScopeModal({
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[13px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]">Close</button>
         </div>
         <div className="max-h-[calc(100vh-13rem)] overflow-y-auto p-7">
-          <div className="mb-4 grid gap-3 md:grid-cols-[1fr_1fr]">
+          <div className="mb-4 grid gap-3 md:grid-cols-[1fr_1fr_1fr]">
+            <label className={labelClass}>
+              Framework
+              <input value={frameworkQuery} onChange={(event) => setFrameworkQuery(event.target.value)} list="scope-framework-options" placeholder="All frameworks" className={inputClass} />
+              <datalist id="scope-framework-options">
+                {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+              </datalist>
+            </label>
             <label className={labelClass}>
               Resource types
               <select className={inputClass} defaultValue="all">
@@ -213,6 +225,7 @@ export default function InventoryPage() {
   const [categoryID, setCategoryID] = useQueryParamState("category_id");
   const [query, setQuery] = useQueryParamState("q");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
+  const [framework, setFramework] = useQueryParamState("framework");
   const [scopeFilter, setScopeFilter] = useQueryParamState("scope_state");
   const [scopeOpen, setScopeOpen] = useState(false);
   const [scopeSavingURN, setScopeSavingURN] = useState<string | null>(null);
@@ -224,6 +237,7 @@ export default function InventoryPage() {
   const debouncedCategoryID = useDebouncedValue(categoryID.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
+  const debouncedFramework = useDebouncedValue(framework.trim());
   const debouncedScopeFilter = useDebouncedValue(scopeFilter.trim());
 
   const categoriesQuery = useGRCQuery<GRCInventoryCategoriesResponse>(
@@ -244,21 +258,23 @@ export default function InventoryPage() {
   );
 
   const categories = useMemo(() => categoriesQuery.data?.categories ?? [], [categoriesQuery.data?.categories]);
-  const assets = useMemo(() => (assetsQuery.data?.assets ?? []).slice().sort((left, right) => (right.risk_score ?? 0) - (left.risk_score ?? 0) || left.label.localeCompare(right.label)), [assetsQuery.data?.assets]);
+  const rawAssets = useMemo(() => (assetsQuery.data?.assets ?? []).slice().sort((left, right) => (right.risk_score ?? 0) - (left.risk_score ?? 0) || left.label.localeCompare(right.label)), [assetsQuery.data?.assets]);
+  const assets = useMemo(() => rawAssets.filter((asset) => inventoryAssetMatchesFrameworkSegment(asset, debouncedFramework)), [debouncedFramework, rawAssets]);
   const summary = assetsQuery.data?.summary;
+  const hasFrameworkFilter = debouncedFramework.length > 0;
   const selectedCategory = categories.find((category) => category.id === categoryID);
   const providerCount = useMemo(() => new Set(assets.map((asset) => providerLabel(asset))).size, [assets]);
   const ownerCount = useMemo(() => new Set(assets.map((asset) => ownerLabel(asset)).filter((owner) => owner !== "Unassigned")).size, [assets]);
-  const highRiskCount = summary?.high_risk_assets ?? assets.filter((asset) => (asset.risk_score ?? 0) >= 70).length;
-  const outOfScopeCount = summary?.out_of_scope_assets ?? assets.filter((asset) => scopeState(asset) === "out_of_scope").length;
-  const publicAssetCount = summary?.public_assets ?? assets.filter(isPublicAsset).length;
+  const highRiskCount = hasFrameworkFilter ? assets.filter((asset) => (asset.risk_score ?? 0) >= 70).length : summary?.high_risk_assets ?? assets.filter((asset) => (asset.risk_score ?? 0) >= 70).length;
+  const outOfScopeCount = hasFrameworkFilter ? assets.filter((asset) => scopeState(asset) === "out_of_scope").length : summary?.out_of_scope_assets ?? assets.filter((asset) => scopeState(asset) === "out_of_scope").length;
+  const publicAssetCount = hasFrameworkFilter ? assets.filter(isPublicAsset).length : summary?.public_assets ?? assets.filter(isPublicAsset).length;
   const missingOwnerCount = assets.filter((asset) => ownerLabel(asset) === "Unassigned").length;
   const inventoryError = categoriesQuery.error || assetsQuery.error;
   const runtimeState = runtimeStateForError(inventoryError);
   const inventoryLoading = categoriesQuery.loading || assetsQuery.loading;
   const metricState: RuntimeState = inventoryError ? runtimeState : inventoryLoading && !assetsQuery.data ? "loading" : "ready";
   const hasAssetData = assets.length > 0;
-  const scopedCoverage = hasAssetData ? `${summary?.scoped_coverage_pct ?? 100}%` : "No data";
+  const scopedCoverage = hasAssetData ? `${hasFrameworkFilter ? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : summary?.scoped_coverage_pct ?? 100}%` : "No data";
   const orgGroups = useMemo(() => {
     const groups = new Map<string, { total: number; scoped: number; highRisk: number; unassigned: number; publicAssets: number }>();
     for (const asset of assets) {
@@ -280,6 +296,7 @@ export default function InventoryPage() {
   const filterChips = [
     { label: "Category", value: selectedCategory?.label || categoryID, onClear: () => setCategoryID("") },
     { label: "Search", value: query, onClear: () => setQuery("") },
+    { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Source", value: sourceID, onClear: () => setSourceID("") },
     { label: "Scope", value: scopeFilter ? scopeCopy(scopeFilter) : "", onClear: () => setScopeFilter("") },
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
@@ -287,6 +304,7 @@ export default function InventoryPage() {
   const clearFilters = () => {
     setCategoryID("");
     setQuery("");
+    setFramework("");
     setSourceID("");
     setScopeFilter("");
     setTenantID("");
@@ -402,8 +420,15 @@ export default function InventoryPage() {
 
         <main className="space-y-4">
           <div className="surface-panel px-5 py-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_160px_160px_160px]">
+            <div className="grid gap-3 md:grid-cols-[1fr_160px_160px_160px_160px]">
               <label className={labelClass}>Search<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className={inputClass} /></label>
+              <label className={labelClass}>
+                Framework
+                <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="FedRAMP Rev. 5" list="inventory-framework-options" className={inputClass} />
+                <datalist id="inventory-framework-options">
+                  {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+                </datalist>
+              </label>
               <label className={labelClass}>Source<input value={sourceID} onChange={(e) => setSourceID(e.target.value)} placeholder="All" className={inputClass} /></label>
               <label className={labelClass}>Scope
                 <select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value)} className={inputClass}>
@@ -545,7 +570,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {scopeOpen && <ScopeModal onClose={() => setScopeOpen(false)} onScopeChange={(asset, state) => void updateScope(asset, state)} response={scopeQuery.data} savingURN={scopeSavingURN} />}
+      {scopeOpen && <ScopeModal onClose={() => setScopeOpen(false)} onScopeChange={(asset, state) => void updateScope(asset, state)} framework={framework} response={scopeQuery.data} savingURN={scopeSavingURN} />}
       {scopeOpen && scopeQuery.loading && <div className="fixed bottom-5 right-5 z-[60]"><LoadingBlock label="Loading scope..." /></div>}
       {reportAsset && (
         <AssetReportModal
