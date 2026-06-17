@@ -74,6 +74,16 @@ export const operatorNavLinks: NavigationEntry[] = [
   },
 ];
 
+const commandOnlyNavLinks: NavigationEntry[] = [
+  {
+    label: "Control Builder",
+    href: "/controls/builder",
+    description: "Build custom control packs, preview coverage, and export YAML.",
+    section: "Operator",
+    keywords: ["builder", "custom framework", "control pack", "yaml", "audit", ...supportedGRCFrameworkNames],
+  },
+];
+
 export const utilityLinks: NavigationEntry[] = [
   {
     label: "Developer Tools",
@@ -86,5 +96,6 @@ export const utilityLinks: NavigationEntry[] = [
 
 export const navigationEntries = [
   ...operatorNavLinks,
+  ...commandOnlyNavLinks,
   ...utilityLinks,
 ];

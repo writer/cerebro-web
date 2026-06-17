@@ -18,7 +18,7 @@ import {
   writeCerebroProxyCache,
 } from "@/lib/cerebro-proxy";
 import { normalizeAskModel } from "@/lib/ask";
-import { authorizationErrorResponse, authorizeCurrentUser } from "@/lib/authorization";
+import { authorizationErrorResponse, authorizeCurrentUser, type AuthorizationPermission } from "@/lib/authorization";
 import { currentUserActor, resolveCurrentUserFromHeadersWithFallback } from "@/lib/identity";
 import { currentUserServerAuditFields } from "@/lib/identity-server";
 import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/identity-write-stamp";
@@ -26,6 +26,14 @@ import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/identity-
 type RouteContext = {
   params: Promise<{ path?: string[] }>;
 };
+
+const readOnlyPostPaths = new Set([
+  "grc/control-packs",
+  "grc/control-packs/preview",
+]);
+
+const permissionForPostPath = (normalizedPath: string): AuthorizationPermission =>
+  readOnlyPostPaths.has(normalizedPath) ? "cerebro:read" : "cerebro:write";
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const [params, currentUser] = await Promise.all([
@@ -136,16 +144,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     resolveCurrentUserFromHeadersWithFallback(request.headers),
     request.text(),
   ]);
-  const decision = authorizeCurrentUser(currentUser, "cerebro:write");
+  const path = (params.path ?? []).join("/");
+  const normalizedPath = normalizeProxyPath(path);
+  const requiredPermission = permissionForPostPath(normalizedPath);
+  const decision = authorizeCurrentUser(currentUser, requiredPermission);
   if (!decision.allowed) {
-    console.warn("cerebro proxy write denied", currentUserServerAuditFields(currentUser));
+    console.warn("cerebro proxy post denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
     return authorizationErrorResponse(decision);
   }
-  const path = (params.path ?? []).join("/");
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   let body = requestBody;
-  const normalizedPath = normalizeProxyPath(path);
   const currentActor = currentUserActor(currentUser);
   const acceptsEventStream = (request.headers.get("accept") ?? "").includes("text/event-stream");
   const isAskStreamRequest = normalizedPath === "grc/ask" && acceptsEventStream;
