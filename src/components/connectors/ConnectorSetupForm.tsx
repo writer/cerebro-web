@@ -41,7 +41,6 @@ import {
 } from "@/lib/connectors";
 import {
   connectorScopeOptionMatchesFrameworkSegment,
-  frameworkSegmentFor,
   supportedGRCFrameworkNames,
 } from "@/lib/grc-frameworks";
 
@@ -1351,9 +1350,9 @@ function ScopePolicyBuilder({
   onResourcesChange: (resources: ConnectorScopeResource[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const initialFrameworkSegment = frameworkSegmentFor(initialFramework ?? "");
+  const initialFrameworkQuery = (initialFramework ?? "").trim();
   const [framework, setFramework] = useState(initialFramework ?? "");
-  const [filter, setFilter] = useState<ResourceTypeFilter>(initialFrameworkSegment ? "framework" : "all");
+  const [filter, setFilter] = useState<ResourceTypeFilter>(initialFrameworkQuery ? "framework" : "all");
   const [resourceType, setResourceType] = useState("");
   const [resourceID, setResourceID] = useState("");
   const [resourceReason, setResourceReason] = useState("");
@@ -1371,8 +1370,8 @@ function ScopePolicyBuilder({
     };
   }), [options, protectedFamilies, selectedFamilies]);
   const disabledRows = rows.filter((row) => row.disabled);
-  const frameworkSegment = frameworkSegmentFor(framework);
-  const frameworkRows = frameworkSegment
+  const frameworkQueryActive = framework.trim().length > 0;
+  const frameworkRows = frameworkQueryActive
     ? rows.filter((row) => connectorScopeOptionMatchesFrameworkSegment(row.option, framework, connector.source_id))
     : [];
   const enabledCount = Math.max(rows.length - disabledRows.length, 0);
@@ -1398,7 +1397,7 @@ function ScopePolicyBuilder({
     .flatMap((row) => row.families)
     .filter((family) => !protectedFamilies.has(family));
   const outsideFrameworkFamilies = rows
-    .filter((row) => frameworkSegment && !row.protectedRow && !frameworkRows.some((frameworkRow) => frameworkRow.option.id === row.option.id))
+    .filter((row) => frameworkQueryActive && !row.protectedRow && !frameworkRows.some((frameworkRow) => frameworkRow.option.id === row.option.id))
     .flatMap((row) => row.families)
     .filter((family) => !protectedFamilies.has(family));
   const exampleFamily = rows[0]?.families[0] ?? `${connector.source_id}.resource`;
@@ -1420,10 +1419,10 @@ function ScopePolicyBuilder({
     { id: "enabled", label: "Collecting", count: enabledCount },
     { id: "disabled", label: "Skipped", count: disabledRows.length },
     { id: "high_value", label: "High value", count: rows.filter((row) => row.option.high_value).length },
-    ...(frameworkSegment ? [{ id: "framework" as const, label: "Framework", count: frameworkRows.length }] : []),
+    ...(frameworkQueryActive ? [{ id: "framework" as const, label: "Framework", count: frameworkRows.length }] : []),
   ];
   const applyFrameworkLens = () => {
-    if (!frameworkSegment) return;
+    if (!frameworkQueryActive) return;
     onEnableFamilies(frameworkFamilies);
     onDisableFamilies(outsideFrameworkFamilies);
     setFilter("framework");
@@ -1502,7 +1501,7 @@ function ScopePolicyBuilder({
             <RotateCcw className="h-3.5 w-3.5" />
             {allVisibleDisabled ? "Enable visible" : "Disable visible"}
           </button>
-          {frameworkSegment && (
+          {frameworkQueryActive && (
             <button
               type="button"
               onClick={applyFrameworkLens}

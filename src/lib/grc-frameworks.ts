@@ -1,5 +1,5 @@
 import type { ConnectorScopeOption } from "@/lib/connectors";
-import type { GRCControl, GRCFinding, GRCInventoryAsset, GRCInventoryTest } from "@/lib/grc";
+import type { GRCControl, GRCControlRef, GRCFinding, GRCInventoryAsset, GRCInventoryTest } from "@/lib/grc";
 
 export type SupportedGRCFramework = {
   name: string;
@@ -371,24 +371,38 @@ const frameworkNameMatches = (candidate: string | undefined, segment: GRCFramewo
   );
 };
 
-export const controlMatchesFrameworkSegment = (control: GRCControl | GRCInventoryTest, query: string) => {
+type FrameworkControlCandidate = GRCControl | GRCControlRef | GRCInventoryTest;
+
+const hasFrameworkQuery = (query: string) => normalizeFrameworkText(query).length > 0;
+
+const controlFrameworkName = (control: FrameworkControlCandidate) =>
+  "framework_name" in control ? control.framework_name : control.framework;
+
+const controlMatchesFrameworkQuery = (control: FrameworkControlCandidate, query: string) => {
+  if (!hasFrameworkQuery(query)) {
+    return true;
+  }
   const segment = frameworkSegmentFor(query);
-  if (!segment) {
-    return true;
+  const frameworkName = controlFrameworkName(control);
+  if (segment) {
+    if (frameworkNameMatches(frameworkName, segment)) {
+      return true;
+    }
+    return textContainsAny([frameworkName, control.control_id], segment.alertTerms);
   }
-  const frameworkName = "framework_name" in control ? control.framework_name : control.framework;
-  if (frameworkNameMatches(frameworkName, segment)) {
-    return true;
-  }
-  return textContainsAny([frameworkName, control.control_id], segment.alertTerms);
+  return textContainsAny([frameworkName, control.control_id], [query]);
+};
+
+export const controlMatchesFrameworkSegment = (control: GRCControl | GRCInventoryTest, query: string) => {
+  return controlMatchesFrameworkQuery(control, query);
 };
 
 export const findingMatchesFrameworkSegment = (finding: GRCFinding, query: string) => {
-  const segment = frameworkSegmentFor(query);
-  if (!segment) {
+  if (!hasFrameworkQuery(query)) {
     return true;
   }
-  if ((finding.controls ?? []).some((control) => controlMatchesFrameworkSegment({ ...control, status: "", open_findings: 0, critical_findings: 0, high_findings: 0, evidence_items: 0 }, query))) {
+  const segment = frameworkSegmentFor(query);
+  if ((finding.controls ?? []).some((control) => controlMatchesFrameworkQuery(control, query))) {
     return true;
   }
   return textContainsAny([
@@ -402,15 +416,15 @@ export const findingMatchesFrameworkSegment = (finding: GRCFinding, query: strin
     finding.risk_reasons,
     finding.title,
     finding.summary,
-  ], segment.alertTerms);
+  ], segment ? segment.alertTerms : [query]);
 };
 
 export const inventoryAssetMatchesFrameworkSegment = (asset: GRCInventoryAsset, query: string) => {
-  const segment = frameworkSegmentFor(query);
-  if (!segment) {
+  if (!hasFrameworkQuery(query)) {
     return true;
   }
-  if (asset.source_id && segment.sourceIDs.includes(normalizeFrameworkText(asset.source_id))) {
+  const segment = frameworkSegmentFor(query);
+  if (segment && asset.source_id && segment.sourceIDs.includes(normalizeFrameworkText(asset.source_id))) {
     return true;
   }
   return textContainsAny([
@@ -424,7 +438,7 @@ export const inventoryAssetMatchesFrameworkSegment = (asset: GRCInventoryAsset, 
     asset.scope_reason,
     Object.keys(asset.attributes ?? {}),
     Object.values(asset.attributes ?? {}),
-  ], [...segment.assetTerms, ...segment.connectorFamilies, ...segment.sourceIDs]);
+  ], segment ? [...segment.assetTerms, ...segment.connectorFamilies, ...segment.sourceIDs] : [query]);
 };
 
 export const connectorScopeOptionMatchesFrameworkSegment = (
@@ -432,11 +446,11 @@ export const connectorScopeOptionMatchesFrameworkSegment = (
   query: string,
   sourceID?: string,
 ) => {
-  const segment = frameworkSegmentFor(query);
-  if (!segment) {
+  if (!hasFrameworkQuery(query)) {
     return true;
   }
-  if (sourceID && segment.sourceIDs.includes(normalizeFrameworkText(sourceID))) {
+  const segment = frameworkSegmentFor(query);
+  if (segment && sourceID && segment.sourceIDs.includes(normalizeFrameworkText(sourceID))) {
     return true;
   }
   return textContainsAny([
@@ -447,5 +461,5 @@ export const connectorScopeOptionMatchesFrameworkSegment = (
     option.families,
     option.notes,
     option.known_unsupported_fields,
-  ], [...segment.connectorFamilies, ...segment.assetTerms, ...segment.sourceIDs]);
+  ], segment ? [...segment.connectorFamilies, ...segment.assetTerms, ...segment.sourceIDs] : [query]);
 };

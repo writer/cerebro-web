@@ -111,6 +111,44 @@ describe("supported GRC frameworks", () => {
     }, "CIS Google Workspace Benchmark", "github")).toBe(false);
   });
 
+  it("falls back to text matching for custom framework lenses", () => {
+    expect(findingMatchesFrameworkSegment({
+      id: "finding-3",
+      title: "Repository default branch is unprotected",
+      severity: "MEDIUM",
+      status: "open",
+      source_id: "github",
+      controls: [{ framework_name: "CIS GitHub Benchmark", control_id: "2.1" }],
+      evidence_count: 1,
+      owner: "appsec",
+      sla_status: "active",
+    }, "repository")).toBe(true);
+
+    expect(inventoryAssetMatchesFrameworkSegment({
+      urn: "urn:cerebro:tenant:github_repository:app",
+      label: "Application repository",
+      entity_type: "github.repository",
+      source_id: "github",
+      attributes: { resource_type: "repository" },
+    }, "github")).toBe(true);
+
+    expect(connectorScopeOptionMatchesFrameworkSegment({
+      id: "google_workspace.group",
+      label: "Workspace groups",
+      families: ["google_workspace.group"],
+    }, "group", "google_workspace")).toBe(true);
+
+    expect(controlMatchesFrameworkSegment({
+      framework_name: "SOC 2",
+      control_id: "CC6.1",
+      status: "passing",
+      open_findings: 0,
+      critical_findings: 0,
+      high_findings: 0,
+      evidence_items: 1,
+    }, "unmapped custom lens")).toBe(false);
+  });
+
   it("matches controls and asset tests through aliases", () => {
     expect(controlMatchesFrameworkSegment({
       framework_name: "FedRAMP Rev. 5",
