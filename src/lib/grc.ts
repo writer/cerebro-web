@@ -76,6 +76,9 @@ export type GRCControl = {
   missing_evidence_items?: number;
   stale_evidence_items?: number;
   evidence_expectations?: number;
+  evidence_score?: number;
+  evidence_quality?: string;
+  audit_summary?: string;
   mapped_rules?: string[];
   reasons?: string[];
   tags?: string[];
@@ -415,11 +418,16 @@ export type GRCControlEvidenceExpectationPosture = {
   id: string;
   title?: string;
   type?: string;
+  description?: string;
   required: boolean;
   status: string;
+  quality?: string;
+  reason?: string;
   evidence_ids?: string[];
   stale_evidence_ids?: string[];
   freshness_sla?: string;
+  accepted_from?: string[];
+  assessment_methods?: string[];
 };
 
 export type GRCControlEvidencePacketItem = {
@@ -427,10 +435,24 @@ export type GRCControlEvidencePacketItem = {
   rule_id?: string;
   evidence_type?: string;
   status?: string;
+  quality?: string;
+  reason?: string;
   source?: string;
   observed_at?: string;
   expires_at?: string;
   manual?: boolean;
+};
+
+export type GRCControlEvidenceReadiness = {
+  score: number;
+  rating: string;
+  summary?: string;
+  open_findings?: number;
+  evidence_items?: number;
+  required_expectations?: number;
+  missing_evidence?: number;
+  stale_evidence?: number;
+  manual_evidence?: number;
 };
 
 export type GRCControlPacketControl = {
@@ -465,6 +487,7 @@ export type GRCControlPacketControl = {
     expectations?: GRCControlEvidenceExpectationPosture[];
     items?: GRCControlEvidencePacketItem[];
   };
+  audit_readiness: GRCControlEvidenceReadiness;
   overrides?: {
     exception_ids?: string[];
     not_applicable_ids?: string[];
@@ -484,6 +507,10 @@ export type GRCControlEvidencePacketResponse = {
   packet: GRCControlEvidencePacket;
   controls: GRCControl[];
   generated_at: string;
+};
+
+export type GRCCustomControlEvidencePacketResponse = GRCControlEvidencePacketResponse & {
+  preview: GRCControlPackPreview;
 };
 
 export type GRCEntityImpact = {

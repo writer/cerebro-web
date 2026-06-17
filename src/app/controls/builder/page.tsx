@@ -20,6 +20,7 @@ import {
   GRCControlPackPreview,
   GRCControlPackResponse,
   GRCControlProfilesResponse,
+  GRCCustomControlEvidencePacketResponse,
 } from "@/lib/grc";
 import { useGRCQuery } from "@/lib/grc-client";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -38,7 +39,8 @@ const profileOptions = (profiles: GRCControlProfilesResponse | null) =>
   }));
 
 const downloadYAML = (name: string, content: string) => {
-  const blob = new Blob([content], { type: "application/x-yaml;charset=utf-8" });
+  const type = name.endsWith(".md") ? "text/markdown;charset=utf-8" : "application/x-yaml;charset=utf-8";
+  const blob = new Blob([content], { type });
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -85,7 +87,23 @@ function ArchetypeRow({
   );
 }
 
-function CoveragePreview({ preview, stale }: { preview: GRCControlPackPreview; stale: boolean }) {
+function CoveragePreview({
+  auditPacket,
+  auditLoading,
+  exportLoading,
+  onBuildAudit,
+  onExportAudit,
+  preview,
+  stale,
+}: {
+  auditPacket: GRCCustomControlEvidencePacketResponse | null;
+  auditLoading: boolean;
+  exportLoading: boolean;
+  onBuildAudit: () => void;
+  onExportAudit: () => void;
+  preview: GRCControlPackPreview;
+  stale: boolean;
+}) {
   const controls = preview.coverage.controls ?? [];
   return (
     <div className="space-y-4">
@@ -157,6 +175,72 @@ function CoveragePreview({ preview, stale }: { preview: GRCControlPackPreview; s
           ))}
         </div>
       </Panel>
+
+      <Panel
+        title="Generated Evidence Packet"
+        action={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={stale || auditLoading}
+              onClick={onBuildAudit}
+              className="rounded-md border border-[color:var(--border)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {auditLoading ? "Building..." : "Build packet"}
+            </button>
+            <button
+              type="button"
+              disabled={stale || !auditPacket || exportLoading}
+              onClick={onExportAudit}
+              className="rounded-md border border-[color:var(--border)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {exportLoading ? "Exporting..." : "Export markdown"}
+            </button>
+          </div>
+        }
+      >
+        {auditPacket ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <MetricCard label="Packet Controls" value={auditPacket.packet.summary.total} detail={auditPacket.profile.name || auditPacket.profile.id} />
+              <MetricCard label="Failing" value={auditPacket.packet.summary.by_status.failing ?? 0} detail="with open findings" intent={(auditPacket.packet.summary.by_status.failing ?? 0) > 0 ? "danger" : "success"} />
+              <MetricCard label="Missing Evidence" value={auditPacket.packet.summary.by_status.missing_evidence ?? 0} detail="controls waiting on proof" intent={(auditPacket.packet.summary.by_status.missing_evidence ?? 0) > 0 ? "warning" : "success"} />
+              <MetricCard label="Evidence Quality" value={auditPacket.controls[0]?.evidence_quality ? <Badge value={auditPacket.controls[0].evidence_quality} /> : "-"} detail="first control" />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-[color:var(--border)] bg-[var(--surface-muted)]">
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Control</th>
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</th>
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Score</th>
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Evidence</th>
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Summary</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditPacket.controls.map((control) => (
+                    <tr key={`${control.framework_name}-${control.control_id}`} className="border-b border-[color:var(--border)] last:border-b-0">
+                      <td className="px-3 py-3">
+                        <div className="font-semibold text-[var(--text-primary)]">{control.framework_name} {control.control_id}</div>
+                        <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">{control.title || control.family_name}</div>
+                      </td>
+                      <td className="px-3 py-3"><Badge value={control.status} /></td>
+                      <td className="px-3 py-3 font-mono text-[12px] text-[var(--text-primary)]">{control.evidence_score ?? "-"}</td>
+                      <td className="px-3 py-3 text-[12px] text-[var(--text-secondary)]">{control.evidence_items} items, {control.missing_evidence_items ?? 0} missing</td>
+                      <td className="px-3 py-3 text-[12px] text-[var(--text-secondary)]">{control.audit_summary || control.reasons?.[0] || "No assessment summary is available."}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">
+            Build the packet to see live evidence posture for the generated custom framework.
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -175,6 +259,10 @@ export default function ControlBuilderPage() {
   const [previewRequestKey, setPreviewRequestKey] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [auditPacket, setAuditPacket] = useState<GRCCustomControlEvidencePacketResponse | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditExportLoading, setAuditExportLoading] = useState(false);
 
   const archetypes = useMemo(() => archetypesQuery.data?.archetypes ?? [], [archetypesQuery.data?.archetypes]);
   const recommendedArchetypes = useMemo(() => archetypes.filter((item) => item.recommended).map((item) => item.id), [archetypes]);
@@ -235,12 +323,60 @@ export default function ControlBuilderPage() {
       }
       setPreview((response.data as GRCControlPackResponse).preview);
       setPreviewRequestKey(currentPreviewRequestKey);
+      setAuditPacket(null);
+      setAuditError(null);
     } catch (error) {
       setPreview(null);
       setPreviewRequestKey(null);
       setPreviewError(error instanceof Error ? error.message : "Preview failed");
     } finally {
       setPreviewLoading(false);
+    }
+  };
+  const submitAuditPacket = async () => {
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      const response = await fetchCerebro<GRCCustomControlEvidencePacketResponse | GRCControlPackIssueResponse>("/grc/control-packets", apiKey, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(previewRequest),
+      });
+      if (!response.ok) {
+        const data = response.data as GRCControlPackIssueResponse;
+        const detail = Array.isArray(data.issues) && data.issues.length > 0
+          ? data.issues.map((issue) => [issue.path ?? issue.Path, issue.message ?? issue.Message].filter(Boolean).join(": ")).join("; ")
+          : `Packet build failed (${response.status})`;
+        setAuditPacket(null);
+        setAuditError(detail);
+        return;
+      }
+      setAuditPacket(response.data as GRCCustomControlEvidencePacketResponse);
+    } catch (error) {
+      setAuditPacket(null);
+      setAuditError(error instanceof Error ? error.message : "Packet build failed");
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+  const exportAuditPacket = async () => {
+    setAuditExportLoading(true);
+    setAuditError(null);
+    try {
+      const response = await fetchCerebro<string>("/grc/control-packets/export?format=markdown", apiKey, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(previewRequest),
+      });
+      if (!response.ok || typeof response.data !== "string") {
+        setAuditError(typeof response.data === "string" ? response.data : `Export failed (${response.status})`);
+        return;
+      }
+      downloadYAML(`${profileID || "custom-control"}-evidence-packet.md`, response.data);
+    } catch (error) {
+      setAuditError(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setAuditExportLoading(false);
     }
   };
 
@@ -324,11 +460,22 @@ export default function ControlBuilderPage() {
             </div>
 
             {previewError && <ErrorBlock error={previewError} />}
+            {auditError && <ErrorBlock error={auditError} />}
           </aside>
         </div>
       )}
 
-      {preview && <CoveragePreview preview={preview} stale={previewIsStale} />}
+      {preview && (
+        <CoveragePreview
+          auditPacket={auditPacket}
+          auditLoading={auditLoading}
+          exportLoading={auditExportLoading}
+          onBuildAudit={() => void submitAuditPacket()}
+          onExportAudit={() => void exportAuditPacket()}
+          preview={preview}
+          stale={previewIsStale}
+        />
+      )}
     </div>
   );
 }
