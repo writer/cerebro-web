@@ -88,6 +88,15 @@ export default function ControlsPage() {
     if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
     return `/reports?${params.toString()}`;
   };
+  const controlDetailHref = (control: GRCControl) => {
+    const params = new URLSearchParams({
+      profile: selectedProfileID,
+      framework: control.framework_name,
+      control: control.control_id,
+    });
+    if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
+    return `/controls/detail?${params.toString()}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -156,7 +165,10 @@ export default function ControlsPage() {
                     <Badge value={control.status} />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-slate-500">{control.open_findings} findings &middot; {control.evidence_items} evidence &middot; {control.missing_evidence_items ?? 0} missing</span>
+                    <span className="text-[12px] text-slate-500">
+                      {control.open_findings} findings &middot; {control.evidence_items} evidence &middot; {control.missing_evidence_items ?? 0} missing
+                      {typeof control.evidence_score === "number" ? ` · ${control.evidence_score} score` : ""}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setExpandedControlKey(show ? null : key)}
@@ -167,15 +179,24 @@ export default function ControlsPage() {
                     <Link href={auditPacketHref(control)} className="rounded-md px-2 py-1 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50">
                       Audit packet
                     </Link>
+                    <Link href={controlDetailHref(control)} className="rounded-md px-2 py-1 text-[12px] font-medium text-indigo-600 transition hover:bg-indigo-50">
+                      Detail
+                    </Link>
                   </div>
                 </div>
                 {show && (
                   <div className="border-t border-slate-100 p-5">
-                    {control.reasons && control.reasons.length > 0 && (
+                    {(control.audit_summary || (control.reasons && control.reasons.length > 0)) && (
                       <div className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
-                        {control.reasons[0]}
+                        {control.audit_summary || control.reasons?.[0]}
                       </div>
                     )}
+                    <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px] text-slate-500">
+                      {control.evidence_quality && <Badge value={control.evidence_quality} />}
+                      <span>{control.evidence_expectations ?? 0} expectations</span>
+                      <span>{control.stale_evidence_items ?? 0} stale</span>
+                      <span>{control.mapped_rules?.length ?? 0} mapped rules</span>
+                    </div>
                     <FindingTable findings={(control.findings ?? []).slice().sort(riskSort)} empty="No findings mapped to this control." />
                   </div>
                 )}

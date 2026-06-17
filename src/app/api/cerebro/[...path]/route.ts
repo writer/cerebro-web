@@ -28,6 +28,8 @@ type RouteContext = {
 };
 
 const readOnlyPostPaths = new Set([
+  "grc/control-packets",
+  "grc/control-packets/export",
   "grc/control-packs",
   "grc/control-packs/preview",
 ]);

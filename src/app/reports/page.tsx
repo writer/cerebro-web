@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import GraphViewer from "@/components/grc/GraphViewer";
+import { useApiKey } from "@/components/providers";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown } from "@/components/grc/Primitives";
+import { fetchCerebro } from "@/lib/cerebro-client";
 import {
   displayDate,
   GRCAuditPacket,
@@ -42,12 +44,25 @@ const evidenceItemCount = (control: GRCControlPacketControl) =>
 const controlLabel = (control: GRCControlPacketControl) =>
   `${control.control.framework_name} ${control.control.control_id}`;
 
+const downloadText = (name: string, body: string) => {
+  const blob = new Blob([body], { type: "text/markdown;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.URL.revokeObjectURL(url);
+};
+
 export default function ReportsPage() {
+  const { apiKey } = useApiKey();
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [findingID, setFindingID] = useQueryParamState("finding_id");
   const [profileID, setProfileID] = useQueryParamState("profile");
   const [framework, setFramework] = useQueryParamState("framework");
   const [controlID, setControlID] = useQueryParamState("control");
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
   const selectedProfileID = profileID.trim() || DEFAULT_CONTROL_PROFILE_ID;
   const wantsControlPacket = findingID.trim() === "" && Boolean(profileID.trim() || framework.trim() || controlID.trim());
   const needsFallbackFinding = !wantsControlPacket && findingID.trim() === "";
@@ -63,6 +78,10 @@ export default function ReportsPage() {
     wantsControlPacket
       ? grcPath("/grc/control-packets", { tenant_id: tenantID, profile: selectedProfileID, framework, control: controlID, limit: 200 })
       : null,
+  );
+  const controlMarkdownPath = useMemo(
+    () => grcPath("/grc/control-packets/export", { tenant_id: tenantID, profile: selectedProfileID, framework, control: controlID, format: "markdown", limit: 200 }),
+    [controlID, framework, selectedProfileID, tenantID],
   );
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
@@ -115,6 +134,22 @@ export default function ReportsPage() {
     void findingPacket.reload();
     void controlPacket.reload();
   };
+  const downloadControlMarkdown = async () => {
+    setExportLoading(true);
+    setExportError(null);
+    try {
+      const response = await fetchCerebro<string>(controlMarkdownPath, apiKey);
+      if (!response.ok || typeof response.data !== "string") {
+        setExportError(typeof response.data === "string" ? response.data : `Export failed (${response.status})`);
+        return;
+      }
+      downloadText(`${selectedProfileID}-control-evidence-packet.md`, response.data);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setExportLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -159,6 +194,7 @@ export default function ReportsPage() {
           recoveryDetail="Report packets will appear when the API is reachable."
         />
       )}
+      {exportError && <ErrorBlock error={exportError} />}
 
       {!wantsControlPacket && !selectedFindingID && !fallbackFindings.loading && !fallbackFindings.error && (
         <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
@@ -166,13 +202,23 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {controlPacket.data && <ControlPacketView packet={controlPacket.data} reportBody={controlReportBody} />}
+      {controlPacket.data && <ControlPacketView packet={controlPacket.data} reportBody={controlReportBody} exporting={exportLoading} onExport={() => void downloadControlMarkdown()} />}
       {!controlPacket.data && findingPacket.data && <FindingPacketView packet={findingPacket.data} reportBody={findingReportBody} />}
     </div>
   );
 }
 
-function ControlPacketView({ packet, reportBody }: { packet: GRCControlEvidencePacketResponse; reportBody: string }) {
+function ControlPacketView({
+  exporting,
+  onExport,
+  packet,
+  reportBody,
+}: {
+  exporting: boolean;
+  onExport: () => void;
+  packet: GRCControlEvidencePacketResponse;
+  reportBody: string;
+}) {
   const controls = packet.packet.controls;
   const visibleControls = controls.slice(0, 40);
   const evidenceCount = controls.reduce((sum, control) => sum + evidenceItemCount(control), 0);
@@ -185,7 +231,14 @@ function ControlPacketView({ packet, reportBody }: { packet: GRCControlEvidenceP
         <MetricCard label="Evidence" value={evidenceCount} detail="attached items" />
       </div>
 
-      <Panel title="Control Evidence Packet">
+      <Panel
+        title="Control Evidence Packet"
+        action={
+          <button type="button" onClick={onExport} disabled={exporting} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50">
+            {exporting ? "Exporting..." : "Export markdown"}
+          </button>
+        }
+      >
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
             <div>
@@ -218,9 +271,10 @@ function ControlPacketView({ packet, reportBody }: { packet: GRCControlEvidenceP
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="font-mono text-[12px] font-semibold text-slate-900">{controlLabel(control)}</div>
                   <Badge value={control.status} />
+                  <Badge value={control.audit_readiness.rating} />
                 </div>
                 <div className="mt-1 text-[13px] font-medium text-slate-800">{control.control.title || control.control.family_name || "Control objective"}</div>
-                {control.reasons && control.reasons.length > 0 && <div className="mt-1 text-[12px] text-slate-500">{control.reasons[0]}</div>}
+                <div className="mt-1 text-[12px] text-slate-500">{control.audit_readiness.summary || control.reasons?.[0] || "No assessment summary is available."}</div>
                 {control.evidence.expectations && control.evidence.expectations.length > 0 && (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {control.evidence.expectations.slice(0, 4).map((expectation) => (
@@ -235,6 +289,7 @@ function ControlPacketView({ packet, reportBody }: { packet: GRCControlEvidenceP
               <div className="space-y-2 text-[12px] text-slate-500">
                 <div className="flex justify-between gap-2"><span>Findings</span><span className="font-mono text-slate-800">{control.findings?.length ?? 0}</span></div>
                 <div className="flex justify-between gap-2"><span>Evidence</span><span className="font-mono text-slate-800">{evidenceItemCount(control)}</span></div>
+                <div className="flex justify-between gap-2"><span>Score</span><span className="font-mono text-slate-800">{control.audit_readiness.score}</span></div>
                 <div className="flex justify-between gap-2"><span>Mapped rules</span><span className="font-mono text-slate-800">{control.mapped_rules?.length ?? 0}</span></div>
                 <div className="flex justify-between gap-2"><span>Freshness</span><span className="font-mono text-slate-800">{control.evidence.summary?.freshness_sla || "\u2014"}</span></div>
               </div>
