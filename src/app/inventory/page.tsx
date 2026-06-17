@@ -20,52 +20,64 @@ import {
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { inventoryAssetMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import {
+  inventoryAccountability,
   inventoryAttr,
   inventoryIsPublicAsset,
+  inventoryMatchesAccountabilityFilter,
   inventoryMatchesOwnerFilter,
-  inventoryMatchesRoutingFilter,
+  inventoryMatchesReviewFilter,
+  inventoryNeedsReview,
   inventoryOwnerLabel,
-  inventoryRouteQueueSort,
-  inventoryRouteQueueStatus,
-  inventoryRoutingDetail,
-  inventoryRoutingLabel,
-  inventoryRoutingStatus,
+  inventoryReviewDetail,
+  inventoryReviewLabel,
+  inventoryReviewSort,
+  inventoryReviewState,
   inventoryScopeCopy,
   inventoryScopeState,
-  type InventoryRoutingFilter,
-  type InventoryRoutingStatus,
-} from "@/lib/inventory-routing";
+  type InventoryAccountabilityFilter,
+  type InventoryReviewFilter,
+  type InventoryReviewState,
+} from "@/lib/inventory-review";
 import { useQueryParamState } from "@/lib/query-params";
 import { metricDetailForState, metricValueForState, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 const inputClass = "control-input mt-1 w-full px-3 py-1.5 text-[13px]";
 const labelClass = "text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]";
 
-const routingFilters: Array<{ value: InventoryRoutingFilter; label: string }> = [
-  { value: "all", label: "All routes" },
-  { value: "needs_route", label: "Route now" },
-  { value: "reported", label: "Reported" },
-  { value: "routed", label: "Routed" },
-  { value: "unowned_baseline", label: "Unowned baseline" },
-  { value: "excluded", label: "Excluded" },
+const reviewFilters: Array<{ value: InventoryReviewFilter; label: string }> = [
+  { value: "all", label: "All review states" },
+  { value: "needs_review", label: "Needs review" },
+  { value: "reported_issue", label: "Reported issue" },
+  { value: "baseline", label: "Baseline" },
+  { value: "out_of_scope", label: "Scoped out" },
 ];
 
-const routeBadgeClasses: Record<InventoryRoutingStatus, string> = {
-  needs_route: "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25",
-  reported: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/25",
-  routed: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/25",
-  unowned_baseline: "bg-stone-100 text-stone-700 ring-1 ring-inset ring-stone-200 dark:bg-stone-500/15 dark:text-stone-100 dark:ring-stone-500/25",
-  excluded: "bg-stone-100 text-stone-600 ring-1 ring-inset ring-stone-200 dark:bg-stone-500/15 dark:text-stone-200 dark:ring-stone-500/25",
+const accountabilityFilters: Array<{ value: InventoryAccountabilityFilter; label: string }> = [
+  { value: "all", label: "All accountability" },
+  { value: "required_missing", label: "Owner required" },
+  { value: "known", label: "Owner known" },
+  { value: "not_required", label: "Owner not required" },
+  { value: "candidate", label: "Owner candidate" },
+  { value: "disputed", label: "Disputed" },
+];
+
+const reviewBadgeClasses: Record<InventoryReviewState, string> = {
+  needs_review: "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-500/25",
+  reported_issue: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/25",
+  baseline: "bg-stone-100 text-stone-700 ring-1 ring-inset ring-stone-200 dark:bg-stone-500/15 dark:text-stone-100 dark:ring-stone-500/25",
+  out_of_scope: "bg-stone-100 text-stone-600 ring-1 ring-inset ring-stone-200 dark:bg-stone-500/15 dark:text-stone-200 dark:ring-stone-500/25",
 };
 
 const providerLabel = (asset: GRCInventoryAsset) =>
   inventoryAttr(asset, "provider", "source_system") || asset.source_id || asset.entity_type.split(".")[0] || "source";
 
 const ownerDisplay = (asset: GRCInventoryAsset) => {
-  const owner = inventoryOwnerLabel(asset);
-  if (owner !== "Unassigned") return owner;
-  const status = inventoryRoutingStatus(asset);
-  return status === "needs_route" || status === "reported" ? "Route needed" : "No owner required";
+  const accountability = inventoryAccountability(asset);
+  if (accountability.principal) return accountability.principal;
+  if (accountability.state === "required_missing") return "Owner required";
+  if (accountability.state === "candidate") return "Owner candidate";
+  if (accountability.state === "disputed") return "Disputed owner";
+  return "Owner not required";
 };
 
 const regionLabel = (asset: GRCInventoryAsset) => {
@@ -88,11 +100,11 @@ const csvEscape = (value: unknown) => {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
 };
 
-function RouteBadge({ asset }: { asset: GRCInventoryAsset }) {
-  const status = inventoryRoutingStatus(asset);
+function ReviewBadge({ asset }: { asset: GRCInventoryAsset }) {
+  const status = inventoryReviewState(asset) as InventoryReviewState;
   return (
-    <span className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${routeBadgeClasses[status]}`}>
-      {inventoryRoutingLabel(status)}
+    <span className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${reviewBadgeClasses[status] ?? reviewBadgeClasses.baseline}`}>
+      {inventoryReviewLabel(status)}
     </span>
   );
 }
@@ -228,7 +240,7 @@ function ScopeModal({
               <select value={scopeView} onChange={(event) => setScopeView(event.target.value)} className={inputClass}>
                 <option value="all">All resources</option>
                 <option value="in_scope">In scope</option>
-                <option value="out_of_scope">Excluded</option>
+                <option value="out_of_scope">Scoped out</option>
               </select>
             </label>
           </div>
@@ -241,7 +253,7 @@ function ScopeModal({
           {summary && (
             <div className="mb-4 grid gap-3 md:grid-cols-3">
               <MetricCard label="Scoped" value={summary.in_scope_assets} detail={`${summary.scoped_coverage_pct}% coverage`} intent="success" />
-              <MetricCard label="Excluded" value={summary.out_of_scope_assets} detail="explicit scope decisions" intent={summary.out_of_scope_assets > 0 ? "warning" : "neutral"} />
+              <MetricCard label="Scoped out" value={summary.out_of_scope_assets} detail="explicit scope decisions" intent={summary.out_of_scope_assets > 0 ? "warning" : "neutral"} />
               <MetricCard label="High risk" value={summary.high_risk_assets} detail="needs review" intent={summary.high_risk_assets > 0 ? "danger" : "success"} />
             </div>
           )}
@@ -294,7 +306,7 @@ function ScopeModal({
   );
 }
 
-function RouteQueuePanel({
+function ReviewQueuePanel({
   assets,
   onReport,
   onScopeChange,
@@ -307,30 +319,30 @@ function RouteQueuePanel({
   reportSavingURN: string | null;
   scopeSavingURN: string | null;
 }) {
-  const routeQueue = assets
-    .filter((asset) => inventoryRouteQueueStatus(inventoryRoutingStatus(asset)))
+  const reviewQueue = assets
+    .filter(inventoryNeedsReview)
     .slice()
-    .sort(inventoryRouteQueueSort)
+    .sort(inventoryReviewSort)
     .slice(0, 6);
 
   return (
     <section className="surface-panel overflow-hidden">
       <div className="flex items-start justify-between gap-3 border-b border-[color:var(--border)] px-4 py-3">
         <div>
-          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Route now</h2>
-          <p className="mt-1 text-[12px] text-[var(--text-muted)]">High-signal unowned assets and submitted curation reports.</p>
+          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Needs review</h2>
+          <p className="mt-1 text-[12px] text-[var(--text-muted)]">Reported issues and assets where GRC accountability is required.</p>
         </div>
-        <Badge value={`${routeQueue.length} open`} />
+        <Badge value={`${reviewQueue.length} open`} />
       </div>
       <div className="divide-y divide-[color:var(--border)]">
-        {routeQueue.map((asset) => (
+        {reviewQueue.map((asset) => (
           <div key={asset.urn} className="px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <Link href={`/inventory/${encodeURIComponent(asset.urn)}`} className="block truncate text-[13px] font-semibold text-[var(--text-primary)] hover:text-[var(--primary)]">
                   {asset.label || shortEntity(asset.urn)}
                 </Link>
-                <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--text-muted)]">{inventoryRoutingDetail(asset)}</div>
+                <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--text-muted)]">{inventoryReviewDetail(asset)}</div>
               </div>
               <RiskBadge score={asset.risk_score} level={asset.risk_level} />
             </div>
@@ -355,7 +367,7 @@ function RouteQueuePanel({
             </div>
           </div>
         ))}
-        {routeQueue.length === 0 && <div className="px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">No assets need routing in this view.</div>}
+        {reviewQueue.length === 0 && <div className="px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">No assets need review in this view.</div>}
       </div>
     </section>
   );
@@ -371,7 +383,8 @@ export default function InventoryPage() {
   const [framework, setFramework] = useQueryParamState("framework");
   const [scopeFilter, setScopeFilter] = useQueryParamState("scope_state");
   const [ownerFilter, setOwnerFilter] = useQueryParamState("owner");
-  const [routingFilter, setRoutingFilter] = useQueryParamState("routing");
+  const [reviewFilter, setReviewFilter] = useQueryParamState("review_state");
+  const [accountabilityFilter, setAccountabilityFilter] = useQueryParamState("accountability_state");
   const [scopeOpen, setScopeOpen] = useState(false);
   const [scopeSavingURN, setScopeSavingURN] = useState<string | null>(null);
   const [scopeError, setScopeError] = useState<string | null>(null);
@@ -385,7 +398,8 @@ export default function InventoryPage() {
   const debouncedFramework = useDebouncedValue(framework.trim());
   const debouncedScopeFilter = useDebouncedValue(scopeFilter.trim());
   const debouncedOwnerFilter = useDebouncedValue(ownerFilter.trim());
-  const debouncedRoutingFilter = useDebouncedValue(routingFilter.trim());
+  const debouncedReviewFilter = useDebouncedValue(reviewFilter.trim());
+  const debouncedAccountabilityFilter = useDebouncedValue(accountabilityFilter.trim());
 
   const categoriesQuery = useGRCQuery<GRCInventoryCategoriesResponse>(
     grcPath("/grc/inventory/categories", { tenant_id: debouncedTenantID, source_id: debouncedSourceID, limit: 200 }),
@@ -397,6 +411,8 @@ export default function InventoryPage() {
       category_id: debouncedCategoryID,
       q: debouncedQuery,
       scope_state: debouncedScopeFilter,
+      review_state: debouncedReviewFilter,
+      accountability_state: debouncedAccountabilityFilter,
       limit: 200,
     }),
   );
@@ -408,37 +424,44 @@ export default function InventoryPage() {
   const rawAssets = useMemo(() => (
     assetsQuery.data?.assets ?? []
   ).slice().sort((left, right) => (
-    inventoryRouteQueueSort(left, right) || left.label.localeCompare(right.label)
+    inventoryReviewSort(left, right) || left.label.localeCompare(right.label)
   )), [assetsQuery.data?.assets]);
   const frameworkAssets = useMemo(() => rawAssets.filter((asset) => inventoryAssetMatchesFrameworkSegment(asset, debouncedFramework)), [debouncedFramework, rawAssets]);
   const assets = useMemo(() => frameworkAssets.filter((asset) =>
     inventoryMatchesOwnerFilter(asset, debouncedOwnerFilter) &&
-    inventoryMatchesRoutingFilter(asset, debouncedRoutingFilter || "all"),
-  ), [debouncedOwnerFilter, debouncedRoutingFilter, frameworkAssets]);
+    inventoryMatchesReviewFilter(asset, debouncedReviewFilter || "all") &&
+    inventoryMatchesAccountabilityFilter(asset, debouncedAccountabilityFilter || "all"),
+  ), [debouncedAccountabilityFilter, debouncedOwnerFilter, debouncedReviewFilter, frameworkAssets]);
   const summary = assetsQuery.data?.summary;
   const hasFrameworkFilter = debouncedFramework.length > 0;
   const selectedCategory = categories.find((category) => category.id === categoryID);
-  const assignedAssetCount = assets.filter((asset) => inventoryOwnerLabel(asset) !== "Unassigned").length;
   const ownerGroupCount = useMemo(() => new Set(assets.map(inventoryOwnerLabel).filter((owner) => owner !== "Unassigned")).size, [assets]);
   const providerCount = useMemo(() => new Set(assets.map((asset) => providerLabel(asset))).size, [assets]);
-  const highRiskCount = hasFrameworkFilter || debouncedOwnerFilter || debouncedRoutingFilter
-    ? assets.filter((asset) => (asset.risk_score ?? 0) >= 70).length
-    : summary?.high_risk_assets ?? assets.filter((asset) => (asset.risk_score ?? 0) >= 70).length;
-  const outOfScopeCount = hasFrameworkFilter || debouncedOwnerFilter || debouncedRoutingFilter
+  const hasClientFilters = hasFrameworkFilter || debouncedOwnerFilter.length > 0;
+  const outOfScopeCount = hasClientFilters
     ? assets.filter((asset) => inventoryScopeState(asset) === "out_of_scope").length
     : summary?.out_of_scope_assets ?? assets.filter((asset) => inventoryScopeState(asset) === "out_of_scope").length;
-  const publicAssetCount = hasFrameworkFilter || debouncedOwnerFilter || debouncedRoutingFilter
+  const publicAssetCount = hasClientFilters
     ? assets.filter(inventoryIsPublicAsset).length
     : summary?.public_assets ?? assets.filter(inventoryIsPublicAsset).length;
-  const routeNowCount = assets.filter((asset) => inventoryRouteQueueStatus(inventoryRoutingStatus(asset))).length;
-  const unownedBaselineCount = assets.filter((asset) => inventoryRoutingStatus(asset) === "unowned_baseline").length;
-  const routedCount = assets.filter((asset) => inventoryRoutingStatus(asset) === "routed").length;
+  const needsReviewCount = hasClientFilters
+    ? assets.filter(inventoryNeedsReview).length
+    : (summary ? (summary.needs_review_assets ?? 0) + (summary.reported_issue_assets ?? 0) : assets.filter(inventoryNeedsReview).length);
+  const baselineCount = hasClientFilters
+    ? assets.filter((asset) => inventoryReviewState(asset) === "baseline").length
+    : summary?.baseline_assets ?? assets.filter((asset) => inventoryReviewState(asset) === "baseline").length;
+  const ownerRequiredCount = hasClientFilters
+    ? assets.filter((asset) => inventoryAccountability(asset).state === "required_missing").length
+    : summary?.owner_required_assets ?? assets.filter((asset) => inventoryAccountability(asset).state === "required_missing").length;
+  const accountableCount = hasClientFilters
+    ? assets.filter((asset) => inventoryAccountability(asset).state === "known").length
+    : summary?.accountable_assets ?? assets.filter((asset) => inventoryAccountability(asset).state === "known").length;
   const inventoryError = categoriesQuery.error || assetsQuery.error;
   const runtimeState = runtimeStateForError(inventoryError);
   const inventoryLoading = categoriesQuery.loading || assetsQuery.loading;
   const metricState: RuntimeState = inventoryError ? runtimeState : inventoryLoading && !assetsQuery.data ? "loading" : "ready";
   const hasAssetData = assets.length > 0;
-  const scopedCoverage = hasAssetData ? `${hasFrameworkFilter || debouncedOwnerFilter || debouncedRoutingFilter ? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : summary?.scoped_coverage_pct ?? 100}%` : "No data";
+  const scopedCoverage = hasAssetData ? `${hasClientFilters ? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : summary?.scoped_coverage_pct ?? 100}%` : "No data";
   const ownerOptions = useMemo(() => (
     [...new Set(frameworkAssets.map(inventoryOwnerLabel))]
       .sort((left, right) => left.localeCompare(right))
@@ -448,24 +471,25 @@ export default function InventoryPage() {
     return [{ id: categoryID, label: humanize(categoryID), entity_types: [], count: assets.length }, ...categories];
   }, [assets.length, categories, categoryID]);
   const orgGroups = useMemo(() => {
-    const groups = new Map<string, { total: number; routed: number; routeNow: number; publicAssets: number }>();
+    const groups = new Map<string, { total: number; accountable: number; needsReview: number; publicAssets: number }>();
     for (const asset of assets) {
       const label = orgLabel(asset);
-      const group = groups.get(label) ?? { total: 0, routed: 0, routeNow: 0, publicAssets: 0 };
+      const group = groups.get(label) ?? { total: 0, accountable: 0, needsReview: 0, publicAssets: 0 };
       group.total += 1;
-      if (inventoryRoutingStatus(asset) === "routed") group.routed += 1;
-      if (inventoryRouteQueueStatus(inventoryRoutingStatus(asset))) group.routeNow += 1;
+      if (inventoryAccountability(asset).state === "known") group.accountable += 1;
+      if (inventoryNeedsReview(asset)) group.needsReview += 1;
       if (inventoryIsPublicAsset(asset)) group.publicAssets += 1;
       groups.set(label, group);
     }
-    return [...groups.entries()].sort(([, left], [, right]) => right.routeNow - left.routeNow || right.total - left.total).slice(0, 6);
+    return [...groups.entries()].sort(([, left], [, right]) => right.needsReview - left.needsReview || right.total - left.total).slice(0, 6);
   }, [assets]);
   const filterChips = [
     { label: "Class", value: selectedCategory?.label || categoryID, onClear: () => setCategoryID("") },
     { label: "Search", value: query, onClear: () => setQuery("") },
     { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Owner", value: ownerFilter, onClear: () => setOwnerFilter("") },
-    { label: "Routing", value: routingFilters.find((item) => item.value === routingFilter)?.label ?? routingFilter, onClear: () => setRoutingFilter("") },
+    { label: "Review", value: reviewFilters.find((item) => item.value === reviewFilter)?.label ?? reviewFilter, onClear: () => setReviewFilter("") },
+    { label: "Accountability", value: accountabilityFilters.find((item) => item.value === accountabilityFilter)?.label ?? accountabilityFilter, onClear: () => setAccountabilityFilter("") },
     { label: "Source", value: sourceID, onClear: () => setSourceID("") },
     { label: "Scope", value: scopeFilter ? inventoryScopeCopy(scopeFilter) : "", onClear: () => setScopeFilter("") },
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
@@ -475,7 +499,8 @@ export default function InventoryPage() {
     setQuery("");
     setFramework("");
     setOwnerFilter("");
-    setRoutingFilter("");
+    setReviewFilter("");
+    setAccountabilityFilter("");
     setSourceID("");
     setScopeFilter("");
     setTenantID("");
@@ -490,6 +515,7 @@ export default function InventoryPage() {
         tenant_id: debouncedTenantID || undefined,
         asset_urn: asset.urn,
         source_id: asset.source_id || debouncedSourceID || undefined,
+        runtime_id: asset.runtime_id || undefined,
         scope_state: state,
         reason: state === "out_of_scope" ? "Scoped out from inventory review" : "Scoped into inventory review",
       }),
@@ -530,11 +556,12 @@ export default function InventoryPage() {
     void assetsQuery.reload();
   }, [actor, apiKey, assetsQuery, debouncedSourceID, debouncedTenantID]);
   const exportAssets = useCallback(() => {
-    const headers = ["Asset", "Asset class", "Route", "Risk score", "Owner", "Scope", "Source", "Account / region", "URN"];
+    const headers = ["Asset", "Asset class", "Review state", "Accountability", "Risk score", "Owner", "Scope", "Source", "Account / region", "URN"];
     const rows = assets.map((asset) => [
       asset.label || shortEntity(asset.urn),
       descriptionLabel(asset),
-      inventoryRoutingLabel(inventoryRoutingStatus(asset)),
+      inventoryReviewLabel(inventoryReviewState(asset)),
+      inventoryAccountability(asset).label,
       asset.risk_score ?? "",
       ownerDisplay(asset),
       inventoryScopeCopy(inventoryScopeState(asset)),
@@ -556,7 +583,7 @@ export default function InventoryPage() {
     <div className="space-y-6">
       <PageHeader
         title={selectedCategory?.label || "Inventory"}
-        description="Browse collected resources by class, risk, scope, and route readiness."
+        description="Browse collected resources by class, risk, GRC review state, and accountability."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={exportAssets} className="secondary-button px-3 py-1.5 text-[13px]">
@@ -590,10 +617,10 @@ export default function InventoryPage() {
       <div className="surface-panel grid gap-0 divide-y divide-[color:var(--border)] overflow-hidden md:grid-cols-5 md:divide-x md:divide-y-0">
         {[
           { label: "Assets", value: String(assets.length), detail: "current view" },
-          { label: "Route now", value: String(routeNowCount), detail: `${highRiskCount} high risk in view` },
-          { label: "Unowned baseline", value: String(unownedBaselineCount), detail: "tracked without owner" },
-          { label: "Routed", value: String(routedCount), detail: `${ownerGroupCount} owner groups` },
-          { label: "Scope", value: scopedCoverage, detail: `${outOfScopeCount} excluded` },
+          { label: "Needs review", value: String(needsReviewCount), detail: `${ownerRequiredCount} owner required` },
+          { label: "Baseline", value: String(baselineCount), detail: "no immediate action" },
+          { label: "Accountable", value: String(accountableCount), detail: `${ownerGroupCount} owner groups` },
+          { label: "Scope", value: scopedCoverage, detail: `${outOfScopeCount} scoped out` },
         ].map((item) => (
           <div key={item.label} className="px-4 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{item.label}</div>
@@ -604,7 +631,7 @@ export default function InventoryPage() {
       </div>
 
       <div className="surface-panel px-5 py-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px_160px_160px_150px]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_150px_150px_150px_150px_130px]">
           <label className={labelClass}>Search<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." className={inputClass} /></label>
           <label className={labelClass}>
             Framework
@@ -621,9 +648,15 @@ export default function InventoryPage() {
             </datalist>
           </label>
           <label className={labelClass}>
-            Route
-            <select value={routingFilter} onChange={(event) => setRoutingFilter(event.target.value)} className={inputClass}>
-              {routingFilters.map((item) => <option key={item.value} value={item.value === "all" ? "" : item.value}>{item.label}</option>)}
+            Review
+            <select value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value)} className={inputClass}>
+              {reviewFilters.map((item) => <option key={item.value} value={item.value === "all" ? "" : item.value}>{item.label}</option>)}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Accountability
+            <select value={accountabilityFilter} onChange={(event) => setAccountabilityFilter(event.target.value)} className={inputClass}>
+              {accountabilityFilters.map((item) => <option key={item.value} value={item.value === "all" ? "" : item.value}>{item.label}</option>)}
             </select>
           </label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="All" className={inputClass} /></label>
@@ -631,7 +664,7 @@ export default function InventoryPage() {
             <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)} className={inputClass}>
               <option value="">All</option>
               <option value="in_scope">In scope</option>
-              <option value="out_of_scope">Excluded</option>
+              <option value="out_of_scope">Scoped out</option>
             </select>
           </label>
         </div>
@@ -652,9 +685,9 @@ export default function InventoryPage() {
                   <thead>
                     <tr>
                       <th>Asset / Details</th>
-                      <th>Route</th>
+                      <th>Review</th>
                       <th>Risk</th>
-                      <th>Owner</th>
+                      <th>Accountability</th>
                       <th>Framework Scope</th>
                       <th>Account / Region</th>
                     </tr>
@@ -674,8 +707,8 @@ export default function InventoryPage() {
                         </td>
                         <td>
                           <div className="space-y-1">
-                            <RouteBadge asset={asset} />
-                            <div className="max-w-[190px] text-[11px] leading-4 text-[var(--text-muted)]">{inventoryRoutingDetail(asset)}</div>
+                            <ReviewBadge asset={asset} />
+                            <div className="max-w-[190px] text-[11px] leading-4 text-[var(--text-muted)]">{inventoryReviewDetail(asset)}</div>
                           </div>
                         </td>
                         <td>
@@ -684,7 +717,11 @@ export default function InventoryPage() {
                         </td>
                         <td>
                           <div className="max-w-[170px] truncate font-medium text-[var(--text-primary)]">{ownerDisplay(asset)}</div>
-                          {inventoryOwnerLabel(asset) === "Unassigned" && <div className="mt-1 text-[11px] text-[var(--text-muted)]">Default inventory state</div>}
+                          {inventoryOwnerLabel(asset) === "Unassigned" && (
+                            <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+                              {inventoryAccountability(asset).state === "required_missing" ? "Required for review" : "Default inventory state"}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <div className="space-y-1">
@@ -708,7 +745,7 @@ export default function InventoryPage() {
             )}
           </main>
           <aside className="grid gap-4 lg:grid-cols-2 min-[1800px]:block min-[1800px]:space-y-4">
-            <RouteQueuePanel
+            <ReviewQueuePanel
               assets={assets}
               onReport={(asset) => { setReportAsset(asset); setReportError(null); }}
               onScopeChange={(asset, state) => void updateScope(asset, state)}
@@ -718,14 +755,14 @@ export default function InventoryPage() {
             <section className="surface-panel p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Routing posture</h2>
-                  <p className="mt-1 text-[12px] text-[var(--text-muted)]">Ownership coverage after default unowned assets are separated from actionable routes.</p>
+                  <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Review posture</h2>
+                  <p className="mt-1 text-[12px] text-[var(--text-muted)]">Accountability coverage after default baseline assets are separated from actionable review.</p>
                 </div>
                 <Badge value={`${providerCount} sources`} />
               </div>
               <div className="mt-4 grid gap-3">
                 <ProgressCard title="Scoped coverage" percent={hasAssetData ? summary?.scoped_coverage_pct ?? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : 0} detail={hasAssetData ? "assets in review" : "no data"} total={summary?.in_scope_assets ?? assets.length} />
-                <ProgressCard title="Routed assets" percent={assets.length ? Math.round((assignedAssetCount / assets.length) * 100) : 0} detail="assigned to owner group" total={assignedAssetCount} />
+                <ProgressCard title="Accountable assets" percent={assets.length ? Math.round((accountableCount / assets.length) * 100) : 0} detail="known owner group" total={accountableCount} />
                 <ProgressCard title="Private posture" percent={assets.length ? Math.round(((assets.length - publicAssetCount) / assets.length) * 100) : 0} detail="not public" total={`${publicAssetCount} public`} />
               </div>
               {scopeError && (
@@ -745,15 +782,15 @@ export default function InventoryPage() {
       {!inventoryError && (
         <section className="surface-panel p-4">
           <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Org parity</h2>
-          <p className="mt-1 text-[12px] text-[var(--text-muted)]">Compare route pressure, ownership coverage, and exposure by organization, account, project, or owner scope.</p>
+          <p className="mt-1 text-[12px] text-[var(--text-muted)]">Compare review pressure, accountability coverage, and exposure by organization, account, project, or owner scope.</p>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {orgGroups.map(([label, group]) => (
               <div key={label} className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                 <div className="flex items-center justify-between gap-3 text-[13px]">
                   <span className="truncate font-medium text-[var(--text-primary)]">{label}</span>
-                  <span className="text-[var(--text-muted)]">{group.routed}/{group.total} routed</span>
+                  <span className="text-[var(--text-muted)]">{group.accountable}/{group.total} accountable</span>
                 </div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{group.routeNow} route now, {group.publicAssets} public</div>
+                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{group.needsReview} need review, {group.publicAssets} public</div>
               </div>
             ))}
             {orgGroups.length === 0 && <div className="text-[13px] text-[var(--text-muted)]">No org groups found.</div>}
