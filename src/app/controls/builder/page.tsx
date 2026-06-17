@@ -60,6 +60,7 @@ function ArchetypeRow({
   return (
     <button
       type="button"
+      aria-pressed={checked}
       onClick={onToggle}
       className={`w-full rounded-lg border px-4 py-3 text-left transition ${checked ? "border-[color:var(--ring)] bg-indigo-50/70" : "border-[color:var(--border)] bg-white hover:border-[color:var(--border-strong)]"}`}
     >
@@ -71,7 +72,9 @@ function ArchetypeRow({
           </div>
           <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{archetype.control.objective}</div>
         </div>
-        <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${checked ? "border-[color:var(--primary)] bg-[var(--primary)]" : "border-[color:var(--border-strong)]"}`} />
+        <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${checked ? "border-[color:var(--primary)] bg-[var(--primary)]" : "border-[color:var(--border-strong)]"}`}>
+          {checked && <span className="h-2 w-2 rounded-sm bg-white" />}
+        </span>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">{archetype.family_name}</span>
@@ -82,10 +85,16 @@ function ArchetypeRow({
   );
 }
 
-function CoveragePreview({ preview }: { preview: GRCControlPackPreview }) {
+function CoveragePreview({ preview, stale }: { preview: GRCControlPackPreview; stale: boolean }) {
   const controls = preview.coverage.controls ?? [];
   return (
     <div className="space-y-4">
+      {stale && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+          This preview was generated from previous inputs. Generate a fresh preview before downloading YAML.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         <MetricCard label="Controls" value={preview.summary.controls} detail={`${preview.summary.families} families`} />
         <MetricCard label="Auditor Ready" value={preview.summary.auditor_ready_controls} detail="ready controls" intent="success" />
@@ -136,8 +145,9 @@ function CoveragePreview({ preview }: { preview: GRCControlPackPreview }) {
                 <div className="font-mono text-[12px] font-semibold text-[var(--text-primary)]">{name}</div>
                 <button
                   type="button"
+                  disabled={stale}
                   onClick={() => downloadYAML(name, preview.files[name] ?? "")}
-                  className="rounded-md border border-[color:var(--border)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]"
+                  className="rounded-md border border-[color:var(--border)] bg-white px-2.5 py-1 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Download
                 </button>
@@ -162,6 +172,7 @@ export default function ControlBuilderPage() {
   const [selectedArchetypes, setSelectedArchetypes] = useState<string[] | null>(null);
   const [includedProfiles, setIncludedProfiles] = useState<string[]>([]);
   const [preview, setPreview] = useState<GRCControlPackPreview | null>(null);
+  const [previewRequestKey, setPreviewRequestKey] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -183,6 +194,16 @@ export default function ControlBuilderPage() {
   const error = archetypesQuery.error || profilesQuery.error;
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : loading && !archetypesQuery.data ? "loading" : "ready";
+  const previewRequest = useMemo(() => ({
+    framework_id: frameworkID,
+    framework_name: frameworkName,
+    profile_id: profileID,
+    profile_name: profileName,
+    archetype_ids: effectiveSelectedArchetypes,
+    include_profiles: includedProfiles,
+  }), [effectiveSelectedArchetypes, frameworkID, frameworkName, includedProfiles, profileID, profileName]);
+  const currentPreviewRequestKey = useMemo(() => JSON.stringify(previewRequest), [previewRequest]);
+  const previewIsStale = preview !== null && previewRequestKey !== currentPreviewRequestKey;
 
   const toggleArchetype = (id: string) => {
     setSelectedArchetypes((current) => {
@@ -196,28 +217,31 @@ export default function ControlBuilderPage() {
   const submitPreview = async () => {
     setPreviewLoading(true);
     setPreviewError(null);
-    const response = await fetchCerebro<GRCControlPackResponse | GRCControlPackIssueResponse>("/grc/control-packs/preview", apiKey, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        framework_id: frameworkID,
-        framework_name: frameworkName,
-        profile_id: profileID,
-        profile_name: profileName,
-        archetype_ids: effectiveSelectedArchetypes,
-        include_profiles: includedProfiles,
-      }),
-    });
-    setPreviewLoading(false);
-    if (!response.ok) {
-      const data = response.data as GRCControlPackIssueResponse;
-      const detail = Array.isArray(data.issues) && data.issues.length > 0
-        ? data.issues.map((issue) => [issue.path ?? issue.Path, issue.message ?? issue.Message].filter(Boolean).join(": ")).join("; ")
-        : `Preview failed (${response.status})`;
-      setPreviewError(detail);
-      return;
+    try {
+      const response = await fetchCerebro<GRCControlPackResponse | GRCControlPackIssueResponse>("/grc/control-packs/preview", apiKey, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(previewRequest),
+      });
+      if (!response.ok) {
+        const data = response.data as GRCControlPackIssueResponse;
+        const detail = Array.isArray(data.issues) && data.issues.length > 0
+          ? data.issues.map((issue) => [issue.path ?? issue.Path, issue.message ?? issue.Message].filter(Boolean).join(": ")).join("; ")
+          : `Preview failed (${response.status})`;
+        setPreview(null);
+        setPreviewRequestKey(null);
+        setPreviewError(detail);
+        return;
+      }
+      setPreview((response.data as GRCControlPackResponse).preview);
+      setPreviewRequestKey(currentPreviewRequestKey);
+    } catch (error) {
+      setPreview(null);
+      setPreviewRequestKey(null);
+      setPreviewError(error instanceof Error ? error.message : "Preview failed");
+    } finally {
+      setPreviewLoading(false);
     }
-    setPreview((response.data as GRCControlPackResponse).preview);
   };
 
   return (
@@ -287,6 +311,7 @@ export default function ControlBuilderPage() {
                     <button
                       key={option.id}
                       type="button"
+                      aria-pressed={profileSet.has(option.id)}
                       onClick={() => toggleProfile(option.id)}
                       className={`w-full rounded-lg border px-3 py-2 text-left transition ${profileSet.has(option.id) ? "border-[color:var(--ring)] bg-indigo-50/70" : "border-[color:var(--border)] bg-white hover:border-[color:var(--border-strong)]"}`}
                     >
@@ -303,7 +328,7 @@ export default function ControlBuilderPage() {
         </div>
       )}
 
-      {preview && <CoveragePreview preview={preview} />}
+      {preview && <CoveragePreview preview={preview} stale={previewIsStale} />}
     </div>
   );
 }
