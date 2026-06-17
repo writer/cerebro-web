@@ -72,9 +72,14 @@ export default function ControlsPage() {
         title="Controls"
         description="Control status, failing objectives, mapped findings, and evidence gaps."
         action={
-          <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <Link href="/controls/builder" className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900">
+              Build Pack
+            </Link>
+            <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
+              Refresh
+            </button>
+          </div>
         }
       />
 

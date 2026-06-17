@@ -70,6 +70,131 @@ export type GRCControl = {
   findings?: GRCFinding[];
 };
 
+export type GRCEvidenceExpectation = {
+  id: string;
+  title?: string;
+  type: string;
+  description?: string;
+  required?: boolean;
+  assessment_methods?: string[];
+  freshness_sla?: string;
+  accepted_from?: string[];
+};
+
+export type GRCControlDefinition = {
+  id: string;
+  title?: string;
+  objective?: string;
+  intent?: string;
+  applicability?: string[];
+  assessment_methods?: string[];
+  implementation_guidance?: string[];
+  audit_procedure?: string[];
+  failure_modes?: string[];
+  remediation_guidance?: string[];
+  exception_guidance?: string;
+  evidence_expectations?: GRCEvidenceExpectation[];
+  freshness_sla?: string;
+  owner_domain?: string;
+  automatable?: boolean;
+  manual_evidence_allowed?: boolean;
+  tags?: string[];
+};
+
+export type GRCControlArchetype = {
+  id: string;
+  family_id: string;
+  family_name: string;
+  family_description?: string;
+  recommended?: boolean;
+  control: GRCControlDefinition;
+};
+
+export type GRCControlReadiness = {
+  status: string;
+  score: number;
+  missing_fields?: string[];
+};
+
+export type GRCControlCoverageSummary = {
+  selected_controls: number;
+  mapped_controls: number;
+  unmapped_controls: number;
+  mapped_rules: number;
+  auditor_ready_controls: number;
+  needs_enrichment_controls: number;
+  placeholder_controls: number;
+};
+
+export type GRCControlCoverageControl = {
+  framework_id?: string;
+  framework_name: string;
+  framework_version?: string;
+  family_id: string;
+  family_name: string;
+  control_id: string;
+  title?: string;
+  owner_domain?: string;
+  tags?: string[];
+  evidence_expectation_ids?: string[];
+  audit_readiness: GRCControlReadiness;
+  coverage_status: string;
+  rule_count: number;
+  mapped_rules?: string[];
+  evidence_plan?: {
+    expectations?: GRCEvidenceExpectation[];
+  };
+};
+
+export type GRCControlCoverageProfile = {
+  id: string;
+  name?: string;
+  description?: string;
+  summary: GRCControlCoverageSummary;
+  controls?: GRCControlCoverageControl[];
+  unmapped_controls?: GRCControlRef[];
+};
+
+export type GRCControlPackSummary = {
+  archetypes: number;
+  controls: number;
+  families: number;
+  mapped_controls: number;
+  unmapped_controls: number;
+  mapped_rules: number;
+  auditor_ready_controls: number;
+  needs_enrichment_controls: number;
+  placeholder_controls: number;
+};
+
+export type GRCControlPackPreview = {
+  version: string;
+  coverage: GRCControlCoverageProfile;
+  summary: GRCControlPackSummary;
+  files: Record<string, string>;
+};
+
+export type GRCControlArchetypesResponse = {
+  version: string;
+  archetypes: GRCControlArchetype[];
+  generated_at: string;
+};
+
+export type GRCControlProfilesResponse = {
+  profiles: GRCControlCoverageProfile[];
+  generated_at: string;
+};
+
+export type GRCControlPackResponse = {
+  preview: GRCControlPackPreview;
+  generated_at: string;
+};
+
+export type GRCControlPackIssueResponse = {
+  issues: Array<{ path?: string; message?: string; Path?: string; Message?: string }>;
+  generated_at: string;
+};
+
 export type GRCConnector = {
   runtime_id: string;
   source_id?: string;
