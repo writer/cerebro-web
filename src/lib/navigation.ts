@@ -1,3 +1,5 @@
+import { supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+
 export type NavigationEntry = {
   label: string;
   href: string;
@@ -19,7 +21,7 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/risk-inbox",
     description: "Triage findings by severity, owner, entity, SLA, and evidence.",
     section: "Operator",
-    keywords: ["findings", "risk", "sla", "triage", "owner"],
+    keywords: ["findings", "risk", "sla", "triage", "owner", "framework", ...supportedGRCFrameworkNames],
   },
   {
     label: "Ask graph",
@@ -33,7 +35,7 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/controls",
     description: "Control status, failing objectives, mapped findings, and evidence gaps.",
     section: "Operator",
-    keywords: ["soc2", "iso", "framework", "control", "audit"],
+    keywords: ["soc2", "iso", "framework", "control", "audit", ...supportedGRCFrameworkNames],
   },
   {
     label: "Evidence",
@@ -47,7 +49,7 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/inventory",
     description: "Browse assets, owners, scope, tests, vulnerabilities, and graph context.",
     section: "Operator",
-    keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities"],
+    keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities", "framework", ...supportedGRCFrameworkNames],
   },
   {
     label: "Impact map",

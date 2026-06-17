@@ -494,16 +494,18 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
   );
 }
 
-function setupHref(sourceID: string, tenantID: string) {
+function setupHref(sourceID: string, tenantID: string, framework = "") {
   const params = new URLSearchParams();
   if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
+  if (framework.trim()) params.set("framework", framework.trim());
   const query = params.toString();
   return `/connectors/${encodeURIComponent(sourceID)}/setup${query ? `?${query}` : ""}`;
 }
 
-function detailHref(sourceID: string, tenantID: string) {
+function detailHref(sourceID: string, tenantID: string, framework = "") {
   const params = new URLSearchParams();
   if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
+  if (framework.trim()) params.set("framework", framework.trim());
   const query = params.toString();
   return `/connectors/${encodeURIComponent(sourceID)}${query ? `?${query}` : ""}`;
 }
@@ -514,6 +516,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const { apiKey } = useApiKey();
   const sourceID = useMemo(() => decodeURIComponent(params.sourceID ?? ""), [params.sourceID]);
   const runtimeID = searchParams.get("runtime_id") ?? "";
+  const framework = searchParams.get("framework") ?? "";
   const initialTab = setupOnly ? "setup" : (searchParams.get("tab") as DetailTab | null) ?? (runtimeID ? "connections" : "overview");
   const [activeTab, setActiveTab] = useState<DetailTab>(tabs.some((tab) => tab.id === initialTab) ? initialTab : "overview");
   const [tenantID, setTenantID] = useState(searchParams.get("tenant_id") ?? "");
@@ -567,7 +570,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
         <section className="overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
           <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0">
-              <Link href={detailHref(sourceID, tenantID)} className="mb-4 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+              <Link href={detailHref(sourceID, tenantID, framework)} className="mb-4 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back to {displayName}
               </Link>
@@ -629,6 +632,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
             tenantID={tenantID.trim()}
             apiKey={apiKey}
             credentialStores={credentialStores}
+            initialFramework={framework}
             onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
           />
         )}
@@ -670,7 +674,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
         </div>
         <div className="flex flex-wrap gap-2">
           {setupAllowed && !catalogOnly && (
-            <Link href={setupHref(sourceID, tenantID)} className="secondary-button px-3 py-2 text-[13px]">
+            <Link href={setupHref(sourceID, tenantID, framework)} className="secondary-button px-3 py-2 text-[13px]">
               Add connection
             </Link>
           )}
@@ -777,6 +781,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
           tenantID={tenantID.trim()}
           apiKey={apiKey}
           credentialStores={credentialStores}
+          initialFramework={framework}
           onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
         />
       ))}

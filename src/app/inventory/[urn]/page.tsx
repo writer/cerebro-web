@@ -22,6 +22,7 @@ import {
   shortEntity,
 } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
+import { controlMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 
 type Tab = "overview" | "vulnerabilities" | "tests" | "framework" | "reports" | "timeline";
 
@@ -211,11 +212,19 @@ function VulnerabilitiesPane({ vulnerabilities }: { vulnerabilities: GRCInventor
 
 function TestsPane({ tests }: { tests: GRCInventoryTest[] }) {
   const [query, setQuery] = useState("");
-  const filtered = tests.filter((test) => [test.name, test.owner, test.status, test.framework, test.control_id].join(" ").toLowerCase().includes(query.toLowerCase()));
+  const [framework, setFramework] = useState("");
+  const filtered = tests.filter((test) => {
+    if (!controlMatchesFrameworkSegment(test, framework)) return false;
+    return [test.name, test.owner, test.status, test.framework, test.control_id].join(" ").toLowerCase().includes(query.toLowerCase());
+  });
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className={inputClass} />
+        <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="Framework" list="asset-test-framework-options" className={inputClass} />
+        <datalist id="asset-test-framework-options">
+          {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+        </datalist>
         <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Status</button>
         <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Due date</button>
       </div>
@@ -247,12 +256,24 @@ function TestsPane({ tests }: { tests: GRCInventoryTest[] }) {
 }
 
 function FrameworkPane({ data }: { data: GRCInventoryAssetDetail }) {
+  const [framework, setFramework] = useState("");
+  const controls = data.controls.filter((control) => controlMatchesFrameworkSegment(control, framework));
   return (
-    <div className="surface-panel overflow-x-auto">
+    <div className="surface-panel overflow-hidden">
+      <div className="border-b border-[color:var(--border)] px-4 py-3">
+        <label className="block max-w-sm text-[11px] font-semibold text-[var(--text-muted)]">
+          Framework
+          <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="All frameworks" list="asset-framework-options" className={`${inputClass} mt-1 w-full`} />
+          <datalist id="asset-framework-options">
+            {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+          </datalist>
+        </label>
+      </div>
+      <div className="overflow-x-auto">
       <table className="data-table">
         <thead><tr><th>Framework</th><th>Control</th><th>Status</th><th>Findings</th><th>Evidence</th></tr></thead>
         <tbody>
-          {data.controls.map((control) => (
+          {controls.map((control) => (
             <tr key={`${control.framework_name}-${control.control_id}`}>
               <td className="font-medium text-[var(--text-primary)]">{control.framework_name}</td>
               <td>{control.control_id}</td>
@@ -263,7 +284,8 @@ function FrameworkPane({ data }: { data: GRCInventoryAssetDetail }) {
           ))}
         </tbody>
       </table>
-      {data.controls.length === 0 && <div className="p-8"><EmptyBlock label="No framework scope is mapped to this asset." /></div>}
+      {controls.length === 0 && <div className="p-8"><EmptyBlock label="No framework scope is mapped to this asset." /></div>}
+      </div>
     </div>
   );
 }
