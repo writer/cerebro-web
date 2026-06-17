@@ -33,9 +33,9 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Controls",
     href: "/controls",
-    description: "Control status, failing objectives, mapped findings, and evidence gaps.",
+    description: "Control status, custom framework packs, mapped findings, and evidence gaps.",
     section: "Operator",
-    keywords: ["soc2", "iso", "framework", "control", "audit", ...supportedGRCFrameworkNames],
+    keywords: ["soc2", "iso", "framework", "control", "audit", "builder", "custom", ...supportedGRCFrameworkNames],
   },
   {
     label: "Evidence",
