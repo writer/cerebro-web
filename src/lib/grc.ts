@@ -250,6 +250,35 @@ export type GRCInventoryCategory = {
   count: number;
 };
 
+export type GRCInventoryReviewState = "baseline" | "needs_review" | "reported_issue" | "out_of_scope" | string;
+export type GRCInventoryAccountabilityState = "not_required" | "known" | "candidate" | "required_missing" | "disputed" | string;
+
+export type GRCInventoryReviewReason = {
+  code: string;
+  label: string;
+};
+
+export type GRCInventoryReviewDisposition = {
+  state: GRCInventoryReviewState;
+  label: string;
+  detail?: string;
+  reasons?: GRCInventoryReviewReason[];
+};
+
+export type GRCInventoryOwnerCandidate = {
+  principal: string;
+  confidence?: string;
+  source?: string;
+};
+
+export type GRCInventoryAccountability = {
+  state: GRCInventoryAccountabilityState;
+  label: string;
+  principal?: string;
+  candidates?: GRCInventoryOwnerCandidate[];
+  reasons?: GRCInventoryReviewReason[];
+};
+
 export type GRCInventoryAsset = {
   urn: string;
   entity_type: string;
@@ -266,6 +295,8 @@ export type GRCInventoryAsset = {
   latest_asset_report_status?: string;
   latest_asset_report_reason?: string;
   latest_asset_report_updated_at?: string;
+  review_disposition?: GRCInventoryReviewDisposition;
+  accountability?: GRCInventoryAccountability;
   attributes?: Record<string, string>;
 };
 
@@ -291,6 +322,11 @@ export type GRCInventorySummary = {
   out_of_scope_assets: number;
   high_risk_assets: number;
   unassigned_assets: number;
+  baseline_assets?: number;
+  needs_review_assets?: number;
+  owner_required_assets?: number;
+  accountable_assets?: number;
+  reported_issue_assets?: number;
   org_groups: number;
   public_assets: number;
   scoped_coverage_pct: number;

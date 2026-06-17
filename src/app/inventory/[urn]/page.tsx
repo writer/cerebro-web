@@ -23,6 +23,7 @@ import {
 } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 import { controlMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { inventoryAccountability, inventoryReviewDetail, inventoryReviewLabel, inventoryReviewState } from "@/lib/inventory-review";
 
 type Tab = "overview" | "vulnerabilities" | "tests" | "framework" | "reports" | "timeline";
 
@@ -67,7 +68,7 @@ const criticalHighVulnerabilities = (items: GRCInventoryVulnerability[]) =>
 
 const scopeState = (asset: GRCInventoryAsset) => asset.scope_state || "in_scope";
 
-const scopeCopy = (state: string) => state === "out_of_scope" ? "Excluded" : "In scope";
+const scopeCopy = (state: string) => state === "out_of_scope" ? "Scoped out" : "In scope";
 
 const reportStatuses = ["submitted", "in_triage", "accepted", "rejected", "resolved"];
 
@@ -82,7 +83,7 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
     criticalHigh === 0 ? "has no critical or high vulnerabilities" : `has ${criticalHigh} critical or high vulnerabilities`,
     failing === 0 ? "has no failing tests" : `has ${failing} failing tests`,
     reportCount === 0 ? "has no curation reports" : `has ${reportCount} curation report${reportCount === 1 ? "" : "s"}`,
-    scopeState(data.asset) === "out_of_scope" ? "is excluded from compliance review" : "is in scope",
+    scopeState(data.asset) === "out_of_scope" ? "is scoped out of compliance review" : "is in scope",
   ].join(", ");
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -101,7 +102,7 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
             )}
             <div className="mt-6 text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Recommendation</div>
             <p className="mt-2 text-[14px] leading-6 text-[var(--text-secondary)]">
-              Review ownership, framework coverage, failing tests, vulnerability posture, and adjacent graph relationships before changing scope or remediation priority.
+              Review accountability, framework coverage, failing tests, vulnerability posture, and adjacent graph relationships before changing scope or remediation priority.
             </p>
           </div>
           <div className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-5 py-3 text-[12px] font-medium text-[var(--text-secondary)]">
@@ -158,8 +159,10 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
       <aside>
         <h2 className="mb-3 text-[16px] font-semibold text-[var(--text-primary)]">Details</h2>
         <div className="mb-4 grid gap-3">
+          <MetricCard label="Review" value={inventoryReviewLabel(inventoryReviewState(data.asset))} detail={inventoryReviewDetail(data.asset) || "current review state"} intent={inventoryReviewState(data.asset) === "needs_review" || inventoryReviewState(data.asset) === "reported_issue" ? "warning" : "neutral"} />
+          <MetricCard label="Accountability" value={inventoryAccountability(data.asset).label} detail={inventoryAccountability(data.asset).principal || "derived from inventory evidence"} intent={inventoryAccountability(data.asset).state === "required_missing" ? "warning" : "neutral"} />
           <MetricCard label="Risk score" value={data.asset.risk_score ?? 0} detail={humanize(data.asset.risk_level)} intent={(data.asset.risk_score ?? 0) >= 70 ? "danger" : "neutral"} />
-          <MetricCard label="Scope" value={scopeState(data.asset) === "out_of_scope" ? "Excluded" : "In"} detail={data.asset.scope_reason || "active inventory state"} intent={scopeState(data.asset) === "out_of_scope" ? "warning" : "success"} />
+          <MetricCard label="Scope" value={scopeState(data.asset) === "out_of_scope" ? "Scoped out" : "In"} detail={data.asset.scope_reason || "active inventory state"} intent={scopeState(data.asset) === "out_of_scope" ? "warning" : "success"} />
         </div>
         <dl className="divide-y divide-[color:var(--border)]">
           <DetailRow label="Last updated" value={displayDate(attr(data.asset, "updated_at", "last_seen_at", "last_synced_at"))} />
@@ -393,6 +396,7 @@ export default function InventoryAssetPage() {
       body: JSON.stringify({
         asset_urn: asset.urn,
         source_id: asset.source_id,
+        runtime_id: asset.runtime_id,
         scope_state: nextState,
         reason: nextState === "out_of_scope" ? "Scoped out from asset review" : "Scoped into asset review",
       }),
