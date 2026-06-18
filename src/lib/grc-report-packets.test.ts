@@ -4,12 +4,13 @@ import { redactReportGraph, redactReportIdentifier, redactReportText, reportRead
 
 describe("GRC report packet helpers", () => {
   it("redacts sensitive packet identifiers in share-safe mode", () => {
+    const longNumericID = "1234".repeat(3);
     const body = [
       "Entity: urn:cerebro:tenant:aws_s3_bucket:customer-data",
       "Owner: reviewer@example.com",
       "Finding: finding-secret-123",
       "Hash: 0123456789abcdef0123456789abcdef",
-      "Account: 123456789012",
+      `Account: ${longNumericID}`,
       "Host: internal-api.dev.example.com",
     ].join("\n");
 
