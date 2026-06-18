@@ -128,6 +128,72 @@ export type GRCControlReadiness = {
   missing_fields?: string[];
 };
 
+export type GRCReportReadinessBlocker = {
+  code: string;
+  label: string;
+  count?: number;
+};
+
+export type GRCReportReadiness = {
+  status: string;
+  score: number;
+  summary?: string;
+  blockers?: GRCReportReadinessBlocker[];
+};
+
+export type GRCReportProvenance = {
+  report_type: string;
+  profile_id?: string;
+  profile_name?: string;
+  packet_version?: string;
+  generated_at: string;
+  control_count?: number;
+  finding_count?: number;
+  evidence_count?: number;
+  runtime_count?: number;
+  source_ids?: string[];
+};
+
+export type GRCReportScopeExclusions = {
+  total: number;
+  runtime_ids?: string[];
+  excluded_families?: string[];
+  excluded_asset_classes?: string[];
+  excluded_kinds?: string[];
+  excluded_resource_urns?: string[];
+  excluded_resources?: Array<{ urn?: string; type?: string; id?: string; reason?: string }>;
+  applied_to_incremental_fetch: boolean;
+  filtered_before_graph_projection: boolean;
+};
+
+export type GRCReportIncrementalFetch = {
+  status: string;
+  policy_applied_before_read: boolean;
+  event_filtering_before_projection: boolean;
+  summary?: string;
+};
+
+export type GRCReportScope = {
+  source_ids?: string[];
+  runtime_ids?: string[];
+  exclusions: GRCReportScopeExclusions;
+  incremental_fetch: GRCReportIncrementalFetch;
+};
+
+export type GRCReportRedaction = {
+  default_mode: "share_safe" | "internal" | string;
+  available_modes?: string[];
+  sensitive_fields?: string[];
+  summary?: string;
+};
+
+export type GRCReportMetadata = {
+  readiness: GRCReportReadiness;
+  provenance: GRCReportProvenance;
+  scope: GRCReportScope;
+  redaction: GRCReportRedaction;
+};
+
 export type GRCControlCoverageSummary = {
   selected_controls: number;
   mapped_controls: number;
@@ -422,6 +488,7 @@ export type GRCAuditPacket = {
   graph?: GRCGraph;
   controls?: GRCControlRef[];
   recommended_action: string;
+  metadata?: GRCReportMetadata;
   generated_at: string;
 };
 
@@ -501,6 +568,17 @@ export type GRCControlPacketControl = {
     expectations?: GRCControlEvidenceExpectationPosture[];
     items?: GRCControlEvidencePacketItem[];
   };
+  audit_readiness?: {
+    score: number;
+    rating: string;
+    summary?: string;
+    open_findings?: number;
+    evidence_items?: number;
+    required_expectations?: number;
+    missing_evidence?: number;
+    stale_evidence?: number;
+    manual_evidence?: number;
+  };
   overrides?: {
     exception_ids?: string[];
     not_applicable_ids?: string[];
@@ -519,6 +597,7 @@ export type GRCControlEvidencePacketResponse = {
   profile: GRCControlPacketProfile;
   packet: GRCControlEvidencePacket;
   controls: GRCControl[];
+  metadata?: GRCReportMetadata;
   generated_at: string;
 };
 

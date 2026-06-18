@@ -113,6 +113,17 @@ export const grcPath = (path: string, params: Record<string, string | number | u
   return queryString ? `${path}?${queryString}` : path;
 };
 
+const cerebroErrorMessage = (path: string, response: Awaited<ReturnType<typeof fetchCerebro>>) => {
+  if (typeof response.data === "object" && response.data && "error" in response.data) {
+    const error = String((response.data as { error?: unknown }).error ?? "").trim();
+    if (error) return `${error} (${response.status})`;
+  }
+  if (typeof response.data === "string" && response.data.trim()) {
+    return `Cerebro API ${path} failed (${response.status}): ${response.data.trim()}`;
+  }
+  return `Cerebro API ${path} failed (${response.status})`;
+};
+
 export function useDebouncedValue<T>(value: T, delayMs = 300) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -164,11 +175,7 @@ export function useGRCQuery<T>(path: string | null) {
     }
     setDurationMs(Math.round(performance.now() - startedAt));
     if (!response.ok) {
-      const message =
-        typeof response.data === "string" && response.data
-          ? response.data
-          : `Cerebro request failed (${response.status})`;
-      setError(message);
+      setError(cerebroErrorMessage(path, response));
       setLoading(false);
       return;
     }
