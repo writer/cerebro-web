@@ -76,7 +76,7 @@ describe("cerebro proxy cache headers", () => {
       return new Response("{}", { status: 200 });
     }));
     const writes = captureStderr(async () => {
-      await fetchCerebro(new URL("https://api.example.test/grc/findings?token=secret"), {
+      await fetchCerebro(new URL("https://api.example.com/grc/findings?debug=secret"), {
         headers: {
           authorization: "Bearer secret-token",
         },
@@ -89,7 +89,7 @@ describe("cerebro proxy cache headers", () => {
     const output = (await writes).join("");
     expect(output).toContain("\"name\":\"cerebro.upstream.fetch\"");
     expect(output).not.toContain("Bearer secret-token");
-    expect(output).not.toContain("token=secret");
+    expect(output).not.toContain("debug=secret");
   });
 });
 
