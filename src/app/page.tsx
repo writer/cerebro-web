@@ -13,6 +13,11 @@ import { prefetchTopFindings } from "@/lib/grc-prefetch";
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
 const HOME_DASHBOARD_FINDING_LIMIT = 12;
 
+const connectorLagLabel = (label: string, seconds?: number) => {
+  const duration = displayDurationSeconds(seconds);
+  return duration === "—" ? `${label} not observed` : `${label} ${duration} ago`;
+};
+
 function SeverityDonut({ critical, high, medium, low }: { critical: number; high: number; medium: number; low: number }) {
   const total = critical + high + medium + low;
   if (total === 0) return null;
@@ -218,7 +223,7 @@ export default function Home() {
                       <div>
                         <div className="text-[13px] font-medium text-slate-900">{c.source_id || shortEntity(c.runtime_id)}</div>
                         <div className="text-[12px] text-slate-500">
-                          sync {displayDurationSeconds(c.sync_lag_seconds)} ago · data {displayDurationSeconds(c.watermark_lag_seconds)} ago
+                          {connectorLagLabel("sync", c.sync_lag_seconds)} · {connectorLagLabel("data", c.watermark_lag_seconds)}
                         </div>
                       </div>
                       <Badge value={c.status} />

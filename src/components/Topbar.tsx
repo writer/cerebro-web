@@ -22,6 +22,7 @@ export default function Topbar() {
   const [showKey, setShowKey] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
   const [showIdentity, setShowIdentity] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [config, setConfig] = useState<ConsoleConfig | null>(null);
 
   useEffect(() => {
@@ -102,8 +103,14 @@ export default function Topbar() {
         </button>
         <button
           type="button"
-          className="rounded-md p-1.5 text-[var(--text-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+          onClick={() => {
+            setShowNotifications((prev) => !prev);
+            setShowIdentity(false);
+            setShowConnection(false);
+          }}
+          className={`rounded-md p-1.5 transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] ${showNotifications ? "bg-[var(--surface-hover)] text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
           aria-label="Notifications"
+          aria-expanded={showNotifications}
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022 23.848 23.848 0 0 0 5.455 1.31m5.714 0a3 3 0 1 1-5.714 0" />
@@ -114,6 +121,7 @@ export default function Topbar() {
           onClick={() => {
             setShowIdentity((prev) => !prev);
             setShowConnection(false);
+            setShowNotifications(false);
           }}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[12px] font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
           aria-label={`Current user: ${identity.displayName}`}
@@ -126,12 +134,33 @@ export default function Topbar() {
           onClick={() => {
             setShowConnection((prev) => !prev);
             setShowIdentity(false);
+            setShowNotifications(false);
           }}
           className="secondary-button px-3 py-1.5 text-[13px] max-md:hidden"
         >
           Settings
         </button>
       </div>
+
+      {showNotifications && (
+        <div className="surface-raised absolute right-24 top-16 z-50 mt-1 w-[320px] p-4 max-md:right-3">
+          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--border)] pb-3">
+            <div>
+              <div className="text-[14px] font-semibold text-[var(--text-primary)]">Notifications</div>
+              <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Nothing needs attention right now.</div>
+            </div>
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          </div>
+          <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">
+            No notifications
+          </div>
+          <div className="flex justify-end border-t border-[color:var(--border)] pt-3">
+            <button type="button" onClick={() => setShowNotifications(false)} className="text-[12px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {showIdentity && (
         <div className="surface-raised absolute right-6 top-16 z-50 mt-1 w-[380px] p-4">
