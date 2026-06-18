@@ -14,10 +14,16 @@ export type LogsInsightsField = {
   value?: string;
 };
 
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonRecord = Record<string, JsonValue>;
+
 export type AuditLogEvent = {
   id: string;
   timestamp: string;
+  ingestionTime: string;
   logGroup: string;
+  logStream: string;
+  pointer: string;
   service: string;
   name: string;
   kind: string;
@@ -26,6 +32,7 @@ export type AuditLogEvent = {
   durationMs: number | null;
   traceId: string;
   spanId: string;
+  parentSpanId: string;
   runtimeId: string;
   sourceId: string;
   phase: string;
@@ -36,7 +43,17 @@ export type AuditLogEvent = {
   eventsRead: number | null;
   entitiesProjected: number | null;
   linksProjected: number | null;
+  jobId: string;
+  jobKind: string;
+  jobStatus: string;
+  jobSubjectType: string;
+  jobSubjectId: string;
+  queueLatencyMs: number | null;
+  runDurationMs: number | null;
   attributes: Record<string, string | number | boolean | null>;
+  fields: Record<string, string>;
+  rawEvent: JsonRecord;
+  rawMessage: string;
 };
 
 export type AuditLogSummary = {
@@ -57,10 +74,14 @@ const DEFAULT_MINUTES = 60;
 
 const visibleFields = [
   "@timestamp",
+  "@ingestionTime",
   "@log",
+  "@logStream",
+  "@ptr",
   "@message",
   "kind",
   "name",
+  "main",
   "status",
   "service",
   "`service.name`",
@@ -79,10 +100,23 @@ const visibleFields = [
   "`http.route`",
   "`http.response.status_code`",
   "`dependency.name`",
+  "`dependency.last_system`",
+  "`dependency.last_status`",
   "error_kind",
   "events_read",
   "entities_projected",
   "links_projected",
+  "`job.id`",
+  "`job.kind`",
+  "`job.status`",
+  "`job.status.final`",
+  "`job.subject_type`",
+  "`job.subject_id`",
+  "`job.queue_latency_ms`",
+  "`job.run_duration_ms`",
+  "`job.payload.key_count`",
+  "`job.result.key_count`",
+  "`job.result_ref.key_count`",
 ];
 
 export const auditLogWindowMinutes = (value: unknown) => clampInteger(value, DEFAULT_MINUTES, 5, MAX_MINUTES);
@@ -135,7 +169,8 @@ export function buildWideEventLogsInsightsQuery(filters: AuditLogFilters = {}) {
 export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] {
   return rows.map((row, index) => {
     const fields = rowFields(row);
-    const message = parseJSONRecord(fields["@message"]);
+    const rawMessage = typeof fields["@message"] === "string" ? fields["@message"] : "";
+    const message = parseJSONRecord(rawMessage);
     const timestamp = stringValue(fields["@timestamp"]) || stringFrom(message.ts) || "";
     const service = firstString(
       fields["service.name"],
@@ -152,10 +187,13 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
     const sourceId = firstString(fields.source_id, message.source_id);
     const traceId = firstString(fields.trace_id, message.trace_id);
     const spanId = firstString(fields.span_id, message.span_id);
+    const pointer = stringValue(fields["@ptr"]);
     const phase = firstString(fields.phase, message.phase, inferPhase(name));
     const httpStatus = numberValue(fields["http.response.status_code"] ?? valueAt(message, "http.response.status_code"));
+    const jobStatus = firstString(fields["job.status.final"], valueAt(message, "job.status.final"), fields["job.status"], valueAt(message, "job.status"));
     const event = {
       id: [
+        pointer,
         timestamp,
         traceId,
         spanId,
@@ -163,7 +201,10 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
         index,
       ].filter(Boolean).join(":"),
       timestamp,
+      ingestionTime: stringValue(fields["@ingestionTime"]),
       logGroup: stringValue(fields["@log"]),
+      logStream: stringValue(fields["@logStream"]),
+      pointer,
       service,
       name,
       kind,
@@ -172,17 +213,28 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
       durationMs: numberValue(fields.duration_ms ?? message.duration_ms),
       traceId,
       spanId,
+      parentSpanId: firstString(fields.parent_span_id, message.parent_span_id),
       runtimeId,
       sourceId,
       phase,
       httpRoute: firstString(fields["http.route"], valueAt(message, "http.route")),
       httpStatus,
-      dependency: firstString(fields["dependency.name"], valueAt(message, "dependency.name")),
+      dependency: firstString(fields["dependency.name"], valueAt(message, "dependency.name"), fields["dependency.last_system"], valueAt(message, "dependency.last_system")),
       errorKind: firstString(fields.error_kind, message.error_kind),
       eventsRead: numberValue(fields.events_read ?? message.events_read),
       entitiesProjected: numberValue(fields.entities_projected ?? message.entities_projected),
       linksProjected: numberValue(fields.links_projected ?? message.links_projected),
-      attributes: selectedAttributes(message),
+      jobId: firstString(fields["job.id"], valueAt(message, "job.id")),
+      jobKind: firstString(fields["job.kind"], valueAt(message, "job.kind")),
+      jobStatus,
+      jobSubjectType: firstString(fields["job.subject_type"], valueAt(message, "job.subject_type")),
+      jobSubjectId: firstString(fields["job.subject_id"], valueAt(message, "job.subject_id")),
+      queueLatencyMs: numberValue(fields["job.queue_latency_ms"] ?? valueAt(message, "job.queue_latency_ms")),
+      runDurationMs: numberValue(fields["job.run_duration_ms"] ?? valueAt(message, "job.run_duration_ms")),
+      attributes: scalarAttributes(message),
+      fields,
+      rawEvent: message,
+      rawMessage,
     };
     return event;
   });
@@ -232,13 +284,13 @@ const rowFields = (row: LogsInsightsField[]) =>
       .map((field) => [String(field.field), field.value ?? ""]),
   ) as Record<string, string>;
 
-const parseJSONRecord = (value: unknown): Record<string, unknown> => {
+const parseJSONRecord = (value: unknown): JsonRecord => {
   if (typeof value !== "string") {
     return {};
   }
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as JsonRecord : {};
   } catch {
     return {};
   }
@@ -289,39 +341,27 @@ const inferPhase = (name: string) => {
   return "";
 };
 
-const selectedAttributes = (message: Record<string, unknown>) => {
-  const keys = [
-    "wide_event.schema.version",
-    "wide_event.contract",
-    "event.dataset",
-    "http.method",
-    "http.route",
-    "http.response.status_code",
-    "dependency.name",
-    "dependency.operation",
-    "source_runtime_id",
-    "runtime_id",
-    "source_id",
-    "tenant_id",
-    "phase.source_read.status",
-    "phase.graph_ingest.status",
-    "phase.finding_rules.status",
-    "phase.graph_rules.status",
-    "events_read",
-    "records_accepted",
-    "entities_projected",
-    "links_projected",
-    "error_kind",
-    "error_fingerprint",
-  ];
+const scalarAttributes = (message: JsonRecord) => {
   const attributes: Record<string, string | number | boolean | null> = {};
-  keys.forEach((key) => {
-    const value = valueAt(message, key);
+  Object.entries(flattenRecord(message)).forEach(([key, value]) => {
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
       attributes[key] = value;
     }
   });
   return attributes;
+};
+
+const flattenRecord = (record: JsonRecord, prefix = ""): Record<string, JsonValue> => {
+  const out: Record<string, JsonValue> = {};
+  Object.entries(record).forEach(([key, value]) => {
+    const nextKey = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      Object.assign(out, flattenRecord(value as JsonRecord, nextKey));
+      return;
+    }
+    out[nextKey] = value;
+  });
+  return out;
 };
 
 const topCounts = (values: string[], limit: number) => {

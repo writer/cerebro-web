@@ -1,10 +1,10 @@
 "use client";
 
-import { Activity, DatabaseZap, RefreshCw, Search, ServerCog, TimerReset, XCircle } from "lucide-react";
+import { Activity, Clipboard, DatabaseZap, Eye, FileJson, RefreshCw, Search, ServerCog, TimerReset, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, MetricCard, Panel } from "@/components/grc/Primitives";
-import type { AuditLogEvent, AuditLogSummary } from "@/lib/audit-log";
+import type { AuditLogEvent, AuditLogSummary, JsonRecord } from "@/lib/audit-log";
 
 type AuditLogResponse = {
   error?: string;
@@ -49,6 +49,7 @@ export default function AuditLogWorkbench() {
   const [response, setResponse] = useState<AuditLogResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<AuditLogEvent | null>(null);
 
   const load = useCallback(async (nextFilters: Filters) => {
     setLoading(true);
@@ -85,6 +86,7 @@ export default function AuditLogWorkbench() {
   }, [load]);
 
   const events = response?.events ?? [];
+  const selectedVisibleEvent = selectedEvent && events.some((event) => event.id === selectedEvent.id) ? selectedEvent : null;
   const summary = response?.summary ?? emptySummary;
   const appliedFilters = useMemo(() => [
     { label: "Query", value: filters.query, onClear: () => setFilters((current) => ({ ...current, query: "" })) },
@@ -213,7 +215,15 @@ export default function AuditLogWorkbench() {
       >
         {events.length === 0 && !loading && <EmptyBlock label="No wide events matched the current filters." />}
         {loading && <div className="text-[13px] text-[var(--text-muted)]">Loading events...</div>}
-        {events.length > 0 && <AuditEventTable events={events} setTrace={(traceId) => update("traceId", traceId)} setRuntime={(runtimeId) => update("runtimeId", runtimeId)} />}
+        {events.length > 0 && (
+          <AuditEventTable
+            events={events}
+            onSelect={setSelectedEvent}
+            selectedEventId={selectedVisibleEvent?.id ?? ""}
+            setTrace={(traceId) => update("traceId", traceId)}
+            setRuntime={(runtimeId) => update("runtimeId", runtimeId)}
+          />
+        )}
         {response?.logGroups && (
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-[var(--text-muted)]">
             <span>{response.region}</span>
@@ -221,6 +231,14 @@ export default function AuditLogWorkbench() {
           </div>
         )}
       </Panel>
+      {selectedVisibleEvent && (
+        <AuditEventDetailDrawer
+          event={selectedVisibleEvent}
+          onClose={() => setSelectedEvent(null)}
+          setRuntime={(runtimeId) => update("runtimeId", runtimeId)}
+          setTrace={(traceId) => update("traceId", traceId)}
+        />
+      )}
     </div>
   );
 }
@@ -271,10 +289,14 @@ function DistributionPanel({
 
 function AuditEventTable({
   events,
+  onSelect,
+  selectedEventId,
   setRuntime,
   setTrace,
 }: {
   events: AuditLogEvent[];
+  onSelect: (event: AuditLogEvent) => void;
+  selectedEventId: string;
   setRuntime: (runtimeId: string) => void;
   setTrace: (traceId: string) => void;
 }) {
@@ -289,11 +311,23 @@ function AuditEventTable({
             <th>Graph</th>
             <th>Trace</th>
             <th>Observed</th>
+            <th>Inspect</th>
           </tr>
         </thead>
         <tbody>
           {events.map((event) => (
-            <tr key={event.id}>
+            <tr
+              key={event.id}
+              className={`cursor-pointer transition hover:bg-[var(--surface-muted)] ${selectedEventId === event.id ? "bg-[var(--surface-muted)]" : ""}`}
+              tabIndex={0}
+              onClick={() => onSelect(event)}
+              onKeyDown={(keyboardEvent) => {
+                if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+                  keyboardEvent.preventDefault();
+                  onSelect(event);
+                }
+              }}
+            >
               <td>
                 <div className="flex items-center gap-2">
                   {event.status === "failed" ? <XCircle className="h-4 w-4 text-red-500" /> : <Activity className="h-4 w-4 text-[var(--text-muted)]" />}
@@ -305,6 +339,7 @@ function AuditEventTable({
                 <div className="mt-1 flex max-w-2xl flex-wrap gap-1.5 text-[11px] text-[var(--text-muted)]">
                   <span>{event.service}</span>
                   {event.phase && <span>{event.phase}</span>}
+                  {event.jobKind && <span className="font-mono">{event.jobKind}</span>}
                   {event.httpRoute && <span className="font-mono">{event.httpRoute}</span>}
                   {event.errorKind && <span className="font-mono text-red-600">{event.errorKind}</span>}
                 </div>
@@ -312,22 +347,24 @@ function AuditEventTable({
               </td>
               <td>
                 {event.runtimeId ? (
-                  <button type="button" onClick={() => setRuntime(event.runtimeId)} className="font-mono text-[12px] text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                  <button type="button" onClick={(clickEvent) => { clickEvent.stopPropagation(); setRuntime(event.runtimeId); }} className="font-mono text-[12px] text-[var(--primary)] hover:text-[var(--primary-hover)]">
                     {event.runtimeId}
                   </button>
                 ) : (
                   <span className="text-[12px] text-[var(--text-muted)]">none</span>
                 )}
                 {event.sourceId && <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{event.sourceId}</div>}
+                {event.jobId && <div className="mt-1 max-w-[12rem] truncate font-mono text-[11px] text-[var(--text-muted)]">{event.jobId}</div>}
               </td>
               <td>
                 <div className="font-mono text-[12px] text-[var(--text-primary)]">{formatNullableNumber(event.entitiesProjected)} entities</div>
                 <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{formatNullableNumber(event.linksProjected)} links</div>
                 {event.eventsRead !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{event.eventsRead} read</div>}
+                {event.runDurationMs !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">job {formatMilliseconds(event.runDurationMs)}</div>}
               </td>
               <td>
                 {event.traceId ? (
-                  <button type="button" onClick={() => setTrace(event.traceId)} className="max-w-[11rem] truncate font-mono text-[12px] text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                  <button type="button" onClick={(clickEvent) => { clickEvent.stopPropagation(); setTrace(event.traceId); }} className="max-w-[11rem] truncate font-mono text-[12px] text-[var(--primary)] hover:text-[var(--primary-hover)]">
                     {event.traceId}
                   </button>
                 ) : (
@@ -336,11 +373,173 @@ function AuditEventTable({
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{formatMilliseconds(event.durationMs)}</div>
               </td>
               <td>{displayTimestamp(event.timestamp)}</td>
+              <td>
+                <button
+                  type="button"
+                  onClick={(clickEvent) => { clickEvent.stopPropagation(); onSelect(event); }}
+                  className="secondary-button inline-flex items-center gap-1.5 px-2 py-1 text-[11px]"
+                  data-testid="audit-log-inspect-event"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Open
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function AuditEventDetailDrawer({
+  event,
+  onClose,
+  setRuntime,
+  setTrace,
+}: {
+  event: AuditLogEvent;
+  onClose: () => void;
+  setRuntime: (runtimeId: string) => void;
+  setTrace: (traceId: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const rawJSON = useMemo(() => formatJSON(event.rawEvent), [event.rawEvent]);
+  const fieldRows = useMemo(
+    () => Object.entries(event.fields)
+      .filter(([key]) => key !== "@message")
+      .sort(([left], [right]) => left.localeCompare(right)),
+    [event.fields],
+  );
+  const attributeRows = useMemo(
+    () => Object.entries(event.attributes).sort(([left], [right]) => left.localeCompare(right)),
+    [event.attributes],
+  );
+  const copyRaw = async () => {
+    await navigator.clipboard.writeText(rawJSON);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/25" role="dialog" aria-modal="true" data-testid="audit-log-event-detail">
+      <button type="button" aria-label="Close event detail" className="absolute inset-0 cursor-default" onClick={onClose} />
+      <div className="relative flex h-full w-full max-w-5xl flex-col border-l border-[color:var(--border)] bg-[var(--background)] shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[color:var(--border)] px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <FileJson className="h-4 w-4 text-[var(--text-muted)]" />
+              <h2 className="truncate text-[15px] font-semibold text-[var(--text-primary)]">{event.name}</h2>
+              <Badge value={event.status} />
+            </div>
+            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-[var(--text-muted)]">
+              <span>{event.service}</span>
+              {event.kind && <span>{event.kind}</span>}
+              {event.outcome && <span>{event.outcome}</span>}
+              {event.jobKind && <span className="font-mono">{event.jobKind}</span>}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={copyRaw} className="secondary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px]">
+              <Clipboard className="h-3.5 w-3.5" />
+              {copied ? "Copied" : "Copy JSON"}
+            </button>
+            <button type="button" onClick={onClose} className="secondary-button inline-flex items-center gap-1.5 px-2 py-1.5 text-[12px]" aria-label="Close event detail">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <DetailTile label="Observed" value={displayTimestamp(event.timestamp)} />
+            <DetailTile label="Ingested" value={displayTimestamp(event.ingestionTime)} />
+            <DetailTile label="Duration" value={formatMilliseconds(event.durationMs)} />
+            <DetailTile label="Trace" value={event.traceId || "none"} mono action={event.traceId ? () => setTrace(event.traceId) : undefined} />
+            <DetailTile label="Span" value={event.spanId || "none"} mono />
+            <DetailTile label="Parent span" value={event.parentSpanId || "none"} mono />
+            <DetailTile label="Runtime" value={event.runtimeId || "none"} mono action={event.runtimeId ? () => setRuntime(event.runtimeId) : undefined} />
+            <DetailTile label="Source" value={event.sourceId || "none"} mono />
+            <DetailTile label="HTTP" value={event.httpRoute || String(event.httpStatus ?? "none")} mono />
+            <DetailTile label="Dependency" value={event.dependency || "none"} mono />
+            <DetailTile label="Job" value={event.jobId || "none"} mono />
+            <DetailTile label="Job kind" value={event.jobKind || "none"} mono />
+            <DetailTile label="Job status" value={event.jobStatus || "none"} />
+            <DetailTile label="Job subject" value={[event.jobSubjectType, event.jobSubjectId].filter(Boolean).join(" / ") || "none"} mono />
+            <DetailTile label="Queue latency" value={formatMilliseconds(event.queueLatencyMs)} />
+            <DetailTile label="Job duration" value={formatMilliseconds(event.runDurationMs)} />
+            <DetailTile label="Log stream" value={event.logStream || "none"} mono />
+            <DetailTile label="CloudWatch ptr" value={event.pointer || "none"} mono />
+          </div>
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
+            <section className="min-w-0 rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+              <div className="border-b border-[color:var(--border)] px-4 py-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Raw wide event JSON
+              </div>
+              <pre className="max-h-[42rem] overflow-auto p-4 text-[11px] leading-5 text-[var(--text-primary)]">{rawJSON}</pre>
+            </section>
+
+            <div className="space-y-5">
+              <KeyValueSection title={`Attributes (${attributeRows.length})`} rows={attributeRows.map(([key, value]) => [key, stringifyValue(value)])} />
+              <KeyValueSection title={`CloudWatch fields (${fieldRows.length})`} rows={fieldRows.map(([key, value]) => [key, value])} />
+              <section className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+                <div className="border-b border-[color:var(--border)] px-4 py-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Raw message
+                </div>
+                <pre className="max-h-56 overflow-auto break-all p-4 text-[11px] leading-5 text-[var(--text-primary)] whitespace-pre-wrap">{event.rawMessage}</pre>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailTile({
+  action,
+  label,
+  mono,
+  value,
+}: {
+  action?: () => void;
+  label: string;
+  mono?: boolean;
+  value: string;
+}) {
+  const content = (
+    <>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+      <div className={`mt-1 truncate text-[12px] text-[var(--text-primary)] ${mono ? "font-mono" : ""}`}>{value}</div>
+    </>
+  );
+  if (!action) {
+    return <div className="min-w-0 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">{content}</div>;
+  }
+  return (
+    <button type="button" onClick={action} className="min-w-0 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2 text-left transition hover:border-[var(--primary)]">
+      {content}
+    </button>
+  );
+}
+
+function KeyValueSection({ rows, title }: { rows: [string, string][]; title: string }) {
+  return (
+    <section className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+      <div className="border-b border-[color:var(--border)] px-4 py-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+        {title}
+      </div>
+      <div className="max-h-96 overflow-auto p-3">
+        {rows.length === 0 && <div className="px-1 py-2 text-[12px] text-[var(--text-muted)]">None</div>}
+        {rows.map(([key, value]) => (
+          <div key={key} className="grid gap-2 border-b border-[color:var(--border)] py-2 last:border-0 md:grid-cols-[minmax(130px,0.45fr)_minmax(0,1fr)]">
+            <div className="min-w-0 truncate font-mono text-[11px] text-[var(--text-muted)]" title={key}>{key}</div>
+            <div className="min-w-0 break-words font-mono text-[11px] text-[var(--text-primary)]">{value}</div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -398,3 +597,7 @@ const displayTimestamp = (value: string) => {
     month: "short",
   }).format(parsed);
 };
+
+const stringifyValue = (value: string | number | boolean | null) => value === null ? "null" : String(value);
+
+const formatJSON = (value: JsonRecord) => JSON.stringify(value, null, 2);

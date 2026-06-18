@@ -20,6 +20,8 @@ describe("audit log wide-event helpers", () => {
     });
 
     expect(query).toContain('`event.dataset` = "cerebro.wide_events"');
+    expect(query).toContain("@ptr");
+    expect(query).toContain("`job.id`");
     expect(query).toContain('runtime_id = "writer-okta-audit"');
     expect(query).toContain('service = "cerebro"');
     expect(query).toContain('status = "failed"');
@@ -42,6 +44,8 @@ describe("audit log wide-event helpers", () => {
       [
         { field: "@timestamp", value: "2026-06-18 15:20:00.000" },
         { field: "@log", value: "aws-account:/ecs/cerebro-sec-dev" },
+        { field: "@logStream", value: "api/cerebro/abc" },
+        { field: "@ptr", value: "ptr-a" },
         {
           field: "@message",
           value: JSON.stringify({
@@ -59,6 +63,11 @@ describe("audit log wide-event helpers", () => {
             entities_projected: 72,
             links_projected: 110,
             error_kind: "ingest_failed",
+            "job.id": "job-a",
+            "job.kind": "source_runtime_orchestrate",
+            "job.status.final": "failed",
+            "job.queue_latency_ms": 2000,
+            nested: { detail: "kept" },
           }),
         },
       ],
@@ -93,7 +102,17 @@ describe("audit log wide-event helpers", () => {
       entitiesProjected: 72,
       linksProjected: 110,
       errorKind: "ingest_failed",
+      jobId: "job-a",
+      jobKind: "source_runtime_orchestrate",
+      jobStatus: "failed",
+      queueLatencyMs: 2000,
+      logStream: "api/cerebro/abc",
+      pointer: "ptr-a",
     });
+    expect(events[0].rawEvent["job.id"]).toBe("job-a");
+    expect(events[0].rawMessage).toContain("orchestrator.run");
+    expect(events[0].fields["@ptr"]).toBe("ptr-a");
+    expect(events[0].attributes["nested.detail"]).toBe("kept");
     expect(events[1]).toMatchObject({
       service: "cerebro-web",
       httpRoute: "/grc/dashboard",
