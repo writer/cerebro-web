@@ -1,0 +1,400 @@
+"use client";
+
+import { Activity, DatabaseZap, RefreshCw, Search, ServerCog, TimerReset, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, MetricCard, Panel } from "@/components/grc/Primitives";
+import type { AuditLogEvent, AuditLogSummary } from "@/lib/audit-log";
+
+type AuditLogResponse = {
+  error?: string;
+  events?: AuditLogEvent[];
+  logGroups?: string[];
+  queryId?: string;
+  queryString?: string;
+  region?: string;
+  status?: string;
+  summary?: AuditLogSummary;
+  window?: {
+    endTime: string;
+    minutes: number;
+    startTime: string;
+  };
+};
+
+type Filters = {
+  limit: string;
+  minutes: string;
+  query: string;
+  runtimeId: string;
+  service: string;
+  sourceId: string;
+  status: string;
+  traceId: string;
+};
+
+const defaultFilters: Filters = {
+  limit: "100",
+  minutes: "60",
+  query: "",
+  runtimeId: "",
+  service: "",
+  sourceId: "",
+  status: "",
+  traceId: "",
+};
+
+export default function AuditLogWorkbench() {
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
+  const [response, setResponse] = useState<AuditLogResponse | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (nextFilters: Filters) => {
+    setLoading(true);
+    setError("");
+    const params = new URLSearchParams();
+    params.set("minutes", nextFilters.minutes);
+    params.set("limit", nextFilters.limit);
+    if (nextFilters.query.trim()) params.set("q", nextFilters.query.trim());
+    if (nextFilters.runtimeId.trim()) params.set("runtime_id", nextFilters.runtimeId.trim());
+    if (nextFilters.service.trim()) params.set("service", nextFilters.service.trim());
+    if (nextFilters.sourceId.trim()) params.set("source_id", nextFilters.sourceId.trim());
+    if (nextFilters.status.trim()) params.set("status", nextFilters.status.trim());
+    if (nextFilters.traceId.trim()) params.set("trace_id", nextFilters.traceId.trim());
+
+    try {
+      const result = await fetch(`/api/audit-log?${params.toString()}`, { cache: "no-store" });
+      const payload = await result.json() as AuditLogResponse;
+      if (!result.ok) {
+        throw new Error(payload.error || `Audit log request failed with ${result.status}`);
+      }
+      setResponse(payload);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Audit log request failed.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load(defaultFilters);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  const events = response?.events ?? [];
+  const summary = response?.summary ?? emptySummary;
+  const appliedFilters = useMemo(() => [
+    { label: "Query", value: filters.query, onClear: () => setFilters((current) => ({ ...current, query: "" })) },
+    { label: "Runtime", value: filters.runtimeId, onClear: () => setFilters((current) => ({ ...current, runtimeId: "" })) },
+    { label: "Source", value: filters.sourceId, onClear: () => setFilters((current) => ({ ...current, sourceId: "" })) },
+    { label: "Service", value: filters.service, onClear: () => setFilters((current) => ({ ...current, service: "" })) },
+    { label: "Status", value: filters.status, onClear: () => setFilters((current) => ({ ...current, status: "" })) },
+    { label: "Trace", value: filters.traceId, onClear: () => setFilters((current) => ({ ...current, traceId: "" })) },
+  ], [filters]);
+
+  const update = (key: keyof Filters, value: string) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <Panel
+        title="Wide Event Query"
+        action={(
+          <button
+            type="button"
+            onClick={() => void load(filters)}
+            className="secondary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px]"
+            disabled={loading}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        )}
+      >
+        <div className="grid gap-3 lg:grid-cols-[1.5fr_repeat(5,minmax(0,1fr))]">
+          <label className={labelClass}>
+            Search
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input value={filters.query} onChange={(event) => update("query", event.target.value)} className={`${inputClass} pl-8`} />
+            </div>
+          </label>
+          <label className={labelClass}>
+            Runtime
+            <input value={filters.runtimeId} onChange={(event) => update("runtimeId", event.target.value)} className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Source
+            <input value={filters.sourceId} onChange={(event) => update("sourceId", event.target.value)} className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Service
+            <select data-testid="audit-log-service-filter" value={filters.service} onChange={(event) => update("service", event.target.value)} className={inputClass}>
+              <option value="">All</option>
+              <option value="cerebro">cerebro</option>
+              <option value="cerebro-api">cerebro-api</option>
+              <option value="cerebro-web">cerebro-web</option>
+            </select>
+          </label>
+          <label className={labelClass}>
+            Status
+            <select data-testid="audit-log-status-filter" value={filters.status} onChange={(event) => update("status", event.target.value)} className={inputClass}>
+              <option value="">All</option>
+              <option value="completed">completed</option>
+              <option value="failed">failed</option>
+              <option value="cancelled">cancelled</option>
+              <option value="timeout">timeout</option>
+            </select>
+          </label>
+          <label className={labelClass}>
+            Window
+            <select data-testid="audit-log-window-filter" value={filters.minutes} onChange={(event) => update("minutes", event.target.value)} className={inputClass}>
+              <option value="15">15m</option>
+              <option value="60">1h</option>
+              <option value="180">3h</option>
+              <option value="720">12h</option>
+              <option value="1440">24h</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto]">
+          <label className={labelClass}>
+            Trace
+            <input value={filters.traceId} onChange={(event) => update("traceId", event.target.value)} className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Limit
+            <select data-testid="audit-log-limit-filter" value={filters.limit} onChange={(event) => update("limit", event.target.value)} className={inputClass}>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="500">500</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => void load(filters)}
+            className="primary-button mt-5 inline-flex items-center justify-center gap-1.5 px-4 py-2 text-[13px]"
+            disabled={loading}
+            data-testid="audit-log-run-query"
+          >
+            <Activity className="h-3.5 w-3.5" />
+            Run
+          </button>
+        </div>
+        <AppliedFilterChips
+          filters={appliedFilters}
+          onClearAll={() => setFilters((current) => ({ ...defaultFilters, minutes: current.minutes, limit: current.limit }))}
+        />
+      </Panel>
+
+      {error && <ErrorBlock error={error} onRetry={() => void load(filters)} />}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Events" value={summary.total} detail={response?.status || (loading ? "loading" : "complete")} state={loading ? "loading" : "ready"} />
+        <MetricCard label="Failures" value={summary.failures} detail={`${Math.round(summary.failureRate * 100)}% of matched events`} intent={summary.failures > 0 ? "danger" : "success"} state={loading ? "loading" : "ready"} />
+        <MetricCard label="Average latency" value={formatMilliseconds(summary.averageDurationMs)} detail="span duration" state={loading ? "loading" : "ready"} />
+        <MetricCard label="p95 latency" value={formatMilliseconds(summary.p95DurationMs)} detail="span duration" state={loading ? "loading" : "ready"} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <DistributionPanel title="Services" icon={<ServerCog className="h-4 w-4" />} rows={summary.services} total={summary.total} />
+        <DistributionPanel title="Runtimes" icon={<DatabaseZap className="h-4 w-4" />} rows={summary.runtimes} total={summary.total} onSelect={(runtimeId) => update("runtimeId", runtimeId)} />
+        <DistributionPanel title="Phases" icon={<TimerReset className="h-4 w-4" />} rows={summary.phases} total={summary.total} />
+      </div>
+
+      <Panel
+        title="Event Timeline"
+        action={response?.queryId ? <span className="font-mono text-[11px] text-[var(--text-muted)]">{response.queryId}</span> : null}
+      >
+        {events.length === 0 && !loading && <EmptyBlock label="No wide events matched the current filters." />}
+        {loading && <div className="text-[13px] text-[var(--text-muted)]">Loading events...</div>}
+        {events.length > 0 && <AuditEventTable events={events} setTrace={(traceId) => update("traceId", traceId)} setRuntime={(runtimeId) => update("runtimeId", runtimeId)} />}
+        {response?.logGroups && (
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-[var(--text-muted)]">
+            <span>{response.region}</span>
+            {response.logGroups.map((group) => <span key={group} className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono">{group}</span>)}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function DistributionPanel({
+  icon,
+  onSelect,
+  rows,
+  title,
+  total,
+}: {
+  icon: React.ReactNode;
+  onSelect?: (value: string) => void;
+  rows: { label: string; count: number }[];
+  title: string;
+  total: number;
+}) {
+  return (
+    <Panel title={title} action={<span className="text-[var(--text-muted)]">{icon}</span>}>
+      <div className="space-y-3">
+        {rows.length === 0 && <EmptyBlock label="No values observed." />}
+        {rows.map((row) => {
+          const percent = total > 0 ? Math.round((row.count / total) * 100) : 0;
+          const content = (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate font-mono text-[12px] text-[var(--text-primary)]">{row.label}</span>
+                <span className="shrink-0 text-[12px] text-[var(--text-muted)]">{row.count}</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: `${percent}%` }} />
+              </div>
+            </>
+          );
+          if (!onSelect) {
+            return <div key={row.label}>{content}</div>;
+          }
+          return (
+            <button key={row.label} type="button" onClick={() => onSelect(row.label)} className="block w-full text-left">
+              {content}
+            </button>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+function AuditEventTable({
+  events,
+  setRuntime,
+  setTrace,
+}: {
+  events: AuditLogEvent[];
+  setRuntime: (runtimeId: string) => void;
+  setTrace: (traceId: string) => void;
+}) {
+  return (
+    <div data-testid="audit-log-event-table" className="overflow-x-auto rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Event</th>
+            <th>Runtime</th>
+            <th>Graph</th>
+            <th>Trace</th>
+            <th>Observed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {events.map((event) => (
+            <tr key={event.id}>
+              <td>
+                <div className="flex items-center gap-2">
+                  {event.status === "failed" ? <XCircle className="h-4 w-4 text-red-500" /> : <Activity className="h-4 w-4 text-[var(--text-muted)]" />}
+                  <Badge value={event.status} />
+                </div>
+              </td>
+              <td>
+                <div className="font-medium text-[var(--text-primary)]">{event.name}</div>
+                <div className="mt-1 flex max-w-2xl flex-wrap gap-1.5 text-[11px] text-[var(--text-muted)]">
+                  <span>{event.service}</span>
+                  {event.phase && <span>{event.phase}</span>}
+                  {event.httpRoute && <span className="font-mono">{event.httpRoute}</span>}
+                  {event.errorKind && <span className="font-mono text-red-600">{event.errorKind}</span>}
+                </div>
+                <AttributeDetails event={event} />
+              </td>
+              <td>
+                {event.runtimeId ? (
+                  <button type="button" onClick={() => setRuntime(event.runtimeId)} className="font-mono text-[12px] text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                    {event.runtimeId}
+                  </button>
+                ) : (
+                  <span className="text-[12px] text-[var(--text-muted)]">none</span>
+                )}
+                {event.sourceId && <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{event.sourceId}</div>}
+              </td>
+              <td>
+                <div className="font-mono text-[12px] text-[var(--text-primary)]">{formatNullableNumber(event.entitiesProjected)} entities</div>
+                <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{formatNullableNumber(event.linksProjected)} links</div>
+                {event.eventsRead !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{event.eventsRead} read</div>}
+              </td>
+              <td>
+                {event.traceId ? (
+                  <button type="button" onClick={() => setTrace(event.traceId)} className="max-w-[11rem] truncate font-mono text-[12px] text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                    {event.traceId}
+                  </button>
+                ) : (
+                  <span className="text-[12px] text-[var(--text-muted)]">none</span>
+                )}
+                <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{formatMilliseconds(event.durationMs)}</div>
+              </td>
+              <td>{displayTimestamp(event.timestamp)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AttributeDetails({ event }: { event: AuditLogEvent }) {
+  const entries = Object.entries(event.attributes);
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-muted)]">Attributes</summary>
+      <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+        {entries.map(([key, value]) => (
+          <div key={key} className="min-w-0 rounded bg-[var(--surface-muted)] px-2 py-1">
+            <div className="truncate font-mono text-[10px] text-[var(--text-muted)]">{key}</div>
+            <div className="truncate font-mono text-[11px] text-[var(--text-primary)]">{String(value)}</div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+const emptySummary: AuditLogSummary = {
+  total: 0,
+  failures: 0,
+  failureRate: 0,
+  averageDurationMs: null,
+  p95DurationMs: null,
+  services: [],
+  runtimes: [],
+  phases: [],
+};
+
+const inputClass = "mt-1 w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]";
+const labelClass = "text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]";
+
+const formatMilliseconds = (value: number | null) => {
+  if (value === null) return "n/a";
+  if (value < 1000) return `${value} ms`;
+  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)} s`;
+};
+
+const formatNullableNumber = (value: number | null) => value === null ? "n/a" : value.toLocaleString();
+
+const displayTimestamp = (value: string) => {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return value || "unknown";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+  }).format(parsed);
+};
