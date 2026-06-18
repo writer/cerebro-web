@@ -19,7 +19,15 @@ import {
 } from "@/lib/grc";
 import { findingMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { redactReportText, reportReadinessIntent, reportReadinessLabel, reportRedactionMode, ReportRedactionMode } from "@/lib/grc-report-packets";
+import {
+  redactReportGraph,
+  redactReportIdentifier,
+  redactReportText,
+  reportReadinessIntent,
+  reportReadinessLabel,
+  reportRedactionMode,
+  ReportRedactionMode,
+} from "@/lib/grc-report-packets";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -444,10 +452,10 @@ function ControlPacketView({
         metadata={packet.metadata}
         redactionMode={redactionMode}
         onRedactionModeChange={onRedactionModeChange}
-        sidecar={<ReportMetadataPanel metadata={packet.metadata} />}
+        sidecar={<ReportMetadataPanel metadata={packet.metadata} redactionMode={redactionMode} />}
       />
 
-      <ScopePanel metadata={packet.metadata} />
+      <ScopePanel metadata={packet.metadata} redactionMode={redactionMode} />
 
       <Panel title="Control Readiness">
         <div className="divide-y divide-slate-100 dark:divide-white/10">
@@ -506,6 +514,7 @@ function FindingPacketView({
   state: RuntimeState;
 }) {
   const readiness = packet.metadata?.readiness;
+  const graph = useMemo(() => redactReportGraph(packet.graph, redactionMode), [packet.graph, redactionMode]);
   return (
     <>
       <div className="grid gap-4 md:grid-cols-4">
@@ -522,13 +531,13 @@ function FindingPacketView({
         metadata={packet.metadata}
         redactionMode={redactionMode}
         onRedactionModeChange={onRedactionModeChange}
-        sidecar={<FindingSidecar packet={packet} />}
+        sidecar={<FindingSidecar packet={packet} redactionMode={redactionMode} />}
       />
 
-      <ScopePanel metadata={packet.metadata} />
+      <ScopePanel metadata={packet.metadata} redactionMode={redactionMode} />
 
       <Panel title="Impact Proof">
-        <GraphViewer graph={packet.graph} />
+        <GraphViewer graph={graph} />
       </Panel>
     </>
   );
@@ -587,19 +596,22 @@ function ReportBodyPanel({
   );
 }
 
-function FindingSidecar({ packet }: { packet: GRCAuditPacket }) {
+function FindingSidecar({ packet, redactionMode }: { packet: GRCAuditPacket; redactionMode: ReportRedactionMode }) {
+  const findingID = redactReportIdentifier(packet.finding.id, redactionMode, "[finding]");
+  const entity = redactReportIdentifier(packet.finding.entity, redactionMode, "[resource]");
+  const runtimeID = redactReportIdentifier(packet.finding.runtime_id, redactionMode, "[runtime]");
   return (
     <div className="space-y-4">
       <div>
-        <div className="text-lg font-semibold text-[var(--text-primary)]">{packet.finding.title}</div>
-        <div className="mt-1 text-[13px] text-[var(--text-muted)]">{packet.finding.summary || "No summary provided."}</div>
+        <div className="text-lg font-semibold text-[var(--text-primary)]">{redactReportText(packet.finding.title, redactionMode)}</div>
+        <div className="mt-1 text-[13px] text-[var(--text-muted)]">{packet.finding.summary ? redactReportText(packet.finding.summary, redactionMode) : "No summary provided."}</div>
       </div>
-      <div className="rounded-lg bg-indigo-50 p-4 text-[13px] text-indigo-900 dark:bg-indigo-500/10 dark:text-indigo-100">{packet.recommended_action}</div>
+      <div className="rounded-lg bg-indigo-50 p-4 text-[13px] text-indigo-900 dark:bg-indigo-500/10 dark:text-indigo-100">{redactReportText(packet.recommended_action, redactionMode)}</div>
       <RiskBreakdown finding={packet.finding} />
       <div className="space-y-2.5 text-[13px]">
-        <DetailRow label="Finding ID" value={packet.finding.id} mono />
-        <DetailRow label="Entity" value={shortEntity(packet.finding.entity)} mono />
-        <DetailRow label="Runtime" value={shortEntity(packet.finding.runtime_id)} mono />
+        <DetailRow label="Finding ID" value={findingID} mono />
+        <DetailRow label="Entity" value={shortEntity(entity)} mono />
+        <DetailRow label="Runtime" value={shortEntity(runtimeID)} mono />
         <DetailRow label="Last seen" value={displayDate(packet.finding.last_observed_at)} />
         <DetailRow label="Generated" value={displayDate(packet.generated_at)} />
       </div>
@@ -610,10 +622,11 @@ function FindingSidecar({ packet }: { packet: GRCAuditPacket }) {
   );
 }
 
-function ReportMetadataPanel({ metadata }: { metadata?: GRCReportMetadata }) {
+function ReportMetadataPanel({ metadata, redactionMode }: { metadata?: GRCReportMetadata; redactionMode: ReportRedactionMode }) {
   if (!metadata) {
     return <div className="text-[13px] text-[var(--text-muted)]">Packet metadata is not available from this API response.</div>;
   }
+  const sources = metadata.provenance.source_ids ?? [];
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-[color:var(--border)] p-4">
@@ -634,15 +647,25 @@ function ReportMetadataPanel({ metadata }: { metadata?: GRCReportMetadata }) {
         <DetailRow label="Profile" value={metadata.provenance.profile_name || metadata.provenance.profile_id || "—"} />
         <DetailRow label="Version" value={metadata.provenance.packet_version || "—"} mono />
         <DetailRow label="Generated" value={displayDate(metadata.provenance.generated_at)} />
-        <DetailRow label="Sources" value={(metadata.provenance.source_ids ?? []).length ? (metadata.provenance.source_ids ?? []).join(", ") : "—"} mono />
+        <DetailRow
+          label="Sources"
+          value={sources.length ? sources.map((sourceID) => redactReportIdentifier(sourceID, redactionMode, "[source]")).join(", ") : "—"}
+          mono
+        />
       </div>
     </div>
   );
 }
 
-function ScopePanel({ metadata }: { metadata?: GRCReportMetadata }) {
+function ScopePanel({ metadata, redactionMode }: { metadata?: GRCReportMetadata; redactionMode: ReportRedactionMode }) {
   const exclusions = metadata?.scope.exclusions;
   const incremental = metadata?.scope.incremental_fetch;
+  const excludedItems = [
+    ...(exclusions?.excluded_families ?? []),
+    ...(exclusions?.excluded_asset_classes ?? []),
+    ...(exclusions?.excluded_kinds ?? []),
+    ...(exclusions?.excluded_resource_urns ?? []),
+  ].slice(0, 10);
   return (
     <Panel title="Scope And Incremental Fetch">
       <div className="grid gap-4 md:grid-cols-4">
@@ -654,14 +677,16 @@ function ScopePanel({ metadata }: { metadata?: GRCReportMetadata }) {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-[color:var(--border)] p-4 text-[13px] text-[var(--text-secondary)]">
           <div className="font-semibold text-[var(--text-primary)]">Incremental fetch</div>
-          <div className="mt-1 text-[var(--text-muted)]">{incremental?.summary || "No incremental fetch metadata was returned."}</div>
+          <div className="mt-1 text-[var(--text-muted)]">{incremental?.summary ? redactReportText(incremental.summary, redactionMode) : "No incremental fetch metadata was returned."}</div>
         </div>
         <div className="rounded-lg border border-[color:var(--border)] p-4 text-[13px] text-[var(--text-secondary)]">
           <div className="font-semibold text-[var(--text-primary)]">Excluded scope</div>
           {exclusions && exclusions.total > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {[...(exclusions.excluded_families ?? []), ...(exclusions.excluded_asset_classes ?? []), ...(exclusions.excluded_kinds ?? []), ...(exclusions.excluded_resource_urns ?? [])].slice(0, 10).map((item) => (
-                <span key={item} className="max-w-full truncate rounded-md bg-[var(--surface-muted)] px-2 py-0.5 font-mono text-[11px] text-[var(--text-secondary)]">{shortEntity(item)}</span>
+              {excludedItems.map((item, index) => (
+                <span key={`${item}-${index}`} className="max-w-full truncate rounded-md bg-[var(--surface-muted)] px-2 py-0.5 font-mono text-[11px] text-[var(--text-secondary)]">
+                  {redactionMode === "share_safe" ? redactReportIdentifier(item, redactionMode, "[scope]") : shortEntity(item)}
+                </span>
               ))}
             </div>
           ) : (

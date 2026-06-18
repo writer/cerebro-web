@@ -105,8 +105,10 @@ export default function ControlsPage() {
   const { data, error, loading, reload } = useGRCQuery<GRCControlEvidencePacketResponse>(
     grcPath("/grc/control-packets", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID, limit: 200 }),
   );
+  const isInitialLoading = loading && !data;
+  const isRefreshing = loading && Boolean(data);
   const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
+  const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
   const controlView = useMemo(() => {
     const fw = framework.trim().toLowerCase();
     const cf = controlID.trim().toLowerCase();
@@ -228,12 +230,14 @@ export default function ControlsPage() {
         <MetricCard label="Open Findings" value={openFindings} detail={`${critical} critical`} intent={openFindings > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
-      {!loading && !error && queueControls.length > 0 && (
+      {data && !error && queueControls.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
             <div>
               <h2 className="text-[13px] font-semibold text-slate-900">Auditor work queue</h2>
-              <p className="mt-0.5 text-[12px] text-slate-500">Prioritized controls by findings, evidence gaps, freshness, and due dates.</p>
+              <p className="mt-0.5 text-[12px] text-slate-500">
+                {isRefreshing ? "Refreshing controls..." : "Prioritized controls by findings, evidence gaps, freshness, and due dates."}
+              </p>
             </div>
             <Link href={packetHref} className="rounded-md border border-slate-200 px-3 py-1.5 text-[12px] font-medium text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50">
               Export packet
@@ -300,10 +304,10 @@ export default function ControlsPage() {
         </div>
       )}
 
-      {loading && <LoadingBlock label="Loading controls..." />}
+      {isInitialLoading && <LoadingBlock label="Loading controls..." />}
       {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Controls will appear when the API is reachable." />}
 
-      {!loading && !error && (
+      {data && !error && (
         <div className="space-y-3">
           {visibleControls.map((control) => {
             const key = `${control.framework_name}-${control.control_id}`;

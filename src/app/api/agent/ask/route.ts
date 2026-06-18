@@ -302,10 +302,16 @@ async function streamLegacyAsk(
   payload: NormalizedAgentRequest,
   span: WebSpan,
 ) {
+  const missingAgentConfig = [
+    process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY",
+    getMcpUrl() ? "" : "CEREBRO_MCP_URL",
+  ].filter(Boolean);
   controller.enqueue(sse("agent_status", {
     stage: "fallback",
     label: "Using the existing Ask pipeline",
-    detail: "Set OPENAI_API_KEY and CEREBRO_MCP_URL to enable the MCP agent.",
+    detail: missingAgentConfig.length
+      ? `${missingAgentConfig.join(" and ")} not configured for the MCP agent.`
+      : "Graph Ask is handling this request.",
     mode: "legacy",
   }));
 
@@ -317,10 +323,7 @@ async function streamLegacyAsk(
       accept: "text/event-stream",
       "x-cerebro-web-surface": "ask-agent-fallback",
     }, span),
-    body: JSON.stringify({
-      ...payload,
-      model: normalizeAskModel(payload.model),
-    }),
+    body: JSON.stringify(legacyAskPayload(payload)),
     cache: "no-store",
   });
 
@@ -331,11 +334,8 @@ async function streamLegacyAsk(
       legacy_ask_status_code: response.status,
       legacy_ask_error_body_size: byteLength(text),
     });
-    controller.enqueue(sse("error", normalizeAskError(
-      `http_${response.status}`,
-      text || `Ask request failed (${response.status})`,
-      response.status === 408 || response.status === 429 || response.status >= 500,
-    )));
+    const failure = legacyAskFailure(response.status, text);
+    controller.enqueue(sse("error", normalizeAskError(failure.code, failure.message, failure.retryable)));
     return;
   }
 
@@ -355,6 +355,57 @@ async function streamLegacyAsk(
     legacy_ask_status_code: response.status,
   });
 }
+
+const legacyAskPayload = (payload: NormalizedAgentRequest) => ({
+  tenant_id: payload.tenant_id,
+  question: payload.question,
+  scope_urn: payload.scope_urn,
+  model: normalizeAskModel(payload.model),
+  history: payload.history,
+});
+
+const legacyAskFailure = (status: number, body: string) => {
+  if (status === 400) {
+    return {
+      code: "ask_request_rejected",
+      message: "Ask could not run because the graph Ask endpoint rejected the request.",
+      retryable: false,
+    };
+  }
+  if (status === 401 || status === 403) {
+    return {
+      code: "ask_not_authorized",
+      message: "Ask is not authorized for the current identity.",
+      retryable: false,
+    };
+  }
+  if (status === 404) {
+    return {
+      code: "ask_endpoint_unavailable",
+      message: "Graph Ask is not available on this Cerebro API.",
+      retryable: false,
+    };
+  }
+  if (status === 408 || status === 429) {
+    return {
+      code: "ask_rate_limited",
+      message: "Graph Ask is busy. Retry the request in a moment.",
+      retryable: true,
+    };
+  }
+  if (status === 503) {
+    return {
+      code: "ask_runtime_unavailable",
+      message: "Graph Ask is unavailable because a required runtime dependency is not configured.",
+      retryable: true,
+    };
+  }
+  return {
+    code: `http_${status}`,
+    message: body.trim() ? "Graph Ask returned an unexpected error." : `Ask request failed (${status}).`,
+    retryable: status >= 500,
+  };
+};
 
 const getMcpUrl = () => {
   const configured = process.env.CEREBRO_MCP_URL?.trim();

@@ -38,8 +38,10 @@ export default function EvidencePage() {
     [debouncedFindingID, debouncedGraphRoot, debouncedRuleID, debouncedRunID, debouncedTenantID],
   );
   const { data, error, loading, reload } = useGRCQuery<EvidenceResponse>(path);
+  const isInitialLoading = loading && !data;
+  const isRefreshing = loading && Boolean(data);
   const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
+  const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
   const evidenceView = useMemo(() => {
     const evidence = data?.evidence ?? [];
     const roots = new Set<string>();
@@ -109,12 +111,17 @@ export default function EvidencePage() {
         <MetricCard label="Graph Roots" value={graphRoots} detail="impact anchors" state={metricState} />
       </div>
 
-      {loading && <LoadingBlock label="Loading evidence..." />}
+      {isInitialLoading && <LoadingBlock label="Loading evidence..." />}
       {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Evidence will appear when the API is reachable." />}
 
-      {!loading && !error && (
+      {data && !error && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            {isRefreshing && (
+              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-[12px] text-slate-500">
+                Refreshing evidence...
+              </div>
+            )}
             <table className="w-full text-left text-[13px]">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80">

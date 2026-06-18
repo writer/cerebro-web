@@ -229,11 +229,6 @@ const graphStyles = (colors: ReturnType<typeof cytoscapeColors>) => ([
     style: {
       "border-color": colors.primary,
       "border-width": 5,
-      "shadow-blur": 16,
-      "shadow-color": colors.primary,
-      "shadow-opacity": 0.28,
-      "shadow-offset-x": 0,
-      "shadow-offset-y": 0,
       "z-index": 20,
     },
   },
