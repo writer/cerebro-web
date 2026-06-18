@@ -197,8 +197,21 @@ export default function ReportsPage() {
       {exportError && <ErrorBlock error={exportError} />}
 
       {!wantsControlPacket && !selectedFindingID && !fallbackFindings.loading && !fallbackFindings.error && (
-        <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
-          No findings available. Enter a finding ID to build a report.
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-[15px] font-semibold text-slate-900">No finding packet is selected</h2>
+            <p className="mt-2 text-[13px] leading-5 text-slate-500">
+              Build a control evidence packet from the default profile, or enter a finding ID above for a finding-specific audit packet.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Link href={`/reports?profile=${encodeURIComponent(DEFAULT_CONTROL_PROFILE_ID)}`} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
+                Open control packet
+              </Link>
+              <Link href="/controls/builder" className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900">
+                Build custom pack
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 

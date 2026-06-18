@@ -28,6 +28,7 @@ import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 const inputClass = "control-input mt-0.5 w-full px-3 py-1 text-[13px]";
 const labelClass = "text-[11px] font-semibold uppercase leading-3 tracking-wider text-[var(--text-muted)]";
 const yamlFiles = ["extension.yaml", "controls.yaml", "profiles.yaml", "coverage.yaml"];
+type BuilderViewMode = "family" | "all";
 
 const selectedRecord = (ids: string[]) => new Set(ids.map((id) => id.trim()).filter(Boolean));
 
@@ -263,6 +264,7 @@ export default function ControlBuilderPage() {
   const [auditError, setAuditError] = useState<string | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditExportLoading, setAuditExportLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<BuilderViewMode>("family");
 
   const archetypes = useMemo(() => archetypesQuery.data?.archetypes ?? [], [archetypesQuery.data?.archetypes]);
   const recommendedArchetypes = useMemo(() => archetypes.filter((item) => item.recommended).map((item) => item.id), [archetypes]);
@@ -276,6 +278,13 @@ export default function ControlBuilderPage() {
     return Array.from(result.entries()).sort(([left], [right]) => left.localeCompare(right));
   }, [archetypes]);
   const selected = useMemo(() => selectedRecord(effectiveSelectedArchetypes), [effectiveSelectedArchetypes]);
+  const selectedFamilies = useMemo(() => {
+    const familyIDs = new Set<string>();
+    for (const archetype of archetypes) {
+      if (selected.has(archetype.id)) familyIDs.add(archetype.family_id || archetype.family_name);
+    }
+    return familyIDs.size;
+  }, [archetypes, selected]);
   const profileSet = useMemo(() => selectedRecord(includedProfiles), [includedProfiles]);
   const options = useMemo(() => profileOptions(profilesQuery.data), [profilesQuery.data]);
   const loading = archetypesQuery.loading || profilesQuery.loading;
@@ -406,10 +415,49 @@ export default function ControlBuilderPage() {
       {!loading && !error && (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="order-2 space-y-5 xl:order-none">
-            {families.map(([family, items]) => (
-              <Panel key={family} title={family}>
+            <div className="rounded-lg border border-[color:var(--border)] bg-white px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Common controls</h2>
+                  <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">{effectiveSelectedArchetypes.length} selected across {selectedFamilies} families</p>
+                </div>
+                <div className="inline-flex rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-0.5">
+                  {([
+                    ["family", "View by family"],
+                    ["all", "View all"],
+                  ] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setViewMode(mode)}
+                      className={`rounded px-3 py-1.5 text-[12px] font-medium transition ${viewMode === mode ? "bg-white text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {viewMode === "family" ? (
+              families.map(([family, items]) => (
+                <Panel key={family} title={family}>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {items.map((archetype) => (
+                      <ArchetypeRow
+                        key={archetype.id}
+                        archetype={archetype}
+                        checked={selected.has(archetype.id)}
+                        onToggle={() => toggleArchetype(archetype.id)}
+                      />
+                    ))}
+                  </div>
+                </Panel>
+              ))
+            ) : (
+              <Panel title="All Controls">
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {items.map((archetype) => (
+                  {archetypes.map((archetype) => (
                     <ArchetypeRow
                       key={archetype.id}
                       archetype={archetype}
@@ -419,7 +467,7 @@ export default function ControlBuilderPage() {
                   ))}
                 </div>
               </Panel>
-            ))}
+            )}
           </div>
 
           <aside className="order-1 space-y-5 pb-24 xl:order-none">
