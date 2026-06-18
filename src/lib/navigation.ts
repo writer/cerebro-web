@@ -1,3 +1,5 @@
+import { supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+
 export type NavigationEntry = {
   label: string;
   href: string;
@@ -19,21 +21,21 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/risk-inbox",
     description: "Triage findings by severity, owner, entity, SLA, and evidence.",
     section: "Operator",
-    keywords: ["findings", "risk", "sla", "triage", "owner"],
+    keywords: ["findings", "risk", "sla", "triage", "owner", "framework", ...supportedGRCFrameworkNames],
   },
   {
-    label: "Ask Cerebro",
+    label: "Ask graph",
     href: "/ask",
-    description: "Ask the graph in natural language. Cypher is drafted, validated, run, and cited.",
+    description: "Ask graph questions. Review drafted Cypher, rows, summaries, and citations.",
     section: "Operator",
     keywords: ["ask", "graph", "cypher", "nlq", "query", "search"],
   },
   {
     label: "Controls",
     href: "/controls",
-    description: "Control posture, failing objectives, and mapped findings.",
+    description: "Control status, custom framework packs, mapped findings, and evidence gaps.",
     section: "Operator",
-    keywords: ["soc2", "iso", "framework", "control", "audit"],
+    keywords: ["soc2", "iso", "framework", "control", "audit", "builder", "custom", ...supportedGRCFrameworkNames],
   },
   {
     label: "Evidence",
@@ -47,14 +49,14 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/inventory",
     description: "Browse assets, owners, scope, tests, vulnerabilities, and graph context.",
     section: "Operator",
-    keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities"],
+    keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities", "framework", ...supportedGRCFrameworkNames],
   },
   {
     label: "Impact map",
     href: "/impact",
-    description: "Entity impact graph and related risk blast radius.",
+    description: "Entity impact graph and affected risk paths.",
     section: "Operator",
-    keywords: ["graph", "entity", "impact", "blast radius"],
+    keywords: ["graph", "entity", "impact", "affected entities"],
   },
   {
     label: "Reports",
@@ -68,7 +70,17 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/connectors",
     description: "Connector library, credentials, source runtime freshness, and ingestion health.",
     section: "Operator",
-    keywords: ["runtimes", "sources", "connectors", "freshness", "mission control"],
+    keywords: ["runtimes", "sources", "connectors", "freshness", "credentials"],
+  },
+];
+
+const commandOnlyNavLinks: NavigationEntry[] = [
+  {
+    label: "Control Builder",
+    href: "/controls/builder",
+    description: "Build custom control packs, preview coverage, and export YAML.",
+    section: "Operator",
+    keywords: ["builder", "custom framework", "control pack", "yaml", "audit", ...supportedGRCFrameworkNames],
   },
 ];
 
@@ -84,5 +96,6 @@ export const utilityLinks: NavigationEntry[] = [
 
 export const navigationEntries = [
   ...operatorNavLinks,
+  ...commandOnlyNavLinks,
   ...utilityLinks,
 ];

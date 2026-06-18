@@ -8,9 +8,11 @@ describe("ci workflow cost controls", () => {
     expect(ciWorkflow).toContain("fetch-depth: 0");
     expect(ciWorkflow).toContain("- name: Resolve expensive validation scope");
     expect(ciWorkflow).toContain("scope:\n    name: Resolve validation scope\n    runs-on: ubuntu-latest\n    defaults:");
-    expect(ciWorkflow).toContain("needs_e2e=${needs_e2e}");
-    expect(ciWorkflow).toContain("needs_docker=${needs_docker}");
-    expect(ciWorkflow).toContain("run_full=true");
+    expect(ciWorkflow).toContain("needs_e2e: ${{ steps.scope.outputs.needs_e2e }}");
+    expect(ciWorkflow).toContain("needs_docker: ${{ steps.scope.outputs.needs_docker }}");
+    expect(ciWorkflow).toContain("run: node scripts/resolve-ci-scope.mjs");
+    expect(ciWorkflow).not.toContain("expensive_pattern=");
+    expect(ciWorkflow).not.toContain("docker_pattern=");
     expect(ciWorkflow).not.toContain("\\.github/workflows/ci\\.yml");
   });
 
@@ -21,6 +23,11 @@ describe("ci workflow cost controls", () => {
     expect(ciWorkflow).toContain("- name: Setup Go");
     expect(ciWorkflow).toContain("- name: Install Playwright browser");
     expect(ciWorkflow).toContain("- name: Local GRC E2E\n        run: npm run e2e:grc:local -- --browser");
+    expect(ciWorkflow).toContain("- name: Upload Local GRC E2E artifacts");
+    expect(ciWorkflow).toContain("if: failure()");
+    expect(ciWorkflow).toContain("uses: actions/upload-artifact@");
+    expect(ciWorkflow).toContain("/tmp/cerebro-grc-e2e-*/logs/**");
+    expect(ciWorkflow).toContain("/tmp/cerebro-grc-e2e-*/*.png");
   });
 
   it("runs cached Docker validation in a scoped parallel job", () => {

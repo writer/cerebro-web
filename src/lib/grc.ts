@@ -61,13 +61,219 @@ export type GRCEvidence = {
 
 export type GRCControl = {
   framework_name: string;
+  framework_id?: string;
+  framework_version?: string;
+  family_id?: string;
+  family_name?: string;
   control_id: string;
+  title?: string;
+  owner_domain?: string;
   status: string;
   open_findings: number;
   critical_findings: number;
   high_findings: number;
   evidence_items: number;
+  missing_evidence_items?: number;
+  stale_evidence_items?: number;
+  evidence_expectations?: number;
+  evidence_score?: number;
+  evidence_quality?: string;
+  audit_summary?: string;
+  mapped_rules?: string[];
+  reasons?: string[];
+  tags?: string[];
   findings?: GRCFinding[];
+};
+
+export type GRCEvidenceExpectation = {
+  id: string;
+  title?: string;
+  type: string;
+  description?: string;
+  required?: boolean;
+  assessment_methods?: string[];
+  freshness_sla?: string;
+  accepted_from?: string[];
+};
+
+export type GRCControlDefinition = {
+  id: string;
+  title?: string;
+  objective?: string;
+  intent?: string;
+  applicability?: string[];
+  assessment_methods?: string[];
+  implementation_guidance?: string[];
+  audit_procedure?: string[];
+  failure_modes?: string[];
+  remediation_guidance?: string[];
+  exception_guidance?: string;
+  evidence_expectations?: GRCEvidenceExpectation[];
+  freshness_sla?: string;
+  owner_domain?: string;
+  automatable?: boolean;
+  manual_evidence_allowed?: boolean;
+  tags?: string[];
+};
+
+export type GRCControlArchetype = {
+  id: string;
+  family_id: string;
+  family_name: string;
+  family_description?: string;
+  recommended?: boolean;
+  control: GRCControlDefinition;
+};
+
+export type GRCControlReadiness = {
+  status: string;
+  score: number;
+  missing_fields?: string[];
+};
+
+export type GRCReportReadinessBlocker = {
+  code: string;
+  label: string;
+  count?: number;
+};
+
+export type GRCReportReadiness = {
+  status: string;
+  score: number;
+  summary?: string;
+  blockers?: GRCReportReadinessBlocker[];
+};
+
+export type GRCReportProvenance = {
+  report_type: string;
+  profile_id?: string;
+  profile_name?: string;
+  packet_version?: string;
+  generated_at: string;
+  control_count?: number;
+  finding_count?: number;
+  evidence_count?: number;
+  runtime_count?: number;
+  source_ids?: string[];
+};
+
+export type GRCReportScopeExclusions = {
+  total: number;
+  runtime_ids?: string[];
+  excluded_families?: string[];
+  excluded_asset_classes?: string[];
+  excluded_kinds?: string[];
+  excluded_resource_urns?: string[];
+  excluded_resources?: Array<{ urn?: string; type?: string; id?: string; reason?: string }>;
+  applied_to_incremental_fetch: boolean;
+  filtered_before_graph_projection: boolean;
+};
+
+export type GRCReportIncrementalFetch = {
+  status: string;
+  policy_applied_before_read: boolean;
+  event_filtering_before_projection: boolean;
+  summary?: string;
+};
+
+export type GRCReportScope = {
+  source_ids?: string[];
+  runtime_ids?: string[];
+  exclusions: GRCReportScopeExclusions;
+  incremental_fetch: GRCReportIncrementalFetch;
+};
+
+export type GRCReportRedaction = {
+  default_mode: "share_safe" | "internal" | string;
+  available_modes?: string[];
+  sensitive_fields?: string[];
+  summary?: string;
+};
+
+export type GRCReportMetadata = {
+  readiness: GRCReportReadiness;
+  provenance: GRCReportProvenance;
+  scope: GRCReportScope;
+  redaction: GRCReportRedaction;
+};
+
+export type GRCControlCoverageSummary = {
+  selected_controls: number;
+  mapped_controls: number;
+  unmapped_controls: number;
+  mapped_rules: number;
+  auditor_ready_controls: number;
+  needs_enrichment_controls: number;
+  placeholder_controls: number;
+};
+
+export type GRCControlCoverageControl = {
+  framework_id?: string;
+  framework_name: string;
+  framework_version?: string;
+  family_id: string;
+  family_name: string;
+  control_id: string;
+  title?: string;
+  owner_domain?: string;
+  tags?: string[];
+  evidence_expectation_ids?: string[];
+  audit_readiness: GRCControlReadiness;
+  coverage_status: string;
+  rule_count: number;
+  mapped_rules?: string[];
+  evidence_plan?: {
+    expectations?: GRCEvidenceExpectation[];
+  };
+};
+
+export type GRCControlCoverageProfile = {
+  id: string;
+  name?: string;
+  description?: string;
+  summary: GRCControlCoverageSummary;
+  controls?: GRCControlCoverageControl[];
+  unmapped_controls?: GRCControlRef[];
+};
+
+export type GRCControlPackSummary = {
+  archetypes: number;
+  controls: number;
+  families: number;
+  mapped_controls: number;
+  unmapped_controls: number;
+  mapped_rules: number;
+  auditor_ready_controls: number;
+  needs_enrichment_controls: number;
+  placeholder_controls: number;
+};
+
+export type GRCControlPackPreview = {
+  version: string;
+  coverage: GRCControlCoverageProfile;
+  summary: GRCControlPackSummary;
+  files: Record<string, string>;
+};
+
+export type GRCControlArchetypesResponse = {
+  version: string;
+  archetypes: GRCControlArchetype[];
+  generated_at: string;
+};
+
+export type GRCControlProfilesResponse = {
+  profiles: GRCControlCoverageProfile[];
+  generated_at: string;
+};
+
+export type GRCControlPackResponse = {
+  preview: GRCControlPackPreview;
+  generated_at: string;
+};
+
+export type GRCControlPackIssueResponse = {
+  issues: Array<{ path?: string; message?: string; Path?: string; Message?: string }>;
+  generated_at: string;
 };
 
 export type GRCConnector = {
@@ -110,6 +316,35 @@ export type GRCInventoryCategory = {
   count: number;
 };
 
+export type GRCInventoryReviewState = "baseline" | "needs_review" | "reported_issue" | "out_of_scope" | string;
+export type GRCInventoryAccountabilityState = "not_required" | "known" | "candidate" | "required_missing" | "disputed" | string;
+
+export type GRCInventoryReviewReason = {
+  code: string;
+  label: string;
+};
+
+export type GRCInventoryReviewDisposition = {
+  state: GRCInventoryReviewState;
+  label: string;
+  detail?: string;
+  reasons?: GRCInventoryReviewReason[];
+};
+
+export type GRCInventoryOwnerCandidate = {
+  principal: string;
+  confidence?: string;
+  source?: string;
+};
+
+export type GRCInventoryAccountability = {
+  state: GRCInventoryAccountabilityState;
+  label: string;
+  principal?: string;
+  candidates?: GRCInventoryOwnerCandidate[];
+  reasons?: GRCInventoryReviewReason[];
+};
+
 export type GRCInventoryAsset = {
   urn: string;
   entity_type: string;
@@ -126,6 +361,8 @@ export type GRCInventoryAsset = {
   latest_asset_report_status?: string;
   latest_asset_report_reason?: string;
   latest_asset_report_updated_at?: string;
+  review_disposition?: GRCInventoryReviewDisposition;
+  accountability?: GRCInventoryAccountability;
   attributes?: Record<string, string>;
 };
 
@@ -151,6 +388,11 @@ export type GRCInventorySummary = {
   out_of_scope_assets: number;
   high_risk_assets: number;
   unassigned_assets: number;
+  baseline_assets?: number;
+  needs_review_assets?: number;
+  owner_required_assets?: number;
+  accountable_assets?: number;
+  reported_issue_assets?: number;
   org_groups: number;
   public_assets: number;
   scoped_coverage_pct: number;
@@ -249,7 +491,126 @@ export type GRCAuditPacket = {
   graph?: GRCGraph;
   controls?: GRCControlRef[];
   recommended_action: string;
+  metadata?: GRCReportMetadata;
   generated_at: string;
+};
+
+export type GRCControlPacketProfile = {
+  id: string;
+  name?: string;
+  description?: string;
+};
+
+export type GRCControlPostureSummary = {
+  selection_id?: string;
+  total: number;
+  by_status: Record<string, number>;
+};
+
+export type GRCControlPacketFinding = {
+  id?: string;
+  rule_id?: string;
+  title?: string;
+  status?: string;
+  severity?: string;
+  first_observed_at?: string;
+  last_observed_at?: string;
+};
+
+export type GRCControlEvidenceExpectationPosture = {
+  id: string;
+  title?: string;
+  description?: string;
+  type?: string;
+  required: boolean;
+  status: string;
+  quality?: string;
+  evidence_ids?: string[];
+  stale_evidence_ids?: string[];
+  freshness_sla?: string;
+};
+
+export type GRCControlEvidencePacketItem = {
+  id?: string;
+  rule_id?: string;
+  evidence_type?: string;
+  status?: string;
+  quality?: string;
+  source?: string;
+  observed_at?: string;
+  expires_at?: string;
+  manual?: boolean;
+};
+
+export type GRCControlEvidenceReadiness = {
+  score: number;
+  rating: string;
+  summary?: string;
+  open_findings?: number;
+  evidence_items?: number;
+  required_expectations?: number;
+  missing_evidence?: number;
+  stale_evidence?: number;
+  manual_evidence?: number;
+};
+
+export type GRCControlPacketControl = {
+  selection_id?: string;
+  control: {
+    framework_id?: string;
+    framework_name: string;
+    framework_version?: string;
+    family_id?: string;
+    family_name?: string;
+    control_id: string;
+    title?: string;
+    owner_domain?: string;
+  };
+  status: string;
+  reasons?: string[];
+  tags?: string[];
+  mapped_rules?: string[];
+  findings?: GRCControlPacketFinding[];
+  evidence: {
+    summary?: {
+      evidence_ids?: string[];
+      missing_evidence_ids?: string[];
+      stale_evidence_ids?: string[];
+      manual_evidence_ids?: string[];
+      evidence_expectation_ids?: string[];
+      required_evidence_ids?: string[];
+      freshness_sla?: string;
+      latest_evidence_at?: string;
+      evidence_due_at?: string;
+    };
+    expectations?: GRCControlEvidenceExpectationPosture[];
+    items?: GRCControlEvidencePacketItem[];
+  };
+  audit_readiness: GRCControlEvidenceReadiness;
+  overrides?: {
+    exception_ids?: string[];
+    not_applicable_ids?: string[];
+  };
+};
+
+export type GRCControlEvidencePacket = {
+  version: string;
+  selection_id?: string;
+  generated_at: string;
+  summary: GRCControlPostureSummary;
+  controls: GRCControlPacketControl[];
+};
+
+export type GRCControlEvidencePacketResponse = {
+  profile: GRCControlPacketProfile;
+  packet: GRCControlEvidencePacket;
+  controls: GRCControl[];
+  metadata?: GRCReportMetadata;
+  generated_at: string;
+};
+
+export type GRCCustomControlEvidencePacketResponse = GRCControlEvidencePacketResponse & {
+  files?: Record<string, string>;
 };
 
 export type GRCEntityImpact = {

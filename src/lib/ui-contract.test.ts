@@ -38,7 +38,7 @@ describe("product UI contract", () => {
   it("keeps developer utilities focused on supported tools", () => {
     const source = readProjectFile("src/app/developer/page.tsx");
 
-    expect(PRODUCT_UI_CONTRACT_VERSION).toBe("2026-06-15.runtime-identity-ux");
+    expect(PRODUCT_UI_CONTRACT_VERSION).toBe("2026-06-16.agent-platform");
     expect(source).toContain("Developer Utilities");
     for (const label of REQUIRED_DEVELOPER_UTILITY_LABELS) {
       expect(source).toContain(label);
@@ -75,7 +75,7 @@ describe("product UI contract", () => {
     expect(statusSource).toContain("Runtime Health");
     expect(primitivesSource).toContain("RuntimeRecoveryBlock");
     expect(primitivesSource).toContain("/developer#quick-status");
-    expect(runtimeStateSource).toContain("Cerebro API unavailable");
+    expect(runtimeStateSource).toContain("API unavailable");
     expect(runtimeStateSource).toContain("metricDetailForState");
   });
 

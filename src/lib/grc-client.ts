@@ -8,6 +8,14 @@ import { cacheGRCMetadata } from "@/lib/grc-metadata-cache";
 
 const GRC_QUERY_CACHE_TTL_MS = 30_000;
 const GRC_QUERY_CACHE_MAX_ENTRIES = 200;
+const DEFAULT_GRC_QUERY_TIMEOUT_MS = 30_000;
+
+const parsePositiveMs = (value: string | undefined, fallback: number) => {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+export const GRC_QUERY_TIMEOUT_MS = parsePositiveMs(process.env.NEXT_PUBLIC_GRC_QUERY_TIMEOUT_MS, DEFAULT_GRC_QUERY_TIMEOUT_MS);
 
 type CachedGRCResponse = {
   expiresAt: number;
@@ -65,6 +73,44 @@ const abortable = async <T,>(promise: Promise<T>, signal?: AbortSignal) => {
     signal.addEventListener("abort", onAbort, { once: true });
     promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
   });
+};
+
+const timeoutPromise = async <T,>(promise: Promise<T>, path: string, timeoutMs: number) =>
+  new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(grcTimeoutMessage(path, timeoutMs))), timeoutMs);
+    promise.then(resolve, reject).finally(() => window.clearTimeout(timeout));
+  });
+
+const durationLabel = (durationMs: number | null | undefined) => {
+  if (typeof durationMs !== "number" || !Number.isFinite(durationMs)) return "";
+  if (durationMs >= 1000) return `${(durationMs / 1000).toFixed(durationMs >= 10_000 ? 0 : 1)}s`;
+  return `${Math.max(1, Math.round(durationMs))}ms`;
+};
+
+const responseDetail = (data: unknown) => {
+  if (typeof data === "string") return data.trim();
+  if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    for (const key of ["error", "message", "detail"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return "";
+};
+
+export const grcTimeoutMessage = (path: string, timeoutMs: number) =>
+  `Cerebro request timed out after ${durationLabel(timeoutMs)} for ${path}`;
+
+export const grcResponseErrorMessage = (path: string, status: number, data: unknown, durationMs?: number | null) => {
+  const elapsed = durationLabel(durationMs);
+  const detail = responseDetail(data);
+  const prefix = [
+    `Cerebro request failed (${status})`,
+    `for ${path}`,
+    elapsed ? `after ${elapsed}` : "",
+  ].filter(Boolean).join(" ");
+  return detail ? `${prefix}: ${detail}` : prefix;
 };
 
 export const fetchCachedGRC = async <T,>(
@@ -149,12 +195,12 @@ export function useGRCQuery<T>(path: string | null) {
     setError(null);
     let response;
     try {
-      response = await abortable(fetchCachedGRC<T>(path, apiKey, force), signal);
+      response = await abortable(timeoutPromise(fetchCachedGRC<T>(path, apiKey, force), path, GRC_QUERY_TIMEOUT_MS), signal);
     } catch (error) {
       if (signal?.aborted || currentRequestID !== requestID.current) {
         return;
       }
-      setError(error instanceof Error ? error.message : "Cerebro request failed");
+      setError(error instanceof Error ? error.message : grcResponseErrorMessage(path, 0, null, Math.round(performance.now() - startedAt)));
       setLoading(false);
       setDurationMs(Math.round(performance.now() - startedAt));
       return;
@@ -164,10 +210,7 @@ export function useGRCQuery<T>(path: string | null) {
     }
     setDurationMs(Math.round(performance.now() - startedAt));
     if (!response.ok) {
-      const message =
-        typeof response.data === "string" && response.data
-          ? response.data
-          : `Cerebro request failed (${response.status})`;
+      const message = grcResponseErrorMessage(path, response.status, response.data, Math.round(performance.now() - startedAt));
       setError(message);
       setLoading(false);
       return;

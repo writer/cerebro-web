@@ -2,8 +2,30 @@ import { describe, expect, it } from "vitest";
 
 import {
   connectionMethodsForConnector,
+  connectorAccessStatusLabel,
+  connectorCatalogStatusLabel,
+  connectorCredentialHealth,
+  connectorCredentialPath,
+  connectorCredentialRevokePath,
+  connectorCredentialRotatePath,
+  connectorCredentialsPath,
+  connectorCredentialStatusLabel,
+  connectorDefinitionOriginLabel,
+  connectorDefinitionBlockingChecks,
+  connectorDefinitionNextStage,
+  connectorDefinitionStatus,
+  connectorDisplayMetadata,
+  connectorIntegrationDepthLabel,
+  connectorIsCatalogOnly,
+  connectorMatchesSlug,
+  connectorReadinessStageLabel,
+  connectorRequestActionLabel,
+  connectorRuntimeSurfaceLabel,
+  connectorSearchText,
+  connectorSetupAllowed,
   connectorScopeOptionFamilies,
   connectorSubmitErrorMessage,
+  defaultConnectorDefinitionDraft,
   defaultCredentialStoreID,
   encryptConnectorCredentials,
   normalizeCredentialStores,
@@ -30,18 +52,40 @@ describe("connector credential store normalization", () => {
   it("only honors advertised closed-set stores and sanitizes detail copy", () => {
     const stores = normalizeCredentialStores({
       credential_stores: [
-        { id: "google_secret_manager", label: "Google Secret Manager", provider: "Google Cloud Platform", available: true, default: true, mode: "reference", detail: "deployment managed" },
+        {
+          id: "aws_secrets_manager",
+          label: "AWS Secrets Manager",
+          provider: "Amazon Web Services",
+          available: true,
+          default: true,
+          mode: "reference",
+          detail: "deployment managed",
+          status: "ready",
+          reference_prefixes: ["env:", "aws-sm:"],
+          reference_namespace_template: "cerebro/<tenant>/<source>/<runtime>/credentials",
+          reference_field_template: "aws-sm:<region>:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
+          reference_placeholder: "aws-sm:us-east-1:cerebro/tenant-a/aws/runtime-a/credentials#token",
+          native_resolution_available: true,
+          required_config: [{ env: "CEREBRO_CONNECTOR_SECRET_STORES", label: "Enabled stores", required: true }],
+        },
         { id: "unknown_store", available: true, detail: "should not render" },
       ],
     });
 
-    expect(defaultCredentialStoreID(stores)).toBe("google_secret_manager");
-    expect(stores.find((store) => store.id === "google_secret_manager")).toMatchObject({
+    expect(defaultCredentialStoreID(stores)).toBe("aws_secrets_manager");
+    expect(stores.find((store) => store.id === "aws_secrets_manager")).toMatchObject({
       available: true,
       detail: "Configured by deployment",
       mode: "reference",
+      status: "ready",
+      referencePrefixes: ["env:", "aws-sm:"],
+      referenceNamespaceTemplate: "cerebro/<tenant>/<source>/<runtime>/credentials",
+      referenceFieldTemplate: "aws-sm:<region>:cerebro/<tenant>/<source>/<runtime>/credentials#<field>",
+      referencePlaceholder: "aws-sm:us-east-1:cerebro/tenant-a/aws/runtime-a/credentials#token",
+      nativeResolutionAvailable: true,
     });
-    expect(stores.some((store) => String(store.id) === "unknown_store")).toBe(false);
+    expect(stores.find((store) => store.id === "aws_secrets_manager")?.requiredConfig).toHaveLength(1);
+    expect(stores.some((store) => store.id === "unknown_store")).toBe(false);
   });
 
   it("uses backend-advertised connection methods and field metadata", () => {
@@ -96,6 +140,105 @@ describe("connector credential store normalization", () => {
   });
 });
 
+describe("connector catalog metadata", () => {
+  it("labels catalog-only executable definitions without advertising live setup", () => {
+    const connector = {
+      source_id: "auth0",
+      name: "Auth0",
+      catalog_status: "generateable",
+      catalog_schema_version: "cerebro.integration/v1",
+      catalog_source_path: "catalog/identity.yaml",
+      definition_origin: "builtin_catalog",
+      readiness_stage: "sourcegen_ready",
+      integration_depth: { level: "ready", score: 68, resource_families: 2, coverage_dimensions: 4 },
+      access_status: "catalog_only",
+      access_reason: "Catalog definition is sourcegen-ready, but setup is not enabled by this API.",
+      setup_allowed: false,
+      requestable: true,
+      requestable_reason: "Catalog definition is sourcegen-ready, but setup is not enabled by this API.",
+      request_access_action: "Request connector",
+      runtime_executable: true,
+      auth_model: "oauth_client_credentials",
+      verification_endpoint: "/users",
+      catalog_categories: ["identity"],
+      resource_families: [
+        { id: "users", label: "Users", path: "/users", event_kind: "auth0.users", high_value: true },
+        { id: "roles", label: "Roles", path: "/roles", event_kind: "auth0.roles", high_value: true },
+      ],
+    };
+
+    expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Sourcegen ready");
+    expect(connectorAccessStatusLabel(connector.access_status)).toBe("Catalog only");
+    expect(connectorReadinessStageLabel(connector.readiness_stage)).toBe("Sourcegen ready");
+    expect(connectorDefinitionOriginLabel(connector.definition_origin)).toBe("Built-in catalog");
+    expect(connectorIntegrationDepthLabel(connector)).toBe("Ready · 68/100");
+    expect(connectorRequestActionLabel(connector)).toBe("Request connector");
+    expect(connectorSetupAllowed(connector)).toBe(false);
+    expect(connectorIsCatalogOnly(connector)).toBe(true);
+    expect(connectorRuntimeSurfaceLabel(connector)).toBe("Sourcegen ready");
+    expect(connectorDisplayMetadata(connector)).toMatchObject({
+      category: "Identity and access",
+      provider: "Auth0",
+    });
+    expect(connectorSearchText(connector)).toContain("oauth_client_credentials");
+    expect(connectorSearchText(connector)).toContain("/roles");
+    expect(connectorSearchText(connector)).toContain("sourcegen-ready");
+    expect(connectorSearchText(connector)).toContain("catalog/identity.yaml");
+  });
+
+  it("treats advertised connection methods as a live runtime surface", () => {
+    expect(connectorIsCatalogOnly({
+      source_id: "aws",
+      name: "AWS",
+      catalog_status: "generateable",
+      connection_methods: [{ id: "encrypted_submission" }],
+    })).toBe(false);
+    expect(connectorRuntimeSurfaceLabel({
+      catalog_status: "generateable",
+      runtime_executable: true,
+      connection_methods: [{ id: "encrypted_submission" }],
+    })).toBe("Runtime supported");
+  });
+
+  it("treats restricted connector setup as inspectable metadata", () => {
+    const connector = {
+      source_id: "aws",
+      name: "AWS",
+      display_name: "Amazon Web Services",
+      catalog_status: "generateable",
+      access_status: "restricted",
+      access_reason: "limited preview",
+      readiness_stage: "api_restricted",
+      integration_depth: { level: "deep", score: 84 },
+      setup_allowed: false,
+      requestable: true,
+      requestable_reason: "limited preview",
+      request_access_action: "Request in Access Hub",
+      request_access_url: "https://access.example.com/request?source=aws",
+      runtime_executable: true,
+      connection_methods: [{ id: "encrypted_submission" }],
+    };
+
+    expect(connectorAccessStatusLabel(connector.access_status)).toBe("Restricted");
+    expect(connectorReadinessStageLabel(connector.readiness_stage)).toBe("API restricted");
+    expect(connectorRequestActionLabel(connector)).toBe("Request in Access Hub");
+    expect(connectorSetupAllowed(connector)).toBe(false);
+    expect(connectorRuntimeSurfaceLabel(connector)).toBe("Restricted");
+    expect(connectorSearchText(connector)).toContain("limited preview");
+  });
+
+  it("matches friendly slugs for catalog sources with punctuation or spaces", () => {
+    const connector = {
+      source_id: "microsoft_365",
+      name: "Microsoft 365",
+      display_name: "Microsoft 365",
+    };
+
+    expect(connectorMatchesSlug(connector, "microsoft-365")).toBe(true);
+    expect(connectorMatchesSlug(connector, "microsoft_365")).toBe(true);
+  });
+});
+
 describe("connector credential transport", () => {
   it("rejects unsupported credential key metadata before encryption", async () => {
     await expect(encryptConnectorCredentials({
@@ -108,6 +251,16 @@ describe("connector credential transport", () => {
   it("uses sanitized submit errors", () => {
     expect(connectorSubmitErrorMessage(400)).not.toContain("token");
     expect(connectorSubmitErrorMessage(503)).toContain("unavailable");
+  });
+
+  it("builds credential lifecycle paths and labels statuses", () => {
+    expect(connectorCredentialsPath("aws", { tenantID: "tenant-a", runtimeID: "runtime-a" })).toBe("/connectors/aws/credentials?tenant_id=tenant-a&runtime_id=runtime-a");
+    expect(connectorCredentialPath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123");
+    expect(connectorCredentialRotatePath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123/rotate");
+    expect(connectorCredentialRevokePath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123/revoke");
+    expect(connectorCredentialStatusLabel("valid")).toBe("Valid");
+    expect(connectorCredentialHealth({ status: "valid" })).toBe("healthy");
+    expect(connectorCredentialHealth({ status: "revoked" })).toBe("bad");
   });
 });
 
@@ -154,5 +307,47 @@ describe("connector resource scope policy", () => {
       families: [" s3_bucket ", "AWS.S3_BUCKET"],
     })).toEqual(["aws.s3_bucket", "s3_bucket"]);
     expect(connectorScopeOptionFamilies({ id: "gcp.project", label: "Projects" })).toEqual(["gcp.project"]);
+  });
+});
+
+describe("dynamic connector definitions", () => {
+  it("creates a reference-only JSON API draft by default", () => {
+    const draft = defaultConnectorDefinitionDraft("tenant-a");
+
+    expect(draft).toMatchObject({
+      tenant_id: "tenant-a",
+      runtime: "json_api",
+      stage: "draft",
+      auth: {
+        model: "bearer_token",
+        requires_references: true,
+      },
+    });
+    expect(draft.config_fields?.[0]).toMatchObject({ key: "base_url", required: true });
+    expect(draft.auth.credential_fields?.[0]).toMatchObject({ key: "token", secret: true, reference_only: true });
+    expect(draft.resource_families?.[0]).toMatchObject({ id: "assets", method: "GET", id_field: "id" });
+  });
+
+  it("derives lifecycle and validation status from backend gates", () => {
+    const definition = {
+      tenant_id: "tenant-a",
+      source_id: "example",
+      display_name: "Example",
+      runtime: "json_api",
+      stage: "draft",
+      auth: { model: "bearer_token" },
+      validation: {
+        status: "blocked",
+        checks: [
+          { id: "auth", label: "Auth", status: "ready", severity: "info" },
+          { id: "resources", label: "Resources", status: "blocked", severity: "error", blocking: true },
+        ],
+      },
+      promotion: { eligible_stages: ["sandbox"] },
+    } as const;
+
+    expect(connectorDefinitionStatus(definition)).toBe("blocked");
+    expect(connectorDefinitionBlockingChecks(definition)).toBe(1);
+    expect(connectorDefinitionNextStage(definition)).toBe("sandbox");
   });
 });

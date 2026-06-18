@@ -140,9 +140,9 @@ export default function FindingTable({
               <td className="text-[var(--text-muted)]">{displayDate(finding.last_observed_at)}</td>
               <td>
                 <AskAboutLink
-                  question={`Why is ${finding.title} risky and what is its blast radius?`}
+                  question={`Why is ${finding.title} risky and which entities are affected?`}
                   scopeUrn={finding.entity}
-                  title="Open in Ask Cerebro"
+                  title="Ask about this finding"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 text-[var(--text-muted)] transition hover:text-[var(--primary)]">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />

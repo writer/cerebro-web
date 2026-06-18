@@ -8,6 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { grcBrowserRouteContracts } from "./grc-route-contract.mjs";
+
 const args = new Set(process.argv.slice(2));
 const withBrowser = args.has("--browser") || process.env.CEREBRO_GRC_E2E_BROWSER === "1";
 const keepServices = args.has("--keep") || process.env.CEREBRO_GRC_E2E_KEEP === "1";
@@ -36,6 +38,7 @@ const neo4jUser = "neo4j";
 const neo4jCredential = "unused-local";
 const apiBase = `http://127.0.0.1:${apiPort}`;
 const webBase = `http://127.0.0.1:${webPort}`;
+const proxyCacheProbeOptions = { cache: "default" };
 const adminURN = `urn:cerebro:${tenantID}:identity:admin`;
 const appURN = `urn:cerebro:${tenantID}:application:okta-admin-console`;
 const repoURN = `urn:cerebro:${tenantID}:repository:public-sensitive`;
@@ -272,10 +275,16 @@ async function waitFor(label, action, timeoutMs = 60_000) {
 
 async function request(url, options = {}) {
   const startedAt = performance.now();
+  const {
+    timeoutMs = 10_000,
+    cache = "no-store",
+    signal,
+    ...fetchOptions
+  } = options;
   const response = await fetch(url, {
-    ...options,
-    cache: "no-store",
-    signal: AbortSignal.timeout(options.timeoutMs ?? 10_000),
+    ...fetchOptions,
+    cache,
+    signal: signal ?? AbortSignal.timeout(timeoutMs),
   });
   const body = await response.text();
   return { status: response.status, headers: response.headers, body, durationMs: Math.round(performance.now() - startedAt) };
@@ -333,26 +342,26 @@ async function validateBackend() {
 
 async function validateProxyCache() {
   const dashboardUrl = `${webBase}/api/cerebro/grc/dashboard?tenant_id=${tenantID}&limit=100&cache_probe=${Date.now()}`;
-  const firstDashboard = await requestJSON(dashboardUrl);
+  const firstDashboard = await requestJSON(dashboardUrl, proxyCacheProbeOptions);
   expect(firstDashboard.status === 200, `proxy dashboard first status ${firstDashboard.status}`);
   expect(firstDashboard.headers.get("x-cerebro-cache") === "miss", `proxy dashboard first cache ${firstDashboard.headers.get("x-cerebro-cache")}`);
   expect(firstDashboard.json.summary.open_findings === 3, "proxy dashboard payload mismatch");
   expect(firstDashboard.durationMs < perfFirstMs, `dashboard first request took ${firstDashboard.durationMs}ms`);
 
-  const secondDashboard = await requestJSON(dashboardUrl);
+  const secondDashboard = await requestJSON(dashboardUrl, proxyCacheProbeOptions);
   expect(secondDashboard.status === 200, `proxy dashboard second status ${secondDashboard.status}`);
   expect(secondDashboard.headers.get("x-cerebro-cache") === "hit", `proxy dashboard second cache ${secondDashboard.headers.get("x-cerebro-cache")}`);
   expect(secondDashboard.json.summary.evidence_items === 3, "proxy dashboard cached payload mismatch");
   expect(secondDashboard.durationMs < perfCachedMs, `dashboard cached request took ${secondDashboard.durationMs}ms`);
 
   const impactUrl = `${webBase}/api/cerebro/grc/entities/${encodeURIComponent(adminURN)}/impact?tenant_id=${tenantID}&limit=10&cache_probe=${Date.now()}`;
-  const firstImpact = await requestJSON(impactUrl);
+  const firstImpact = await requestJSON(impactUrl, proxyCacheProbeOptions);
   expect(firstImpact.status === 200, `proxy impact first status ${firstImpact.status}`);
   expect(firstImpact.headers.get("x-cerebro-cache") === "miss", `proxy impact first cache ${firstImpact.headers.get("x-cerebro-cache")}`);
   expect(firstImpact.json.graph.root.urn === adminURN, "proxy impact root mismatch");
   expect(firstImpact.durationMs < perfFirstMs, `impact first request took ${firstImpact.durationMs}ms`);
 
-  const secondImpact = await requestJSON(impactUrl);
+  const secondImpact = await requestJSON(impactUrl, proxyCacheProbeOptions);
   expect(secondImpact.status === 200, `proxy impact second status ${secondImpact.status}`);
   expect(secondImpact.headers.get("x-cerebro-cache") === "hit", `proxy impact second cache ${secondImpact.headers.get("x-cerebro-cache")}`);
   expect(secondImpact.durationMs < perfCachedMs, `impact cached request took ${secondImpact.durationMs}ms`);
@@ -360,7 +369,7 @@ async function validateProxyCache() {
 
 async function validateConcurrentProxyRequests() {
   const url = `${webBase}/api/cerebro/grc/dashboard?tenant_id=${tenantID}&limit=100&cache_probe=dedupe-${Date.now()}`;
-  const responses = await Promise.all(Array.from({ length: 12 }, () => requestJSON(url)));
+  const responses = await Promise.all(Array.from({ length: 12 }, () => requestJSON(url, proxyCacheProbeOptions)));
   const bodies = new Set(responses.map((response) => JSON.stringify(response.json.summary)));
   const states = responses.map((response) => response.headers.get("x-cerebro-cache"));
   const missCount = states.filter((state) => state === "miss").length;
@@ -371,8 +380,7 @@ async function validateConcurrentProxyRequests() {
 }
 
 async function validateRoutes() {
-  const routes = ["/", "/risk-inbox", "/controls", "/evidence", "/connectors", "/impact", "/reports"];
-  for (const route of routes) {
+  for (const { route } of grcBrowserRouteContracts({ adminURN })) {
     const page = await request(`${webBase}${route}`);
     expect(page.status === 200, `${route} status ${page.status}`);
     expect(page.body.includes("Cerebro"), `${route} missing app shell`);
@@ -393,35 +401,17 @@ async function validatePlaywrightBrowser() {
   browserUsed = true;
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    const pages = {
-      "/": ["Overview", "Security posture", "Priority Findings"],
-      "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
-      "/controls": ["Controls", "Framework", "Control"],
-      "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-      "/connectors": ["Connectors", "Connector library", "Connected runtimes"],
-      [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
-      "/reports": ["Reports"],
-    };
-    for (const [route, expectedTexts] of Object.entries(pages)) {
+    for (const { route, pageId } of grcBrowserRouteContracts({ adminURN })) {
       await page.goto(`${webBase}${route}`, { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+      const pageContract = `[data-grc-page="${pageId}"]`;
       try {
-        await page.waitForFunction(
-          (texts) => {
-            const body = document.body.innerText.toLowerCase();
-            return texts.every((text) => body.includes(text.toLowerCase()));
-          },
-          expectedTexts,
-          { timeout: 15_000 },
-        );
+        await page.locator(pageContract).waitFor({ state: "visible", timeout: 15_000 });
       } catch (error) {
         const body = await page.locator("body").innerText().catch(() => "");
-        throw new Error(`${route} missing expected browser text ${expectedTexts.join(", ")}: ${body.slice(0, 500)}`, { cause: error });
+        throw new Error(`${route} missing browser page contract ${pageContract}: ${body.slice(0, 500)}`, { cause: error });
       }
       const body = await page.locator("body").innerText();
-      for (const expected of expectedTexts) {
-        expect(includesText(body, expected), `${route} missing ${expected}`);
-      }
       expect(!/Application error|Unhandled Runtime Error|Cerebro request failed \([45][0-9][0-9]\)/i.test(body), `${route} contains error text`);
       await page.screenshot({ path: path.join(workDir, `${safeRouteName(route)}.png`), fullPage: true });
     }
@@ -435,24 +425,13 @@ async function validateAgentBrowser() {
   await run("agent-browser", ["--version"], { quiet: true });
   browserUsed = true;
   await run("agent-browser", ["set", "viewport", "1440", "1000"], { quiet: true });
-  const pages = {
-    "/": ["Overview", "Security posture", "Priority Findings"],
-    "/risk-inbox": ["Risk Inbox", "Triage findings", "Findings"],
-    "/controls": ["Controls", "Framework", "Control"],
-    "/evidence": ["Evidence", "Graph Root", "Evidence Items"],
-    "/connectors": ["Connectors", "Connector library", "Connected runtimes"],
-    [`/impact?root_urn=${encodeURIComponent(adminURN)}`]: ["Impact Map", "Entity Root", "Impact Graph"],
-    "/reports": ["Reports"],
-  };
-  for (const [route, expectedTexts] of Object.entries(pages)) {
+  for (const { route, heading } of grcBrowserRouteContracts({ adminURN })) {
     await run("agent-browser", ["open", `${webBase}${route}`], { quiet: true });
     await run("agent-browser", ["wait", "--load", "networkidle"], { quiet: true });
-    await run("agent-browser", ["wait", "--text", expectedTexts[0]], { quiet: true });
+    await run("agent-browser", ["wait", "--text", heading], { quiet: true });
     await run("agent-browser", ["screenshot", path.join(workDir, `${safeRouteName(route)}.png`), "--annotate"], { quiet: true });
     const { stdout } = await run("agent-browser", ["get", "text", "body"], { quiet: true });
-    for (const expected of expectedTexts) {
-      expect(includesText(stdout, expected), `${route} missing ${expected}`);
-    }
+    expect(includesText(stdout, heading), `${route} missing ${heading}`);
     expect(!/Application error|Unhandled Runtime Error|Cerebro request failed \([45][0-9][0-9]\)/i.test(stdout), `${route} contains error text`);
   }
 }
@@ -476,24 +455,24 @@ async function validateFailureModes() {
   expect(missingImpact.status === 404, `proxy missing impact status ${missingImpact.status}`);
 
   const staleImpactUrl = `${webBase}/api/cerebro/grc/entities/${encodeURIComponent(adminURN)}/impact?tenant_id=${tenantID}&limit=10&cache_probe=graph-stale-${Date.now()}`;
-  const warmImpact = await requestJSON(staleImpactUrl);
+  const warmImpact = await requestJSON(staleImpactUrl, proxyCacheProbeOptions);
   expect(warmImpact.status === 200, `warm impact status ${warmImpact.status}`);
   expect(warmImpact.headers.get("x-cerebro-cache") === "miss", `warm impact cache ${warmImpact.headers.get("x-cerebro-cache")}`);
   await sleep(proxyCacheTtlMs + 500);
   await stopNeo4j();
-  const staleImpact = await requestJSON(staleImpactUrl);
+  const staleImpact = await requestJSON(staleImpactUrl, proxyCacheProbeOptions);
   expect(staleImpact.status === 200, `stale impact status ${staleImpact.status}`);
   expect(staleImpact.headers.get("x-cerebro-cache") === "stale", `stale impact cache ${staleImpact.headers.get("x-cerebro-cache")}`);
   expect(staleImpact.headers.get("warning")?.includes("stale"), "stale impact missing warning header");
   expect(staleImpact.json.graph.root.urn === adminURN, "stale impact payload mismatch");
 
   const staleDashboardUrl = `${webBase}/api/cerebro/grc/dashboard?tenant_id=${tenantID}&limit=100&cache_probe=api-stale-${Date.now()}`;
-  const warmDashboard = await requestJSON(staleDashboardUrl);
+  const warmDashboard = await requestJSON(staleDashboardUrl, proxyCacheProbeOptions);
   expect(warmDashboard.status === 200, `warm dashboard status ${warmDashboard.status}`);
   await sleep(proxyCacheTtlMs + 500);
   await stopChild(backendProcess);
   backendProcess = null;
-  const staleDashboard = await requestJSON(staleDashboardUrl);
+  const staleDashboard = await requestJSON(staleDashboardUrl, proxyCacheProbeOptions);
   expect(staleDashboard.status === 200, `stale dashboard status ${staleDashboard.status}`);
   expect(staleDashboard.headers.get("x-cerebro-cache") === "stale", `stale dashboard cache ${staleDashboard.headers.get("x-cerebro-cache")}`);
   expect(staleDashboard.json.summary.open_findings === 3, "stale dashboard payload mismatch");

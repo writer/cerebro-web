@@ -37,14 +37,14 @@ export default function SecurityProducersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Security Producers"
-        description="Cerebro source runtime coverage, graph context tools, and agent entry points for security producers."
+        description="Source runtime coverage, graph context tools, and query entry points for security producers."
       />
 
       <Panel title="Runtime Health Snapshot">
         {!snapshot && <div className="text-[13px] text-slate-500">Loading runtime snapshot...</div>}
         {snapshot && (
           <div className={snapshot.ok ? "text-[13px] text-slate-700" : "text-[13px] text-red-600"}>
-            Cerebro `/source-runtimes` returned status {snapshot.status || "unavailable"}.
+            `/source-runtimes` returned status {snapshot.status || "unavailable"}.
           </div>
         )}
       </Panel>

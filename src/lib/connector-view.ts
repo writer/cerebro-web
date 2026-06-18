@@ -1,5 +1,13 @@
 import type { ConnectorCatalogEntry } from "@/lib/connectors";
-import { connectorDisplayMetadata, connectorDisplayName, connectorSearchText, connectorStatus } from "@/lib/connectors";
+import {
+  connectorDisplayMetadata,
+  connectorDisplayName,
+  connectorIsCatalogOnly,
+  connectorRequestActionLabel,
+  connectorSearchText,
+  connectorSetupAllowed,
+  connectorStatus,
+} from "@/lib/connectors";
 import type { SourceCoverageSummary, SourceReadiness } from "@/lib/mission-control";
 
 export type ReadinessFilter = SourceReadiness | "all";
@@ -51,6 +59,10 @@ const runtimeAttentionCount = (source: SourceCoverageSummary) =>
 export function compactConnectorStatus(card: ConnectorCatalogEntry | ConnectorCard): SourceReadiness {
   const cardWithCoverage = card as ConnectorCard;
   if (cardWithCoverage.coverage) return cardWithCoverage.coverage.performance;
+  if (connectorIsCatalogOnly(card)) {
+    if (card.catalog_status === "generateable" || card.catalog_status === "catalog_ready") return "not_configured";
+    return "poor";
+  }
   const status = connectorStatus(card);
   if (["bad", "needs_refresh", "poor", "healthy", "not_configured"].includes(status)) {
     return status as SourceReadiness;
@@ -73,6 +85,9 @@ export function connectorAttentionTotal(card: ConnectorCard) {
 }
 
 export function connectorPrimaryAction(card: ConnectorCard) {
+  if (!connectorSetupAllowed(card) && card.requestable && card.request_access_url) return connectorRequestActionLabel(card);
+  if (connectorIsCatalogOnly(card)) return "Inspect";
+  if (!connectorSetupAllowed(card)) return card.requestable ? "Inspect" : "View";
   const status = compactConnectorStatus(card);
   if (status === "not_configured") return "Connect";
   if (status === "healthy") return "View";
@@ -80,12 +95,24 @@ export function connectorPrimaryAction(card: ConnectorCard) {
   return "Fix";
 }
 
-export function connectorCapabilities(card: Pick<ConnectorCatalogEntry, "emitted_kinds">, limit = 3) {
+export function connectorCapabilities(card: Pick<ConnectorCatalogEntry, "emitted_kinds" | "resource_families" | "catalog_categories">, limit = 3) {
   const seen = new Set<string>();
-  (card.emitted_kinds ?? []).forEach((kind) => {
-    const prefix = kind.split(".")[0]?.trim();
-    if (prefix) seen.add(prefix);
+  (card.resource_families ?? []).forEach((family) => {
+    const label = family.label?.trim() || family.id?.trim();
+    if (label) seen.add(label);
   });
+  if (seen.size === 0) {
+    (card.catalog_categories ?? []).forEach((category) => {
+      const normalized = category.trim();
+      if (normalized) seen.add(normalized);
+    });
+  }
+  if (seen.size === 0) {
+    (card.emitted_kinds ?? []).forEach((kind) => {
+      const prefix = kind.split(".")[0]?.trim();
+      if (prefix) seen.add(prefix);
+    });
+  }
   return [...seen].slice(0, limit);
 }
 
@@ -95,11 +122,19 @@ const connectorCapabilityLabels: Record<string, string> = {
   aws: "Amazon Web Services",
   azure: "Microsoft Azure",
   cloudflare: "Cloudflare",
+  grc: "GRC",
   gcp: "Google Cloud Platform",
   github: "GitHub",
   google_workspace: "Google Workspace",
+  iac: "IaC",
+  itsm: "ITSM",
+  mdm: "MDM",
   okta: "Okta",
   openai: "OpenAI",
+  saas: "SaaS",
+  sca: "SCA",
+  siem: "SIEM",
+  soar: "SOAR",
 };
 
 export function connectorCapabilityLabel(capability: string) {
@@ -134,7 +169,11 @@ export function buildConnectorCards(library: ConnectorCatalogEntry[], sources: S
       ...connector,
       coverage,
       readiness,
-      nextAction: coverage?.next_action ?? ((connector.configured_runtimes ?? 0) > 0 ? "Monitor connection health" : "Connect credential"),
+      nextAction: coverage?.next_action ?? (
+        !connectorSetupAllowed(connector)
+          ? (connector.requestable_reason || connector.access_reason || "Inspect connector availability")
+          : ((connector.configured_runtimes ?? 0) > 0 ? "Monitor connection health" : "Connect credential")
+      ),
     };
   });
   sources.forEach((source) => {

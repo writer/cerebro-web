@@ -143,11 +143,11 @@ export default function FindingDetailPage() {
             {finding?.entity && (
               <AskAboutLink
                 variant="button"
-                question={`What is the blast radius of ${finding.title} and what entities are affected?`}
+                question={`Which entities are affected by ${finding.title} and what should be reviewed first?`}
                 scopeUrn={finding.entity}
                 title="Ask about this finding"
               >
-                Ask Cerebro
+                Ask
               </AskAboutLink>
             )}
             <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">

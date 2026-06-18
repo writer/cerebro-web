@@ -67,7 +67,7 @@ export default function TraceDrawer({ turn, onClose }: Props) {
                 <dd className="text-[13px] font-semibold text-slate-900">{formatMs(turn.done?.total_ms)}</dd>
               </div>
               <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
-                <dt className="text-[10px] uppercase tracking-wide text-slate-500">MCP connect</dt>
+                <dt className="text-[10px] uppercase tracking-wide text-slate-500">Tool connection</dt>
                 <dd className="text-[13px] font-semibold text-slate-900">{formatMs(turn.done?.timings?.mcp_connect_ms)}</dd>
               </div>
               <div className="rounded-md border border-slate-200 bg-slate-50 p-2">

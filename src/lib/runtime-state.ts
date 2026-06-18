@@ -21,12 +21,12 @@ export type RuntimeStateCopy = {
 
 export const runtimeStateCopy: Record<RuntimeState, RuntimeStateCopy> = {
   loading: {
-    description: "Cerebro is loading the latest view.",
+    description: "Loading the latest view.",
     label: "Loading",
     tone: "neutral",
   },
   ready: {
-    description: "Cerebro data is current for this view.",
+    description: "Data is current for this view.",
     label: "Ready",
     tone: "success",
   },
@@ -37,8 +37,8 @@ export const runtimeStateCopy: Record<RuntimeState, RuntimeStateCopy> = {
   },
   unavailable: {
     actionLabel: "Health",
-    description: "Data will appear when the Cerebro API is reachable.",
-    label: "Cerebro API unavailable",
+    description: "Data will appear when the API is reachable.",
+    label: "API unavailable",
     tone: "warning",
   },
   partial: {
@@ -57,7 +57,7 @@ export const runtimeStateCopy: Record<RuntimeState, RuntimeStateCopy> = {
     tone: "warning",
   },
   error: {
-    description: "Cerebro could not load this view.",
+    description: "This view could not load.",
     label: "Unable to load",
     tone: "danger",
   },

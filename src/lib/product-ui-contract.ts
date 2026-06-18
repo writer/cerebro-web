@@ -1,6 +1,7 @@
-export const PRODUCT_UI_CONTRACT_VERSION = "2026-06-15.runtime-identity-ux";
+export const PRODUCT_UI_CONTRACT_VERSION = "2026-06-16.agent-platform";
 
 export const REQUIRED_DEVELOPER_UTILITY_LABELS = [
+  "Agent Platform",
   "Identity Contract",
   "Security Producers",
   "Raindrop Ask Evals",

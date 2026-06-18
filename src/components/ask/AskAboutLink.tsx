@@ -32,7 +32,7 @@ export default function AskAboutLink({
     <button
       type="button"
       className={cls}
-      title={title ?? "Ask Cerebro about this context"}
+      title={title ?? "Ask about this context"}
       onClick={() =>
         openAgent({
           question,

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
-import { identityPosture } from "@/lib/identity";
+import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 
 type ConsoleConfig = {
@@ -49,6 +49,7 @@ export default function Topbar() {
   const apiKeyPosture = canUseClientKey ? (apiKey ? "Client key present" : "No client key") : "Server-managed";
   const runtimeHealthy = Boolean(connected && identity.state === "resolved");
   const runtimeWarning = !runtimeHealthy;
+  const identityAttention = Boolean(user?.conflicts?.length || user?.warnings?.length || user?.confidence === "unverified");
   const writeStampRows = [
     { label: "Asset report create", path: "grc/inventory/asset-reports" },
     { label: "Asset report triage", path: "grc/inventory/asset-reports/{id}/triage" },
@@ -67,7 +68,7 @@ export default function Topbar() {
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-4 w-4 text-[var(--primary)]">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.091-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.091L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.091 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.091ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 0 0 2.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
           </svg>
-          <span className="truncate">Ask or search Cerebro...</span>
+          <span className="truncate">Ask or search findings, controls, evidence...</span>
           <kbd className="ml-auto rounded border border-[color:var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">⌘K</kbd>
         </button>
       </div>
@@ -148,9 +149,15 @@ export default function Topbar() {
           <div className="mt-3 grid gap-2 text-[12px]">
             {[
               ["Actor", identity.actor || "Not resolved"],
+              ["Actor label", user?.actorLabel ?? "—"],
               ["Email", user?.email ?? "—"],
               ["Username", user?.username ?? "—"],
               ["Subject", user?.subject ?? "—"],
+              ["Provider", user?.provider ?? "—"],
+              ["Confidence", user ? currentUserConfidenceLabel(user.confidence) : "—"],
+              ["Groups", user?.entitlements?.groups?.join(", ") ?? "—"],
+              ["Roles", user?.entitlements?.roles?.join(", ") ?? "—"],
+              ["Scopes", user?.entitlements?.scopes?.join(", ") ?? "—"],
               ["Auth mode", authLabel],
               ["API key posture", apiKeyPosture],
             ].map(([label, value]) => (
@@ -160,6 +167,12 @@ export default function Topbar() {
               </div>
             ))}
           </div>
+
+          {identityAttention && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-[12px] leading-5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+              Identity requires attention. Protected actions may be refused until the current-user signal is consistent and verified.
+            </div>
+          )}
 
           <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Write Attribution</div>
@@ -202,12 +215,20 @@ export default function Topbar() {
               </div>
               <div className="mt-2 grid gap-1.5 text-[12px] text-[var(--text-muted)]">
                 <div className="flex justify-between gap-3">
-                  <span>Actor</span>
+                  <span>Actor ID</span>
                   <span className="break-all text-right font-mono text-[var(--text-secondary)]">{identity.actor || "Not resolved"}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Actor label</span>
+                  <span className="break-all text-right font-mono text-[var(--text-secondary)]">{user?.actorLabel ?? "—"}</span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span>Identity source</span>
                   <span className="text-right text-[var(--text-secondary)]">{identity.sourceLabel}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Confidence</span>
+                  <span className="text-right text-[var(--text-secondary)]">{user ? currentUserConfidenceLabel(user.confidence) : "—"}</span>
                 </div>
               </div>
             </div>

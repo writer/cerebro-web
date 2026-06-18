@@ -36,8 +36,17 @@ import type {
   ConnectorScopePolicy,
 } from "@/lib/connectors";
 import {
+  connectorAccessStatusLabel,
+  connectorCatalogStatusLabel,
+  connectorDefinitionOriginLabel,
   connectorDisplayMetadata,
   connectorDisplayName,
+  connectorIntegrationDepthLabel,
+  connectorIsCatalogOnly,
+  connectorReadinessStageLabel,
+  connectorRequestActionLabel,
+  connectorRuntimeSurfaceLabel,
+  connectorSetupAllowed,
   normalizeCredentialStores,
   scopePolicyExclusionCount,
 } from "@/lib/connectors";
@@ -49,7 +58,7 @@ const tabs: Array<{ id: DetailTab; label: string; icon: ReactNode }> = [
   { id: "setup", label: "Setup", icon: <KeyRound className="h-4 w-4" /> },
   { id: "connections", label: "Connections", icon: <ListChecks className="h-4 w-4" /> },
   { id: "activity", label: "Activity", icon: <RefreshCw className="h-4 w-4" /> },
-  { id: "scope", label: "Scope", icon: <Layers3 className="h-4 w-4" /> },
+  { id: "scope", label: "Collected resources", icon: <Layers3 className="h-4 w-4" /> },
   { id: "data", label: "Data", icon: <Database className="h-4 w-4" /> },
 ];
 
@@ -182,7 +191,7 @@ function OperationsSummary({
   );
 }
 
-function AttentionNotice({ summary, onSetup }: { summary: ConnectorOperationsSummary; onSetup: () => void }) {
+function AttentionNotice({ summary, setupAllowed, onSetup }: { summary: ConnectorOperationsSummary; setupAllowed: boolean; onSetup: () => void }) {
   if (summary.status === "healthy") {
     return null;
   }
@@ -197,15 +206,17 @@ function AttentionNotice({ summary, onSetup }: { summary: ConnectorOperationsSum
           <div className="text-[12px] leading-5">{detail}</div>
         </div>
       </div>
-      <button type="button" onClick={onSetup} className="secondary-button px-3 py-2 text-[12px]">
-        {summary.status === "not_configured" ? "Configure" : "Review setup"}
-      </button>
+      {setupAllowed && (
+        <button type="button" onClick={onSetup} className="secondary-button px-3 py-2 text-[12px]">
+          {summary.status === "not_configured" ? "Configure" : "Review setup"}
+        </button>
+      )}
     </div>
   );
 }
 
-function ConnectionsTable({ connections }: { connections: ConnectorConnectionSummary[] }) {
-  if (connections.length === 0) return <EmptyBlock label="No connections match this scope." />;
+function ConnectionsTable({ connections, activeRuntimeID = "" }: { connections: ConnectorConnectionSummary[]; activeRuntimeID?: string }) {
+  if (connections.length === 0) return <EmptyBlock label="No connections match these filters." />;
   return (
     <div className="overflow-x-auto rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
       <table className="data-table">
@@ -216,14 +227,14 @@ function ConnectionsTable({ connections }: { connections: ConnectorConnectionSum
             <th>Graph</th>
             <th>Records</th>
             <th>Projected</th>
-            <th>Scope</th>
+            <th>Collected resources</th>
             <th>Last Activity</th>
             <th>Next Action</th>
           </tr>
         </thead>
         <tbody>
           {connections.map((connection) => (
-            <tr key={connection.runtime_id}>
+            <tr key={connection.runtime_id} className={activeRuntimeID === connection.runtime_id ? "bg-[var(--surface-hover)]" : undefined}>
               <td>
                 <div className="font-medium text-[var(--text-primary)]">{connection.family || "Default"}</div>
                 <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{connection.runtime_id}</div>
@@ -238,7 +249,7 @@ function ConnectionsTable({ connections }: { connections: ConnectorConnectionSum
                 <div>{connection.entities_projected ?? 0} entities</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{connection.links_projected ?? 0} links</div>
               </td>
-              <td><Badge value={scopePolicyExclusionCount(connection.scope_policy) > 0 ? `${scopePolicyExclusionCount(connection.scope_policy)} excluded` : "all in scope"} /></td>
+              <td><Badge value={scopePolicyExclusionCount(connection.scope_policy) > 0 ? `${scopePolicyExclusionCount(connection.scope_policy)} excluded` : "all collected"} /></td>
               <td>
                 <div>{displayDate(connection.last_activity_at)}</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{formatDuration(connection.watermark_lag_seconds)} lag</div>
@@ -272,11 +283,11 @@ function ScopePolicyCard({ connection }: { connection: ConnectorConnectionSummar
           <div className="text-[13px] font-semibold text-[var(--text-primary)]">{connection.family || "Default family"}</div>
           <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{connection.runtime_id}</div>
         </div>
-        <Badge value={count > 0 ? `${count} excluded` : "all in scope"} />
+        <Badge value={count > 0 ? `${count} excluded` : "all collected"} />
       </div>
       {count === 0 ? (
         <div className="mt-3 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
-          This connection has no source-time exclusions. The runtime will attempt every configured family.
+          This connection has no collection exclusions. The runtime will attempt to collect every configured family.
         </div>
       ) : (
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -322,21 +333,131 @@ function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
   );
 }
 
+function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntry }) {
+  const families = connector.resource_families ?? [];
+  if (!connector.catalog_status && families.length === 0) return null;
+  return (
+    <Panel title="Catalog definition" action={<Badge value={connectorRuntimeSurfaceLabel(connector)} />}>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Readiness</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connectorReadinessStageLabel(connector.readiness_stage || connector.catalog_status)}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Depth</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Families</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{families.length}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Verification</div>
+          <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.verification_endpoint || "Not advertised"}</div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Auth</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{humanize(connector.auth_model || "unknown")}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Origin</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connectorDefinitionOriginLabel(connector.definition_origin)}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Catalog path</div>
+          <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.catalog_source_path || connector.catalog_schema_version || "Not cataloged"}</div>
+        </div>
+      </div>
+      {connector.missing_features && connector.missing_features.length > 0 && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+          <span className="font-semibold">Missing runtime features:</span> {connector.missing_features.join(", ")}
+        </div>
+      )}
+      {families.length > 0 && (
+        <div className="mt-4 grid gap-2 lg:grid-cols-2">
+          {families.map((family) => (
+            <div key={family.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">{family.label || humanize(family.id)}</div>
+                  <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{family.path || family.event_kind || family.id}</div>
+                </div>
+                {family.high_value && <Badge value="high_value" />}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {family.projection_template && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)]">{family.projection_template}</span>}
+                {family.event_kind && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{family.event_kind}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function CatalogSetupNotice({ connector }: { connector: ConnectorCatalogEntry }) {
+  const accessLabel = connectorAccessStatusLabel(connector.access_status);
+  const requestHref = connector.request_access_url?.trim();
+  const availabilityDetail = connector.access_reason || (
+    connector.runtime_executable
+      ? "Generate and register the source runtime before saving connections."
+      : connectorCatalogStatusLabel(connector.catalog_status)
+  );
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <CatalogDefinitionPanel connector={connector} />
+      <Panel title="Runtime status" action={<Badge value={connector.access_status ? accessLabel : connector.catalog_status || "catalog"} />}>
+        <div className="space-y-3 text-[13px] leading-5 text-[var(--text-secondary)]">
+          <p>
+            {connector.access_reason
+              ? "Connector metadata is visible, but setup is not enabled by this API."
+              : "This catalog definition is not currently advertised by the backend as a live setup target."}
+          </p>
+          <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Availability</div>
+            <div className="mt-1 text-[var(--text-primary)]">{availabilityDetail}</div>
+          </div>
+          {connector.classifier_output && (
+            <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Classifier</div>
+              <div className="mt-1 text-[var(--text-primary)]">{humanize(connector.classifier_output)}</div>
+            </div>
+          )}
+          {connector.requestable && (
+            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Request path</div>
+              <div className="mt-1 text-[var(--text-primary)]">{connector.requestable_reason || connector.access_reason || "This connector can be requested for this deployment."}</div>
+              {requestHref && (
+                <a href={requestHref} target="_blank" rel="noreferrer" className="primary-button mt-3 inline-flex px-3 py-2 text-[12px]">
+                  {connectorRequestActionLabel(connector)}
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntry; connections: ConnectorConnectionSummary[] }) {
   const capabilities = connectorCapabilities(connector, 8);
   const scopeOptions = connector.scope_options ?? [];
   const excludedConnections = connections.filter((connection) => scopePolicyExclusionCount(connection.scope_policy) > 0);
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <Panel title="Source-time resource scope">
+      <Panel title="Collection policy">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-lg bg-[var(--surface-muted)] p-3">
             <div className="text-xl font-semibold text-[var(--text-primary)]">{scopeOptions.length}</div>
-            <div className="text-[11px] text-[var(--text-muted)]">available scope classes</div>
+            <div className="text-[11px] text-[var(--text-muted)]">available classes</div>
           </div>
           <div className="rounded-lg bg-[var(--surface-muted)] p-3">
             <div className="text-xl font-semibold text-[var(--text-primary)]">{excludedConnections.length}</div>
-            <div className="text-[11px] text-[var(--text-muted)]">connections scoped down</div>
+            <div className="text-[11px] text-[var(--text-muted)]">connections with exclusions</div>
           </div>
           <div className="rounded-lg bg-[var(--surface-muted)] p-3">
             <div className="text-xl font-semibold text-[var(--text-primary)]">{connections.reduce((sum, connection) => sum + scopePolicyExclusionCount(connection.scope_policy), 0)}</div>
@@ -344,7 +465,7 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
           </div>
         </div>
         <div className="mt-4 space-y-3">
-          {connections.length === 0 && <EmptyBlock label="Connect this source before resource scope can be evaluated." />}
+          {connections.length === 0 && <EmptyBlock label="Connect this source before collection exclusions can be evaluated." />}
           {connections.map((connection) => (
             <ScopePolicyCard key={connection.runtime_id} connection={connection} />
           ))}
@@ -373,12 +494,30 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
   );
 }
 
-export default function ConnectorDetailPage() {
+function setupHref(sourceID: string, tenantID: string, framework = "") {
+  const params = new URLSearchParams();
+  if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
+  if (framework.trim()) params.set("framework", framework.trim());
+  const query = params.toString();
+  return `/connectors/${encodeURIComponent(sourceID)}/setup${query ? `?${query}` : ""}`;
+}
+
+function detailHref(sourceID: string, tenantID: string, framework = "") {
+  const params = new URLSearchParams();
+  if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
+  if (framework.trim()) params.set("framework", framework.trim());
+  const query = params.toString();
+  return `/connectors/${encodeURIComponent(sourceID)}${query ? `?${query}` : ""}`;
+}
+
+export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: boolean }) {
   const params = useParams<{ sourceID: string }>();
   const searchParams = useSearchParams();
   const { apiKey } = useApiKey();
   const sourceID = useMemo(() => decodeURIComponent(params.sourceID ?? ""), [params.sourceID]);
-  const initialTab = (searchParams.get("tab") as DetailTab | null) ?? "overview";
+  const runtimeID = searchParams.get("runtime_id") ?? "";
+  const framework = searchParams.get("framework") ?? "";
+  const initialTab = setupOnly ? "setup" : (searchParams.get("tab") as DetailTab | null) ?? (runtimeID ? "connections" : "overview");
   const [activeTab, setActiveTab] = useState<DetailTab>(tabs.some((tab) => tab.id === initialTab) ? initialTab : "overview");
   const [tenantID, setTenantID] = useState(searchParams.get("tenant_id") ?? "");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
@@ -416,6 +555,90 @@ export default function ConnectorDetailPage() {
   const meta = connectorDisplayMetadata(connector);
   const readyStores = credentialStores.filter((store) => store.available);
   const capabilityLabels = connectorCapabilities(connector, 4);
+  const catalogOnly = connectorIsCatalogOnly(connector);
+  const setupAllowed = connectorSetupAllowed(connector);
+
+  if (setupOnly) {
+    const setupStats = [
+      { label: "Ready stores", value: String(readyStores.length) },
+      { label: "Source", value: meta.category },
+      { label: "Connections", value: String(connections.length) },
+    ];
+
+    return (
+      <div className="space-y-5">
+        <section className="overflow-hidden rounded-xl border border-[color:var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+          <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0">
+              <Link href={detailHref(sourceID, tenantID, framework)} className="mb-4 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to {displayName}
+              </Link>
+              <div className="flex items-start gap-3">
+                <ProviderMark connector={connector} />
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Connect {displayName}</h1>
+                  <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[var(--text-muted)]">
+                    Choose identity, bind credentials to a backend store, validate access, then save a collector runtime with optional collection exclusions.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {capabilityLabels.map((capability) => (
+                      <span key={capability} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                        {connectorCapabilityLabel(capability)}
+                      </span>
+                    ))}
+                    {capabilityLabels.length === 0 && <Badge value="connector runtime" />}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-3">
+              <div className="grid overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] text-center sm:grid-cols-3">
+                {setupStats.map((item) => (
+                  <div key={item.label} className="border-t border-[color:var(--border)] px-3 py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:first:border-l-0">
+                    <div className="text-[15px] font-semibold leading-5 text-[var(--text-primary)]">{item.value}</div>
+                    <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-3 text-[12px] leading-5 text-[var(--text-secondary)]">
+                <span className="font-semibold text-[var(--text-primary)]">Credentials:</span>
+                <span className="ml-1">encrypted submit or backend references only.</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 border-t border-[color:var(--border)] bg-[var(--surface-muted)] p-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,1fr)_auto]">
+            <label className={labelClass}>
+              Tenant
+              <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} />
+            </label>
+            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+              <span className="font-semibold text-[var(--text-primary)]">Dedicated setup:</span>
+              <span className="ml-1">monitoring and activity remain on the connector detail page.</span>
+            </div>
+            <button type="button" onClick={() => void Promise.all([detailQuery.reload(), libraryQuery.reload()])} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px]">
+              <RefreshCw className="h-4 w-4" />
+              Refresh metadata
+            </button>
+          </div>
+        </section>
+
+        {!setupAllowed ? (
+          <CatalogSetupNotice connector={connector} />
+        ) : (
+          <ConnectorSetupForm
+            connector={connector}
+            tenantID={tenantID.trim()}
+            apiKey={apiKey}
+            credentialStores={credentialStores}
+            initialFramework={framework}
+            onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -435,6 +658,11 @@ export default function ConnectorDetailPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge value={summary.status || "not_configured"} />
                 <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">{meta.category}</span>
+                {connector.access_status && connector.access_status !== "available" && (
+                  <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-100">
+                    {connectorAccessStatusLabel(connector.access_status)}
+                  </span>
+                )}
                 {capabilityLabels.map((capability) => (
                   <span key={capability} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
                     {connectorCapabilityLabel(capability)}
@@ -445,9 +673,11 @@ export default function ConnectorDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setActiveTab("setup")} className="secondary-button px-3 py-2 text-[13px]">
-            Add connection
-          </button>
+          {setupAllowed && !catalogOnly && (
+            <Link href={setupHref(sourceID, tenantID, framework)} className="secondary-button px-3 py-2 text-[13px]">
+              Add connection
+            </Link>
+          )}
           <button type="button" onClick={() => void Promise.all([detailQuery.reload(), libraryQuery.reload()])} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -456,12 +686,12 @@ export default function ConnectorDetailPage() {
       </div>
 
       <OperationsSummary connector={connector} summary={summary} secretStoreCount={readyStores.length} />
-      <AttentionNotice summary={summary} onSetup={() => setActiveTab("setup")} />
+      <AttentionNotice summary={summary} setupAllowed={setupAllowed} onSetup={() => setActiveTab("setup")} />
 
       <section className="surface-panel p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(220px,0.6fr)_minmax(0,1fr)]">
           <label className={labelClass}>
-            Tenant scope
+            Tenant filter
             <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} />
           </label>
           <details className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
@@ -470,6 +700,13 @@ export default function ConnectorDetailPage() {
               <div><span className="text-[var(--text-muted)]">Source ID</span><div className="font-mono">{connector.source_id}</div></div>
               <div><span className="text-[var(--text-muted)]">Generated</span><div>{displayDate(detailQuery.data?.generated_at)}</div></div>
               <div><span className="text-[var(--text-muted)]">Credential stores</span><div>{readyStores.map((store) => store.shortLabel).join(", ") || "none"}</div></div>
+              <div><span className="text-[var(--text-muted)]">Catalog</span><div>{connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"}</div></div>
+              <div><span className="text-[var(--text-muted)]">Runtime surface</span><div>{connectorRuntimeSurfaceLabel(connector)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Access</span><div>{connectorAccessStatusLabel(connector.access_status)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Stage</span><div>{connectorReadinessStageLabel(connector.readiness_stage)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Depth</span><div>{connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"}</div></div>
+              <div><span className="text-[var(--text-muted)]">Origin</span><div>{connectorDefinitionOriginLabel(connector.definition_origin)}</div></div>
+              <div><span className="text-[var(--text-muted)]">Auth model</span><div>{humanize(connector.auth_model || "unknown")}</div></div>
             </div>
           </details>
         </div>
@@ -510,6 +747,11 @@ export default function ConnectorDetailPage() {
                 ["Last activity", summary.last_activity_at ? displayDate(summary.last_activity_at) : "None"],
                 ["Sync frequency", summary.sync_frequency_seconds ? `Every ${formatDuration(summary.sync_frequency_seconds)}` : "Deployment managed"],
                 ["Secret stores", readyStores.map((store) => store.label).join(", ") || "None advertised"],
+                ["Catalog", connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"],
+                ["Runtime", connectorRuntimeSurfaceLabel(connector)],
+                ["Access", connectorAccessStatusLabel(connector.access_status)],
+                ["Stage", connectorReadinessStageLabel(connector.readiness_stage)],
+                ["Depth", connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"],
                 ["Provider", meta.provider],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4 border-b border-[color:var(--border)] pb-2 last:border-0 last:pb-0">
@@ -517,27 +759,36 @@ export default function ConnectorDetailPage() {
                   <span className="text-right text-[var(--text-primary)]">{value}</span>
                 </div>
               ))}
+              {!setupAllowed && connector.access_reason && (
+                <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                  <span className="font-semibold text-[var(--text-primary)]">Availability:</span> {connector.access_reason}
+                </div>
+              )}
             </div>
           </Panel>
+          <CatalogDefinitionPanel connector={connector} />
           <Panel title="Recent activity" action={<span className="text-[12px] text-[var(--text-muted)]">{activity.slice(0, 5).length} events</span>}>
             <ConnectorActivityTable activity={activity.slice(0, 5)} />
           </Panel>
         </div>
       )}
 
-      {activeTab === "setup" && (
+      {activeTab === "setup" && (!setupAllowed ? (
+        <CatalogSetupNotice connector={connector} />
+      ) : (
         <ConnectorSetupForm
           connector={connector}
           tenantID={tenantID.trim()}
           apiKey={apiKey}
           credentialStores={credentialStores}
+          initialFramework={framework}
           onConnected={() => Promise.all([detailQuery.reload(), libraryQuery.reload()]).then(() => undefined)}
         />
-      )}
+      ))}
 
       {activeTab === "connections" && (
         <Panel title="Connections" action={<span className="text-[12px] text-[var(--text-muted)]">{connections.length} shown</span>}>
-          <ConnectionsTable connections={connections} />
+          <ConnectionsTable connections={connections} activeRuntimeID={runtimeID} />
         </Panel>
       )}
 
@@ -556,4 +807,8 @@ export default function ConnectorDetailPage() {
       )}
     </div>
   );
+}
+
+export default function ConnectorDetailPage() {
+  return <ConnectorDetailContent />;
 }

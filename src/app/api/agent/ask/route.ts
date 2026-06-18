@@ -18,6 +18,9 @@ import {
   normalizeAskError,
   normalizeAskModel,
 } from "@/lib/ask";
+import { authorizationErrorResponse, authorizeCurrentUser } from "@/lib/authorization";
+import { resolveCurrentUserFromHeadersWithFallback } from "@/lib/identity";
+import { currentUserServerAuditFields } from "@/lib/identity-server";
 import { headersWithTrace, startWebSpan, type WebSpan } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -102,13 +105,23 @@ export async function POST(request: NextRequest) {
     "http.request.method": "POST",
     "url.path_family": "/api/agent",
   }, request.headers.get("traceparent"));
-  let payload: NormalizedAgentRequest | null = null;
-  try {
-    payload = normalizePayload(await request.json());
-  } catch {
-    payload = null;
+  const [currentUser, rawPayload] = await Promise.all([
+    resolveCurrentUserFromHeadersWithFallback(request.headers),
+    request.json().catch(() => null),
+  ]);
+  const decision = authorizeCurrentUser(currentUser, "agent:ask");
+  if (!decision.allowed) {
+    console.warn("agent ask denied", currentUserServerAuditFields(currentUser));
+    const response = authorizationErrorResponse(decision);
+    response.headers.set("x-cerebro-web-trace-id", span.traceId);
+    span.end("completed", {
+      authorization_allowed: false,
+      "http.response.status_code": response.status,
+    });
+    return response;
   }
 
+  const payload = normalizePayload(rawPayload);
   if (!payload) {
     span.end("completed", { "http.response.status_code": 400 });
     const response = NextResponse.json(
@@ -198,7 +211,7 @@ async function streamAgentRun(
 
   controller.enqueue(sse("agent_status", {
     stage: "connect",
-    label: "Connecting to Cerebro MCP",
+    label: "Connecting to graph tools",
     detail: new URL(mcpUrl).pathname,
     mode: "agent",
   }));
@@ -423,7 +436,7 @@ const emitAgentStreamEvent = (
       controller.enqueue(sse("agent_tool", {
         name: toolNameFromItem(event.item),
         status: "started",
-        detail: "Calling Cerebro MCP",
+        detail: "Calling graph tools",
       }));
     }
     if (event.name === "tool_output") {

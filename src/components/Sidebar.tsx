@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useCommandPalette, useSidebar } from "@/components/providers";
+import { appVersionLabel } from "@/lib/app-version";
 import { operatorNavLinks, utilityLinks } from "@/lib/navigation";
 
 const icons: Record<string, React.ReactNode> = {
@@ -76,7 +77,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="ml-2 max-md:hidden">
             <span className="block text-[15px] font-semibold text-[var(--text-primary)]">Cerebro</span>
-            <span className="block text-[11px] text-[var(--sidebar-muted)]">GRC control plane</span>
+            <span className="block text-[11px] text-[var(--sidebar-muted)]">Controls and evidence</span>
           </div>
         )}
       </div>
@@ -125,7 +126,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="flex items-center justify-between border-t border-[color:var(--border)] px-3 py-2.5">
-        {!collapsed && <div className="text-[11px] text-[var(--sidebar-muted)] max-md:hidden">v2.1.86</div>}
+        {!collapsed && <div className="text-[11px] text-[var(--sidebar-muted)] max-md:hidden">{appVersionLabel}</div>}
         <button
           type="button"
           onClick={toggleSidebar}

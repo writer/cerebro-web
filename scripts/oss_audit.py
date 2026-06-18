@@ -81,7 +81,7 @@ PROHIBITED_PATTERNS = [
     re.compile(r"ghcr\.io/writerinternal/"),
     re.compile(r"arn:aws:iam::\d{12}:"),
     re.compile(
-        r"\bWriterInternal/(security-tooling-map|trusted-endpoint|aurelius|seclift|npm-guard|vulnerabilities|security-reviewer|panopticon|dast|writer-vuln-miner|mender|tiresias|2password|huggingface-vanta-connector|strix)\b",
+        r"\bWriterInternal/(security-tooling-map|trusted-endpoint|aurelius|seclift|npm-guard|vulnerabilities|security-reviewer|panopticon|dast|writer-vuln-miner|mender|tiresias|2password|huggingface-[a-z0-9-]+-connector|strix)\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -189,7 +189,7 @@ def check_repository_split(root: Path) -> list[str]:
     if "export const securityProducers: SecurityProducer[] = [" in text:
         findings.append("src/lib/security-producers.ts: public repo must stay config-driven, not hardcode producer registries")
     if "WriterInternal/" in text:
-        findings.append("src/lib/security-producers.ts: private producer repositories belong in the private web overlay")
+        findings.append("src/lib/security-producers.ts: private producer repositories belong in the internal deployment mirror")
     return findings
 
 

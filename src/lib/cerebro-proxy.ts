@@ -48,7 +48,7 @@ const SERVER_AUTHORIZATION =
 const forwardRequestAuth =
   parseBooleanEnv(process.env.CEREBRO_FORWARD_AUTH_HEADERS) ??
   !Boolean(SERVER_API_KEY || SERVER_AUTHORIZATION);
-const DEFAULT_PROXY_TIMEOUT_MS = 600000;
+const DEFAULT_PROXY_TIMEOUT_MS = 45000;
 const proxyTimeoutMs = Number.parseInt(process.env.CEREBRO_PROXY_TIMEOUT_MS ?? String(DEFAULT_PROXY_TIMEOUT_MS), 10);
 const PROXY_TIMEOUT_MS = Number.isFinite(proxyTimeoutMs) && proxyTimeoutMs > 0 ? proxyTimeoutMs : DEFAULT_PROXY_TIMEOUT_MS;
 const PROXY_CACHE_TTL_MS = parseNonNegativeMs(process.env.CEREBRO_PROXY_CACHE_TTL_MS, 60000);
@@ -127,6 +127,8 @@ export const isCacheableCerebroPath = (path: string) => {
   return [
     "grc/dashboard",
     "grc/controls",
+    "grc/control-packets",
+    "grc/control-packets/detail",
     "grc/findings",
     "grc/evidence",
     "grc/inventory/categories",

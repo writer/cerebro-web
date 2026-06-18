@@ -12,8 +12,8 @@ describe("runtime state contract", () => {
   });
 
   it("keeps operator-facing copy centralized", () => {
-    expect(runtimeStateLabel("unavailable")).toBe("Cerebro API unavailable");
-    expect(runtimeStateDescription("unavailable")).toContain("Cerebro API");
+    expect(runtimeStateLabel("unavailable")).toBe("API unavailable");
+    expect(runtimeStateDescription("unavailable")).toContain("API");
     expect(metricValueForState({ state: "unavailable", value: 0 })).toBe("Not loaded");
     expect(metricValueForState({ state: "ready", value: 0 })).toBe(0);
     expect(metricDetailForState({ state: "unavailable", detail: "in scope" })).toBe("waiting for API");

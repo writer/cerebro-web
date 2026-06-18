@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildConnectorCards,
   connectorAttentionTotal,
+  connectorCapabilities,
   connectorCapabilityLabel,
   connectorPath,
+  connectorPrimaryAction,
   filterConnectorCards,
 } from "./connector-view";
 import { connectorDisplayName } from "./connectors";
@@ -63,8 +65,64 @@ describe("connector view model", () => {
     expect(connectorPath("github", { runtime_id: "example-runtime", tenant_id: "" })).toBe("/connectors/github?runtime_id=example-runtime");
   });
 
+  it("keeps catalog-only executable definitions in inspection mode", () => {
+    const cards = buildConnectorCards(
+      [
+        {
+          source_id: "auth0",
+          name: "Auth0",
+          status: "generateable",
+          catalog_status: "generateable",
+          runtime_executable: true,
+        },
+      ],
+      [],
+    );
+
+    expect(cards[0]).toMatchObject({ source_id: "auth0", readiness: "not_configured" });
+    expect(connectorPrimaryAction(cards[0])).toBe("Inspect");
+    expect(filterConnectorCards(cards, "sourcegen", "all")).toHaveLength(1);
+  });
+
+  it("keeps restricted API-owned connectors visible without setup actions", () => {
+    const cards = buildConnectorCards(
+      [
+        {
+          source_id: "aws",
+          name: "AWS",
+          access_status: "restricted",
+          access_reason: "limited preview",
+          setup_allowed: false,
+          requestable: true,
+          requestable_reason: "limited preview",
+          request_access_action: "Request in Access Hub",
+          request_access_url: "https://access.example.com/request?source=aws",
+          connection_methods: [{ id: "encrypted_submission" }],
+        },
+      ],
+      [],
+    );
+
+    expect(cards[0]).toMatchObject({ source_id: "aws", nextAction: "limited preview" });
+    expect(connectorPrimaryAction(cards[0])).toBe("Request in Access Hub");
+    expect(filterConnectorCards(cards, "limited preview", "all")).toHaveLength(1);
+  });
+
   it("renders provider capability labels with full public names", () => {
     expect(connectorCapabilityLabel("aws")).toBe("Amazon Web Services");
     expect(connectorCapabilityLabel("gcp")).toBe("Google Cloud Platform");
+    expect(connectorCapabilityLabel("grc")).toBe("GRC");
+  });
+
+  it("prefers catalog resource families as capability chips for sourcegen entries", () => {
+    expect(connectorCapabilities({
+      emitted_kinds: ["crowdstrike_falcon.findings"],
+      catalog_categories: ["security", "endpoint"],
+      resource_families: [
+        { id: "endpoint_devices", label: "Endpoint devices" },
+        { id: "findings", label: "Findings" },
+        { id: "vulnerabilities", label: "Vulnerabilities" },
+      ],
+    }, 2)).toEqual(["Endpoint devices", "Findings"]);
   });
 });

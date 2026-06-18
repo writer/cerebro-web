@@ -163,8 +163,8 @@ function AskPageInner() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ask Cerebro"
-        description="Expanded console for the Cerebro agent. Ask natural-language questions against the graph, inspect tool progress, Cypher, rows, summaries, and trace metadata."
+        title="Ask graph"
+        description="Ask graph questions, then inspect tool progress, Cypher, rows, summaries, and trace metadata."
         action={
           turns.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">

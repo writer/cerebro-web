@@ -35,8 +35,8 @@ const statusTone = (turn?: AskTurnState) => {
 
 const statusLabel = (turn?: AskTurnState) => {
   if (!turn) return "Ready";
-  if (turn.status === "streaming") return turn.agentMode === "legacy" ? "Ask stream" : "MCP live";
-  if (turn.status === "completed") return turn.agentMode === "legacy" ? "Ask complete" : "MCP complete";
+  if (turn.status === "streaming") return turn.agentMode === "legacy" ? "Ask stream" : "Graph tools running";
+  if (turn.status === "completed") return turn.agentMode === "legacy" ? "Ask complete" : "Graph tools complete";
   if (turn.status === "aborted") return "Stopped";
   return "Attention";
 };
@@ -61,12 +61,12 @@ const samplePrompts = (routeLabel?: string, scope?: string, pageState?: string) 
     return [
       {
         label: "Check API health",
-        prompt: `On the ${routeLabel ?? "current"} screen, explain why Cerebro data is unavailable and what health checks I should run next.`,
+        prompt: `On the ${routeLabel ?? "current"} screen, explain why data is unavailable and what health checks I should run next.`,
         icon: Activity,
       },
       {
         label: "Plan recovery",
-        prompt: "List the fastest recovery steps for restoring the Cerebro API and validating that the UI is healthy again.",
+        prompt: "List the fastest recovery steps for restoring API access and validating that the UI is healthy again.",
         icon: RefreshCw,
       },
       {
@@ -113,8 +113,8 @@ const samplePrompts = (routeLabel?: string, scope?: string, pageState?: string) 
     {
       label: "Map impact",
       prompt: scope
-        ? `Map the blast radius and likely impact paths for ${scope}.`
-        : "Map the likely blast radius for the current screen's most important entity.",
+        ? `Map affected entities and likely impact paths for ${scope}.`
+        : "Map the affected entities for the current screen's most important entity.",
       icon: Activity,
     },
   ];
@@ -160,16 +160,16 @@ export default function CerebroAgentPanel() {
         type="button"
         onClick={() => openAgent()}
         className={`agent-surface agent-launcher fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-lg border border-slate-200 bg-white text-left shadow-[0_18px_45px_rgba(15,23,42,0.15)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_22px_55px_rgba(15,23,42,0.18)] ${quietLauncher ? "w-[58px] justify-center px-2.5 py-2.5" : "w-[234px] px-3 py-3"}`}
-        aria-label="Open Cerebro AI"
-        title={quietLauncher ? `Open Cerebro AI for ${pageContext.routeLabel ?? "this screen"}` : undefined}
+        aria-label="Open graph query panel"
+        title={quietLauncher ? `Open graph query for ${pageContext.routeLabel ?? "this screen"}` : undefined}
       >
         <span className={`grid shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-950 text-white ${quietLauncher ? "h-9 w-9" : "h-10 w-10"}`}>
           {activeTurn ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
         </span>
         <span className={quietLauncher ? "sr-only" : "min-w-0 flex-1"}>
-          <span className="block text-[14px] font-semibold text-slate-950">Cerebro AI</span>
+          <span className="block text-[14px] font-semibold text-slate-950">Ask graph</span>
           <span className="mt-0.5 block truncate text-[12px] text-slate-500">
-            {activeTurn ? "Working across context" : pageContext.routeLabel ?? "Ask across Cerebro"}
+            {activeTurn ? "Query running" : pageContext.routeLabel ?? "Ask across current data"}
           </span>
         </span>
         {!quietLauncher && <ArrowUpRight className="h-4 w-4 text-slate-400" />}
@@ -197,7 +197,7 @@ export default function CerebroAgentPanel() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-[16px] font-semibold text-slate-950">Cerebro AI</h2>
+                  <h2 className="truncate text-[16px] font-semibold text-slate-950">Ask graph</h2>
                   <span className={`agent-mono rounded-full border px-2 py-0.5 text-[10px] uppercase ${statusTone(latestTurn)}`}>
                     {statusLabel(latestTurn)}
                   </span>
@@ -220,7 +220,7 @@ export default function CerebroAgentPanel() {
                 type="button"
                 onClick={() => setOpen(false)}
                 className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-                title="Close Cerebro AI"
+                title="Close graph query panel"
               >
                 <X className={iconClass} />
               </button>
@@ -228,7 +228,7 @@ export default function CerebroAgentPanel() {
           </div>
 
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {(pageContext.chips?.length ? pageContext.chips : [{ label: "Screen", value: pageContext.routeLabel ?? "Cerebro" }]).map((chip) => (
+            {(pageContext.chips?.length ? pageContext.chips : [{ label: "Screen", value: pageContext.routeLabel ?? "Current view" }]).map((chip) => (
               <span
                 key={`${chip.label}:${chip.value}`}
                 className="agent-mono inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] text-slate-600"
@@ -246,13 +246,13 @@ export default function CerebroAgentPanel() {
             <div className="space-y-5">
               <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="agent-mono text-[10px] font-semibold uppercase text-indigo-700">
-                  Context-aware agent
+                  Evidence and graph query
                 </div>
                 <h3 className="mt-3 text-[27px] font-semibold leading-tight tracking-normal text-slate-950">
-                  Ask from exactly where you are.
+                  Ask about the current view.
                 </h3>
                 <p className="mt-3 text-[14px] leading-6 text-slate-600">
-                  Cerebro AI keeps the current screen, scope, and investigation trail in view, then uses Cerebro MCP to move through findings, evidence, graph impact, runtimes, and proposals.
+                  Uses this page&apos;s filters, selected entity, and investigation context to answer questions about findings, evidence, affected entities, source runtimes, and proposed remediation.
                 </p>
               </section>
 
@@ -307,7 +307,7 @@ export default function CerebroAgentPanel() {
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={onComposerKeyDown}
               rows={3}
-              placeholder="Ask about this screen, a finding, evidence, ownership, or blast radius..."
+              placeholder="Ask about this screen, a finding, evidence, ownership, or affected entities..."
               className="block max-h-36 min-h-20 w-full resize-none rounded-lg border-0 bg-transparent px-3 py-2.5 text-[14px] leading-5 text-slate-900 outline-none placeholder:text-slate-400"
             />
             <div className="flex items-center justify-between border-t border-slate-100 px-2.5 py-2">
@@ -420,14 +420,14 @@ function AgentTurnCard({
           !turn.error && (
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[13px] text-slate-500">
               <LoaderCircle className="h-4 w-4 animate-spin text-emerald-600" />
-              Reading Cerebro context...
+              Reading current context...
             </div>
           )
         )}
 
         <div className="flex items-center justify-between border-t border-slate-100 pt-2">
           <div className="agent-mono text-[10px] uppercase text-slate-400">
-            {turn.agentMode === "legacy" ? "Legacy Ask stream" : "Cerebro MCP"}
+            {turn.agentMode === "legacy" ? "Legacy Ask stream" : "Graph tools"}
           </div>
           <div className="flex items-center gap-1">
             <button

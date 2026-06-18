@@ -421,7 +421,7 @@ export default function GraphViewer({ graph }: { graph?: GRCGraph }) {
   const selectedAttributes = Object.entries(selectedNode?.attributes ?? {}).slice(0, 8);
   const askHref = selectedNode
     ? `/ask?${new URLSearchParams({
-      q: `Explain the blast radius and compliance impact of ${selectedNode.urn}.`,
+      q: `Explain affected entities and compliance impact for ${selectedNode.urn}.`,
       scope_urn: selectedNode.urn,
     }).toString()}`
     : "/ask";
