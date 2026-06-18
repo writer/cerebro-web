@@ -76,6 +76,13 @@ export const operatorNavLinks: NavigationEntry[] = [
 
 const commandOnlyNavLinks: NavigationEntry[] = [
   {
+    label: "Audit Log",
+    href: "/developer/audit-log",
+    description: "Wide-event timeline, trace drilldown, source runtime diagnostics, and CloudWatch query detail.",
+    section: "Advanced",
+    keywords: ["audit", "wide events", "otel", "trace", "cloudwatch", "runtime", "logs"],
+  },
+  {
     label: "Control Builder",
     href: "/controls/builder",
     description: "Build custom control packs, preview coverage, and export YAML.",

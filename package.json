@@ -22,6 +22,7 @@
     "e2e:grc:local": "node scripts/local-grc-e2e.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1071.0",
     "@openai/agents": "^0.11.6",
     "cytoscape": "^3.34.0",
     "lucide-react": "^1.18.0",
