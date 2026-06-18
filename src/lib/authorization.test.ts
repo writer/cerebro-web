@@ -7,9 +7,13 @@ const identityEnvNames = [
   "CEREBRO_AUTHZ_REQUIRED_GROUPS",
   "CEREBRO_AUTHZ_REQUIRED_ROLES",
   "CEREBRO_AUTHZ_REQUIRED_SCOPES",
+  "CEREBRO_AUTHZ_BUILTIN_RBAC",
   "CEREBRO_AUTHZ_WRITE_GROUPS",
   "CEREBRO_AUTHZ_WRITE_ROLES",
   "CEREBRO_AUTHZ_WRITE_SCOPES",
+  "CEREBRO_AUTHZ_FINDINGS_WRITE_GROUPS",
+  "CEREBRO_AUTHZ_FINDINGS_WRITE_ROLES",
+  "CEREBRO_AUTHZ_FINDINGS_WRITE_SCOPES",
   "CEREBRO_IDENTITY_REQUIRED",
 ];
 
@@ -106,6 +110,43 @@ describe("identity authorization", () => {
       allowed: false,
       code: "entitlement_missing",
       status: 403,
+    });
+  });
+
+  it("enforces explicit Cerebro roles as built-in RBAC grants", () => {
+    expect(authorizeCurrentUser(user({
+      entitlements: { roles: ["cerebro.viewer"] },
+    }), "cerebro:read")).toMatchObject({
+      allowed: true,
+      code: "allowed",
+    });
+
+    expect(authorizeCurrentUser(user({
+      entitlements: { roles: ["cerebro.viewer"] },
+    }), "findings:write")).toMatchObject({
+      allowed: false,
+      code: "permission_missing",
+      status: 403,
+    });
+  });
+
+  it("expands backend scopes into web permissions", () => {
+    expect(authorizeCurrentUser(user({
+      entitlements: { scopes: ["cerebro.source_runtimes.write"] },
+    }), "source-runtimes:write")).toMatchObject({
+      allowed: true,
+      code: "allowed",
+    });
+  });
+
+  it("can enforce backend role aliases when built-in RBAC is enabled", () => {
+    process.env.CEREBRO_AUTHZ_BUILTIN_RBAC = "true";
+
+    expect(authorizeCurrentUser(user({
+      entitlements: { roles: ["analyst"] },
+    }), "findings:write")).toMatchObject({
+      allowed: true,
+      code: "allowed",
     });
   });
 });

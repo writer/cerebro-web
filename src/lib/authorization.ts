@@ -5,12 +5,13 @@ import {
   identityRequired,
   type CurrentUser,
 } from "@/lib/identity";
+import {
+  hasExplicitCerebroRoleOrScope,
+  userHasAuthorizationPermission,
+  type AuthorizationPermission,
+} from "@/lib/rbac";
 
-export type AuthorizationPermission =
-  | "agent:ask"
-  | "cerebro:read"
-  | "cerebro:write"
-  | "identity:read";
+export type { AuthorizationPermission } from "@/lib/rbac";
 
 export type AuthorizationDecision = {
   allowed: boolean;
@@ -32,6 +33,19 @@ const permissionEnvPrefix: Record<AuthorizationPermission, string> = {
   "cerebro:read": "CEREBRO_AUTHZ_READ",
   "cerebro:write": "CEREBRO_AUTHZ_WRITE",
   "identity:read": "CEREBRO_AUTHZ_IDENTITY",
+  "findings:write": "CEREBRO_AUTHZ_FINDINGS_WRITE",
+  "grc:inventory:write": "CEREBRO_AUTHZ_GRC_INVENTORY_WRITE",
+  "connector-credentials:read": "CEREBRO_AUTHZ_CONNECTOR_CREDENTIALS_READ",
+  "connector-credentials:write": "CEREBRO_AUTHZ_CONNECTOR_CREDENTIALS_WRITE",
+  "connector-definitions:write": "CEREBRO_AUTHZ_CONNECTOR_DEFINITIONS_WRITE",
+  "connectors:write": "CEREBRO_AUTHZ_CONNECTORS_WRITE",
+  "runtime-response:write": "CEREBRO_AUTHZ_RUNTIME_RESPONSE_WRITE",
+  "reports:run": "CEREBRO_AUTHZ_REPORTS_RUN",
+  "knowledge:write": "CEREBRO_AUTHZ_KNOWLEDGE_WRITE",
+  "workflow:replay": "CEREBRO_AUTHZ_WORKFLOW_REPLAY",
+  "sources:preview": "CEREBRO_AUTHZ_SOURCES_PREVIEW",
+  "source-runtimes:write": "CEREBRO_AUTHZ_SOURCE_RUNTIMES_WRITE",
+  "jobs:write": "CEREBRO_AUTHZ_JOBS_WRITE",
 };
 
 const splitEnvList = (value: string | undefined) =>
@@ -60,6 +74,12 @@ const entitlementPolicyFor = (permission: AuthorizationPermission): EntitlementP
 
 const hasEntitlementPolicy = (policy: EntitlementPolicy) =>
   policy.groups.length > 0 || policy.roles.length > 0 || policy.scopes.length > 0;
+
+const builtinRbacRequired = (user: CurrentUser | null | undefined) =>
+  truthyEnv(process.env.CEREBRO_AUTHZ_BUILTIN_RBAC) || hasExplicitCerebroRoleOrScope(user);
+
+const truthyEnv = (value: string | undefined) =>
+  ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 
 const lowerSet = (values: string[] | undefined) =>
   new Set((values ?? []).map((value) => value.toLowerCase()));
@@ -97,9 +117,10 @@ export const authorizeCurrentUser = (
 ): AuthorizationDecision => {
   const policy = entitlementPolicyFor(permission);
   const policyConfigured = hasEntitlementPolicy(policy);
+  const builtinPolicyConfigured = builtinRbacRequired(user);
 
   if (!user) {
-    if (identityRequired() || policyConfigured) {
+    if (identityRequired() || policyConfigured || builtinPolicyConfigured) {
       return denied(permission, user, 401, "identity_missing", "Current user identity is required.");
     }
     return {
@@ -120,7 +141,7 @@ export const authorizeCurrentUser = (
     return denied(permission, user, 401, "identity_fallback", "Local fallback identity is not accepted in this deployment.");
   }
 
-  if ((identityRequired() || policyConfigured) && user.confidence === "unverified") {
+  if ((identityRequired() || policyConfigured || builtinPolicyConfigured) && user.confidence === "unverified") {
     return denied(permission, user, 401, "identity_unverified", "Identity claims are not verified enough for this action.");
   }
 
@@ -130,6 +151,10 @@ export const authorizeCurrentUser = (
 
   if (policyConfigured && !userMatchesPolicy(user, policy)) {
     return denied(permission, user, 403, "entitlement_missing", "Current user is missing a required role, group, or scope.");
+  }
+
+  if (builtinPolicyConfigured && !userHasAuthorizationPermission(user, permission)) {
+    return denied(permission, user, 403, "permission_missing", "Current user is missing a required permission.");
   }
 
   return {
