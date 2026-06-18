@@ -18,8 +18,17 @@ import {
   writeCerebroProxyCache,
 } from "@/lib/cerebro-proxy";
 import { normalizeAskModel } from "@/lib/ask";
-import { authorizationErrorResponse, authorizeCurrentUser, type AuthorizationPermission } from "@/lib/authorization";
-import { currentUserActor, resolveCurrentUserFromHeadersWithFallback } from "@/lib/identity";
+import {
+  authorizationErrorResponse,
+  authorizeCurrentUser,
+  type AuthorizationDecision,
+  type AuthorizationPermission,
+} from "@/lib/authorization";
+import {
+  currentUserActor,
+  resolveCurrentUserFromHeadersWithFallback,
+  type CurrentUser,
+} from "@/lib/identity";
 import { currentUserServerAuditFields } from "@/lib/identity-server";
 import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/identity-write-stamp";
 import {
@@ -48,24 +57,34 @@ export async function GET(request: NextRequest, context: RouteContext) {
     context.params,
     resolveCurrentUserFromHeadersWithFallback(request.headers),
   ]);
+  const path = (params.path ?? []).join("/");
+  const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("GET", path, request), request.headers.get("traceparent"));
   const decision = authorizeCurrentUser(currentUser, "cerebro:read");
+  span.annotate(authorizationSpanAttributes(decision, currentUser));
   if (!decision.allowed) {
     console.warn("cerebro proxy read denied", currentUserServerAuditFields(currentUser));
-    return authorizationErrorResponse(decision);
+    return tracedAuthorizationError(decision, span);
   }
-  const path = (params.path ?? []).join("/");
-  const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("GET", path), request.headers.get("traceparent"));
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   const authHeaders = authHeadersFor(request);
   const bypassCache = shouldBypassCerebroProxyCache(request.headers);
+  const cacheablePath = isCacheableCerebroPath(path);
   const upstreamHeaders = headersWithTrace(bypassCache ? withCerebroCacheBypassHeader(authHeaders) : authHeaders, span);
-  const cacheKey = !bypassCache && isCacheableCerebroPath(path) ? cerebroProxyCacheKey(target, authHeaders) : null;
+  const cacheKey = !bypassCache && cacheablePath ? cerebroProxyCacheKey(target, authHeaders) : null;
+  span.annotate({
+    proxy_cache_bypass: bypassCache,
+    proxy_cache_configured: Boolean(cacheKey),
+    proxy_cacheable_path: cacheablePath,
+  });
   const cached = cacheKey ? readCerebroProxyCache(cacheKey) : null;
   if (cached) {
+    span.increment("proxy.cache.lookup.count");
+    span.increment("proxy.cache.hit.count");
     span.end("completed", {
       cache_state: cached.state,
       "http.response.status_code": cached.status,
+      ...responseSpanAttributes(cached.status, cached.headers, cached.body),
     });
     return new NextResponse(cached.body, {
       status: cached.status,
@@ -76,9 +95,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const inflight = cacheKey ? readCerebroProxyInflight(cacheKey) : null;
   if (inflight) {
     const payload = await inflight;
+    span.increment("proxy.cache.dedupe.count");
     span.end(payload.status >= 500 ? "failed" : "completed", {
       cache_state: payload.state === "stale" ? "stale" : "dedupe",
       "http.response.status_code": payload.status,
+      ...responseSpanAttributes(payload.status, payload.headers, payload.body),
     });
     return new NextResponse(payload.body, {
       status: payload.status,
@@ -97,6 +118,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     } catch (error) {
       const stale = cacheKey ? readCerebroProxyCache(cacheKey, true) : null;
       if (stale) {
+        span.increment("proxy.cache.stale.count");
         return {
           body: stale.body,
           headers: cachedResponseHeaders(stale, "stale"),
@@ -110,6 +132,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (cacheKey && [502, 503, 504].includes(response.status)) {
       const stale = readCerebroProxyCache(cacheKey, true);
       if (stale) {
+        span.increment("proxy.cache.stale.count");
         return {
           body: stale.body,
           headers: cachedResponseHeaders(stale, "stale"),
@@ -126,6 +149,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
     if (cacheKey) {
       writeCerebroProxyCache(cacheKey, response, body, headers);
+      span.increment("proxy.cache.write.count");
     }
     return {
       body,
@@ -141,9 +165,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } catch (error) {
     const stale = cacheKey ? readCerebroProxyCache(cacheKey, true) : null;
     if (stale) {
+      span.increment("proxy.cache.stale.count");
       span.end("completed", {
         cache_state: "stale",
         "http.response.status_code": stale.status,
+        ...responseSpanAttributes(stale.status, stale.headers, stale.body),
       });
       return new NextResponse(stale.body, {
         status: stale.status,
@@ -156,6 +182,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   span.end(payload.status >= 500 ? "failed" : "completed", {
     cache_state: payload.state,
     "http.response.status_code": payload.status,
+    ...responseSpanAttributes(payload.status, payload.headers, payload.body),
   });
   return new NextResponse(payload.body, {
     status: payload.status,
@@ -170,20 +197,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
     request.text(),
   ]);
   const path = (params.path ?? []).join("/");
-  const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("POST", path), request.headers.get("traceparent"));
+  const span = startWebSpan(
+    "cerebro.proxy.request",
+    proxySpanAttributes("POST", path, request, requestBody),
+    request.headers.get("traceparent"),
+  );
   const normalizedPath = normalizeProxyPath(path);
   const requiredPermission = permissionForPostPath(normalizedPath);
   const decision = authorizeCurrentUser(currentUser, requiredPermission);
+  span.annotate(authorizationSpanAttributes(decision, currentUser));
+  span.annotate({
+    request_body_was_stamped_with_actor: decision.allowed,
+    normalized_proxy_path: normalizedPath,
+  });
   if (!decision.allowed) {
     console.warn("cerebro proxy post denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
-    const response = authorizationErrorResponse(decision);
-    response.headers.set("x-cerebro-web-trace-id", span.traceId);
-    span.end("completed", {
-      authorization_allowed: false,
-      authorization_permission: requiredPermission,
-      "http.response.status_code": response.status,
-    });
-    return response;
+    return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
@@ -191,6 +220,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const currentActor = currentUserActor(currentUser);
   const acceptsEventStream = (request.headers.get("accept") ?? "").includes("text/event-stream");
   const isAskStreamRequest = normalizedPath === "grc/ask" && acceptsEventStream;
+  span.annotate({
+    stream_requested: acceptsEventStream,
+    stream_surface: isAskStreamRequest ? "ask" : "none",
+  });
   if (isAskStreamRequest) {
     body = normalizeAskRequestBody(body);
   }
@@ -221,6 +254,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     span.end(response.status >= 500 ? "failed" : "completed", {
       stream: true,
       "http.response.status_code": response.status,
+      "http.response.header.content_type": contentType,
     });
     return new NextResponse(response.body, {
       status: response.status,
@@ -237,6 +271,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const text = await response.text();
   span.end(response.status >= 500 ? "failed" : "completed", {
     "http.response.status_code": response.status,
+    ...responseSpanAttributes(response.status, passThroughHeaders, text),
   });
   return new NextResponse(text, {
     status: response.status,
@@ -251,12 +286,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     request.text(),
   ]);
   const decision = authorizeCurrentUser(currentUser, "cerebro:write");
+  const path = (params.path ?? []).join("/");
+  const span = startWebSpan(
+    "cerebro.proxy.request",
+    proxySpanAttributes("PATCH", path, request, requestBody),
+    request.headers.get("traceparent"),
+  );
+  span.annotate(authorizationSpanAttributes(decision, currentUser));
   if (!decision.allowed) {
     console.warn("cerebro proxy write denied", currentUserServerAuditFields(currentUser));
-    return authorizationErrorResponse(decision);
+    return tracedAuthorizationError(decision, span);
   }
-  const path = (params.path ?? []).join("/");
-  const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("PATCH", path), request.headers.get("traceparent"));
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   let body = requestBody;
@@ -286,6 +326,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const text = await response.text();
   span.end(response.status >= 500 ? "failed" : "completed", {
     "http.response.status_code": response.status,
+    ...responseSpanAttributes(response.status, responseHeadersFor(response), text),
   });
   return new NextResponse(text, {
     status: response.status,
@@ -305,12 +346,23 @@ function normalizeAskRequestBody(body: string): string {
   }
 }
 
-function proxySpanAttributes(method: string, path: string) {
+function proxySpanAttributes(method: string, path: string, request: NextRequest, body?: string) {
+  const url = new URL(request.url);
   return {
+    main: true,
+    wide_event: true,
     component: "cerebro-api-route",
     operation: method,
     "http.request.method": method,
+    "http.request.body.size": body === undefined ? requestBodySize(request) : byteLength(body),
+    "http.request.header.accept": request.headers.get("accept") ?? "",
+    "http.request.header.content_type": request.headers.get("content-type") ?? "",
+    "http.request.header.user_agent": request.headers.get("user-agent") ?? "",
+    "network.protocol.name": url.protocol.replace(":", ""),
+    "server.address": url.hostname,
+    "url.path_depth": path.split("/").filter(Boolean).length,
     "url.path_family": proxyPathFamily(path),
+    "user_agent.family": userAgentFamily(request.headers.get("user-agent")),
   };
 }
 
@@ -328,7 +380,83 @@ function tracedProxyError(error: unknown, span: WebSpan) {
   return response;
 }
 
+function tracedAuthorizationError(decision: AuthorizationDecision, span: WebSpan) {
+  const response = authorizationErrorResponse(decision);
+  response.headers.set("x-cerebro-web-trace-id", span.traceId);
+  span.end("completed", {
+    ...authorizationDecisionAttributes(decision),
+    ...responseSpanAttributes(response.status, Object.fromEntries(response.headers.entries())),
+    "http.response.status_code": response.status,
+  });
+  return response;
+}
+
 function proxyPathFamily(path: string) {
   const segments = path.split("/").filter(Boolean).slice(0, 2);
   return segments.length ? `/${segments.join("/")}` : "/";
+}
+
+function authorizationSpanAttributes(decision: AuthorizationDecision, user: CurrentUser | null) {
+  const audit = currentUserServerAuditFields(user);
+  return {
+    ...authorizationDecisionAttributes(decision),
+    "enduser.id_hash": audit.actorKey,
+    identity_authenticated: audit.authenticated,
+    identity_claim_count: audit.claimCount,
+    identity_confidence: audit.confidence,
+    identity_conflict_count: audit.conflictCount,
+    identity_group_count: audit.groupCount,
+    identity_header_count: audit.headerCount,
+    identity_provider: audit.provider,
+    identity_role_count: audit.roleCount,
+    identity_scope_count: audit.scopeCount,
+    identity_source: audit.source,
+    identity_warning_count: audit.warningCount,
+  };
+}
+
+function authorizationDecisionAttributes(decision: AuthorizationDecision) {
+  return {
+    authorization_allowed: decision.allowed,
+    authorization_code: decision.code,
+    authorization_permission: decision.permission,
+    authorization_status_code: decision.status,
+  };
+}
+
+function responseSpanAttributes(status: number, headers: Record<string, string>, body?: string) {
+  return {
+    "http.response.body.size": body === undefined ? undefined : byteLength(body),
+    "http.response.header.cache_control": headers["cache-control"] ?? "",
+    "http.response.header.content_type": headers["content-type"] ?? "",
+    "http.response.header.retry_after": headers["retry-after"] ?? "",
+    upstream_cache_state: headers["x-cerebro-upstream-cache"] ?? headers["x-cerebro-cache"] ?? "",
+    upstream_trace_id_present: Boolean(headers["x-cerebro-trace-id"]),
+  };
+}
+
+function requestBodySize(request: NextRequest) {
+  const raw = request.headers.get("content-length");
+  if (!raw) {
+    return 0;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function byteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function userAgentFamily(value: string | null) {
+  const normalized = (value ?? "").toLowerCase();
+  if (!normalized) return "none";
+  if (normalized.includes("bot") || normalized.includes("crawler") || normalized.includes("spider")) return "bot";
+  if (normalized.includes("edge") || normalized.includes("edg/")) return "edge";
+  if (normalized.includes("chrome")) return "chrome";
+  if (normalized.includes("safari")) return "safari";
+  if (normalized.includes("firefox")) return "firefox";
+  if (normalized.includes("curl")) return "curl";
+  if (normalized.includes("node")) return "node";
+  return "other";
 }

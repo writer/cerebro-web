@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 
+import { appVersion } from "./app-version";
+
 type AttributeValue = string | number | boolean | null | undefined;
 type Attributes = Record<string, AttributeValue>;
 
@@ -9,6 +11,8 @@ export type WebSpan = {
   spanId: string;
   parentSpanId?: string;
   traceparent: string;
+  annotate: (attributes?: Attributes) => void;
+  increment: (key: string, value?: number) => void;
   event: (name: string, attributes?: Attributes) => void;
   captureException: (error: unknown, attributes?: Attributes) => void;
   end: (status?: "completed" | "failed" | "cancelled", attributes?: Attributes) => void;
@@ -18,6 +22,7 @@ const traceIdPattern = /^[0-9a-f]{32}$/;
 const spanIdPattern = /^[0-9a-f]{16}$/;
 const traceFlagsPattern = /^[0-9a-f]{2}$/;
 const secretKeyPattern = /(authorization|api[-_.]?key|token|secret|password|cookie|credential)/i;
+const MAX_ATTRIBUTE_STRING_LENGTH = 512;
 
 export const parseTraceparent = (value: string | null | undefined) => {
   const parts = value?.trim().toLowerCase().split("-") ?? [];
@@ -47,6 +52,7 @@ export const startWebSpan = (
   const spanId = randomHex(8);
   const startedAt = Date.now();
   let ended = false;
+  const annotations: Attributes = {};
   const base = {
     name,
     trace_id: traceId,
@@ -56,6 +62,7 @@ export const startWebSpan = (
 
   emit("span_start", {
     ...base,
+    ...serviceAttributes(),
     ...safeAttributes(attributes),
   });
 
@@ -65,6 +72,16 @@ export const startWebSpan = (
     spanId,
     parentSpanId: parent?.spanId,
     traceparent: `00-${traceId}-${spanId}-01`,
+    annotate: (nextAttributes = {}) => {
+      Object.assign(annotations, safeAttributes(nextAttributes));
+    },
+    increment: (key, value = 1) => {
+      if (!key.trim()) {
+        return;
+      }
+      const current = typeof annotations[key] === "number" ? annotations[key] : 0;
+      annotations[key] = current + value;
+    },
     event: (eventName, eventAttributes = {}) => {
       emit("event", {
         ...base,
@@ -90,6 +107,8 @@ export const startWebSpan = (
       ended = true;
       emit("span_end", {
         ...base,
+        ...serviceAttributes(),
+        ...annotations,
         status,
         duration_ms: Date.now() - startedAt,
         ...safeAttributes(endAttributes),
@@ -164,10 +183,25 @@ const normalizeAttributeValue = (value: AttributeValue) => {
     return undefined;
   }
   if (typeof value === "string") {
-    return value.trim();
+    const trimmed = value.trim();
+    if (trimmed.length <= MAX_ATTRIBUTE_STRING_LENGTH) {
+      return trimmed;
+    }
+    return `${trimmed.slice(0, MAX_ATTRIBUTE_STRING_LENGTH)}...`;
   }
   return value;
 };
+
+const serviceAttributes = (): Attributes => ({
+  "service.name": "cerebro-web",
+  "service.version": appVersion,
+  "deployment.environment": process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "unknown",
+  "cloud.provider": process.env.VERCEL ? "vercel" : process.env.AWS_REGION ? "aws" : "unknown",
+  "cloud.region": process.env.VERCEL_REGION ?? process.env.AWS_REGION ?? undefined,
+  "service.instance.id": process.env.VERCEL_REGION ?? process.env.AWS_EXECUTION_ENV ?? undefined,
+  "process.runtime.name": "nodejs",
+  "process.runtime.version": process.version,
+});
 
 const snakeCase = (value: string) =>
   value

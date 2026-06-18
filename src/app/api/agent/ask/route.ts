@@ -18,8 +18,12 @@ import {
   normalizeAskError,
   normalizeAskModel,
 } from "@/lib/ask";
-import { authorizationErrorResponse, authorizeCurrentUser } from "@/lib/authorization";
-import { resolveCurrentUserFromHeadersWithFallback } from "@/lib/identity";
+import {
+  authorizationErrorResponse,
+  authorizeCurrentUser,
+  type AuthorizationDecision,
+} from "@/lib/authorization";
+import { resolveCurrentUserFromHeadersWithFallback, type CurrentUser } from "@/lib/identity";
 import { currentUserServerAuditFields } from "@/lib/identity-server";
 import { headersWithTrace, startWebSpan, type WebSpan } from "@/lib/observability";
 
@@ -99,31 +103,24 @@ const normalizeContext = (value: unknown): AskAgentContext | undefined => {
 };
 
 export async function POST(request: NextRequest) {
-  const span = startWebSpan("cerebro.agent.request", {
-    component: "agent-ask-route",
-    operation: "POST",
-    "http.request.method": "POST",
-    "url.path_family": "/api/agent",
-  }, request.headers.get("traceparent"));
+  const span = startWebSpan("cerebro.agent.request", agentRequestSpanAttributes(request), request.headers.get("traceparent"));
   const [currentUser, rawPayload] = await Promise.all([
     resolveCurrentUserFromHeadersWithFallback(request.headers),
     request.json().catch(() => null),
   ]);
   const decision = authorizeCurrentUser(currentUser, "agent:ask");
+  span.annotate(authorizationSpanAttributes(decision, currentUser));
   if (!decision.allowed) {
     console.warn("agent ask denied", currentUserServerAuditFields(currentUser));
-    const response = authorizationErrorResponse(decision);
-    response.headers.set("x-cerebro-web-trace-id", span.traceId);
-    span.end("completed", {
-      authorization_allowed: false,
-      "http.response.status_code": response.status,
-    });
-    return response;
+    return tracedAuthorizationError(decision, span);
   }
 
   const payload = normalizePayload(rawPayload);
   if (!payload) {
-    span.end("completed", { "http.response.status_code": 400 });
+    span.end("completed", {
+      payload_valid: false,
+      "http.response.status_code": 400,
+    });
     const response = NextResponse.json(
       { error: "Ask requires a non-empty question." },
       { status: 400 },
@@ -132,7 +129,15 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  const canRunAgent = Boolean(process.env.OPENAI_API_KEY && getMcpUrl());
+  span.annotate(agentPayloadSpanAttributes(payload));
+  const mcpUrl = getMcpUrl();
+  const canRunAgent = Boolean(process.env.OPENAI_API_KEY && mcpUrl);
+  span.annotate({
+    agent_mode: canRunAgent ? "agent" : "agent-fallback",
+    agent_model: AGENT_MODEL,
+    mcp_configured: Boolean(mcpUrl),
+    openai_configured: Boolean(process.env.OPENAI_API_KEY),
+  });
   let streamStatus: "completed" | "failed" | "cancelled" = "completed";
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -158,6 +163,9 @@ export async function POST(request: NextRequest) {
           true,
         )));
       } finally {
+        span.annotate({
+          stream_status: streamStatus,
+        });
         span.end(streamStatus, {
           mode: canRunAgent ? "agent" : "agent-fallback",
           "http.response.status_code": 200,
@@ -196,6 +204,10 @@ async function streamAgentRun(
   };
   const mcpUrl = getMcpUrl();
   if (!mcpUrl) {
+    span.annotate({
+      mcp_connected: false,
+      mcp_missing_url: true,
+    });
     await streamLegacyAsk(controller, request, payload, span);
     return;
   }
@@ -220,6 +232,10 @@ async function streamAgentRun(
     const connectStartedAt = Date.now();
     await server.connect();
     stats.mcpConnectMs = Date.now() - connectStartedAt;
+    span.annotate({
+      mcp_connected: true,
+      mcp_path_family: new URL(mcpUrl).pathname.split("/").filter(Boolean).slice(0, 3).join("/") || "/",
+    });
     controller.enqueue(sse("agent_status", {
       stage: "plan",
       label: "Reading graph context",
@@ -257,11 +273,15 @@ async function streamAgentRun(
 
     const finalOutput = stringifyFinalOutput(result.finalOutput);
     if (finalOutput) {
+      span.annotate({
+        final_output_chars: finalOutput.length,
+      });
       controller.enqueue(sse("summary", {
         markdown: finalOutput,
         citations: [],
       }));
     }
+    span.annotate(agentStreamStatsAttributes(stats));
     controller.enqueue(sse("done", {
       trace_id: span.traceId,
       total_ms: Date.now() - startedAt,
@@ -306,6 +326,11 @@ async function streamLegacyAsk(
 
   if (!response.ok || !response.body) {
     const text = await response.text().catch(() => "");
+    span.annotate({
+      legacy_ask_error: true,
+      legacy_ask_status_code: response.status,
+      legacy_ask_error_body_size: byteLength(text),
+    });
     controller.enqueue(sse("error", normalizeAskError(
       `http_${response.status}`,
       text || `Ask request failed (${response.status})`,
@@ -315,11 +340,20 @@ async function streamLegacyAsk(
   }
 
   const reader = response.body.getReader();
+  let chunkCount = 0;
+  let streamedBytes = 0;
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
+    chunkCount += 1;
+    streamedBytes += value.byteLength;
     controller.enqueue(value);
   }
+  span.annotate({
+    legacy_ask_chunk_count: chunkCount,
+    legacy_ask_streamed_bytes: streamedBytes,
+    legacy_ask_status_code: response.status,
+  });
 }
 
 const getMcpUrl = () => {
@@ -507,3 +541,123 @@ const stringifyFinalOutput = (output: unknown) => {
     return String(output);
   }
 };
+
+function agentRequestSpanAttributes(request: NextRequest) {
+  const url = new URL(request.url);
+  return {
+    main: true,
+    wide_event: true,
+    component: "agent-ask-route",
+    operation: "POST",
+    "http.request.body.size": requestBodySize(request),
+    "http.request.header.accept": request.headers.get("accept") ?? "",
+    "http.request.header.content_type": request.headers.get("content-type") ?? "",
+    "http.request.header.user_agent": request.headers.get("user-agent") ?? "",
+    "http.request.method": "POST",
+    "network.protocol.name": url.protocol.replace(":", ""),
+    "server.address": url.hostname,
+    "url.path_family": "/api/agent",
+    "user_agent.family": userAgentFamily(request.headers.get("user-agent")),
+  };
+}
+
+function tracedAuthorizationError(decision: AuthorizationDecision, span: WebSpan) {
+  const response = authorizationErrorResponse(decision);
+  response.headers.set("x-cerebro-web-trace-id", span.traceId);
+  span.end("completed", {
+    ...authorizationDecisionAttributes(decision),
+    "http.response.header.cache_control": response.headers.get("cache-control") ?? "",
+    "http.response.status_code": response.status,
+  });
+  return response;
+}
+
+function authorizationSpanAttributes(decision: AuthorizationDecision, user: CurrentUser | null) {
+  const audit = currentUserServerAuditFields(user);
+  return {
+    ...authorizationDecisionAttributes(decision),
+    "enduser.id_hash": audit.actorKey,
+    identity_authenticated: audit.authenticated,
+    identity_claim_count: audit.claimCount,
+    identity_confidence: audit.confidence,
+    identity_conflict_count: audit.conflictCount,
+    identity_group_count: audit.groupCount,
+    identity_header_count: audit.headerCount,
+    identity_provider: audit.provider,
+    identity_role_count: audit.roleCount,
+    identity_scope_count: audit.scopeCount,
+    identity_source: audit.source,
+    identity_warning_count: audit.warningCount,
+  };
+}
+
+function authorizationDecisionAttributes(decision: AuthorizationDecision) {
+  return {
+    authorization_allowed: decision.allowed,
+    authorization_code: decision.code,
+    authorization_permission: decision.permission,
+    authorization_status_code: decision.status,
+  };
+}
+
+function agentPayloadSpanAttributes(payload: NormalizedAgentRequest) {
+  return {
+    context_chip_count: payload.context?.chips?.length ?? 0,
+    context_has_entity_urn: Boolean(payload.context?.entityUrn),
+    context_has_finding_id: Boolean(payload.context?.findingId),
+    context_has_resource_urn: Boolean(payload.context?.resourceUrn),
+    context_has_scope_urn: Boolean(payload.context?.scopeUrn || payload.scope_urn),
+    context_route_family: routeFamily(payload.context?.route),
+    conversation_present: Boolean(payload.conversation_id),
+    history_count: payload.history?.length ?? 0,
+    payload_valid: true,
+    question_chars: payload.question.length,
+    request_model: payload.model ?? "default",
+    surface: payload.surface ?? "agent",
+    tenant_id: payload.tenant_id,
+  };
+}
+
+function agentStreamStatsAttributes(stats: AgentStreamStats) {
+  return {
+    agent_delta_count: stats.deltaCount,
+    agent_first_delta_ms: stats.firstDeltaMs,
+    agent_first_tool_ms: stats.firstToolMs,
+    agent_run_ms: stats.agentRunMs,
+    agent_tool_call_count: stats.toolCalls,
+    agent_tool_result_count: stats.toolResults,
+    mcp_connect_ms: stats.mcpConnectMs,
+    total_stream_ms: Date.now() - stats.startedAt,
+  };
+}
+
+function requestBodySize(request: NextRequest) {
+  const raw = request.headers.get("content-length");
+  if (!raw) {
+    return 0;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function byteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function routeFamily(route: string | undefined) {
+  const segments = (route ?? "").split(/[?#]/, 1)[0].split("/").filter(Boolean).slice(0, 2);
+  return segments.length ? `/${segments.join("/")}` : "unknown";
+}
+
+function userAgentFamily(value: string | null) {
+  const normalized = (value ?? "").toLowerCase();
+  if (!normalized) return "none";
+  if (normalized.includes("bot") || normalized.includes("crawler") || normalized.includes("spider")) return "bot";
+  if (normalized.includes("edge") || normalized.includes("edg/")) return "edge";
+  if (normalized.includes("chrome")) return "chrome";
+  if (normalized.includes("safari")) return "safari";
+  if (normalized.includes("firefox")) return "firefox";
+  if (normalized.includes("curl")) return "curl";
+  if (normalized.includes("node")) return "node";
+  return "other";
+}
