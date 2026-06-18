@@ -26,6 +26,10 @@ export const inventoryIsPublicAsset = (asset: GRCInventoryAsset) =>
     ["1", "true", "yes", "y"].includes((asset.attributes?.[key] || "").toLowerCase()),
   );
 
+const assetOwnerNotRequired = (asset: GRCInventoryAsset) =>
+  asset.attributes?.accountability_state === "not_required" ||
+  ["1", "true", "yes", "y"].includes((asset.attributes?.owner_not_required || "").toLowerCase());
+
 const assetHasActiveReport = (asset: GRCInventoryAsset) => {
   if (!asset.asset_report_count) return false;
   const status = (asset.latest_asset_report_status || "").toLowerCase();
@@ -34,6 +38,7 @@ const assetHasActiveReport = (asset: GRCInventoryAsset) => {
 
 const assetNeedsAccountability = (asset: GRCInventoryAsset) => {
   if (inventoryScopeState(asset) === "out_of_scope" || inventoryOwnerPrincipal(asset)) return false;
+  if (assetOwnerNotRequired(asset)) return false;
   if (["owner_required", "requires_owner", "accountability_required"].some((key) =>
     ["1", "true", "yes", "y"].includes((asset.attributes?.[key] || "").toLowerCase()),
   )) return true;
@@ -44,6 +49,13 @@ export const inventoryAccountability = (asset: GRCInventoryAsset): GRCInventoryA
   if (asset.accountability?.state) return asset.accountability;
   if (inventoryScopeState(asset) === "out_of_scope") {
     return { state: "not_required", label: "Owner not required", reasons: [{ code: "scope_exclusion", label: "Scoped out" }] };
+  }
+  if (assetOwnerNotRequired(asset)) {
+    return {
+      state: "not_required",
+      label: "Owner not required",
+      reasons: [{ code: "accountability_not_required", label: asset.attributes?.accountability_reason || "Owner not required" }],
+    };
   }
   const owner = inventoryOwnerPrincipal(asset);
   if (owner) return { state: "known", label: "Owner known", principal: owner };

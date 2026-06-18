@@ -36,6 +36,33 @@ describe("inventory review posture", () => {
     expect(inventoryMatchesReviewFilter(asset({ risk_score: 78 }), "needs_review")).toBe(true);
   });
 
+  it("honors explicit owner-not-required decisions even for high-risk inventory", () => {
+    const item = asset({
+      risk_score: 91,
+      attributes: {
+        accountability_state: "not_required",
+        owner_not_required: "true",
+        accountability_reason: "Ephemeral build output",
+      },
+    });
+
+    expect(inventoryAccountability(item).state).toBe("not_required");
+    expect(inventoryReviewDisposition(item).state).toBe("baseline");
+    expect(inventoryReviewDetail(item)).toBe("No immediate GRC action required.");
+  });
+
+  it("lets owner-not-required override noisy source owner hints", () => {
+    const item = asset({
+      attributes: {
+        owner: "detected-owner@example.com",
+        accountability_state: "not_required",
+        owner_not_required: "true",
+      },
+    });
+
+    expect(inventoryAccountability(item).state).toBe("not_required");
+  });
+
   it("separates owned, reported, and scoped-out assets into explicit states", () => {
     expect(inventoryAccountability(asset({ attributes: { owner: "platform" }, risk_score: 90 })).state).toBe("known");
     expect(inventoryReviewDisposition(asset({ asset_report_count: 1, latest_asset_report_reason: "Classification needs review" })).state).toBe("reported_issue");

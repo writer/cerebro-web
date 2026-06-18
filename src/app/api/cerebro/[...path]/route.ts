@@ -334,6 +334,50 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
 }
 
+export async function PUT(request: NextRequest, context: RouteContext) {
+  const [params, currentUser, requestBody] = await Promise.all([
+    context.params,
+    resolveCurrentUserFromHeadersWithFallback(request.headers),
+    request.text(),
+  ]);
+  const decision = authorizeCurrentUser(currentUser, "cerebro:write");
+  if (!decision.allowed) {
+    console.warn("cerebro proxy put denied", currentUserServerAuditFields(currentUser));
+    return authorizationErrorResponse(decision);
+  }
+  const path = (params.path ?? []).join("/");
+  const url = new URL(request.url);
+  const target = buildCerebroUrl(path, url.search);
+  const body = stampCurrentUserOnWriteBody(
+    requestBody,
+    normalizeProxyPath(path),
+    currentUserActor(currentUser),
+  );
+  const headers = {
+    ...authHeadersFor(request),
+    "content-type": request.headers.get("content-type") ?? "application/json",
+    accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+  };
+
+  let response: Response;
+  try {
+    response = await fetchCerebro(target, {
+      method: "PUT",
+      headers,
+      body,
+      cache: "no-store",
+    });
+  } catch (error) {
+    return proxyFetchError(error);
+  }
+
+  const text = await response.text();
+  return new NextResponse(text, {
+    status: response.status,
+    headers: responseHeadersFor(response),
+  });
+}
+
 function normalizeAskRequestBody(body: string): string {
   try {
     const parsed = JSON.parse(body) as Record<string, unknown>;

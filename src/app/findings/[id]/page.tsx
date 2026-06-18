@@ -2,15 +2,30 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 import AskAboutLink from "@/components/ask/AskAboutLink";
+import { useApiKey } from "@/components/providers";
 import GraphViewer from "@/components/grc/GraphViewer";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
+import { fetchCerebro } from "@/lib/cerebro-client";
 import { displayDate, GRCAuditPacket, GRCEntityImpact, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 
 type Tab = "overview" | "evidence" | "graph" | "timeline";
+type FindingActionKey = "assign" | "due" | "note" | "ticket" | "resolve" | "suppress";
+
+const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
+const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
+const secondaryButtonClass = "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50";
+const primaryButtonClass = "rounded-md border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50";
+
+const formatDateInput = (value?: string) => {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+};
 
 function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -115,10 +130,219 @@ function TimelinePanel({ finding, evidence }: { finding: GRCAuditPacket["finding
   );
 }
 
+function FindingWorkflowPanel({
+  actionError,
+  actionSaving,
+  actionSuccess,
+  assigneeDraft,
+  dueDateDraft,
+  finding,
+  noteDraft,
+  onAssign,
+  onDueDate,
+  onNote,
+  onResolve,
+  onSuppress,
+  onTicket,
+  resolveReason,
+  setAssigneeDraft,
+  setDueDateDraft,
+  setNoteDraft,
+  setResolveReason,
+  setSuppressReason,
+  setTicketExternalID,
+  setTicketName,
+  setTicketURL,
+  suppressReason,
+  ticketExternalID,
+  ticketName,
+  ticketURL,
+}: {
+  actionError: string | null;
+  actionSaving: FindingActionKey | null;
+  actionSuccess: string | null;
+  assigneeDraft: string;
+  dueDateDraft: string;
+  finding: GRCAuditPacket["finding"];
+  noteDraft: string;
+  onAssign: (event: FormEvent<HTMLFormElement>) => void;
+  onDueDate: (event: FormEvent<HTMLFormElement>) => void;
+  onNote: (event: FormEvent<HTMLFormElement>) => void;
+  onResolve: (event: FormEvent<HTMLFormElement>) => void;
+  onSuppress: (event: FormEvent<HTMLFormElement>) => void;
+  onTicket: (event: FormEvent<HTMLFormElement>) => void;
+  resolveReason: string;
+  setAssigneeDraft: (value: string) => void;
+  setDueDateDraft: (value: string) => void;
+  setNoteDraft: (value: string) => void;
+  setResolveReason: (value: string) => void;
+  setSuppressReason: (value: string) => void;
+  setTicketExternalID: (value: string) => void;
+  setTicketName: (value: string) => void;
+  setTicketURL: (value: string) => void;
+  suppressReason: string;
+  ticketExternalID: string;
+  ticketName: string;
+  ticketURL: string;
+}) {
+  const notes = finding.notes ?? [];
+  const tickets = finding.tickets ?? [];
+  const externalRefs = finding.external_refs ?? [];
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Workflow</div>
+          <h2 className="mt-1 text-[15px] font-semibold text-slate-900">Push updates to Cerebro</h2>
+        </div>
+        <Badge value={finding.status} />
+      </div>
+      <p className="mt-2 text-[12px] leading-5 text-slate-500">
+        Change owner, due date, notes, tickets, and lifecycle state from the GRC workbench.
+      </p>
+
+      {actionError && <div className="mt-3 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">{actionError}</div>}
+      {actionSuccess && <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">{actionSuccess}</div>}
+
+      <div className="mt-4 space-y-4">
+        <form onSubmit={onAssign} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <label className={labelClass}>
+            Assignee
+            <input value={assigneeDraft} onChange={(event) => setAssigneeDraft(event.target.value)} placeholder={finding.assignee || finding.owner || "identity-team"} className={inputClass} />
+          </label>
+          <div className="mt-2 flex justify-end">
+            <button type="submit" disabled={actionSaving === "assign"} className={secondaryButtonClass}>
+              {actionSaving === "assign" ? "Saving..." : "Save owner"}
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={onDueDate} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <label className={labelClass}>
+            Due date
+            <input type="date" value={dueDateDraft} onChange={(event) => setDueDateDraft(event.target.value)} placeholder={formatDateInput(finding.due_at)} className={inputClass} />
+          </label>
+          <div className="mt-2 flex justify-end">
+            <button type="submit" disabled={actionSaving === "due"} className={secondaryButtonClass}>
+              {actionSaving === "due" ? "Saving..." : "Save due date"}
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={onNote} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <label className={labelClass}>
+            Note
+            <textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="What changed, who was contacted, or why this is acceptable..." className={`${inputClass} min-h-20 normal-case tracking-normal`} />
+          </label>
+          <div className="mt-2 flex justify-end">
+            <button type="submit" disabled={actionSaving === "note" || noteDraft.trim().length === 0} className={secondaryButtonClass}>
+              {actionSaving === "note" ? "Adding..." : "Add note"}
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={onTicket} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <div className="grid gap-2">
+            <label className={labelClass}>Ticket URL<input value={ticketURL} onChange={(event) => setTicketURL(event.target.value)} placeholder="https://tracker.example.com/browse/SEC-123" className={inputClass} /></label>
+            <label className={labelClass}>Name<input value={ticketName} onChange={(event) => setTicketName(event.target.value)} placeholder="SEC-123" className={inputClass} /></label>
+            <label className={labelClass}>External ID<input value={ticketExternalID} onChange={(event) => setTicketExternalID(event.target.value)} placeholder="SEC-123" className={inputClass} /></label>
+          </div>
+          <div className="mt-2 flex justify-end">
+            <button type="submit" disabled={actionSaving === "ticket" || ticketURL.trim().length === 0} className={secondaryButtonClass}>
+              {actionSaving === "ticket" ? "Linking..." : "Link ticket"}
+            </button>
+          </div>
+        </form>
+
+        <div className="grid gap-3">
+          <form onSubmit={onResolve} className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-emerald-700">
+              Resolution reason
+              <textarea value={resolveReason} onChange={(event) => setResolveReason(event.target.value)} placeholder="Evidence confirms remediation..." className={`${inputClass} min-h-16 normal-case tracking-normal`} />
+            </label>
+            <div className="mt-2 flex justify-end">
+              <button type="submit" disabled={actionSaving === "resolve" || resolveReason.trim().length === 0} className={primaryButtonClass}>
+                {actionSaving === "resolve" ? "Resolving..." : "Resolve finding"}
+              </button>
+            </div>
+          </form>
+          <form onSubmit={onSuppress} className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-amber-700">
+              Suppression reason
+              <textarea value={suppressReason} onChange={(event) => setSuppressReason(event.target.value)} placeholder="Accepted exception, false positive, compensating control..." className={`${inputClass} min-h-16 normal-case tracking-normal`} />
+            </label>
+            <div className="mt-2 flex justify-end">
+              <button type="submit" disabled={actionSaving === "suppress" || suppressReason.trim().length === 0} className={secondaryButtonClass}>
+                {actionSaving === "suppress" ? "Suppressing..." : "Suppress"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {(notes.length > 0 || tickets.length > 0 || externalRefs.length > 0) && (
+        <div className="mt-5 space-y-4 border-t border-slate-100 pt-4">
+          {notes.length > 0 && (
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Notes</div>
+              <div className="mt-2 space-y-2">
+                {notes.slice(0, 3).map((note) => (
+                  <div key={note.id || note.body} className="rounded-md bg-slate-50 px-3 py-2 text-[12px] leading-5 text-slate-600">
+                    <div>{note.body}</div>
+                    {note.created_at && <div className="mt-1 text-[11px] text-slate-400">{displayDate(note.created_at)}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {tickets.length > 0 && (
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Tickets</div>
+              <div className="mt-2 space-y-1.5">
+                {tickets.slice(0, 3).map((ticket) => (
+                  <a key={ticket.url} href={ticket.url} target="_blank" rel="noreferrer" className="block truncate rounded-md bg-slate-50 px-3 py-2 text-[12px] font-medium text-indigo-600 hover:bg-slate-100">
+                    {ticket.name || ticket.external_id || ticket.url}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {externalRefs.length > 0 && (
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">External lifecycle</div>
+              <div className="mt-2 space-y-1.5">
+                {externalRefs.slice(0, 3).map((ref) => (
+                  <div key={`${ref.system}-${ref.external_id}`} className="rounded-md bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+                    <span className="font-medium text-slate-800">{ref.system || "external"}</span>
+                    {ref.external_status ? ` ${ref.external_status}` : ""}
+                    {ref.external_id ? ` · ${ref.external_id}` : ""}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FindingDetailPage() {
+  const { apiKey } = useApiKey();
   const params = useParams<{ id: string }>();
   const findingID = useMemo(() => decodeURIComponent(params.id ?? ""), [params.id]);
   const [tab, setTab] = useState<Tab>("overview");
+  const [actionSaving, setActionSaving] = useState<FindingActionKey | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [assigneeDraft, setAssigneeDraft] = useState("");
+  const [dueDateDraft, setDueDateDraft] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [ticketURL, setTicketURL] = useState("");
+  const [ticketName, setTicketName] = useState("");
+  const [ticketExternalID, setTicketExternalID] = useState("");
+  const [resolveReason, setResolveReason] = useState("");
+  const [suppressReason, setSuppressReason] = useState("");
 
   const { data, error, loading, reload } = useGRCQuery<GRCAuditPacket>(
     findingID ? `/grc/audit-packets/${encodeURIComponent(findingID)}` : null,
@@ -132,6 +356,110 @@ export default function FindingDetailPage() {
   const finding = data?.finding;
   const controls = data?.controls ?? finding?.controls ?? [];
   const evidence = data?.evidence ?? [];
+
+  const mutateFinding = async (key: FindingActionKey, path: string, method: "POST" | "PUT", body: Record<string, unknown>, success: string) => {
+    setActionSaving(key);
+    setActionError(null);
+    setActionSuccess(null);
+    const response = await fetchCerebro(path, apiKey, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setActionSaving(null);
+    if (!response.ok) {
+      setActionError(typeof response.data === "string" ? response.data : `Finding update failed (${response.status})`);
+      return false;
+    }
+    setActionSuccess(success);
+    void reload();
+    return true;
+  };
+
+  const assignFinding = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const ok = await mutateFinding(
+      "assign",
+      `/findings/${encodeURIComponent(findingID)}/assign`,
+      "PUT",
+      { assignee: assigneeDraft.trim() },
+      assigneeDraft.trim() ? "Owner updated." : "Owner cleared.",
+    );
+    if (ok) setAssigneeDraft("");
+  };
+
+  const setFindingDueDate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const body = dueDateDraft ? { dueAt: new Date(`${dueDateDraft}T00:00:00Z`).toISOString() } : {};
+    const ok = await mutateFinding(
+      "due",
+      `/findings/${encodeURIComponent(findingID)}/due`,
+      "PUT",
+      body,
+      dueDateDraft ? "Due date updated." : "Due date cleared.",
+    );
+    if (ok) setDueDateDraft("");
+  };
+
+  const addFindingNote = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const note = noteDraft.trim();
+    if (!note) return;
+    const ok = await mutateFinding(
+      "note",
+      `/findings/${encodeURIComponent(findingID)}/notes`,
+      "POST",
+      { note },
+      "Note added.",
+    );
+    if (ok) setNoteDraft("");
+  };
+
+  const linkFindingTicket = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const url = ticketURL.trim();
+    if (!url) return;
+    const ok = await mutateFinding(
+      "ticket",
+      `/findings/${encodeURIComponent(findingID)}/tickets`,
+      "POST",
+      { url, name: ticketName.trim(), externalId: ticketExternalID.trim() },
+      "Ticket linked.",
+    );
+    if (ok) {
+      setTicketURL("");
+      setTicketName("");
+      setTicketExternalID("");
+    }
+  };
+
+  const resolveFinding = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const reason = resolveReason.trim();
+    if (!reason) return;
+    const ok = await mutateFinding(
+      "resolve",
+      `/findings/${encodeURIComponent(findingID)}/resolve`,
+      "POST",
+      { reason },
+      "Finding resolved.",
+    );
+    if (ok) setResolveReason("");
+  };
+
+  const suppressFinding = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const reason = suppressReason.trim();
+    if (!reason) return;
+    const ok = await mutateFinding(
+      "suppress",
+      `/findings/${encodeURIComponent(findingID)}/suppress`,
+      "POST",
+      { reason },
+      "Finding suppressed.",
+    );
+    if (ok) setSuppressReason("");
+  };
 
   return (
     <div className="space-y-6">
@@ -208,6 +536,34 @@ export default function FindingDetailPage() {
               </div>
 
               <div className="space-y-4">
+                <FindingWorkflowPanel
+                  actionError={actionError}
+                  actionSaving={actionSaving}
+                  actionSuccess={actionSuccess}
+                  assigneeDraft={assigneeDraft}
+                  dueDateDraft={dueDateDraft}
+                  finding={finding}
+                  noteDraft={noteDraft}
+                  onAssign={(event) => void assignFinding(event)}
+                  onDueDate={(event) => void setFindingDueDate(event)}
+                  onNote={(event) => void addFindingNote(event)}
+                  onResolve={(event) => void resolveFinding(event)}
+                  onSuppress={(event) => void suppressFinding(event)}
+                  onTicket={(event) => void linkFindingTicket(event)}
+                  resolveReason={resolveReason}
+                  setAssigneeDraft={setAssigneeDraft}
+                  setDueDateDraft={setDueDateDraft}
+                  setNoteDraft={setNoteDraft}
+                  setResolveReason={setResolveReason}
+                  setSuppressReason={setSuppressReason}
+                  setTicketExternalID={setTicketExternalID}
+                  setTicketName={setTicketName}
+                  setTicketURL={setTicketURL}
+                  suppressReason={suppressReason}
+                  ticketExternalID={ticketExternalID}
+                  ticketName={ticketName}
+                  ticketURL={ticketURL}
+                />
                 <div className="rounded-lg border border-slate-200 bg-white p-4">
                   <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-slate-500">Details</div>
                   <KeyValueRow label="Finding ID" value={finding.id} mono />
@@ -219,6 +575,8 @@ export default function FindingDetailPage() {
                   <KeyValueRow label="First seen" value={displayDate(finding.first_observed_at)} />
                   <KeyValueRow label="Last seen" value={displayDate(finding.last_observed_at)} />
                   <KeyValueRow label="Due" value={displayDate(finding.due_at)} />
+                  <KeyValueRow label="Status reason" value={finding.status_reason || "\u2014"} />
+                  <KeyValueRow label="Status updated" value={displayDate(finding.status_updated_at)} />
                   <KeyValueRow label="Risk model" value={finding.risk_model_version || "\u2014"} mono />
                   <KeyValueRow label="Generated" value={displayDate(data.generated_at)} />
                 </div>
