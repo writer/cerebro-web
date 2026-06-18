@@ -22,8 +22,8 @@ import {
   authorizationErrorResponse,
   authorizeCurrentUser,
   type AuthorizationDecision,
-  type AuthorizationPermission,
 } from "@/lib/authorization";
+import { permissionForCerebroProxyRequest } from "@/lib/rbac";
 import {
   currentUserActor,
   resolveCurrentUserFromHeadersWithFallback,
@@ -42,16 +42,6 @@ type RouteContext = {
   params: Promise<{ path?: string[] }>;
 };
 
-const readOnlyPostPaths = new Set([
-  "grc/control-packets",
-  "grc/control-packets/export",
-  "grc/control-packs",
-  "grc/control-packs/preview",
-]);
-
-const permissionForPostPath = (normalizedPath: string): AuthorizationPermission =>
-  readOnlyPostPaths.has(normalizedPath) ? "cerebro:read" : "cerebro:write";
-
 export async function GET(request: NextRequest, context: RouteContext) {
   const [params, currentUser] = await Promise.all([
     context.params,
@@ -59,10 +49,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
   ]);
   const path = (params.path ?? []).join("/");
   const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("GET", path, request), request.headers.get("traceparent"));
-  const decision = authorizeCurrentUser(currentUser, "cerebro:read");
+  const requiredPermission = permissionForCerebroProxyRequest("GET", path);
+  const decision = authorizeCurrentUser(currentUser, requiredPermission);
   span.annotate(authorizationSpanAttributes(decision, currentUser));
   if (!decision.allowed) {
-    console.warn("cerebro proxy read denied", currentUserServerAuditFields(currentUser));
+    console.warn("cerebro proxy read denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
@@ -203,7 +194,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     request.headers.get("traceparent"),
   );
   const normalizedPath = normalizeProxyPath(path);
-  const requiredPermission = permissionForPostPath(normalizedPath);
+  const requiredPermission = permissionForCerebroProxyRequest("POST", normalizedPath);
   const decision = authorizeCurrentUser(currentUser, requiredPermission);
   span.annotate(authorizationSpanAttributes(decision, currentUser));
   span.annotate({
@@ -285,8 +276,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     resolveCurrentUserFromHeadersWithFallback(request.headers),
     request.text(),
   ]);
-  const decision = authorizeCurrentUser(currentUser, "cerebro:write");
   const path = (params.path ?? []).join("/");
+  const normalizedPath = normalizeProxyPath(path);
+  const requiredPermission = permissionForCerebroProxyRequest("PATCH", normalizedPath);
+  const decision = authorizeCurrentUser(currentUser, requiredPermission);
   const span = startWebSpan(
     "cerebro.proxy.request",
     proxySpanAttributes("PATCH", path, request, requestBody),
@@ -294,7 +287,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   );
   span.annotate(authorizationSpanAttributes(decision, currentUser));
   if (!decision.allowed) {
-    console.warn("cerebro proxy write denied", currentUserServerAuditFields(currentUser));
+    console.warn("cerebro proxy write denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
@@ -302,7 +295,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   let body = requestBody;
   body = stampCurrentUserOnWriteBody(
     body,
-    normalizeProxyPath(path),
+    normalizedPath,
     currentUserActor(currentUser),
   );
   const headers = {
@@ -340,17 +333,19 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     resolveCurrentUserFromHeadersWithFallback(request.headers),
     request.text(),
   ]);
-  const decision = authorizeCurrentUser(currentUser, "cerebro:write");
+  const path = (params.path ?? []).join("/");
+  const normalizedPath = normalizeProxyPath(path);
+  const requiredPermission = permissionForCerebroProxyRequest("PUT", normalizedPath);
+  const decision = authorizeCurrentUser(currentUser, requiredPermission);
   if (!decision.allowed) {
-    console.warn("cerebro proxy put denied", currentUserServerAuditFields(currentUser));
+    console.warn("cerebro proxy put denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
     return authorizationErrorResponse(decision);
   }
-  const path = (params.path ?? []).join("/");
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   const body = stampCurrentUserOnWriteBody(
     requestBody,
-    normalizeProxyPath(path),
+    normalizedPath,
     currentUserActor(currentUser),
   );
   const headers = {

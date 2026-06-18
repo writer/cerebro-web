@@ -40,7 +40,9 @@ Application changes should land here first and then be promoted to `WriterIntern
 | `CEREBRO_IDENTITY_ISSUER`, `CEREBRO_IDENTITY_AUDIENCE` | Expected JWT issuer and audience claim checks. |
 | `CEREBRO_IDENTITY_JWKS_URL` | JWKS endpoint used to verify JWT signatures for accepted identity tokens. |
 | `CEREBRO_AUTHZ_REQUIRED_GROUPS`, `CEREBRO_AUTHZ_REQUIRED_ROLES`, `CEREBRO_AUTHZ_REQUIRED_SCOPES` | Optional global entitlement requirements for protected app actions. |
-| `CEREBRO_AUTHZ_READ_*`, `CEREBRO_AUTHZ_WRITE_*`, `CEREBRO_AUTHZ_AGENT_*`, `CEREBRO_AUTHZ_IDENTITY_*` | Optional per-surface entitlement requirements, using `_GROUPS`, `_ROLES`, or `_SCOPES` suffixes. |
+| `CEREBRO_AUTHZ_BUILTIN_RBAC` | Set to `true` to enforce built-in Cerebro role aliases such as `viewer`, `analyst`, and `admin`. Explicit `cerebro.*` roles and Cerebro scopes enforce built-in RBAC automatically. |
+| `CEREBRO_AUTHZ_READ_*`, `CEREBRO_AUTHZ_WRITE_*`, `CEREBRO_AUTHZ_AGENT_*`, `CEREBRO_AUTHZ_IDENTITY_*` | Optional legacy per-surface entitlement requirements, using `_GROUPS`, `_ROLES`, or `_SCOPES` suffixes. |
+| `CEREBRO_AUTHZ_FINDINGS_WRITE_*`, `CEREBRO_AUTHZ_GRC_INVENTORY_WRITE_*`, `CEREBRO_AUTHZ_CONNECTOR_CREDENTIALS_READ_*`, `CEREBRO_AUTHZ_CONNECTOR_CREDENTIALS_WRITE_*`, `CEREBRO_AUTHZ_CONNECTOR_DEFINITIONS_WRITE_*`, `CEREBRO_AUTHZ_CONNECTORS_WRITE_*`, `CEREBRO_AUTHZ_RUNTIME_RESPONSE_WRITE_*`, `CEREBRO_AUTHZ_REPORTS_RUN_*`, `CEREBRO_AUTHZ_KNOWLEDGE_WRITE_*`, `CEREBRO_AUTHZ_WORKFLOW_REPLAY_*`, `CEREBRO_AUTHZ_SOURCES_PREVIEW_*`, `CEREBRO_AUTHZ_SOURCE_RUNTIMES_WRITE_*`, `CEREBRO_AUTHZ_JOBS_WRITE_*` | Optional route-family entitlement requirements, using `_GROUPS`, `_ROLES`, or `_SCOPES` suffixes. |
 | `OPENAI_API_KEY` | Enables the platform-wide Cerebro AI agent. Without it, Ask falls back to the existing `/grc/ask` stream. |
 | `CEREBRO_AGENT_MODEL` | Optional OpenAI model override for the Cerebro AI agent. Defaults to `gpt-5.4-mini`. |
 | `CEREBRO_MCP_URL` | Optional Cerebro MCP Streamable HTTP endpoint. Defaults to `/api/v1/mcp` on `CEREBRO_API_BASE`. |
@@ -49,6 +51,20 @@ Application changes should land here first and then be promoted to `WriterIntern
 | `NEXT_PUBLIC_CEREBRO_WEB_VERSION`, `NEXT_PUBLIC_APP_VERSION`, `CEREBRO_WEB_VERSION`, `APP_VERSION`, `RELEASE_VERSION`, `IMAGE_TAG` | Build-time version stamp for the sidebar. Without an explicit value, local builds fall back to Git metadata and then `package.json`. |
 
 `/api/cerebro/*` keeps a small process-local cache for high-traffic GRC reads. Responses expose `x-cerebro-cache` for the web proxy cache state and `x-cerebro-upstream-cache` when the API also reports a shared backend cache state. Manual refreshes send `Cache-Control: no-cache` through the proxy so the API can bypass both layers.
+
+Built-in Cerebro RBAC recognizes these role bundles from identity roles or OAuth/API scopes:
+
+| Role | Web permissions |
+| --- | --- |
+| `cerebro.viewer` | Read, Ask, and identity views. Aliases: `viewer`, `reader`, `read_only`. |
+| `cerebro.analyst` | Viewer plus findings and GRC inventory writes. Aliases: `analyst`, `editor`. |
+| `cerebro.finding_manager` | Viewer plus finding lifecycle writes. |
+| `cerebro.grc_reviewer` | Viewer plus GRC inventory writes. |
+| `cerebro.connector_manager` | Viewer plus connector credentials, definitions, and connection writes. |
+| `cerebro.responder` | Viewer plus runtime response writes. |
+| `cerebro.source_manager` | Viewer plus source previews, report runs, and source-runtime writes. |
+| `cerebro.job_manager` | Viewer plus platform job writes. |
+| `cerebro.admin` | All web permissions. Aliases: `admin`, `owner`. |
 
 ## Observability
 

@@ -7,12 +7,15 @@ import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
 import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
+import { authorizationRoleLabelsForUser, effectiveAuthorizationPermissionsForUser } from "@/lib/rbac";
 
 type ConsoleConfig = {
   apiBase: string;
   serverAuthConfigured: boolean;
   forwardRequestAuth: boolean;
 };
+
+const displayValues = (values: string[] | undefined) => values?.filter(Boolean).join(", ") || "—";
 
 export default function Topbar() {
   const { apiKey, setApiKey } = useApiKey();
@@ -46,6 +49,8 @@ export default function Topbar() {
   const canUseClientKey = clientKeyEnabled || !serverAuthConfigured;
   const connected = apiKey || serverAuthConfigured;
   const identity = identityPosture({ error: userError, loading: userLoading, user });
+  const effectivePermissions = effectiveAuthorizationPermissionsForUser(user);
+  const recognizedRoles = authorizationRoleLabelsForUser(user);
   const authLabel = serverAuthConfigured ? "Server auth" : apiKey ? "API key" : "No API key";
   const apiKeyPosture = canUseClientKey ? (apiKey ? "Client key present" : "No client key") : "Server-managed";
   const runtimeHealthy = Boolean(connected && identity.state === "resolved");
@@ -184,9 +189,11 @@ export default function Topbar() {
               ["Subject", user?.subject ?? "—"],
               ["Provider", user?.provider ?? "—"],
               ["Confidence", user ? currentUserConfidenceLabel(user.confidence) : "—"],
-              ["Groups", user?.entitlements?.groups?.join(", ") ?? "—"],
-              ["Roles", user?.entitlements?.roles?.join(", ") ?? "—"],
-              ["Scopes", user?.entitlements?.scopes?.join(", ") ?? "—"],
+              ["Groups", displayValues(user?.entitlements?.groups)],
+              ["Roles", displayValues(user?.entitlements?.roles)],
+              ["RBAC roles", displayValues(recognizedRoles)],
+              ["Permissions", displayValues(effectivePermissions)],
+              ["Scopes", displayValues(user?.entitlements?.scopes)],
               ["Auth mode", authLabel],
               ["API key posture", apiKeyPosture],
             ].map(([label, value]) => (

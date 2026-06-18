@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useCurrentUser } from "@/components/providers";
 import { currentUserConfidenceLabel, identityPosture, type IdentityHealth } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
+import { authorizationRoleLabelsForUser, effectiveAuthorizationPermissionsForUser } from "@/lib/rbac";
 
 const writeStampRows = [
   { path: "grc/inventory/asset-reports", label: "Asset report create" },
@@ -27,6 +28,8 @@ export default function IdentityContractPanel({ compact = false }: { compact?: b
   const { actor, error, loading, user } = useCurrentUser();
   const [health, setHealth] = useState<IdentityHealth | null>(null);
   const identity = identityPosture({ error, loading, user });
+  const effectivePermissions = effectiveAuthorizationPermissionsForUser(user);
+  const recognizedRoles = authorizationRoleLabelsForUser(user);
   const attentionItems = [
     ...(user?.conflicts ?? []),
     ...(user?.warnings ?? []),
@@ -82,6 +85,8 @@ export default function IdentityContractPanel({ compact = false }: { compact?: b
             <IdentityRow label="Source" value={identity.sourceLabel} />
             <IdentityRow label="Groups" value={joinValues(user?.entitlements?.groups)} />
             <IdentityRow label="Roles" value={joinValues(user?.entitlements?.roles)} />
+            <IdentityRow label="RBAC roles" value={joinValues(recognizedRoles)} />
+            <IdentityRow label="Permissions" value={joinValues(effectivePermissions)} />
             <IdentityRow label="Scopes" value={joinValues(user?.entitlements?.scopes)} />
           </div>
           <p className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">{identity.detail}</p>
