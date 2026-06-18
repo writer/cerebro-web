@@ -15,11 +15,37 @@ export type GRCControlRef = {
   control_id: string;
 };
 
+export type GRCFindingNote = {
+  id: string;
+  body: string;
+  created_at?: string;
+};
+
+export type GRCFindingTicket = {
+  url: string;
+  name?: string;
+  external_id?: string;
+  linked_at?: string;
+};
+
+export type GRCFindingExternalRef = {
+  system?: string;
+  kind?: string;
+  external_id?: string;
+  url?: string;
+  external_status?: string;
+  external_status_reason?: string;
+  lifecycle_owner?: string;
+  observed_at?: string;
+};
+
 export type GRCFinding = {
   id: string;
   title: string;
   severity: string;
   status: string;
+  status_reason?: string;
+  status_updated_at?: string;
   summary?: string;
   tenant_id?: string;
   runtime_id?: string;
@@ -39,11 +65,15 @@ export type GRCFinding = {
   risk_reasons?: string[];
   risk_model_version?: string;
   evidence_count: number;
+  assignee?: string;
   owner: string;
   sla_status: string;
   due_at?: string;
   first_observed_at?: string;
   last_observed_at?: string;
+  notes?: GRCFindingNote[];
+  tickets?: GRCFindingTicket[];
+  external_refs?: GRCFindingExternalRef[];
 };
 
 export type GRCEvidence = {
@@ -380,6 +410,23 @@ export type GRCInventoryAssetReport = {
   attributes?: Record<string, string>;
   created_at: string;
   updated_at: string;
+};
+
+export type GRCInventoryScopeRecord = {
+  tenant_id: string;
+  asset_urn: string;
+  source_id?: string;
+  scope_state: "in_scope" | "out_of_scope" | string;
+  reason?: string;
+  updated_by?: string;
+  attributes?: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type GRCInventoryAccountabilityUpdateResponse = {
+  scope: GRCInventoryScopeRecord;
+  generated_at: string;
 };
 
 export type GRCInventorySummary = {

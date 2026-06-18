@@ -10,6 +10,7 @@ import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHe
 import {
   GRCInventoryAsset,
   GRCInventoryAssetReport,
+  GRCInventoryAccountabilityUpdateResponse,
   GRCInventoryAssetsResponse,
   GRCInventoryCategoriesResponse,
   GRCInventoryCategory,
@@ -141,39 +142,70 @@ function ScopeToggle({
   );
 }
 
-function AssetClassTabs({
+function AssetClassRail({
   categories,
   selectedID,
   total,
+  currentCount,
   onSelect,
 }: {
   categories: GRCInventoryCategory[];
   selectedID: string;
   total: number;
+  currentCount: number;
   onSelect: (id: string) => void;
 }) {
+  const [classQuery, setClassQuery] = useState("");
+  const visibleCategories = useMemo(() => {
+    const normalized = classQuery.trim().toLowerCase();
+    if (!normalized) return categories;
+    return categories.filter((category) =>
+      [category.label, category.id, ...(category.entity_types ?? [])].join(" ").toLowerCase().includes(normalized),
+    );
+  }, [categories, classQuery]);
+
   return (
-    <div className="surface-panel overflow-x-auto p-2">
-      <div className="flex min-w-max items-center gap-1.5">
+    <aside className="surface-panel overflow-hidden xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]">
+      <div className="border-b border-[color:var(--border)] px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Asset classes</h2>
+          <span className="text-[12px] text-[var(--text-muted)]">{total.toLocaleString()}</span>
+        </div>
+        <input
+          value={classQuery}
+          onChange={(event) => setClassQuery(event.target.value)}
+          placeholder="Find a class"
+          className="control-input mt-3 w-full px-3 py-1.5 text-[13px]"
+        />
+      </div>
+      <div className="max-h-[28rem] overflow-y-auto p-2 xl:max-h-[calc(100vh-12rem)]">
         <button
           type="button"
           onClick={() => onSelect("")}
-          className={`rounded-md px-3 py-2 text-left text-[13px] transition ${!selectedID ? "bg-[var(--nav-active)] font-semibold text-[var(--primary)]" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"}`}
+          className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-[13px] transition ${!selectedID ? "bg-[var(--nav-active)] font-semibold text-[var(--primary)]" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"}`}
         >
-          All classes <span className="ml-2 text-[11px] text-[var(--text-muted)]">{total}</span>
+          <span className="truncate">All classes</span>
+          <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{currentCount.toLocaleString()}</span>
         </button>
-        {categories.map((category) => (
+        {visibleCategories.map((category) => (
           <button
             key={category.id}
             type="button"
             onClick={() => onSelect(category.id)}
-            className={`rounded-md px-3 py-2 text-left text-[13px] transition ${selectedID === category.id ? "bg-[var(--nav-active)] font-semibold text-[var(--primary)]" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"}`}
+            className={`mt-1 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-[13px] transition ${selectedID === category.id ? "bg-[var(--nav-active)] font-semibold text-[var(--primary)]" : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"}`}
           >
-            {category.label} <span className="ml-2 text-[11px] text-[var(--text-muted)]">{category.count}</span>
+            <span className="min-w-0 truncate">{category.label}</span>
+            <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{category.count.toLocaleString()}</span>
           </button>
         ))}
+        {visibleCategories.length === 0 && (
+          <div className="px-3 py-8 text-center text-[13px] text-[var(--text-muted)]">No classes match.</div>
+        )}
       </div>
-    </div>
+      <div className="border-t border-[color:var(--border)] px-4 py-3 text-[12px] text-[var(--text-muted)]">
+        Showing {visibleCategories.length.toLocaleString()} of {categories.length.toLocaleString()} classes.
+      </div>
+    </aside>
   );
 }
 
@@ -306,6 +338,97 @@ function ScopeModal({
   );
 }
 
+type AccountabilityUpdateState = "known" | "not_required" | "clear";
+
+function AccountabilityModal({
+  assets,
+  defaultState,
+  error,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  assets: GRCInventoryAsset[];
+  defaultState: AccountabilityUpdateState;
+  error: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (update: { state: AccountabilityUpdateState; owner?: string; reason?: string }) => void;
+}) {
+  const firstOwner = assets.length === 1 && inventoryOwnerLabel(assets[0]) !== "Unassigned" ? inventoryOwnerLabel(assets[0]) : "";
+  const [state, setState] = useState<AccountabilityUpdateState>(defaultState);
+  const [owner, setOwner] = useState(firstOwner);
+  const [reason, setReason] = useState(defaultState === "not_required" ? "Owner is not required for GRC review" : "");
+  const canSubmit = state !== "known" || owner.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-stone-950/45 px-4 py-12 backdrop-blur-sm" onClick={onClose}>
+      <div className="surface-raised mx-auto max-w-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-[color:var(--border)] px-7 py-6">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">{assets.length === 1 ? "Update owner decision" : "Update selected assets"}</h2>
+            <p className="mt-1 text-[13px] text-[var(--text-muted)]">{assets.length} asset{assets.length === 1 ? "" : "s"} will be updated in inventory accountability.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[13px] text-[var(--text-muted)] hover:bg-[var(--surface-hover)]">Close</button>
+        </div>
+        <div className="space-y-5 p-7">
+          <div className="max-h-36 overflow-y-auto rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+            {assets.slice(0, 8).map((asset) => (
+              <div key={asset.urn} className="flex items-center justify-between gap-3 py-1 text-[12px]">
+                <span className="min-w-0 truncate font-medium text-[var(--text-primary)]">{asset.label || shortEntity(asset.urn)}</span>
+                <span className="shrink-0 text-[var(--text-muted)]">{descriptionLabel(asset)}</span>
+              </div>
+            ))}
+            {assets.length > 8 && <div className="py-1 text-[12px] text-[var(--text-muted)]">+ {assets.length - 8} more</div>}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              { value: "known" as const, label: "Set owner" },
+              { value: "not_required" as const, label: "Not required" },
+              { value: "clear" as const, label: "Clear decision" },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setState(item.value)}
+                className={`rounded-md border px-3 py-2 text-left text-[13px] font-semibold transition ${state === item.value ? "border-[color:var(--ring)] bg-[var(--nav-active)] text-[var(--primary)]" : "border-[color:var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {state === "known" && (
+            <label className={labelClass}>
+              Owner
+              <input value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="team@example.com or owner group" className={inputClass} />
+            </label>
+          )}
+          {state !== "clear" && (
+            <label className={labelClass}>
+              Reason
+              <textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this owner decision is correct" className={`${inputClass} min-h-24 resize-y`} />
+            </label>
+          )}
+          {error && <ErrorBlock error={error} recoveryDetail="The owner decision was not saved." />}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" onClick={onClose} className="secondary-button px-3 py-1.5 text-[13px]">Cancel</button>
+            <button
+              type="button"
+              disabled={!canSubmit || saving}
+              onClick={() => onSubmit({ state, owner: owner.trim(), reason: reason.trim() })}
+              className="primary-button px-3 py-1.5 text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Saving" : "Save decision"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReviewQueuePanel({
   assets,
   onReport,
@@ -391,6 +514,11 @@ export default function InventoryPage() {
   const [reportAsset, setReportAsset] = useState<GRCInventoryAsset | null>(null);
   const [reportSavingURN, setReportSavingURN] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [selectedAssetURNs, setSelectedAssetURNs] = useState<string[]>([]);
+  const [accountabilityAssets, setAccountabilityAssets] = useState<GRCInventoryAsset[] | null>(null);
+  const [accountabilityDefaultState, setAccountabilityDefaultState] = useState<AccountabilityUpdateState>("known");
+  const [accountabilitySaving, setAccountabilitySaving] = useState(false);
+  const [accountabilityError, setAccountabilityError] = useState<string | null>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedCategoryID = useDebouncedValue(categoryID.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
@@ -432,6 +560,9 @@ export default function InventoryPage() {
     inventoryMatchesReviewFilter(asset, debouncedReviewFilter || "all") &&
     inventoryMatchesAccountabilityFilter(asset, debouncedAccountabilityFilter || "all"),
   ), [debouncedAccountabilityFilter, debouncedOwnerFilter, debouncedReviewFilter, frameworkAssets]);
+  const selectedAssetURNSet = useMemo(() => new Set(selectedAssetURNs), [selectedAssetURNs]);
+  const selectedAssets = useMemo(() => assets.filter((asset) => selectedAssetURNSet.has(asset.urn)), [assets, selectedAssetURNSet]);
+  const allVisibleSelected = assets.length > 0 && selectedAssets.length === assets.length;
   const summary = assetsQuery.data?.summary;
   const hasFrameworkFilter = debouncedFramework.length > 0;
   const selectedCategory = categories.find((category) => category.id === categoryID);
@@ -504,8 +635,23 @@ export default function InventoryPage() {
     setSourceID("");
     setScopeFilter("");
     setTenantID("");
+    setSelectedAssetURNs([]);
   };
-  const updateScope = useCallback(async (asset: GRCInventoryAsset, state: "in_scope" | "out_of_scope") => {
+  const toggleAssetSelection = useCallback((asset: GRCInventoryAsset) => {
+    setSelectedAssetURNs((current) => current.includes(asset.urn)
+      ? current.filter((urn) => urn !== asset.urn)
+      : [...current, asset.urn]);
+  }, []);
+  const toggleAllVisible = useCallback(() => {
+    setSelectedAssetURNs(allVisibleSelected ? [] : assets.map((asset) => asset.urn));
+  }, [allVisibleSelected, assets]);
+  const openAccountabilityModal = useCallback((targetAssets: GRCInventoryAsset[], defaultState: AccountabilityUpdateState = "known") => {
+    if (targetAssets.length === 0) return;
+    setAccountabilityAssets(targetAssets);
+    setAccountabilityDefaultState(defaultState);
+    setAccountabilityError(null);
+  }, []);
+  const updateScope = useCallback(async (asset: GRCInventoryAsset, state: "in_scope" | "out_of_scope", reload = true) => {
     setScopeSavingURN(asset.urn);
     setScopeError(null);
     const response = await fetchCerebro("/grc/inventory/resource-scope", apiKey, {
@@ -523,8 +669,51 @@ export default function InventoryPage() {
     setScopeSavingURN(null);
     if (!response.ok) {
       setScopeError(typeof response.data === "string" ? response.data : `Scope update failed (${response.status})`);
-      return;
+      return false;
     }
+    if (reload) {
+      void assetsQuery.reload();
+      void scopeQuery.reload();
+    }
+    return true;
+  }, [apiKey, assetsQuery, debouncedSourceID, debouncedTenantID, scopeQuery]);
+  const updateScopeForAssets = useCallback(async (targetAssets: GRCInventoryAsset[], state: "in_scope" | "out_of_scope") => {
+    if (targetAssets.length === 0) return;
+    for (const asset of targetAssets) {
+      const ok = await updateScope(asset, state, false);
+      if (!ok) return;
+    }
+    setSelectedAssetURNs([]);
+    void assetsQuery.reload();
+    void scopeQuery.reload();
+  }, [assetsQuery, scopeQuery, updateScope]);
+  const submitAccountabilityUpdate = useCallback(async (targetAssets: GRCInventoryAsset[], update: { state: AccountabilityUpdateState; owner?: string; reason?: string }) => {
+    if (targetAssets.length === 0) return;
+    setAccountabilitySaving(true);
+    setAccountabilityError(null);
+    for (const asset of targetAssets) {
+      const response = await fetchCerebro<GRCInventoryAccountabilityUpdateResponse>("/grc/inventory/accountability", apiKey, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_id: debouncedTenantID || undefined,
+          asset_urn: asset.urn,
+          source_id: asset.source_id || debouncedSourceID || undefined,
+          runtime_id: asset.runtime_id || undefined,
+          state: update.state,
+          owner: update.state === "known" ? update.owner : undefined,
+          reason: update.reason || undefined,
+        }),
+      });
+      if (!response.ok) {
+        setAccountabilitySaving(false);
+        setAccountabilityError(typeof response.data === "string" ? response.data : `Owner decision failed (${response.status})`);
+        return;
+      }
+    }
+    setAccountabilitySaving(false);
+    setAccountabilityAssets(null);
+    setSelectedAssetURNs([]);
     void assetsQuery.reload();
     void scopeQuery.reload();
   }, [apiKey, assetsQuery, debouncedSourceID, debouncedTenantID, scopeQuery]);
@@ -607,199 +796,258 @@ export default function InventoryPage() {
         />
       )}
 
-      <AssetClassTabs
-        categories={filteredCategories}
-        selectedID={categoryID}
-        total={categories.reduce((sum, item) => sum + item.count, 0)}
-        onSelect={setCategoryID}
-      />
+      <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <AssetClassRail
+          categories={filteredCategories}
+          selectedID={categoryID}
+          total={categories.reduce((sum, item) => sum + item.count, 0)}
+          currentCount={assets.length}
+          onSelect={(id) => { setCategoryID(id); setSelectedAssetURNs([]); }}
+        />
 
-      <div className="surface-panel grid gap-0 divide-y divide-[color:var(--border)] overflow-hidden md:grid-cols-5 md:divide-x md:divide-y-0">
-        {[
-          { label: "Assets", value: String(assets.length), detail: "current view" },
-          { label: "Needs review", value: String(needsReviewCount), detail: `${ownerRequiredCount} owner required` },
-          { label: "Baseline", value: String(baselineCount), detail: "no immediate action" },
-          { label: "Accountable", value: String(accountableCount), detail: `${ownerGroupCount} owner groups` },
-          { label: "Scope", value: scopedCoverage, detail: `${outOfScopeCount} scoped out` },
-        ].map((item) => (
-          <div key={item.label} className="px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{item.label}</div>
-            <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{metricValueForState({ state: metricState, value: item.value })}</div>
-            <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">{metricDetailForState({ state: metricState, detail: item.detail })}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="surface-panel px-5 py-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_150px_150px_150px_150px_130px]">
-          <label className={labelClass}>Search<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." className={inputClass} /></label>
-          <label className={labelClass}>
-            Framework
-            <input value={framework} onChange={(event) => setFramework(event.target.value)} placeholder="FedRAMP Rev. 5" list="inventory-framework-options" className={inputClass} />
-            <datalist id="inventory-framework-options">
-              {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
-            </datalist>
-          </label>
-          <label className={labelClass}>
-            Owner
-            <input value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} placeholder="Any owner" list="inventory-owner-options" className={inputClass} />
-            <datalist id="inventory-owner-options">
-              {ownerOptions.map((owner) => <option key={owner} value={owner} />)}
-            </datalist>
-          </label>
-          <label className={labelClass}>
-            Review
-            <select value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value)} className={inputClass}>
-              {reviewFilters.map((item) => <option key={item.value} value={item.value === "all" ? "" : item.value}>{item.label}</option>)}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Accountability
-            <select value={accountabilityFilter} onChange={(event) => setAccountabilityFilter(event.target.value)} className={inputClass}>
-              {accountabilityFilters.map((item) => <option key={item.value} value={item.value === "all" ? "" : item.value}>{item.label}</option>)}
-            </select>
-          </label>
-          <label className={labelClass}>Source<input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Scope
-            <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)} className={inputClass}>
-              <option value="">All</option>
-              <option value="in_scope">In scope</option>
-              <option value="out_of_scope">Scoped out</option>
-            </select>
-          </label>
-        </div>
-        <div className="mt-3 max-w-xs">
-          <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All" className={inputClass} /></label>
-        </div>
-        <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
-      </div>
-
-      {inventoryLoading && <LoadingBlock label="Loading inventory..." />}
-
-      {!inventoryError && (
-        <div className="grid gap-6 min-[1800px]:grid-cols-[minmax(0,1fr)_340px]">
-          <main className="space-y-4">
-            {!assetsQuery.loading && !assetsQuery.error && (
-              <div className="surface-panel overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Asset / Details</th>
-                      <th>Review</th>
-                      <th>Risk</th>
-                      <th>Accountability</th>
-                      <th>Framework Scope</th>
-                      <th>Account / Region</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assets.map((asset) => (
-                      <tr key={asset.urn}>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <SourceMark asset={asset} />
-                            <div className="min-w-0">
-                              <Link href={`/inventory/${encodeURIComponent(asset.urn)}`} className="block max-w-[26rem] truncate font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">{asset.label || shortEntity(asset.urn)}</Link>
-                              <div className="truncate font-mono text-[11px] text-[var(--text-muted)]">{shortEntity(inventoryAttr(asset, "resource_id", "id") || asset.urn)}</div>
-                              <div className="mt-1 text-[11px] text-[var(--text-muted)]">{descriptionLabel(asset)}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="space-y-1">
-                            <ReviewBadge asset={asset} />
-                            <div className="max-w-[190px] text-[11px] leading-4 text-[var(--text-muted)]">{inventoryReviewDetail(asset)}</div>
-                          </div>
-                        </td>
-                        <td>
-                          <RiskBadge score={asset.risk_score} level={asset.risk_level} />
-                          {asset.risk_reasons && asset.risk_reasons.length > 0 && <div className="mt-1 max-w-[180px] text-[11px] leading-4 text-[var(--text-muted)]">{asset.risk_reasons.slice(0, 2).map(humanize).join(", ")}</div>}
-                        </td>
-                        <td>
-                          <div className="max-w-[170px] truncate font-medium text-[var(--text-primary)]">{ownerDisplay(asset)}</div>
-                          {inventoryOwnerLabel(asset) === "Unassigned" && (
-                            <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                              {inventoryAccountability(asset).state === "required_missing" ? "Required for review" : "Default inventory state"}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <div className="space-y-1">
-                            <Badge value={inventoryScopeCopy(inventoryScopeState(asset))} />
-                            {asset.scope_reason && <div className="max-w-[170px] truncate text-[11px] text-[var(--text-muted)]">{asset.scope_reason}</div>}
-                            {asset.asset_report_count ? (
-                              <div className="space-y-1">
-                                <Badge value={reportStatusCopy(asset.latest_asset_report_status)} />
-                                <div className="max-w-[170px] truncate text-[11px] text-[var(--text-muted)]">{asset.latest_asset_report_reason}</div>
-                              </div>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td>{regionLabel(asset)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {assets.length === 0 && <div className="flex items-center justify-center p-8 text-[13px] text-[var(--text-muted)]">No resources match this view.</div>}
-              </div>
-            )}
-          </main>
-          <aside className="grid gap-4 lg:grid-cols-2 min-[1800px]:block min-[1800px]:space-y-4">
-            <ReviewQueuePanel
-              assets={assets}
-              onReport={(asset) => { setReportAsset(asset); setReportError(null); }}
-              onScopeChange={(asset, state) => void updateScope(asset, state)}
-              reportSavingURN={reportSavingURN}
-              scopeSavingURN={scopeSavingURN}
-            />
-            <section className="surface-panel p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Review posture</h2>
-                  <p className="mt-1 text-[12px] text-[var(--text-muted)]">Accountability coverage after default baseline assets are separated from actionable review.</p>
-                </div>
-                <Badge value={`${providerCount} sources`} />
-              </div>
-              <div className="mt-4 grid gap-3">
-                <ProgressCard title="Scoped coverage" percent={hasAssetData ? summary?.scoped_coverage_pct ?? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : 0} detail={hasAssetData ? "assets in review" : "no data"} total={summary?.in_scope_assets ?? assets.length} />
-                <ProgressCard title="Accountable assets" percent={assets.length ? Math.round((accountableCount / assets.length) * 100) : 0} detail="known owner group" total={accountableCount} />
-                <ProgressCard title="Private posture" percent={assets.length ? Math.round(((assets.length - publicAssetCount) / assets.length) * 100) : 0} detail="not public" total={`${publicAssetCount} public`} />
-              </div>
-              {scopeError && (
-                <div className="mt-4">
-                  <ErrorBlock
-                    error={scopeError}
-                    onRetry={() => { void assetsQuery.reload(); void scopeQuery.reload(); }}
-                    recoveryDetail="Scope updates can resume when the API is reachable."
-                  />
-                </div>
-              )}
-            </section>
-          </aside>
-        </div>
-      )}
-
-      {!inventoryError && (
-        <section className="surface-panel p-4">
-          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Org parity</h2>
-          <p className="mt-1 text-[12px] text-[var(--text-muted)]">Compare review pressure, accountability coverage, and exposure by organization, account, project, or owner scope.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {orgGroups.map(([label, group]) => (
-              <div key={label} className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <div className="flex items-center justify-between gap-3 text-[13px]">
-                  <span className="truncate font-medium text-[var(--text-primary)]">{label}</span>
-                  <span className="text-[var(--text-muted)]">{group.accountable}/{group.total} accountable</span>
-                </div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{group.needsReview} need review, {group.publicAssets} public</div>
+        <div className="min-w-0 space-y-6">
+          <div className="surface-panel grid gap-0 divide-y divide-[color:var(--border)] overflow-hidden md:grid-cols-5 md:divide-x md:divide-y-0">
+            {[
+              { label: "Assets", value: String(assets.length), detail: "current view" },
+              { label: "Needs review", value: String(needsReviewCount), detail: `${ownerRequiredCount} owner required` },
+              { label: "Baseline", value: String(baselineCount), detail: "no immediate action" },
+              { label: "Accountable", value: String(accountableCount), detail: `${ownerGroupCount} owner groups` },
+              { label: "Scope", value: scopedCoverage, detail: `${outOfScopeCount} scoped out` },
+            ].map((item) => (
+              <div key={item.label} className="px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{item.label}</div>
+                <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{metricValueForState({ state: metricState, value: item.value })}</div>
+                <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">{metricDetailForState({ state: metricState, detail: item.detail })}</div>
               </div>
             ))}
-            {orgGroups.length === 0 && <div className="text-[13px] text-[var(--text-muted)]">No org groups found.</div>}
           </div>
-        </section>
-      )}
+
+          <div className="surface-panel px-5 py-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_150px_150px_150px_150px_130px]">
+              <label className={labelClass}>Search<input value={query} onChange={(event) => { setQuery(event.target.value); setSelectedAssetURNs([]); }} placeholder="Search..." className={inputClass} /></label>
+              <label className={labelClass}>
+                Framework
+                <input value={framework} onChange={(event) => { setFramework(event.target.value); setSelectedAssetURNs([]); }} placeholder="FedRAMP Rev. 5" list="inventory-framework-options" className={inputClass} />
+                <datalist id="inventory-framework-options">
+                  {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+                </datalist>
+              </label>
+              <label className={labelClass}>
+                Owner
+                <input value={ownerFilter} onChange={(event) => { setOwnerFilter(event.target.value); setSelectedAssetURNs([]); }} placeholder="Any owner" list="inventory-owner-options" className={inputClass} />
+                <datalist id="inventory-owner-options">
+                  {ownerOptions.map((owner) => <option key={owner} value={owner} />)}
+                </datalist>
+              </label>
+              <label className={labelClass}>
+                Review
+                <select value={reviewFilter} onChange={(event) => { setReviewFilter(event.target.value); setSelectedAssetURNs([]); }} className={inputClass}>
+                  {reviewFilters.map((item) => <option key={item.value} value={item.value === "all" ? "" : item.value}>{item.label}</option>)}
+                </select>
+              </label>
+              <label className={labelClass}>
+                Accountability
+                <select value={accountabilityFilter} onChange={(event) => { setAccountabilityFilter(event.target.value); setSelectedAssetURNs([]); }} className={inputClass}>
+                  {accountabilityFilters.map((item) => <option key={item.value} value={item.value === "all" ? "" : item.value}>{item.label}</option>)}
+                </select>
+              </label>
+              <label className={labelClass}>Source<input value={sourceID} onChange={(event) => { setSourceID(event.target.value); setSelectedAssetURNs([]); }} placeholder="All" className={inputClass} /></label>
+              <label className={labelClass}>Scope
+                <select value={scopeFilter} onChange={(event) => { setScopeFilter(event.target.value); setSelectedAssetURNs([]); }} className={inputClass}>
+                  <option value="">All</option>
+                  <option value="in_scope">In scope</option>
+                  <option value="out_of_scope">Scoped out</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 max-w-xs">
+              <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => { setTenantID(event.target.value); setSelectedAssetURNs([]); }} placeholder="All" className={inputClass} /></label>
+            </div>
+            <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
+          </div>
+
+          {inventoryLoading && <LoadingBlock label="Loading inventory..." />}
+
+          {!inventoryError && selectedAssets.length > 0 && (
+            <div className="surface-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">{selectedAssets.length} selected</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => openAccountabilityModal(selectedAssets, "known")} className="secondary-button px-3 py-1.5 text-[12px]">Set owner</button>
+                <button type="button" onClick={() => openAccountabilityModal(selectedAssets, "not_required")} className="secondary-button px-3 py-1.5 text-[12px]">Owner not required</button>
+                <button type="button" onClick={() => void updateScopeForAssets(selectedAssets, "out_of_scope")} className="secondary-button px-3 py-1.5 text-[12px]">Scope out</button>
+                <button type="button" onClick={() => void updateScopeForAssets(selectedAssets, "in_scope")} className="secondary-button px-3 py-1.5 text-[12px]">Scope in</button>
+                <button type="button" onClick={() => setSelectedAssetURNs([])} className="rounded-md px-3 py-1.5 text-[12px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-hover)]">Clear</button>
+              </div>
+            </div>
+          )}
+
+          {!inventoryError && (
+            <div className="grid gap-6 min-[1800px]:grid-cols-[minmax(0,1fr)_340px]">
+              <main className="space-y-4">
+                {!assetsQuery.loading && !assetsQuery.error && (
+                  <div className="surface-panel overflow-x-auto">
+                    <table className="data-table min-w-[1180px]">
+                      <thead>
+                        <tr>
+                          <th className="w-10">
+                            <input
+                              type="checkbox"
+                              aria-label="Select all visible assets"
+                              checked={allVisibleSelected}
+                              onChange={toggleAllVisible}
+                              className="h-4 w-4 rounded border-[color:var(--border)]"
+                            />
+                          </th>
+                          <th>Asset / Details</th>
+                          <th>Review</th>
+                          <th>Risk</th>
+                          <th>Accountability</th>
+                          <th>Framework Scope</th>
+                          <th>Account / Region</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assets.map((asset) => (
+                          <tr key={asset.urn} className={selectedAssetURNSet.has(asset.urn) ? "bg-[var(--surface-hover)]" : ""}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${asset.label || shortEntity(asset.urn)}`}
+                                checked={selectedAssetURNSet.has(asset.urn)}
+                                onChange={() => toggleAssetSelection(asset)}
+                                className="h-4 w-4 rounded border-[color:var(--border)]"
+                              />
+                            </td>
+                            <td>
+                              <div className="flex items-center gap-3">
+                                <SourceMark asset={asset} />
+                                <div className="min-w-0">
+                                  <Link href={`/inventory/${encodeURIComponent(asset.urn)}`} className="block max-w-[26rem] truncate font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">{asset.label || shortEntity(asset.urn)}</Link>
+                                  <div className="truncate font-mono text-[11px] text-[var(--text-muted)]">{shortEntity(inventoryAttr(asset, "resource_id", "id") || asset.urn)}</div>
+                                  <div className="mt-1 text-[11px] text-[var(--text-muted)]">{descriptionLabel(asset)}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="space-y-1">
+                                <ReviewBadge asset={asset} />
+                                <div className="max-w-[190px] text-[11px] leading-4 text-[var(--text-muted)]">{inventoryReviewDetail(asset)}</div>
+                              </div>
+                            </td>
+                            <td>
+                              <RiskBadge score={asset.risk_score} level={asset.risk_level} />
+                              {asset.risk_reasons && asset.risk_reasons.length > 0 && <div className="mt-1 max-w-[180px] text-[11px] leading-4 text-[var(--text-muted)]">{asset.risk_reasons.slice(0, 2).map(humanize).join(", ")}</div>}
+                            </td>
+                            <td>
+                              <div className="max-w-[170px] truncate font-medium text-[var(--text-primary)]">{ownerDisplay(asset)}</div>
+                              {inventoryOwnerLabel(asset) === "Unassigned" && (
+                                <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+                                  {inventoryAccountability(asset).state === "required_missing" ? "Required for review" : "Default inventory state"}
+                                </div>
+                              )}
+                              <button type="button" onClick={() => openAccountabilityModal([asset], "known")} className="mt-1 text-[11px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">Edit owner</button>
+                            </td>
+                            <td>
+                              <div className="space-y-1">
+                                <Badge value={inventoryScopeCopy(inventoryScopeState(asset))} />
+                                {asset.scope_reason && <div className="max-w-[170px] truncate text-[11px] text-[var(--text-muted)]">{asset.scope_reason}</div>}
+                                {asset.asset_report_count ? (
+                                  <div className="space-y-1">
+                                    <Badge value={reportStatusCopy(asset.latest_asset_report_status)} />
+                                    <div className="max-w-[170px] truncate text-[11px] text-[var(--text-muted)]">{asset.latest_asset_report_reason}</div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td>{regionLabel(asset)}</td>
+                            <td>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button type="button" onClick={() => void updateScope(asset, inventoryScopeState(asset) === "out_of_scope" ? "in_scope" : "out_of_scope")} disabled={scopeSavingURN === asset.urn} className="secondary-button px-2.5 py-1 text-[12px] disabled:opacity-50">
+                                  {scopeSavingURN === asset.urn ? "Saving" : inventoryScopeState(asset) === "out_of_scope" ? "Scope in" : "Scope out"}
+                                </button>
+                                <button type="button" onClick={() => { setReportAsset(asset); setReportError(null); }} disabled={reportSavingURN === asset.urn} className="secondary-button px-2.5 py-1 text-[12px] disabled:opacity-50">
+                                  {reportSavingURN === asset.urn ? "Reporting" : "Report"}
+                                </button>
+                                <Link href={`/inventory/${encodeURIComponent(asset.urn)}`} className="px-2.5 py-1 text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">Open</Link>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {assets.length === 0 && <div className="flex items-center justify-center p-8 text-[13px] text-[var(--text-muted)]">No resources match this view.</div>}
+                  </div>
+                )}
+              </main>
+              <aside className="grid gap-4 lg:grid-cols-2 min-[1800px]:block min-[1800px]:space-y-4">
+                <ReviewQueuePanel
+                  assets={assets}
+                  onReport={(asset) => { setReportAsset(asset); setReportError(null); }}
+                  onScopeChange={(asset, state) => void updateScope(asset, state)}
+                  reportSavingURN={reportSavingURN}
+                  scopeSavingURN={scopeSavingURN}
+                />
+                <section className="surface-panel p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Review posture</h2>
+                      <p className="mt-1 text-[12px] text-[var(--text-muted)]">Accountability coverage after default baseline assets are separated from actionable review.</p>
+                    </div>
+                    <Badge value={`${providerCount} sources`} />
+                  </div>
+                  <div className="mt-4 grid gap-3">
+                    <ProgressCard title="Scoped coverage" percent={hasAssetData ? summary?.scoped_coverage_pct ?? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : 0} detail={hasAssetData ? "assets in review" : "no data"} total={summary?.in_scope_assets ?? assets.length} />
+                    <ProgressCard title="Accountable assets" percent={assets.length ? Math.round((accountableCount / assets.length) * 100) : 0} detail="known owner group" total={accountableCount} />
+                    <ProgressCard title="Private posture" percent={assets.length ? Math.round(((assets.length - publicAssetCount) / assets.length) * 100) : 0} detail="not public" total={`${publicAssetCount} public`} />
+                  </div>
+                  {scopeError && (
+                    <div className="mt-4">
+                      <ErrorBlock
+                        error={scopeError}
+                        onRetry={() => { void assetsQuery.reload(); void scopeQuery.reload(); }}
+                        recoveryDetail="Scope updates can resume when the API is reachable."
+                      />
+                    </div>
+                  )}
+                </section>
+              </aside>
+            </div>
+          )}
+
+          {!inventoryError && (
+            <section className="surface-panel p-4">
+              <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Org parity</h2>
+              <p className="mt-1 text-[12px] text-[var(--text-muted)]">Compare review pressure, accountability coverage, and exposure by organization, account, project, or owner scope.</p>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {orgGroups.map(([label, group]) => (
+                  <div key={label} className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                    <div className="flex items-center justify-between gap-3 text-[13px]">
+                      <span className="truncate font-medium text-[var(--text-primary)]">{label}</span>
+                      <span className="text-[var(--text-muted)]">{group.accountable}/{group.total} accountable</span>
+                    </div>
+                    <div className="mt-1 text-[12px] text-[var(--text-muted)]">{group.needsReview} need review, {group.publicAssets} public</div>
+                  </div>
+                ))}
+                {orgGroups.length === 0 && <div className="text-[13px] text-[var(--text-muted)]">No org groups found.</div>}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
 
       {scopeOpen && <ScopeModal onClose={() => setScopeOpen(false)} onScopeChange={(asset, state) => void updateScope(asset, state)} framework={framework} response={scopeQuery.data} savingURN={scopeSavingURN} />}
       {scopeOpen && scopeQuery.loading && <div className="fixed bottom-5 right-5 z-[60]"><LoadingBlock label="Loading scope..." /></div>}
+      {accountabilityAssets && (
+        <AccountabilityModal
+          assets={accountabilityAssets}
+          defaultState={accountabilityDefaultState}
+          error={accountabilityError}
+          saving={accountabilitySaving}
+          onClose={() => setAccountabilityAssets(null)}
+          onSubmit={(update) => void submitAccountabilityUpdate(accountabilityAssets, update)}
+        />
+      )}
       {reportAsset && (
         <AssetReportModal
           asset={reportAsset}
