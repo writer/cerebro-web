@@ -22,6 +22,12 @@ import { authorizationErrorResponse, authorizeCurrentUser, type AuthorizationPer
 import { currentUserActor, resolveCurrentUserFromHeadersWithFallback } from "@/lib/identity";
 import { currentUserServerAuditFields } from "@/lib/identity-server";
 import { normalizeProxyPath, stampCurrentUserOnWriteBody } from "@/lib/identity-write-stamp";
+import {
+  headersWithTrace,
+  responseHeadersWithTrace,
+  startWebSpan,
+  type WebSpan,
+} from "@/lib/observability";
 
 type RouteContext = {
   params: Promise<{ path?: string[] }>;
@@ -48,26 +54,35 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return authorizationErrorResponse(decision);
   }
   const path = (params.path ?? []).join("/");
+  const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("GET", path), request.headers.get("traceparent"));
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   const authHeaders = authHeadersFor(request);
   const bypassCache = shouldBypassCerebroProxyCache(request.headers);
-  const upstreamHeaders = bypassCache ? withCerebroCacheBypassHeader(authHeaders) : authHeaders;
+  const upstreamHeaders = headersWithTrace(bypassCache ? withCerebroCacheBypassHeader(authHeaders) : authHeaders, span);
   const cacheKey = !bypassCache && isCacheableCerebroPath(path) ? cerebroProxyCacheKey(target, authHeaders) : null;
   const cached = cacheKey ? readCerebroProxyCache(cacheKey) : null;
   if (cached) {
+    span.end("completed", {
+      cache_state: cached.state,
+      "http.response.status_code": cached.status,
+    });
     return new NextResponse(cached.body, {
       status: cached.status,
-      headers: cachedResponseHeaders(cached, cached.state),
+      headers: responseHeadersWithTrace(cachedResponseHeaders(cached, cached.state), span),
     });
   }
 
   const inflight = cacheKey ? readCerebroProxyInflight(cacheKey) : null;
   if (inflight) {
     const payload = await inflight;
+    span.end(payload.status >= 500 ? "failed" : "completed", {
+      cache_state: payload.state === "stale" ? "stale" : "dedupe",
+      "http.response.status_code": payload.status,
+    });
     return new NextResponse(payload.body, {
       status: payload.status,
-      headers: cachedResponseHeaders(payload, payload.state === "stale" ? "stale" : "dedupe"),
+      headers: responseHeadersWithTrace(cachedResponseHeaders(payload, payload.state === "stale" ? "stale" : "dedupe"), span),
     });
   }
 
@@ -126,17 +141,25 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } catch (error) {
     const stale = cacheKey ? readCerebroProxyCache(cacheKey, true) : null;
     if (stale) {
+      span.end("completed", {
+        cache_state: "stale",
+        "http.response.status_code": stale.status,
+      });
       return new NextResponse(stale.body, {
         status: stale.status,
-        headers: cachedResponseHeaders(stale, "stale"),
+        headers: responseHeadersWithTrace(cachedResponseHeaders(stale, "stale"), span),
       });
     }
-    return proxyFetchError(error);
+    return tracedProxyError(error, span);
   }
 
+  span.end(payload.status >= 500 ? "failed" : "completed", {
+    cache_state: payload.state,
+    "http.response.status_code": payload.status,
+  });
   return new NextResponse(payload.body, {
     status: payload.status,
-    headers: cachedResponseHeaders(payload, payload.state),
+    headers: responseHeadersWithTrace(cachedResponseHeaders(payload, payload.state), span),
   });
 }
 
@@ -147,12 +170,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
     request.text(),
   ]);
   const path = (params.path ?? []).join("/");
+  const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("POST", path), request.headers.get("traceparent"));
   const normalizedPath = normalizeProxyPath(path);
   const requiredPermission = permissionForPostPath(normalizedPath);
   const decision = authorizeCurrentUser(currentUser, requiredPermission);
   if (!decision.allowed) {
     console.warn("cerebro proxy post denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
-    return authorizationErrorResponse(decision);
+    const response = authorizationErrorResponse(decision);
+    response.headers.set("x-cerebro-web-trace-id", span.traceId);
+    span.end("completed", {
+      authorization_allowed: false,
+      authorization_permission: requiredPermission,
+      "http.response.status_code": response.status,
+    });
+    return response;
   }
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
@@ -175,22 +206,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     response = await fetchCerebro(target, {
       method: "POST",
-      headers,
+      headers: headersWithTrace(headers, span),
       body,
       cache: "no-store",
     });
   } catch (error) {
-    return proxyFetchError(error);
+    return tracedProxyError(error, span);
   }
 
   const passThroughHeaders = responseHeadersFor(response);
   const contentType = passThroughHeaders["content-type"] ?? response.headers.get("content-type") ?? "";
 
   if (isAskStreamRequest && contentType.includes("text/event-stream") && response.body) {
+    span.end(response.status >= 500 ? "failed" : "completed", {
+      stream: true,
+      "http.response.status_code": response.status,
+    });
     return new NextResponse(response.body, {
       status: response.status,
       headers: {
-        ...passThroughHeaders,
+        ...responseHeadersWithTrace(passThroughHeaders, span),
         "content-type": "text/event-stream",
         "cache-control": "no-cache, no-transform",
         connection: "keep-alive",
@@ -200,9 +235,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const text = await response.text();
+  span.end(response.status >= 500 ? "failed" : "completed", {
+    "http.response.status_code": response.status,
+  });
   return new NextResponse(text, {
     status: response.status,
-    headers: passThroughHeaders,
+    headers: responseHeadersWithTrace(passThroughHeaders, span),
   });
 }
 
@@ -218,6 +256,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return authorizationErrorResponse(decision);
   }
   const path = (params.path ?? []).join("/");
+  const span = startWebSpan("cerebro.proxy.request", proxySpanAttributes("PATCH", path), request.headers.get("traceparent"));
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
   let body = requestBody;
@@ -236,18 +275,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     response = await fetchCerebro(target, {
       method: "PATCH",
-      headers,
+      headers: headersWithTrace(headers, span),
       body,
       cache: "no-store",
     });
   } catch (error) {
-    return proxyFetchError(error);
+    return tracedProxyError(error, span);
   }
 
   const text = await response.text();
+  span.end(response.status >= 500 ? "failed" : "completed", {
+    "http.response.status_code": response.status,
+  });
   return new NextResponse(text, {
     status: response.status,
-    headers: responseHeadersFor(response),
+    headers: responseHeadersWithTrace(responseHeadersFor(response), span),
   });
 }
 
@@ -261,4 +303,32 @@ function normalizeAskRequestBody(body: string): string {
   } catch {
     return body;
   }
+}
+
+function proxySpanAttributes(method: string, path: string) {
+  return {
+    component: "cerebro-api-route",
+    operation: method,
+    "http.request.method": method,
+    "url.path_family": proxyPathFamily(path),
+  };
+}
+
+function tracedProxyError(error: unknown, span: WebSpan) {
+  span.captureException(error, {
+    component: "cerebro-api-route",
+    operation: "proxy",
+  });
+  const response = proxyFetchError(error);
+  response.headers.set("x-cerebro-web-trace-id", span.traceId);
+  span.end("failed", {
+    error_kind: error instanceof Error ? error.constructor.name : typeof error,
+    "http.response.status_code": response.status,
+  });
+  return response;
+}
+
+function proxyPathFamily(path: string) {
+  const segments = path.split("/").filter(Boolean).slice(0, 2);
+  return segments.length ? `/${segments.join("/")}` : "/";
 }

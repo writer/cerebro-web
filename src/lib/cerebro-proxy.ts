@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 
+import { headersWithTrace, startWebSpan } from "./observability";
+
 const API_BASE =
   process.env.CEREBRO_API_BASE ??
   process.env.NEXT_PUBLIC_CEREBRO_API_BASE ??
@@ -230,8 +232,18 @@ export const cachedResponseHeaders = (cached: Pick<CachedProxyResponse, "headers
 };
 
 export const fetchCerebro = async (target: URL, init: RequestInit = {}) => {
-  const method = init.method ?? "GET";
+  const method = (init.method ?? "GET").toUpperCase();
   const maxAttempts = method === "GET" ? 2 : 1;
+  const parentHeaders = new Headers(init.headers);
+  const span = startWebSpan("cerebro.upstream.fetch", {
+    component: "cerebro-proxy",
+    operation: "fetch",
+    "http.request.method": method,
+    "server.address": target.hostname,
+    "url.scheme": target.protocol.replace(":", ""),
+    "url.path_family": targetPathFamily(target),
+  }, parentHeaders.get("traceparent"));
+  const tracedHeaders = headersWithTrace(parentHeaders, span);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
@@ -240,29 +252,57 @@ export const fetchCerebro = async (target: URL, init: RequestInit = {}) => {
     try {
       const response = await fetch(target, {
         ...init,
+        headers: tracedHeaders,
         signal: controller.signal,
       });
 
       if (attempt < maxAttempts && RETRY_STATUSES.has(response.status)) {
+        span.event("cerebro.upstream.retry", {
+          attempt,
+          "http.response.status_code": response.status,
+        });
         await response.body?.cancel();
         continue;
       }
 
+      span.end(response.status >= 500 ? "failed" : "completed", {
+        attempts: attempt,
+        "http.response.status_code": response.status,
+      });
       return response;
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "AbortError";
       if (attempt < maxAttempts && !timedOut) {
+        span.event("cerebro.upstream.retry", {
+          attempt,
+          error_kind: error instanceof Error ? error.constructor.name : typeof error,
+        });
         continue;
       }
-      throw new CerebroProxyError(
+      const proxyError = new CerebroProxyError(
         timedOut ? "Cerebro API request timed out" : "Unable to reach Cerebro API",
         timedOut ? 504 : 502,
       );
+      span.captureException(error, {
+        component: "cerebro-proxy",
+        operation: "fetch",
+      });
+      span.end("failed", {
+        attempts: attempt,
+        error_kind: timedOut ? "abort_error" : "fetch_error",
+        "http.response.status_code": proxyError.status,
+      });
+      throw proxyError;
     } finally {
       clearTimeout(timeout);
     }
   }
 
+  span.end("failed", {
+    attempts: maxAttempts,
+    error_kind: "retry_exhausted",
+    "http.response.status_code": 502,
+  });
   throw new CerebroProxyError("Unable to reach Cerebro API", 502);
 };
 
@@ -284,6 +324,8 @@ export const responseHeadersFor = (response: Response): Record<string, string> =
     "vary",
     "warning",
     "x-cerebro-cache",
+    "x-cerebro-trace-id",
+    "x-cerebro-web-trace-id",
     "x-request-id",
   ].forEach((name) => {
     const value = response.headers.get(name);
@@ -292,4 +334,9 @@ export const responseHeadersFor = (response: Response): Record<string, string> =
     }
   });
   return headers;
+};
+
+const targetPathFamily = (target: URL) => {
+  const segments = target.pathname.split("/").filter(Boolean).slice(0, 2);
+  return segments.length ? `/${segments.join("/")}` : "/";
 };
