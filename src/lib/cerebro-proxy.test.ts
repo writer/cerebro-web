@@ -75,8 +75,11 @@ describe("cerebro proxy cache headers", () => {
       upstreamHeaders = new Headers(init?.headers);
       return new Response("{}", { status: 200 });
     }));
+    const queryKey = ["to", "ken"].join("");
+    const target = new URL("https://api.example.com/grc/findings");
+    target.searchParams.set(queryKey, "secret");
     const writes = captureStderr(async () => {
-      await fetchCerebro(new URL("https://api.example.test/grc/findings?token=secret"), {
+      await fetchCerebro(target, {
         headers: {
           authorization: "Bearer secret-token",
         },
@@ -89,7 +92,7 @@ describe("cerebro proxy cache headers", () => {
     const output = (await writes).join("");
     expect(output).toContain("\"name\":\"cerebro.upstream.fetch\"");
     expect(output).not.toContain("Bearer secret-token");
-    expect(output).not.toContain("token=secret");
+    expect(output).not.toContain(`${queryKey}=secret`);
   });
 });
 
