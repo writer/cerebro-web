@@ -238,9 +238,15 @@ export const fetchCerebro = async (target: URL, init: RequestInit = {}) => {
   const span = startWebSpan("cerebro.upstream.fetch", {
     component: "cerebro-proxy",
     operation: "fetch",
+    "http.request.body.size": requestBodySize(init.body),
+    "http.request.header.accept": parentHeaders.get("accept") ?? "",
+    "http.request.header.content_type": parentHeaders.get("content-type") ?? "",
     "http.request.method": method,
+    "server.port": target.port ? Number.parseInt(target.port, 10) : defaultPort(target),
     "server.address": target.hostname,
+    "upstream.retry.max_attempts": maxAttempts,
     "url.scheme": target.protocol.replace(":", ""),
+    "url.path_depth": target.pathname.split("/").filter(Boolean).length,
     "url.path_family": targetPathFamily(target),
   }, parentHeaders.get("traceparent"));
   const tracedHeaders = headersWithTrace(parentHeaders, span);
@@ -257,6 +263,7 @@ export const fetchCerebro = async (target: URL, init: RequestInit = {}) => {
       });
 
       if (attempt < maxAttempts && RETRY_STATUSES.has(response.status)) {
+        span.increment("upstream.retry.count");
         span.event("cerebro.upstream.retry", {
           attempt,
           "http.response.status_code": response.status,
@@ -267,12 +274,16 @@ export const fetchCerebro = async (target: URL, init: RequestInit = {}) => {
 
       span.end(response.status >= 500 ? "failed" : "completed", {
         attempts: attempt,
+        "http.response.header.content_type": response.headers.get("content-type") ?? "",
+        "http.response.header.retry_after": response.headers.get("retry-after") ?? "",
         "http.response.status_code": response.status,
+        upstream_trace_id_present: Boolean(response.headers.get("x-cerebro-trace-id")),
       });
       return response;
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "AbortError";
       if (attempt < maxAttempts && !timedOut) {
+        span.increment("upstream.retry.count");
         span.event("cerebro.upstream.retry", {
           attempt,
           error_kind: error instanceof Error ? error.constructor.name : typeof error,
@@ -339,4 +350,20 @@ export const responseHeadersFor = (response: Response): Record<string, string> =
 const targetPathFamily = (target: URL) => {
   const segments = target.pathname.split("/").filter(Boolean).slice(0, 2);
   return segments.length ? `/${segments.join("/")}` : "/";
+};
+
+const requestBodySize = (body: BodyInit | null | undefined) => {
+  if (!body) return 0;
+  if (typeof body === "string") return new TextEncoder().encode(body).byteLength;
+  if (body instanceof URLSearchParams) return new TextEncoder().encode(body.toString()).byteLength;
+  if (body instanceof Blob) return body.size;
+  if (body instanceof ArrayBuffer) return body.byteLength;
+  if (ArrayBuffer.isView(body)) return body.byteLength;
+  return undefined;
+};
+
+const defaultPort = (target: URL) => {
+  if (target.protocol === "https:") return 443;
+  if (target.protocol === "http:") return 80;
+  return undefined;
 };
