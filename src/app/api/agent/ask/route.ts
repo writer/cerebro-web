@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-
 import {
   Agent,
   MCPServerStreamableHttp,
@@ -20,6 +18,7 @@ import {
   normalizeAskError,
   normalizeAskModel,
 } from "@/lib/ask";
+import { headersWithTrace, startWebSpan, type WebSpan } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -97,6 +96,12 @@ const normalizeContext = (value: unknown): AskAgentContext | undefined => {
 };
 
 export async function POST(request: NextRequest) {
+  const span = startWebSpan("cerebro.agent.request", {
+    component: "agent-ask-route",
+    operation: "POST",
+    "http.request.method": "POST",
+    "url.path_family": "/api/agent",
+  }, request.headers.get("traceparent"));
   let payload: NormalizedAgentRequest | null = null;
   try {
     payload = normalizePayload(await request.json());
@@ -105,31 +110,45 @@ export async function POST(request: NextRequest) {
   }
 
   if (!payload) {
-    return NextResponse.json(
+    span.end("completed", { "http.response.status_code": 400 });
+    const response = NextResponse.json(
       { error: "Ask requires a non-empty question." },
       { status: 400 },
     );
+    response.headers.set("x-cerebro-web-trace-id", span.traceId);
+    return response;
   }
 
   const canRunAgent = Boolean(process.env.OPENAI_API_KEY && getMcpUrl());
+  let streamStatus: "completed" | "failed" | "cancelled" = "completed";
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
         if (canRunAgent) {
-          await streamAgentRun(controller, request, payload);
+          await streamAgentRun(controller, request, payload, span);
         } else {
-          await streamLegacyAsk(controller, request, payload);
+          await streamLegacyAsk(controller, request, payload, span);
         }
       } catch (error) {
         if (request.signal.aborted) {
+          streamStatus = "cancelled";
           return;
         }
+        streamStatus = "failed";
+        span.captureException(error, {
+          component: "agent-ask-route",
+          operation: canRunAgent ? "agent_stream" : "legacy_stream",
+        });
         controller.enqueue(sse("error", normalizeAskError(
           "agent_exception",
           error instanceof Error ? error.message : "Cerebro agent failed",
           true,
         )));
       } finally {
+        span.end(streamStatus, {
+          mode: canRunAgent ? "agent" : "agent-fallback",
+          "http.response.status_code": 200,
+        });
         controller.close();
       }
     },
@@ -144,6 +163,7 @@ export async function POST(request: NextRequest) {
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
       "x-cerebro-web-surface": canRunAgent ? "agent" : "agent-fallback",
+      "x-cerebro-web-trace-id": span.traceId,
     },
   });
 }
@@ -152,9 +172,9 @@ async function streamAgentRun(
   controller: ReadableStreamDefaultController<Uint8Array>,
   request: NextRequest,
   payload: NormalizedAgentRequest,
+  span: WebSpan,
 ) {
   const startedAt = Date.now();
-  const traceId = `agent-${randomUUID()}`;
   const stats: AgentStreamStats = {
     startedAt,
     toolCalls: 0,
@@ -163,11 +183,11 @@ async function streamAgentRun(
   };
   const mcpUrl = getMcpUrl();
   if (!mcpUrl) {
-    await streamLegacyAsk(controller, request, payload);
+    await streamLegacyAsk(controller, request, payload, span);
     return;
   }
 
-  const mcpHeaders = headersForMcp(request);
+  const mcpHeaders = headersWithTrace(headersForMcp(request), span);
   const server = new MCPServerStreamableHttp({
     url: mcpUrl,
     name: "Cerebro MCP",
@@ -230,7 +250,7 @@ async function streamAgentRun(
       }));
     }
     controller.enqueue(sse("done", {
-      trace_id: traceId,
+      trace_id: span.traceId,
       total_ms: Date.now() - startedAt,
       cypher_refused: false,
       timings: compactTimings(stats),
@@ -247,6 +267,7 @@ async function streamLegacyAsk(
   controller: ReadableStreamDefaultController<Uint8Array>,
   request: NextRequest,
   payload: NormalizedAgentRequest,
+  span: WebSpan,
 ) {
   controller.enqueue(sse("agent_status", {
     stage: "fallback",
@@ -257,12 +278,12 @@ async function streamLegacyAsk(
 
   const response = await fetchCerebro(buildCerebroUrl("grc/ask"), {
     method: "POST",
-    headers: {
+    headers: headersWithTrace({
       ...authHeadersFor(request),
       "content-type": "application/json",
       accept: "text/event-stream",
       "x-cerebro-web-surface": "ask-agent-fallback",
-    },
+    }, span),
     body: JSON.stringify({
       ...payload,
       model: normalizeAskModel(payload.model),

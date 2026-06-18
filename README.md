@@ -41,6 +41,18 @@ The handoff from this repo is the published web image plus documented environmen
 
 `/api/cerebro/*` keeps a small process-local cache for high-traffic GRC reads. Responses expose `x-cerebro-cache` for the web proxy cache state and `x-cerebro-upstream-cache` when the API also reports a shared backend cache state. Manual refreshes send `Cache-Control: no-cache` through the proxy so the API can bypass both layers.
 
+## Observability
+
+Server-side API proxy and agent routes emit structured JSON span/event lines to stderr with `service=cerebro-web`. The proxy generates or continues W3C `traceparent`, forwards it to Cerebro API and MCP calls, and returns `x-cerebro-web-trace-id` on responses. The Ask agent `done.trace_id` is the same web trace id.
+
+Telemetry is intentionally bounded. It records route family, method, status, cache state, retry attempts, upstream host, and error kind/fingerprint. It does not log request bodies, authorization headers, API keys, cookies, full URLs, or query strings.
+
+Focused checks:
+
+```bash
+npm run test -- src/lib/observability.test.ts src/lib/cerebro-proxy.test.ts
+```
+
 ## Development
 
 ```bash

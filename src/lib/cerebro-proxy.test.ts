@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   cachedResponseHeaders,
+  fetchCerebro,
   responseHeadersFor,
   shouldBypassCerebroProxyCache,
   withCerebroCacheBypassHeader,
 } from "./cerebro-proxy";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("cerebro proxy cache headers", () => {
   it("recognizes explicit cache bypass requests", () => {
@@ -46,6 +52,8 @@ describe("cerebro proxy cache headers", () => {
         "content-type": "application/json",
         vary: "Authorization",
         "x-cerebro-cache": "miss",
+        "x-cerebro-trace-id": "trace-123",
+        "x-cerebro-web-trace-id": "web-trace-123",
         "x-request-id": "req-123",
       },
     });
@@ -55,7 +63,47 @@ describe("cerebro proxy cache headers", () => {
       "content-type": "application/json",
       vary: "Authorization",
       "x-cerebro-cache": "miss",
+      "x-cerebro-trace-id": "trace-123",
+      "x-cerebro-web-trace-id": "web-trace-123",
       "x-request-id": "req-123",
     });
   });
+
+  it("propagates trace headers upstream without logging auth or query strings", async () => {
+    let upstreamHeaders = new Headers();
+    vi.stubGlobal("fetch", vi.fn(async (_target: URL | RequestInfo, init?: RequestInit) => {
+      upstreamHeaders = new Headers(init?.headers);
+      return new Response("{}", { status: 200 });
+    }));
+    const writes = captureStderr(async () => {
+      await fetchCerebro(new URL("https://api.example.test/grc/findings?token=secret"), {
+        headers: {
+          authorization: "Bearer secret-token",
+        },
+      });
+    });
+
+    expect(upstreamHeaders.get("traceparent")).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    expect(upstreamHeaders.get("x-cerebro-web-trace-id")).toMatch(/^[0-9a-f]{32}$/);
+    expect(upstreamHeaders.get("authorization")).toBe("Bearer secret-token");
+    const output = (await writes).join("");
+    expect(output).toContain("\"name\":\"cerebro.upstream.fetch\"");
+    expect(output).not.toContain("Bearer secret-token");
+    expect(output).not.toContain("token=secret");
+  });
 });
+
+const captureStderr = async (fn: () => Promise<void>) => {
+  const original = process.stderr.write;
+  const writes: string[] = [];
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    writes.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await fn();
+  } finally {
+    process.stderr.write = original;
+  }
+  return writes;
+};
