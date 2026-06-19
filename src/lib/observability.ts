@@ -23,6 +23,7 @@ const spanIdPattern = /^[0-9a-f]{16}$/;
 const traceFlagsPattern = /^[0-9a-f]{2}$/;
 const secretKeyPattern = /(authorization|api[-_.]?key|token|secret|password|cookie|credential)/i;
 const MAX_ATTRIBUTE_STRING_LENGTH = 512;
+const WIDE_EVENT_SCHEMA_VERSION = "2026-06-19.1";
 
 export const parseTraceparent = (value: string | null | undefined) => {
   const parts = value?.trim().toLowerCase().split("-") ?? [];
@@ -52,18 +53,20 @@ export const startWebSpan = (
   const spanId = randomHex(8);
   const startedAt = Date.now();
   let ended = false;
-  const annotations: Attributes = {};
+  const annotations: Attributes = safeAttributes(attributes);
   const base = {
     name,
     trace_id: traceId,
     span_id: spanId,
     ...(parent?.spanId ? { parent_span_id: parent.spanId } : {}),
   };
+  const startAttributes = { ...annotations };
 
   emit("span_start", {
     ...base,
     ...serviceAttributes(),
-    ...safeAttributes(attributes),
+    ...telemetryAttributes(name, "span", "start", startAttributes),
+    ...startAttributes,
   });
 
   return {
@@ -83,21 +86,29 @@ export const startWebSpan = (
       annotations[key] = current + value;
     },
     event: (eventName, eventAttributes = {}) => {
+      const eventPayload = safeAttributes(eventAttributes);
       emit("event", {
         ...base,
         name: eventName,
-        ...safeAttributes(eventAttributes),
+        ...telemetryAttributes(eventName, "event", "info", eventPayload),
+        "event.name": eventName,
+        ...eventPayload,
       });
     },
     captureException: (error, errorAttributes = {}) => {
       const kind = errorKind(error);
-      emit("event", {
-        ...base,
-        name: "error.capture",
-        ...safeAttributes(errorAttributes),
+      const eventPayload = safeAttributes({
+        ...errorAttributes,
         handled: true,
         error_kind: kind,
         error_fingerprint: errorFingerprint(name, kind, errorAttributes),
+      });
+      emit("event", {
+        ...base,
+        name: "error.capture",
+        ...telemetryAttributes("error.capture", "event", "info", eventPayload),
+        "event.name": "error.capture",
+        ...eventPayload,
       });
     },
     end: (status = "completed", endAttributes = {}) => {
@@ -105,13 +116,18 @@ export const startWebSpan = (
         return;
       }
       ended = true;
-      emit("span_end", {
-        ...base,
-        ...serviceAttributes(),
+      const terminalAttributes = safeAttributes({
         ...annotations,
         status,
         duration_ms: Date.now() - startedAt,
-        ...safeAttributes(endAttributes),
+        ...endAttributes,
+      });
+      emit("span_end", {
+        ...base,
+        ...serviceAttributes(),
+        ...telemetryAttributes(name, "span", "end", terminalAttributes),
+        "event.outcome": eventOutcomeForStatus(status),
+        ...terminalAttributes,
       });
     },
   };
@@ -190,6 +206,47 @@ const normalizeAttributeValue = (value: AttributeValue) => {
     return `${trimmed.slice(0, MAX_ATTRIBUTE_STRING_LENGTH)}...`;
   }
   return value;
+};
+
+const telemetryAttributes = (
+  name: string,
+  signalKind: "event" | "span",
+  eventType: "end" | "info" | "start",
+  attributes: Attributes,
+): Attributes => {
+  const wideEvent = attributes.wide_event === true || attributes.wide_event === 1;
+  return {
+    "telemetry.schema.version": WIDE_EVENT_SCHEMA_VERSION,
+    "event.dataset": wideEvent ? "cerebro.wide_events" : "cerebro.telemetry",
+    "telemetry.signal.kind": signalKind,
+    "event.category": signalKind === "span" ? "operation" : "application",
+    "event.type": eventType,
+    ...(signalKind === "span" ? { "operation.name": name } : { "event.name": name }),
+    ...(wideEvent ? {
+      "wide_event.contract": "main-span",
+      "wide_event.schema.version": WIDE_EVENT_SCHEMA_VERSION,
+    } : {}),
+  };
+};
+
+const eventOutcomeForStatus = (status: string) => {
+  switch (status.trim().toLowerCase()) {
+    case "completed":
+    case "ok":
+    case "success":
+    case "succeeded":
+      return "success";
+    case "cancelled":
+    case "failed":
+    case "failure":
+    case "timeout":
+    case "timed_out":
+      return "failure";
+    case "skipped":
+      return "neutral";
+    default:
+      return "unknown";
+  }
 };
 
 const serviceAttributes = (): Attributes => ({

@@ -27,6 +27,9 @@ export type AuditLogEvent = {
   service: string;
   name: string;
   kind: string;
+  eventDataset: string;
+  eventType: string;
+  eventCategory: string;
   status: string;
   outcome: string;
   durationMs: number | null;
@@ -37,22 +40,34 @@ export type AuditLogEvent = {
   sourceId: string;
   phase: string;
   httpRoute: string;
+  httpMethod: string;
   httpStatus: number | null;
   dependency: string;
+  dependencyOperation: string;
+  dependencyStatus: string;
   errorKind: string;
   errorFingerprint: string;
   operation: string;
+  operationName: string;
+  operationType: string;
   eventsRead: number | null;
   entitiesProjected: number | null;
   linksProjected: number | null;
+  jetstreamStream: string;
   jetstreamSubject: string;
   jetstreamErrorCategory: string;
   jetstreamAckStream: string;
   jetstreamAckSequence: number | null;
   jetstreamCanaryReplayed: boolean | null;
   canaryDurationMs: number | null;
+  canaryReplayDurationMs: number | null;
+  jetstreamPublishRetryCount: number | null;
+  jetstreamPublishDurationMs: number | null;
+  jetstreamReplayDurationMs: number | null;
   replayScannedCount: number | null;
   replayMatchedCount: number | null;
+  replayMissingCount: number | null;
+  replayDecodedCount: number | null;
   jobId: string;
   jobKind: string;
   jobStatus: string;
@@ -64,6 +79,10 @@ export type AuditLogEvent = {
   jobRuntimeStatus: string;
   queueLatencyMs: number | null;
   runDurationMs: number | null;
+  orchestratorRuntimeLastStatus: string;
+  sourceRuntimeFreshnessState: string;
+  sourceRuntimeNextAction: string;
+  sourceRuntimeFailureClass: string;
   attributes: Record<string, string | number | boolean | null>;
   fields: Record<string, string>;
   rawEvent: JsonRecord;
@@ -98,35 +117,55 @@ const visibleFields = [
   "main",
   "status",
   "operation",
+  "`operation.name`",
+  "`operation.type`",
   "service",
   "`service.name`",
   "`event.dataset`",
+  "`event.category`",
+  "`event.type`",
+  "`event.name`",
   "wide_event",
   "runtime_id",
   "source_runtime_id",
   "source_id",
   "trace_id",
   "span_id",
+  "parent_span_id",
   "duration_ms",
   "phase",
+  "`phase.last_name`",
+  "`phase.last_status`",
   "`event.action`",
   "`event.outcome`",
   "`http.method`",
+  "`http.request.method`",
   "`http.route`",
   "`http.response.status_code`",
   "`dependency.name`",
   "`dependency.last_system`",
+  "`dependency.last_operation`",
   "`dependency.last_status`",
   "error_kind",
   "error_fingerprint",
   "events_read",
   "entities_projected",
   "links_projected",
+  "`messaging.jetstream.stream`",
   "`messaging.jetstream.subject`",
   "`messaging.jetstream.error.category`",
   "`messaging.jetstream.ack.stream`",
   "`messaging.jetstream.ack.sequence`",
   "`messaging.jetstream.canary.replayed`",
+  "`messaging.jetstream.canary.duration_ms`",
+  "`messaging.jetstream.canary.replay.duration_ms`",
+  "`messaging.jetstream.publish.retry_count`",
+  "`messaging.jetstream.publish.duration_ms`",
+  "`messaging.jetstream.replay.duration_ms`",
+  "`messaging.jetstream.replay.scanned_count`",
+  "`messaging.jetstream.replay.missing_count`",
+  "`messaging.jetstream.replay.decoded_count`",
+  "`messaging.jetstream.replay.matched_count`",
   "canary_duration_ms",
   "replay_scanned_count",
   "replay_matched_count",
@@ -138,6 +177,12 @@ const visibleFields = [
   "`job.subject_id`",
   "`job.queue_latency_ms`",
   "`job.run_duration_ms`",
+  "`job.phase`",
+  "`job.phase_key`",
+  "`job.phase.status`",
+  "`job.phase.duration_ms`",
+  "`job.heartbeat.stage`",
+  "`job.runtime.status`",
   "`job.payload.key_count`",
   "`job.result.key_count`",
   "`job.result_ref.key_count`",
@@ -149,6 +194,13 @@ const visibleFields = [
   "job_phase_status",
   "job_heartbeat_stage",
   "job_runtime_status",
+  "`orchestrator.runtime.last_status`",
+  "`orchestrator.runtime.last_runtime_id`",
+  "`orchestrator.runtime.last_source_id`",
+  "`orchestrator.runtime.last_tenant_id`",
+  "`source_runtime.freshness_state`",
+  "`source_runtime.next_action`",
+  "`source_runtime.failure_class`",
 ];
 
 export const auditLogWindowMinutes = (value: unknown) => clampInteger(value, DEFAULT_MINUTES, 5, MAX_MINUTES);
@@ -156,8 +208,12 @@ export const auditLogLimit = (value: unknown) => clampInteger(value, DEFAULT_LIM
 
 export function buildWideEventLogsInsightsQuery(filters: AuditLogFilters = {}) {
   const limit = auditLogLimit(filters.limit);
+  const traceId = normalizeFilter(filters.traceId);
+  const wideEventClause = '(`event.dataset` = "cerebro.wide_events" or wide_event = true or wide_event = 1)';
   const clauses = [
-    '(`event.dataset` = "cerebro.wide_events" or wide_event = true or wide_event = 1)',
+    traceId
+      ? `(${wideEventClause} or (\`event.dataset\` = "cerebro.telemetry" and trace_id = ${quoteLogsInsightsString(traceId)}))`
+      : wideEventClause,
   ];
 
   const service = normalizeFilter(filters.service);
@@ -175,7 +231,6 @@ export function buildWideEventLogsInsightsQuery(filters: AuditLogFilters = {}) {
     clauses.push(`source_id = ${quoteLogsInsightsString(sourceId)}`);
   }
 
-  const traceId = normalizeFilter(filters.traceId);
   if (traceId) {
     clauses.push(`trace_id = ${quoteLogsInsightsString(traceId)}`);
   }
@@ -204,6 +259,9 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
     const rawMessage = typeof fields["@message"] === "string" ? fields["@message"] : "";
     const message = parseJSONRecord(rawMessage);
     const timestamp = stringValue(fields["@timestamp"]) || stringFrom(message.ts) || "";
+    const eventDataset = firstStringField(fields, message, "event.dataset");
+    const eventType = firstStringField(fields, message, "event.type");
+    const eventCategory = firstStringField(fields, message, "event.category");
     const service = firstString(
       fields["service.name"],
       fields.service,
@@ -211,16 +269,37 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
       message.service,
       "unknown",
     );
-    const name = firstString(fields.name, message.name, message["event.action"], valueAt(message, "event.action"), message.kind, "event");
+    const name = firstString(fields.name, message.name, firstStringField(fields, message, "event.name"), message["event.action"], valueAt(message, "event.action"), message.kind, "event");
     const kind = firstString(fields.kind, message.kind, "event");
-    const status = firstString(fields.status, message.status, valueAt(message, "event.outcome"), "observed");
+    const status = firstString(
+      fields.status,
+      message.status,
+      firstStringField(fields, message, "job.phase.status"),
+      firstStringField(fields, message, "job.runtime.status"),
+      fields.job_phase_status,
+      message.job_phase_status,
+      fields.job_runtime_status,
+      message.job_runtime_status,
+      valueAt(message, "event.outcome"),
+      "observed",
+    );
     const outcome = firstString(fields["event.outcome"], valueAt(message, "event.outcome"), status);
-    const runtimeId = firstString(fields.runtime_id, fields.source_runtime_id, message.runtime_id, message.source_runtime_id);
-    const sourceId = firstString(fields.source_id, message.source_id);
+    const runtimeId = firstString(
+      fields.runtime_id,
+      fields.source_runtime_id,
+      message.runtime_id,
+      message.source_runtime_id,
+      firstStringField(fields, message, "orchestrator.runtime.last_runtime_id"),
+    );
+    const sourceId = firstString(fields.source_id, message.source_id, firstStringField(fields, message, "orchestrator.runtime.last_source_id"));
     const traceId = firstString(fields.trace_id, message.trace_id);
     const spanId = firstString(fields.span_id, message.span_id);
     const pointer = stringValue(fields["@ptr"]);
-    const phase = firstString(fields.phase, message.phase, inferPhase(name));
+    const operationName = firstStringField(fields, message, "operation.name");
+    const operationType = firstStringField(fields, message, "operation.type");
+    const operation = firstString(fields.operation, message.operation, operationType, operationName);
+    const phase = firstString(fields.phase, message.phase, firstStringField(fields, message, "phase.last_name"), fields.job_phase, message.job_phase, firstStringField(fields, message, "job.phase"), inferPhase(name));
+    const httpMethod = firstStringField(fields, message, "http.request.method", "http.method");
     const httpStatus = numberValue(fields["http.response.status_code"] ?? valueAt(message, "http.response.status_code"));
     const jobStatus = firstString(fields["job.status.final"], valueAt(message, "job.status.final"), fields["job.status"], valueAt(message, "job.status"), fields.job_status, message.job_status);
     const event = {
@@ -240,6 +319,9 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
       service,
       name,
       kind,
+      eventDataset,
+      eventType,
+      eventCategory,
       status,
       outcome,
       durationMs: numberValue(fields.duration_ms ?? message.duration_ms),
@@ -249,34 +331,50 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
       runtimeId,
       sourceId,
       phase,
+      httpMethod,
       httpRoute: firstString(fields["http.route"], valueAt(message, "http.route")),
       httpStatus,
       dependency: firstString(fields["dependency.name"], valueAt(message, "dependency.name"), fields["dependency.last_system"], valueAt(message, "dependency.last_system")),
+      dependencyOperation: firstStringField(fields, message, "dependency.last_operation"),
+      dependencyStatus: firstStringField(fields, message, "dependency.last_status"),
       errorKind: firstString(fields.error_kind, message.error_kind),
       errorFingerprint: firstString(fields.error_fingerprint, message.error_fingerprint),
-      operation: firstString(fields.operation, message.operation),
+      operation,
+      operationName,
+      operationType,
       eventsRead: numberValue(fields.events_read ?? message.events_read),
       entitiesProjected: numberValue(fields.entities_projected ?? message.entities_projected),
       linksProjected: numberValue(fields.links_projected ?? message.links_projected),
+      jetstreamStream: firstStringField(fields, message, "messaging.jetstream.stream"),
       jetstreamSubject: firstString(fields["messaging.jetstream.subject"], valueAt(message, "messaging.jetstream.subject")),
       jetstreamErrorCategory: firstString(fields["messaging.jetstream.error.category"], valueAt(message, "messaging.jetstream.error.category")),
       jetstreamAckStream: firstString(fields["messaging.jetstream.ack.stream"], valueAt(message, "messaging.jetstream.ack.stream")),
       jetstreamAckSequence: numberValue(fields["messaging.jetstream.ack.sequence"] ?? valueAt(message, "messaging.jetstream.ack.sequence")),
       jetstreamCanaryReplayed: booleanValue(fields["messaging.jetstream.canary.replayed"] ?? valueAt(message, "messaging.jetstream.canary.replayed")),
-      canaryDurationMs: numberValue(fields.canary_duration_ms ?? message.canary_duration_ms),
-      replayScannedCount: numberValue(fields.replay_scanned_count ?? message.replay_scanned_count),
-      replayMatchedCount: numberValue(fields.replay_matched_count ?? message.replay_matched_count),
+      canaryDurationMs: numberValue(fields.canary_duration_ms ?? message.canary_duration_ms ?? firstFieldValue(fields, message, "messaging.jetstream.canary.duration_ms")),
+      canaryReplayDurationMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.canary.replay.duration_ms")),
+      jetstreamPublishRetryCount: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.retry_count")),
+      jetstreamPublishDurationMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.duration_ms")),
+      jetstreamReplayDurationMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.replay.duration_ms")),
+      replayScannedCount: numberValue(fields.replay_scanned_count ?? message.replay_scanned_count ?? firstFieldValue(fields, message, "messaging.jetstream.replay.scanned_count")),
+      replayMatchedCount: numberValue(fields.replay_matched_count ?? message.replay_matched_count ?? firstFieldValue(fields, message, "messaging.jetstream.replay.matched_count")),
+      replayMissingCount: numberValue(firstFieldValue(fields, message, "messaging.jetstream.replay.missing_count")),
+      replayDecodedCount: numberValue(firstFieldValue(fields, message, "messaging.jetstream.replay.decoded_count")),
       jobId: firstString(fields["job.id"], valueAt(message, "job.id"), fields.job_id, message.job_id),
       jobKind: firstString(fields["job.kind"], valueAt(message, "job.kind"), fields.job_kind, message.job_kind),
       jobStatus,
       jobSubjectType: firstString(fields["job.subject_type"], valueAt(message, "job.subject_type")),
       jobSubjectId: firstString(fields["job.subject_id"], valueAt(message, "job.subject_id")),
-      jobPhase: firstString(fields.job_phase, message.job_phase, valueAt(message, "job.phase")),
-      jobPhaseStatus: firstString(fields.job_phase_status, message.job_phase_status, valueAt(message, "job.phase.status")),
-      jobHeartbeatStage: firstString(fields.job_heartbeat_stage, message.job_heartbeat_stage, valueAt(message, "job.heartbeat.stage")),
-      jobRuntimeStatus: firstString(fields.job_runtime_status, message.job_runtime_status, valueAt(message, "job.runtime.status")),
+      jobPhase: firstString(fields.job_phase, message.job_phase, firstStringField(fields, message, "job.phase")),
+      jobPhaseStatus: firstString(fields.job_phase_status, message.job_phase_status, firstStringField(fields, message, "job.phase.status")),
+      jobHeartbeatStage: firstString(fields.job_heartbeat_stage, message.job_heartbeat_stage, firstStringField(fields, message, "job.heartbeat.stage")),
+      jobRuntimeStatus: firstString(fields.job_runtime_status, message.job_runtime_status, firstStringField(fields, message, "job.runtime.status")),
       queueLatencyMs: numberValue(fields["job.queue_latency_ms"] ?? valueAt(message, "job.queue_latency_ms")),
       runDurationMs: numberValue(fields["job.run_duration_ms"] ?? valueAt(message, "job.run_duration_ms")),
+      orchestratorRuntimeLastStatus: firstStringField(fields, message, "orchestrator.runtime.last_status"),
+      sourceRuntimeFreshnessState: firstStringField(fields, message, "source_runtime.freshness_state"),
+      sourceRuntimeNextAction: firstStringField(fields, message, "source_runtime.next_action"),
+      sourceRuntimeFailureClass: firstStringField(fields, message, "source_runtime.failure_class"),
       attributes: scalarAttributes(message),
       fields,
       rawEvent: message,
@@ -358,6 +456,12 @@ const firstString = (...values: unknown[]) => {
   }
   return "";
 };
+
+const firstFieldValue = (fields: Record<string, string>, message: JsonRecord, key: string) =>
+  fields[key] ?? valueAt(message, key);
+
+const firstStringField = (fields: Record<string, string>, message: JsonRecord, ...keys: string[]) =>
+  firstString(...keys.flatMap((key) => [fields[key], valueAt(message, key)]));
 
 const numberValue = (value: unknown) => {
   if (value === null || value === undefined || value === "") {

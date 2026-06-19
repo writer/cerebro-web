@@ -27,6 +27,21 @@ describe("web observability", () => {
     });
 
     const output = writes.join("");
+    const payloads = writes.map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(payloads[0]).toMatchObject({
+      kind: "span_start",
+      "event.dataset": "cerebro.telemetry",
+      "event.type": "start",
+      "operation.name": "test.web.operation",
+      "telemetry.signal.kind": "span",
+    });
+    expect(payloads.at(-1)).toMatchObject({
+      component: "test",
+      kind: "span_end",
+      "event.outcome": "failure",
+      "event.type": "end",
+      status: "failed",
+    });
     expect(output).toContain("\"name\":\"error.capture\"");
     expect(output).toContain("\"error_fingerprint\"");
     expect(output).toContain("\"authorization\":\"[redacted]\"");
