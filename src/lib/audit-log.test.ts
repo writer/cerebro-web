@@ -200,7 +200,7 @@ describe("audit log wide-event helpers", () => {
     const events = parseAuditLogRows([
       [
         { field: "@timestamp", value: "2026-06-19 03:20:00.000" },
-        { field: "@log", value: "944130631940:/ecs/cerebro-sec-dev" },
+        { field: "@log", value: "audit-account:/ecs/cerebro-sec-dev" },
         {
           field: "@message",
           value: JSON.stringify({
