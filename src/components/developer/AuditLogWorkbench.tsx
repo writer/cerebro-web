@@ -1,9 +1,10 @@
 "use client";
 
-import { Activity, Clipboard, DatabaseZap, Eye, FileJson, RefreshCw, Search, ServerCog, TimerReset, X, XCircle } from "lucide-react";
+import { Activity, Clipboard, DatabaseZap, Eye, FileJson, RefreshCw, Search, Send, ServerCog, TimerReset, TriangleAlert, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, MetricCard, Panel } from "@/components/grc/Primitives";
+import { isFailureStatus } from "@/lib/audit-log";
 import type { AuditLogEvent, AuditLogSummary, JsonRecord } from "@/lib/audit-log";
 
 type AuditLogResponse = {
@@ -207,6 +208,9 @@ export default function AuditLogWorkbench() {
         <DistributionPanel title="Services" icon={<ServerCog className="h-4 w-4" />} rows={summary.services} total={summary.total} />
         <DistributionPanel title="Runtimes" icon={<DatabaseZap className="h-4 w-4" />} rows={summary.runtimes} total={summary.total} onSelect={(runtimeId) => update("runtimeId", runtimeId)} />
         <DistributionPanel title="Phases" icon={<TimerReset className="h-4 w-4" />} rows={summary.phases} total={summary.total} />
+        <DistributionPanel title="Dependencies" icon={<ServerCog className="h-4 w-4" />} rows={summary.dependencies} total={summary.total} />
+        <DistributionPanel title="Subjects" icon={<Send className="h-4 w-4" />} rows={summary.subjects} total={summary.total} />
+        <DistributionPanel title="Errors" icon={<TriangleAlert className="h-4 w-4" />} rows={summary.errors} total={summary.total} />
       </div>
 
       <Panel
@@ -308,7 +312,8 @@ function AuditEventTable({
             <th>Status</th>
             <th>Event</th>
             <th>Runtime</th>
-            <th>Graph</th>
+            <th>Work</th>
+            <th>Messaging</th>
             <th>Trace</th>
             <th>Observed</th>
             <th>Inspect</th>
@@ -330,7 +335,7 @@ function AuditEventTable({
             >
               <td>
                 <div className="flex items-center gap-2">
-                  {event.status === "failed" ? <XCircle className="h-4 w-4 text-red-500" /> : <Activity className="h-4 w-4 text-[var(--text-muted)]" />}
+                  {isFailureStatus(event.status) || isFailureStatus(event.outcome) ? <XCircle className="h-4 w-4 text-red-500" /> : <Activity className="h-4 w-4 text-[var(--text-muted)]" />}
                   <Badge value={event.status} />
                 </div>
               </td>
@@ -342,6 +347,8 @@ function AuditEventTable({
                   {event.phase && <span>{event.phase}</span>}
                   {event.jobPhase && <span>{event.jobPhase}</span>}
                   {event.jobKind && <span className="font-mono">{event.jobKind}</span>}
+                  {event.dependency && <span className="font-mono">{event.dependency}</span>}
+                  {event.dependencyOperation && <span className="font-mono">{event.dependencyOperation}</span>}
                   {event.jetstreamErrorCategory && <span className="font-mono">{event.jetstreamErrorCategory}</span>}
                   {event.httpRoute && <span className="font-mono">{event.httpRoute}</span>}
                   {event.errorKind && <span className="font-mono text-red-600">{event.errorKind}</span>}
@@ -366,6 +373,28 @@ function AuditEventTable({
                 {event.replayScannedCount !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{event.replayScannedCount} replay scan</div>}
                 {event.canaryDurationMs !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">canary {formatMilliseconds(event.canaryDurationMs)}</div>}
                 {event.runDurationMs !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">job {formatMilliseconds(event.runDurationMs)}</div>}
+              </td>
+              <td>
+                {event.jetstreamSubject ? (
+                  <div className="max-w-[18rem] truncate font-mono text-[12px] text-[var(--text-primary)]">{event.jetstreamSubject}</div>
+                ) : (
+                  <span className="text-[12px] text-[var(--text-muted)]">none</span>
+                )}
+                <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[11px] text-[var(--text-muted)]">
+                  {event.jetstreamStream && <span>{event.jetstreamStream}</span>}
+                  {event.jetstreamPublishAttempts !== null && <span>{formatAttempts(event.jetstreamPublishAttempts, event.jetstreamPublishMaxAttempts)}</span>}
+                  {event.jetstreamPublishRetryCount !== null && <span>{event.jetstreamPublishRetryCount} retries</span>}
+                  {event.jetstreamPublishRetryBudgetMs !== null && <span>{formatMilliseconds(event.jetstreamPublishRetryBudgetMs)} budget</span>}
+                  {event.jetstreamPublishAttemptTimeoutMs !== null && <span>{formatMilliseconds(event.jetstreamPublishAttemptTimeoutMs)} attempt</span>}
+                  {event.jetstreamPayloadBytes !== null && <span>{formatBytes(event.jetstreamPayloadBytes)}</span>}
+                </div>
+                {(event.jetstreamPublishDurationMs !== null || event.jetstreamPublishLastBackoffMs !== null) && (
+                  <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">
+                    {event.jetstreamPublishDurationMs !== null && <span>{formatMilliseconds(event.jetstreamPublishDurationMs)} publish</span>}
+                    {event.jetstreamPublishDurationMs !== null && event.jetstreamPublishLastBackoffMs !== null && <span> / </span>}
+                    {event.jetstreamPublishLastBackoffMs !== null && <span>{formatMilliseconds(event.jetstreamPublishLastBackoffMs)} backoff</span>}
+                  </div>
+                )}
               </td>
               <td>
                 {event.traceId ? (
@@ -474,6 +503,7 @@ function AuditEventDetailDrawer({
             <DetailTile label="Error fingerprint" value={event.errorFingerprint || "none"} mono />
             <DetailTile label="JetStream stream" value={event.jetstreamStream || "none"} mono />
             <DetailTile label="JetStream subject" value={event.jetstreamSubject || "none"} mono />
+            <DetailTile label="JetStream message" value={[event.jetstreamMessageId, event.jetstreamPayloadBytes === null ? "" : formatBytes(event.jetstreamPayloadBytes)].filter(Boolean).join(" / ") || "none"} mono />
             <DetailTile label="JetStream category" value={event.jetstreamErrorCategory || "none"} mono />
             <DetailTile label="JetStream ack" value={[event.jetstreamAckStream, event.jetstreamAckSequence ?? ""].filter(Boolean).join(" / ") || "none"} mono />
             <DetailTile label="JetStream publish" value={formatJetstreamPublish(event)} mono />
@@ -594,6 +624,9 @@ const emptySummary: AuditLogSummary = {
   services: [],
   runtimes: [],
   phases: [],
+  dependencies: [],
+  subjects: [],
+  errors: [],
 };
 
 const inputClass = "mt-1 w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)]";
@@ -637,8 +670,13 @@ const formatSourceRuntime = (event: AuditLogEvent) =>
 
 const formatJetstreamPublish = (event: AuditLogEvent) => {
   const values = [
+    event.jetstreamPublishAttempts === null ? "" : formatAttempts(event.jetstreamPublishAttempts, event.jetstreamPublishMaxAttempts),
     event.jetstreamPublishDurationMs === null ? "" : formatMilliseconds(event.jetstreamPublishDurationMs),
     event.jetstreamPublishRetryCount === null ? "" : `${event.jetstreamPublishRetryCount} retries`,
+    event.jetstreamPublishRetryBudgetMs === null ? "" : `${formatMilliseconds(event.jetstreamPublishRetryBudgetMs)} budget`,
+    event.jetstreamPublishAttemptTimeoutMs === null ? "" : `${formatMilliseconds(event.jetstreamPublishAttemptTimeoutMs)} attempt`,
+    event.jetstreamPublishLastBackoffMs === null ? "" : `${formatMilliseconds(event.jetstreamPublishLastBackoffMs)} backoff`,
+    event.jetstreamPublishMaxBackoffMs === null ? "" : `${formatMilliseconds(event.jetstreamPublishMaxBackoffMs)} max backoff`,
   ].filter(Boolean);
   return values.join(" / ") || "none";
 };
@@ -663,6 +701,15 @@ const formatReplayScan = (event: AuditLogEvent) => {
     counts.push(formatMilliseconds(event.jetstreamReplayDurationMs));
   }
   return counts.join(" / ") || "none";
+};
+
+const formatAttempts = (attempts: number, maxAttempts: number | null) =>
+  `${attempts.toLocaleString()}/${maxAttempts === null ? "?" : maxAttempts.toLocaleString()} attempts`;
+
+const formatBytes = (value: number) => {
+  if (value < 1024) return `${value.toLocaleString()} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
 };
 
 const displayTimestamp = (value: string) => {

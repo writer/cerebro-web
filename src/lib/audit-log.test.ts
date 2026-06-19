@@ -34,6 +34,8 @@ describe("audit log wide-event helpers", () => {
     expect(query).toContain('service = "cerebro"');
     expect(query).toContain('status = "failed"');
     expect(query).toContain('trace_id = "abc123"');
+    expect(query).toContain("`messaging.jetstream.publish.retry_budget_ms`");
+    expect(query).toContain("`messaging.jetstream.subject`");
     expect(query).toContain("@message like /graph\\.ingest\\/runtime/");
     expect(query).toContain("| limit 500");
   });
@@ -192,5 +194,72 @@ describe("audit log wide-event helpers", () => {
       { label: "cerebro", count: 1 },
       { label: "cerebro-web", count: 1 },
     ]);
+  });
+
+  it("promotes JetStream publish retry fields into audit-log events", () => {
+    const events = parseAuditLogRows([
+      [
+        { field: "@timestamp", value: "2026-06-19 03:20:00.000" },
+        { field: "@log", value: "944130631940:/ecs/cerebro-sec-dev" },
+        {
+          field: "@message",
+          value: JSON.stringify({
+            kind: "event",
+            name: "jetstream.publish.retry_exhausted",
+            status: "failed",
+            "event.dataset": "cerebro.telemetry",
+            "service.name": "cerebro-api",
+            trace_id: "trace-retry",
+            span_id: "span-retry",
+            "dependency.name": "messaging.jetstream",
+            "dependency.operation": "publish",
+            "messaging.destination.name": "sec.findings.v1.recorded",
+            "messaging.message.id_hash": "9449df22ee55e675",
+            payload_bytes: 1883,
+            "messaging.jetstream.subject": "sec.findings.v1.recorded",
+            "messaging.jetstream.stream": "CEREBRO_EVENTS",
+            "messaging.jetstream.error.category": "no_response",
+            "messaging.jetstream.publish.attempts": 10,
+            "messaging.jetstream.publish.max_attempts": 10,
+            "messaging.jetstream.publish.retry_count": 9,
+            "messaging.jetstream.publish.retry_budget_ms": 90000,
+            "messaging.jetstream.publish.attempt_timeout_ms": 30000,
+            "messaging.jetstream.publish.max_backoff_ms": 5000,
+            "messaging.jetstream.publish.client_retry_attempts": 5,
+            "messaging.jetstream.publish.client_retry_wait_ms": 500,
+            "messaging.jetstream.publish.last_backoff_ms": 5000,
+            "messaging.jetstream.publish.duration_ms": 90001,
+          }),
+        },
+      ],
+    ]);
+
+    expect(events[0]).toMatchObject({
+      name: "jetstream.publish.retry_exhausted",
+      dependency: "messaging.jetstream",
+      dependencyOperation: "publish",
+      jetstreamErrorCategory: "no_response",
+      jetstreamSubject: "sec.findings.v1.recorded",
+      jetstreamStream: "CEREBRO_EVENTS",
+      jetstreamMessageId: "9449df22ee55e675",
+      jetstreamPayloadBytes: 1883,
+      jetstreamPublishAttempts: 10,
+      jetstreamPublishMaxAttempts: 10,
+      jetstreamPublishRetryCount: 9,
+      jetstreamPublishRetryBudgetMs: 90000,
+      jetstreamPublishAttemptTimeoutMs: 30000,
+      jetstreamPublishMaxBackoffMs: 5000,
+      jetstreamPublishLastBackoffMs: 5000,
+      jetstreamPublishDurationMs: 90001,
+    });
+    expect(events[0].attributes).toMatchObject({
+      "messaging.jetstream.publish.client_retry_attempts": 5,
+      "messaging.jetstream.publish.client_retry_wait_ms": 500,
+    });
+
+    const summary = summarizeAuditLog(events);
+    expect(summary.dependencies).toEqual([{ label: "messaging.jetstream", count: 1 }]);
+    expect(summary.subjects).toEqual([{ label: "sec.findings.v1.recorded", count: 1 }]);
+    expect(summary.errors).toEqual([{ label: "no_response", count: 1 }]);
   });
 });
