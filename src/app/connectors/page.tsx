@@ -555,51 +555,27 @@ function CatalogDemandPanel({ cards, tenantID }: { cards: ConnectorCard[]; tenan
   );
 }
 
-function ConnectorViewControls({
+function ConnectorViewTabs({
   libraryTab,
   tabCounts,
-  readinessCounts,
-  readinessFilter,
   onTab,
-  onReadiness,
 }: {
   libraryTab: LibraryTab;
   tabCounts: Record<LibraryTab, number>;
-  readinessCounts: Record<SourceReadiness, number>;
-  readinessFilter: ReadinessFilter;
   onTab: (tab: LibraryTab) => void;
-  onReadiness: (filter: ReadinessFilter) => void;
 }) {
   return (
-    <>
-      <div className="flex flex-wrap gap-2">
-        {libraryTabs.map((tab) => (
-          <LibraryTabButton
-            key={tab.id}
-            id={tab.id}
-            active={libraryTab === tab.id}
-            count={tabCounts[tab.id]}
-            onClick={() => onTab(tab.id)}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {(["all", ...readinessOrder] as ReadinessFilter[]).map((filter) => (
-          <button
-            key={filter}
-            type="button"
-            onClick={() => onReadiness(filter)}
-            className={`rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition ${
-              readinessFilter === filter
-                ? "border-[color:var(--border-strong)] bg-[var(--surface-hover)] text-[var(--text-primary)]"
-                : "border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[color:var(--border-strong)]"
-            }`}
-          >
-            {readinessLabels[filter]} {filter === "all" ? tabCounts.all : readinessCounts[filter]}
-          </button>
-        ))}
-      </div>
-    </>
+    <div className="flex flex-wrap gap-2">
+      {libraryTabs.map((tab) => (
+        <LibraryTabButton
+          key={tab.id}
+          id={tab.id}
+          active={libraryTab === tab.id}
+          count={tabCounts[tab.id]}
+          onClick={() => onTab(tab.id)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -849,28 +825,22 @@ export default function ConnectorsPage() {
                 activeSourceID={debouncedSourceID}
               />
               <details className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <summary className="cursor-pointer text-[12px] font-semibold text-[var(--text-secondary)]">View and readiness filters</summary>
+                <summary className="cursor-pointer text-[12px] font-semibold text-[var(--text-secondary)]">View filters</summary>
                 <div className="mt-3 space-y-3">
-                  <ConnectorViewControls
+                  <ConnectorViewTabs
                     libraryTab={libraryTab}
                     tabCounts={tabCounts}
-                    readinessCounts={readinessCounts}
-                    readinessFilter={readinessFilter}
                     onTab={setLibraryTab}
-                    onReadiness={setReadinessFilter}
                   />
                 </div>
               </details>
             </div>
             <div className="hidden space-y-4 md:block">
               <div className="text-[12px] leading-5 text-[var(--text-muted)]">{currentView.detail}</div>
-              <ConnectorViewControls
+              <ConnectorViewTabs
                 libraryTab={libraryTab}
                 tabCounts={tabCounts}
-                readinessCounts={readinessCounts}
-                readinessFilter={readinessFilter}
                 onTab={setLibraryTab}
-                onReadiness={setReadinessFilter}
               />
               <ConnectorResultList
                 libraryTab={libraryTab}
