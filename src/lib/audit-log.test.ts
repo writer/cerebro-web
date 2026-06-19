@@ -21,10 +21,15 @@ describe("audit log wide-event helpers", () => {
 
     expect(query).toContain('`event.dataset` = "cerebro.wide_events"');
     expect(query).toContain("@ptr");
+    expect(query).toContain("`operation.type`");
+    expect(query).toContain("`event.type`");
+    expect(query).toContain("`http.request.method`");
     expect(query).toContain("`job.id`");
-    expect(query).toContain("canary_duration_ms");
+    expect(query).toContain("`job.phase.status`");
+    expect(query).toContain("`messaging.jetstream.canary.duration_ms`");
     expect(query).toContain("job_phase_status");
     expect(query).toContain("`messaging.jetstream.subject`");
+    expect(query).toContain("cerebro.telemetry");
     expect(query).toContain('runtime_id = "writer-okta-audit"');
     expect(query).toContain('service = "cerebro"');
     expect(query).toContain('status = "failed"');
@@ -56,8 +61,11 @@ describe("audit log wide-event helpers", () => {
             name: "orchestrator.run",
             status: "failed",
             "event.dataset": "cerebro.wide_events",
+            "event.category": "operation",
+            "event.type": "end",
+            "operation.name": "orchestrator.run",
+            "operation.type": "background_job",
             "service.name": "cerebro",
-            operation: "canary",
             runtime_id: "writer-okta-audit",
             source_id: "okta",
             trace_id: "trace-a",
@@ -73,17 +81,26 @@ describe("audit log wide-event helpers", () => {
             "messaging.jetstream.ack.stream": "CEREBRO_EVENTS",
             "messaging.jetstream.ack.sequence": 42,
             "messaging.jetstream.canary.replayed": true,
-            canary_duration_ms: 82,
-            replay_scanned_count: 25,
-            replay_matched_count: 3,
+            "messaging.jetstream.canary.duration_ms": 82,
+            "messaging.jetstream.canary.replay.duration_ms": 12,
+            "messaging.jetstream.publish.retry_count": 1,
+            "messaging.jetstream.publish.duration_ms": 20,
+            "messaging.jetstream.replay.duration_ms": 31,
+            "messaging.jetstream.replay.scanned_count": 25,
+            "messaging.jetstream.replay.matched_count": 3,
+            "messaging.jetstream.replay.decoded_count": 4,
+            "messaging.jetstream.replay.missing_count": 2,
             "job.id": "job-a",
             "job.kind": "source_runtime_orchestrate",
             "job.status.final": "failed",
-            job_phase: "orchestrator.graph_ingest",
-            job_phase_status: "failed",
-            job_heartbeat_stage: "iteration_failed",
-            job_runtime_status: "failed",
+            "job.phase": "orchestrator.graph_ingest",
+            "job.phase.status": "failed",
+            "job.heartbeat.stage": "iteration_failed",
+            "job.runtime.status": "failed",
             "job.queue_latency_ms": 2000,
+            "orchestrator.runtime.last_status": "failed",
+            "source_runtime.freshness_state": "graph_failed",
+            "source_runtime.next_action": "repair_graph",
             nested: { detail: "kept" },
           }),
         },
@@ -101,6 +118,7 @@ describe("audit log wide-event helpers", () => {
             trace_id: "trace-b",
             span_id: "span-b",
             duration_ms: 50,
+            "http.request.method": "GET",
             "http.route": "/grc/dashboard",
             "http.response.status_code": 200,
           }),
@@ -120,15 +138,25 @@ describe("audit log wide-event helpers", () => {
       linksProjected: 110,
       errorKind: "ingest_failed",
       errorFingerprint: "fp-a",
-      operation: "canary",
+      eventDataset: "cerebro.wide_events",
+      eventType: "end",
+      operation: "background_job",
+      operationName: "orchestrator.run",
+      operationType: "background_job",
       jetstreamSubject: "events.cerebro.health.jetstream_canary",
       jetstreamErrorCategory: "timeout",
       jetstreamAckStream: "CEREBRO_EVENTS",
       jetstreamAckSequence: 42,
       jetstreamCanaryReplayed: true,
       canaryDurationMs: 82,
+      canaryReplayDurationMs: 12,
+      jetstreamPublishRetryCount: 1,
+      jetstreamPublishDurationMs: 20,
+      jetstreamReplayDurationMs: 31,
       replayScannedCount: 25,
       replayMatchedCount: 3,
+      replayDecodedCount: 4,
+      replayMissingCount: 2,
       jobId: "job-a",
       jobKind: "source_runtime_orchestrate",
       jobStatus: "failed",
@@ -137,6 +165,9 @@ describe("audit log wide-event helpers", () => {
       jobHeartbeatStage: "iteration_failed",
       jobRuntimeStatus: "failed",
       queueLatencyMs: 2000,
+      orchestratorRuntimeLastStatus: "failed",
+      sourceRuntimeFreshnessState: "graph_failed",
+      sourceRuntimeNextAction: "repair_graph",
       logStream: "api/cerebro/abc",
       pointer: "ptr-a",
     });
@@ -146,6 +177,7 @@ describe("audit log wide-event helpers", () => {
     expect(events[0].attributes["nested.detail"]).toBe("kept");
     expect(events[1]).toMatchObject({
       service: "cerebro-web",
+      httpMethod: "GET",
       httpRoute: "/grc/dashboard",
       httpStatus: 200,
     });

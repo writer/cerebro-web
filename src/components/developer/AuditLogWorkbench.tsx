@@ -460,22 +460,25 @@ function AuditEventDetailDrawer({
             <DetailTile label="Observed" value={displayTimestamp(event.timestamp)} />
             <DetailTile label="Ingested" value={displayTimestamp(event.ingestionTime)} />
             <DetailTile label="Duration" value={formatMilliseconds(event.durationMs)} />
-            <DetailTile label="Operation" value={event.operation || "none"} mono />
+            <DetailTile label="Operation" value={formatOperation(event)} mono />
+            <DetailTile label="Event" value={formatEventShape(event)} mono />
             <DetailTile label="Trace" value={event.traceId || "none"} mono action={event.traceId ? () => setTrace(event.traceId) : undefined} />
             <DetailTile label="Span" value={event.spanId || "none"} mono />
             <DetailTile label="Parent span" value={event.parentSpanId || "none"} mono />
             <DetailTile label="Runtime" value={event.runtimeId || "none"} mono action={event.runtimeId ? () => setRuntime(event.runtimeId) : undefined} />
             <DetailTile label="Source" value={event.sourceId || "none"} mono />
-            <DetailTile label="HTTP" value={event.httpRoute || String(event.httpStatus ?? "none")} mono />
-            <DetailTile label="Dependency" value={event.dependency || "none"} mono />
+            <DetailTile label="Source runtime" value={formatSourceRuntime(event)} mono />
+            <DetailTile label="HTTP" value={formatHttp(event)} mono />
+            <DetailTile label="Dependency" value={formatDependency(event)} mono />
             <DetailTile label="Error kind" value={event.errorKind || "none"} mono />
             <DetailTile label="Error fingerprint" value={event.errorFingerprint || "none"} mono />
+            <DetailTile label="JetStream stream" value={event.jetstreamStream || "none"} mono />
             <DetailTile label="JetStream subject" value={event.jetstreamSubject || "none"} mono />
             <DetailTile label="JetStream category" value={event.jetstreamErrorCategory || "none"} mono />
             <DetailTile label="JetStream ack" value={[event.jetstreamAckStream, event.jetstreamAckSequence ?? ""].filter(Boolean).join(" / ") || "none"} mono />
-            <DetailTile label="Canary replayed" value={formatBoolean(event.jetstreamCanaryReplayed)} />
-            <DetailTile label="Canary duration" value={formatMilliseconds(event.canaryDurationMs)} />
-            <DetailTile label="Replay scan" value={[event.replayScannedCount ?? "", event.replayMatchedCount ?? ""].filter((value) => value !== "").join(" / ") || "none"} mono />
+            <DetailTile label="JetStream publish" value={formatJetstreamPublish(event)} mono />
+            <DetailTile label="Canary" value={formatCanary(event)} mono />
+            <DetailTile label="Replay scan" value={formatReplayScan(event)} mono />
             <DetailTile label="Job" value={event.jobId || "none"} mono />
             <DetailTile label="Job kind" value={event.jobKind || "none"} mono />
             <DetailTile label="Job status" value={event.jobStatus || "none"} />
@@ -486,6 +489,7 @@ function AuditEventDetailDrawer({
             <DetailTile label="Job subject" value={[event.jobSubjectType, event.jobSubjectId].filter(Boolean).join(" / ") || "none"} mono />
             <DetailTile label="Queue latency" value={formatMilliseconds(event.queueLatencyMs)} />
             <DetailTile label="Job duration" value={formatMilliseconds(event.runDurationMs)} />
+            <DetailTile label="Runtime rollup" value={event.orchestratorRuntimeLastStatus || "none"} mono />
             <DetailTile label="Log stream" value={event.logStream || "none"} mono />
             <DetailTile label="CloudWatch ptr" value={event.pointer || "none"} mono />
           </div>
@@ -604,6 +608,62 @@ const formatMilliseconds = (value: number | null) => {
 const formatNullableNumber = (value: number | null) => value === null ? "n/a" : value.toLocaleString();
 
 const formatBoolean = (value: boolean | null) => value === null ? "n/a" : value ? "true" : "false";
+
+const formatOperation = (event: AuditLogEvent) =>
+  [event.operationType || event.operation, event.operationName]
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(" / ") || "none";
+
+const formatEventShape = (event: AuditLogEvent) =>
+  [event.eventDataset, event.eventCategory, event.eventType, event.outcome]
+    .filter(Boolean)
+    .join(" / ") || "none";
+
+const formatHttp = (event: AuditLogEvent) =>
+  [event.httpMethod, event.httpRoute, event.httpStatus === null ? "" : String(event.httpStatus)]
+    .filter(Boolean)
+    .join(" ") || "none";
+
+const formatDependency = (event: AuditLogEvent) =>
+  [event.dependency, event.dependencyOperation, event.dependencyStatus]
+    .filter(Boolean)
+    .join(" / ") || "none";
+
+const formatSourceRuntime = (event: AuditLogEvent) =>
+  [event.sourceRuntimeFreshnessState, event.sourceRuntimeNextAction, event.sourceRuntimeFailureClass]
+    .filter(Boolean)
+    .join(" / ") || "none";
+
+const formatJetstreamPublish = (event: AuditLogEvent) => {
+  const values = [
+    event.jetstreamPublishDurationMs === null ? "" : formatMilliseconds(event.jetstreamPublishDurationMs),
+    event.jetstreamPublishRetryCount === null ? "" : `${event.jetstreamPublishRetryCount} retries`,
+  ].filter(Boolean);
+  return values.join(" / ") || "none";
+};
+
+const formatCanary = (event: AuditLogEvent) => {
+  const values = [
+    formatBoolean(event.jetstreamCanaryReplayed),
+    event.canaryDurationMs === null ? "" : formatMilliseconds(event.canaryDurationMs),
+    event.canaryReplayDurationMs === null ? "" : `replay ${formatMilliseconds(event.canaryReplayDurationMs)}`,
+  ].filter((value) => value && value !== "n/a");
+  return values.join(" / ") || "n/a";
+};
+
+const formatReplayScan = (event: AuditLogEvent) => {
+  const counts = [
+    event.replayScannedCount === null ? "" : `${event.replayScannedCount} scanned`,
+    event.replayMatchedCount === null ? "" : `${event.replayMatchedCount} matched`,
+    event.replayDecodedCount === null ? "" : `${event.replayDecodedCount} decoded`,
+    event.replayMissingCount === null ? "" : `${event.replayMissingCount} missing`,
+  ].filter(Boolean);
+  if (event.jetstreamReplayDurationMs !== null) {
+    counts.push(formatMilliseconds(event.jetstreamReplayDurationMs));
+  }
+  return counts.join(" / ") || "none";
+};
 
 const displayTimestamp = (value: string) => {
   const parsed = Date.parse(value);
