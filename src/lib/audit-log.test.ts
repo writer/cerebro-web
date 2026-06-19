@@ -22,6 +22,9 @@ describe("audit log wide-event helpers", () => {
     expect(query).toContain('`event.dataset` = "cerebro.wide_events"');
     expect(query).toContain("@ptr");
     expect(query).toContain("`job.id`");
+    expect(query).toContain("canary_duration_ms");
+    expect(query).toContain("job_phase_status");
+    expect(query).toContain("`messaging.jetstream.subject`");
     expect(query).toContain('runtime_id = "writer-okta-audit"');
     expect(query).toContain('service = "cerebro"');
     expect(query).toContain('status = "failed"');
@@ -54,6 +57,7 @@ describe("audit log wide-event helpers", () => {
             status: "failed",
             "event.dataset": "cerebro.wide_events",
             "service.name": "cerebro",
+            operation: "canary",
             runtime_id: "writer-okta-audit",
             source_id: "okta",
             trace_id: "trace-a",
@@ -63,9 +67,22 @@ describe("audit log wide-event helpers", () => {
             entities_projected: 72,
             links_projected: 110,
             error_kind: "ingest_failed",
+            error_fingerprint: "fp-a",
+            "messaging.jetstream.subject": "events.cerebro.health.jetstream_canary",
+            "messaging.jetstream.error.category": "timeout",
+            "messaging.jetstream.ack.stream": "CEREBRO_EVENTS",
+            "messaging.jetstream.ack.sequence": 42,
+            "messaging.jetstream.canary.replayed": true,
+            canary_duration_ms: 82,
+            replay_scanned_count: 25,
+            replay_matched_count: 3,
             "job.id": "job-a",
             "job.kind": "source_runtime_orchestrate",
             "job.status.final": "failed",
+            job_phase: "orchestrator.graph_ingest",
+            job_phase_status: "failed",
+            job_heartbeat_stage: "iteration_failed",
+            job_runtime_status: "failed",
             "job.queue_latency_ms": 2000,
             nested: { detail: "kept" },
           }),
@@ -102,9 +119,23 @@ describe("audit log wide-event helpers", () => {
       entitiesProjected: 72,
       linksProjected: 110,
       errorKind: "ingest_failed",
+      errorFingerprint: "fp-a",
+      operation: "canary",
+      jetstreamSubject: "events.cerebro.health.jetstream_canary",
+      jetstreamErrorCategory: "timeout",
+      jetstreamAckStream: "CEREBRO_EVENTS",
+      jetstreamAckSequence: 42,
+      jetstreamCanaryReplayed: true,
+      canaryDurationMs: 82,
+      replayScannedCount: 25,
+      replayMatchedCount: 3,
       jobId: "job-a",
       jobKind: "source_runtime_orchestrate",
       jobStatus: "failed",
+      jobPhase: "orchestrator.graph_ingest",
+      jobPhaseStatus: "failed",
+      jobHeartbeatStage: "iteration_failed",
+      jobRuntimeStatus: "failed",
       queueLatencyMs: 2000,
       logStream: "api/cerebro/abc",
       pointer: "ptr-a",

@@ -40,14 +40,28 @@ export type AuditLogEvent = {
   httpStatus: number | null;
   dependency: string;
   errorKind: string;
+  errorFingerprint: string;
+  operation: string;
   eventsRead: number | null;
   entitiesProjected: number | null;
   linksProjected: number | null;
+  jetstreamSubject: string;
+  jetstreamErrorCategory: string;
+  jetstreamAckStream: string;
+  jetstreamAckSequence: number | null;
+  jetstreamCanaryReplayed: boolean | null;
+  canaryDurationMs: number | null;
+  replayScannedCount: number | null;
+  replayMatchedCount: number | null;
   jobId: string;
   jobKind: string;
   jobStatus: string;
   jobSubjectType: string;
   jobSubjectId: string;
+  jobPhase: string;
+  jobPhaseStatus: string;
+  jobHeartbeatStage: string;
+  jobRuntimeStatus: string;
   queueLatencyMs: number | null;
   runDurationMs: number | null;
   attributes: Record<string, string | number | boolean | null>;
@@ -83,6 +97,7 @@ const visibleFields = [
   "name",
   "main",
   "status",
+  "operation",
   "service",
   "`service.name`",
   "`event.dataset`",
@@ -103,9 +118,18 @@ const visibleFields = [
   "`dependency.last_system`",
   "`dependency.last_status`",
   "error_kind",
+  "error_fingerprint",
   "events_read",
   "entities_projected",
   "links_projected",
+  "`messaging.jetstream.subject`",
+  "`messaging.jetstream.error.category`",
+  "`messaging.jetstream.ack.stream`",
+  "`messaging.jetstream.ack.sequence`",
+  "`messaging.jetstream.canary.replayed`",
+  "canary_duration_ms",
+  "replay_scanned_count",
+  "replay_matched_count",
   "`job.id`",
   "`job.kind`",
   "`job.status`",
@@ -117,6 +141,14 @@ const visibleFields = [
   "`job.payload.key_count`",
   "`job.result.key_count`",
   "`job.result_ref.key_count`",
+  "job_id",
+  "job_kind",
+  "job_status",
+  "job_phase",
+  "job_phase_key",
+  "job_phase_status",
+  "job_heartbeat_stage",
+  "job_runtime_status",
 ];
 
 export const auditLogWindowMinutes = (value: unknown) => clampInteger(value, DEFAULT_MINUTES, 5, MAX_MINUTES);
@@ -190,7 +222,7 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
     const pointer = stringValue(fields["@ptr"]);
     const phase = firstString(fields.phase, message.phase, inferPhase(name));
     const httpStatus = numberValue(fields["http.response.status_code"] ?? valueAt(message, "http.response.status_code"));
-    const jobStatus = firstString(fields["job.status.final"], valueAt(message, "job.status.final"), fields["job.status"], valueAt(message, "job.status"));
+    const jobStatus = firstString(fields["job.status.final"], valueAt(message, "job.status.final"), fields["job.status"], valueAt(message, "job.status"), fields.job_status, message.job_status);
     const event = {
       id: [
         pointer,
@@ -221,14 +253,28 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
       httpStatus,
       dependency: firstString(fields["dependency.name"], valueAt(message, "dependency.name"), fields["dependency.last_system"], valueAt(message, "dependency.last_system")),
       errorKind: firstString(fields.error_kind, message.error_kind),
+      errorFingerprint: firstString(fields.error_fingerprint, message.error_fingerprint),
+      operation: firstString(fields.operation, message.operation),
       eventsRead: numberValue(fields.events_read ?? message.events_read),
       entitiesProjected: numberValue(fields.entities_projected ?? message.entities_projected),
       linksProjected: numberValue(fields.links_projected ?? message.links_projected),
-      jobId: firstString(fields["job.id"], valueAt(message, "job.id")),
-      jobKind: firstString(fields["job.kind"], valueAt(message, "job.kind")),
+      jetstreamSubject: firstString(fields["messaging.jetstream.subject"], valueAt(message, "messaging.jetstream.subject")),
+      jetstreamErrorCategory: firstString(fields["messaging.jetstream.error.category"], valueAt(message, "messaging.jetstream.error.category")),
+      jetstreamAckStream: firstString(fields["messaging.jetstream.ack.stream"], valueAt(message, "messaging.jetstream.ack.stream")),
+      jetstreamAckSequence: numberValue(fields["messaging.jetstream.ack.sequence"] ?? valueAt(message, "messaging.jetstream.ack.sequence")),
+      jetstreamCanaryReplayed: booleanValue(fields["messaging.jetstream.canary.replayed"] ?? valueAt(message, "messaging.jetstream.canary.replayed")),
+      canaryDurationMs: numberValue(fields.canary_duration_ms ?? message.canary_duration_ms),
+      replayScannedCount: numberValue(fields.replay_scanned_count ?? message.replay_scanned_count),
+      replayMatchedCount: numberValue(fields.replay_matched_count ?? message.replay_matched_count),
+      jobId: firstString(fields["job.id"], valueAt(message, "job.id"), fields.job_id, message.job_id),
+      jobKind: firstString(fields["job.kind"], valueAt(message, "job.kind"), fields.job_kind, message.job_kind),
       jobStatus,
       jobSubjectType: firstString(fields["job.subject_type"], valueAt(message, "job.subject_type")),
       jobSubjectId: firstString(fields["job.subject_id"], valueAt(message, "job.subject_id")),
+      jobPhase: firstString(fields.job_phase, message.job_phase, valueAt(message, "job.phase")),
+      jobPhaseStatus: firstString(fields.job_phase_status, message.job_phase_status, valueAt(message, "job.phase.status")),
+      jobHeartbeatStage: firstString(fields.job_heartbeat_stage, message.job_heartbeat_stage, valueAt(message, "job.heartbeat.stage")),
+      jobRuntimeStatus: firstString(fields.job_runtime_status, message.job_runtime_status, valueAt(message, "job.runtime.status")),
       queueLatencyMs: numberValue(fields["job.queue_latency_ms"] ?? valueAt(message, "job.queue_latency_ms")),
       runDurationMs: numberValue(fields["job.run_duration_ms"] ?? valueAt(message, "job.run_duration_ms")),
       attributes: scalarAttributes(message),
@@ -319,6 +365,20 @@ const numberValue = (value: unknown) => {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const booleanValue = (value: unknown) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const text = stringValue(value).toLowerCase();
+  if (text === "true" || text === "1") {
+    return true;
+  }
+  if (text === "false" || text === "0") {
+    return false;
+  }
+  return null;
 };
 
 const valueAt = (record: Record<string, unknown>, path: string) => {
