@@ -338,8 +338,11 @@ function AuditEventTable({
                 <div className="font-medium text-[var(--text-primary)]">{event.name}</div>
                 <div className="mt-1 flex max-w-2xl flex-wrap gap-1.5 text-[11px] text-[var(--text-muted)]">
                   <span>{event.service}</span>
+                  {event.operation && <span>{event.operation}</span>}
                   {event.phase && <span>{event.phase}</span>}
+                  {event.jobPhase && <span>{event.jobPhase}</span>}
                   {event.jobKind && <span className="font-mono">{event.jobKind}</span>}
+                  {event.jetstreamErrorCategory && <span className="font-mono">{event.jetstreamErrorCategory}</span>}
                   {event.httpRoute && <span className="font-mono">{event.httpRoute}</span>}
                   {event.errorKind && <span className="font-mono text-red-600">{event.errorKind}</span>}
                 </div>
@@ -360,6 +363,8 @@ function AuditEventTable({
                 <div className="font-mono text-[12px] text-[var(--text-primary)]">{formatNullableNumber(event.entitiesProjected)} entities</div>
                 <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{formatNullableNumber(event.linksProjected)} links</div>
                 {event.eventsRead !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{event.eventsRead} read</div>}
+                {event.replayScannedCount !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{event.replayScannedCount} replay scan</div>}
+                {event.canaryDurationMs !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">canary {formatMilliseconds(event.canaryDurationMs)}</div>}
                 {event.runDurationMs !== null && <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">job {formatMilliseconds(event.runDurationMs)}</div>}
               </td>
               <td>
@@ -455,6 +460,7 @@ function AuditEventDetailDrawer({
             <DetailTile label="Observed" value={displayTimestamp(event.timestamp)} />
             <DetailTile label="Ingested" value={displayTimestamp(event.ingestionTime)} />
             <DetailTile label="Duration" value={formatMilliseconds(event.durationMs)} />
+            <DetailTile label="Operation" value={event.operation || "none"} mono />
             <DetailTile label="Trace" value={event.traceId || "none"} mono action={event.traceId ? () => setTrace(event.traceId) : undefined} />
             <DetailTile label="Span" value={event.spanId || "none"} mono />
             <DetailTile label="Parent span" value={event.parentSpanId || "none"} mono />
@@ -462,9 +468,21 @@ function AuditEventDetailDrawer({
             <DetailTile label="Source" value={event.sourceId || "none"} mono />
             <DetailTile label="HTTP" value={event.httpRoute || String(event.httpStatus ?? "none")} mono />
             <DetailTile label="Dependency" value={event.dependency || "none"} mono />
+            <DetailTile label="Error kind" value={event.errorKind || "none"} mono />
+            <DetailTile label="Error fingerprint" value={event.errorFingerprint || "none"} mono />
+            <DetailTile label="JetStream subject" value={event.jetstreamSubject || "none"} mono />
+            <DetailTile label="JetStream category" value={event.jetstreamErrorCategory || "none"} mono />
+            <DetailTile label="JetStream ack" value={[event.jetstreamAckStream, event.jetstreamAckSequence ?? ""].filter(Boolean).join(" / ") || "none"} mono />
+            <DetailTile label="Canary replayed" value={formatBoolean(event.jetstreamCanaryReplayed)} />
+            <DetailTile label="Canary duration" value={formatMilliseconds(event.canaryDurationMs)} />
+            <DetailTile label="Replay scan" value={[event.replayScannedCount ?? "", event.replayMatchedCount ?? ""].filter((value) => value !== "").join(" / ") || "none"} mono />
             <DetailTile label="Job" value={event.jobId || "none"} mono />
             <DetailTile label="Job kind" value={event.jobKind || "none"} mono />
             <DetailTile label="Job status" value={event.jobStatus || "none"} />
+            <DetailTile label="Job phase" value={event.jobPhase || "none"} mono />
+            <DetailTile label="Job phase status" value={event.jobPhaseStatus || "none"} />
+            <DetailTile label="Job heartbeat" value={event.jobHeartbeatStage || "none"} mono />
+            <DetailTile label="Job runtime status" value={event.jobRuntimeStatus || "none"} />
             <DetailTile label="Job subject" value={[event.jobSubjectType, event.jobSubjectId].filter(Boolean).join(" / ") || "none"} mono />
             <DetailTile label="Queue latency" value={formatMilliseconds(event.queueLatencyMs)} />
             <DetailTile label="Job duration" value={formatMilliseconds(event.runDurationMs)} />
@@ -584,6 +602,8 @@ const formatMilliseconds = (value: number | null) => {
 };
 
 const formatNullableNumber = (value: number | null) => value === null ? "n/a" : value.toLocaleString();
+
+const formatBoolean = (value: boolean | null) => value === null ? "n/a" : value ? "true" : "false";
 
 const displayTimestamp = (value: string) => {
   const parsed = Date.parse(value);
