@@ -55,13 +55,21 @@ export type AuditLogEvent = {
   linksProjected: number | null;
   jetstreamStream: string;
   jetstreamSubject: string;
+  jetstreamMessageId: string;
+  jetstreamPayloadBytes: number | null;
   jetstreamErrorCategory: string;
   jetstreamAckStream: string;
   jetstreamAckSequence: number | null;
   jetstreamCanaryReplayed: boolean | null;
   canaryDurationMs: number | null;
   canaryReplayDurationMs: number | null;
+  jetstreamPublishAttempts: number | null;
+  jetstreamPublishMaxAttempts: number | null;
   jetstreamPublishRetryCount: number | null;
+  jetstreamPublishRetryBudgetMs: number | null;
+  jetstreamPublishAttemptTimeoutMs: number | null;
+  jetstreamPublishMaxBackoffMs: number | null;
+  jetstreamPublishLastBackoffMs: number | null;
   jetstreamPublishDurationMs: number | null;
   jetstreamReplayDurationMs: number | null;
   replayScannedCount: number | null;
@@ -98,6 +106,9 @@ export type AuditLogSummary = {
   services: { label: string; count: number }[];
   runtimes: { label: string; count: number }[];
   phases: { label: string; count: number }[];
+  dependencies: { label: string; count: number }[];
+  subjects: { label: string; count: number }[];
+  errors: { label: string; count: number }[];
 };
 
 const MAX_LIMIT = 500;
@@ -143,11 +154,23 @@ const visibleFields = [
   "`http.route`",
   "`http.response.status_code`",
   "`dependency.name`",
+  "`dependency.operation`",
   "`dependency.last_system`",
   "`dependency.last_operation`",
   "`dependency.last_status`",
   "error_kind",
   "error_fingerprint",
+  "`messaging.destination.name`",
+  "`messaging.message.id`",
+  "`messaging.message.id_hash`",
+  "`messaging.message.payload_size_bytes`",
+  "payload_bytes",
+  "`messaging.jetstream.publish.attempts`",
+  "`messaging.jetstream.publish.max_attempts`",
+  "`messaging.jetstream.publish.retry_budget_ms`",
+  "`messaging.jetstream.publish.attempt_timeout_ms`",
+  "`messaging.jetstream.publish.max_backoff_ms`",
+  "`messaging.jetstream.publish.last_backoff_ms`",
   "events_read",
   "entities_projected",
   "links_projected",
@@ -209,10 +232,10 @@ export const auditLogLimit = (value: unknown) => clampInteger(value, DEFAULT_LIM
 export function buildWideEventLogsInsightsQuery(filters: AuditLogFilters = {}) {
   const limit = auditLogLimit(filters.limit);
   const traceId = normalizeFilter(filters.traceId);
-  const wideEventClause = '(`event.dataset` = "cerebro.wide_events" or wide_event = true or wide_event = 1)';
+  const wideEventClause = '(`event.dataset` = "cerebro.wide_events" or `event.dataset` = "cerebro.telemetry" or wide_event = true or wide_event = 1)';
   const clauses = [
     traceId
-      ? `(${wideEventClause} or (\`event.dataset\` = "cerebro.telemetry" and trace_id = ${quoteLogsInsightsString(traceId)}))`
+      ? `(${wideEventClause} or trace_id = ${quoteLogsInsightsString(traceId)})`
       : wideEventClause,
   ];
 
@@ -335,7 +358,7 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
       httpRoute: firstString(fields["http.route"], valueAt(message, "http.route")),
       httpStatus,
       dependency: firstString(fields["dependency.name"], valueAt(message, "dependency.name"), fields["dependency.last_system"], valueAt(message, "dependency.last_system")),
-      dependencyOperation: firstStringField(fields, message, "dependency.last_operation"),
+      dependencyOperation: firstStringField(fields, message, "dependency.operation", "dependency.last_operation"),
       dependencyStatus: firstStringField(fields, message, "dependency.last_status"),
       errorKind: firstString(fields.error_kind, message.error_kind),
       errorFingerprint: firstString(fields.error_fingerprint, message.error_fingerprint),
@@ -346,14 +369,22 @@ export function parseAuditLogRows(rows: LogsInsightsField[][]): AuditLogEvent[] 
       entitiesProjected: numberValue(fields.entities_projected ?? message.entities_projected),
       linksProjected: numberValue(fields.links_projected ?? message.links_projected),
       jetstreamStream: firstStringField(fields, message, "messaging.jetstream.stream"),
-      jetstreamSubject: firstString(fields["messaging.jetstream.subject"], valueAt(message, "messaging.jetstream.subject")),
+      jetstreamSubject: firstStringField(fields, message, "messaging.jetstream.subject", "messaging.destination.name"),
+      jetstreamMessageId: firstStringField(fields, message, "messaging.message.id", "messaging.message.id_hash"),
+      jetstreamPayloadBytes: numberValue(firstFieldValue(fields, message, "messaging.message.payload_size_bytes") ?? fields.payload_bytes ?? message.payload_bytes),
       jetstreamErrorCategory: firstString(fields["messaging.jetstream.error.category"], valueAt(message, "messaging.jetstream.error.category")),
       jetstreamAckStream: firstString(fields["messaging.jetstream.ack.stream"], valueAt(message, "messaging.jetstream.ack.stream")),
       jetstreamAckSequence: numberValue(fields["messaging.jetstream.ack.sequence"] ?? valueAt(message, "messaging.jetstream.ack.sequence")),
       jetstreamCanaryReplayed: booleanValue(fields["messaging.jetstream.canary.replayed"] ?? valueAt(message, "messaging.jetstream.canary.replayed")),
       canaryDurationMs: numberValue(fields.canary_duration_ms ?? message.canary_duration_ms ?? firstFieldValue(fields, message, "messaging.jetstream.canary.duration_ms")),
       canaryReplayDurationMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.canary.replay.duration_ms")),
+      jetstreamPublishAttempts: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.attempts")),
+      jetstreamPublishMaxAttempts: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.max_attempts")),
       jetstreamPublishRetryCount: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.retry_count")),
+      jetstreamPublishRetryBudgetMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.retry_budget_ms")),
+      jetstreamPublishAttemptTimeoutMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.attempt_timeout_ms")),
+      jetstreamPublishMaxBackoffMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.max_backoff_ms")),
+      jetstreamPublishLastBackoffMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.last_backoff_ms")),
       jetstreamPublishDurationMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.publish.duration_ms")),
       jetstreamReplayDurationMs: numberValue(firstFieldValue(fields, message, "messaging.jetstream.replay.duration_ms")),
       replayScannedCount: numberValue(fields.replay_scanned_count ?? message.replay_scanned_count ?? firstFieldValue(fields, message, "messaging.jetstream.replay.scanned_count")),
@@ -399,6 +430,12 @@ export function summarizeAuditLog(events: AuditLogEvent[]): AuditLogSummary {
     services: topCounts(events.map((event) => event.service).filter(Boolean), 6),
     runtimes: topCounts(events.map((event) => event.runtimeId).filter(Boolean), 8),
     phases: topCounts(events.map((event) => event.phase).filter(Boolean), 8),
+    dependencies: topCounts(events.map((event) => event.dependency).filter(Boolean), 8),
+    subjects: topCounts(events.map((event) => event.jetstreamSubject).filter(Boolean), 8),
+    errors: topCounts(
+      events.map((event) => firstString(event.jetstreamErrorCategory, event.errorKind)).filter(Boolean),
+      8,
+    ),
   };
 }
 
