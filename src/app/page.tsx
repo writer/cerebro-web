@@ -6,10 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useApiKey } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
+import TrendsChart from "@/components/grc/TrendsChart";
 import { countLabel } from "@/lib/format";
-import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
+import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCTrends, riskSort, shortEntity } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
+import { hasTrendActivity } from "@/lib/trends";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
 const HOME_DASHBOARD_FINDING_LIMIT = DASHBOARD_FINDING_LIMIT;
@@ -65,6 +67,7 @@ export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const evidenceQuery = useGRCQuery<EvidenceResponse>(showEvidence ? grcPath("/grc/evidence", { limit: 8 }) : null);
+  const trendsQuery = useGRCQuery<GRCTrends>(grcPath("/grc/trends", { interval: "week", days: 90 }));
   const data = dashboard.data;
   const priorityFindings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
   const priorityMetrics = useMemo(() => {
@@ -101,6 +104,7 @@ export default function Home() {
 
   const reload = () => {
     void dashboard.reload();
+    void trendsQuery.reload();
     if (showEvidence) void evidenceQuery.reload();
   };
 
@@ -185,6 +189,19 @@ export default function Home() {
             <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
             <ProgressCard title="Connector Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
           </div>
+
+          <Panel
+            title="Finding Trends"
+            action={<Link href="/trends" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">View trends</Link>}
+          >
+            {hasTrendActivity(trendsQuery.data) ? (
+              <TrendsChart points={trendsQuery.data?.points ?? []} height={220} />
+            ) : (
+              <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
+                Finding trends will appear as history accrues.
+              </div>
+            )}
+          </Panel>
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <Panel
