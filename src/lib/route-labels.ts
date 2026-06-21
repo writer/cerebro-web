@@ -8,6 +8,7 @@ const routeLabels: Record<string, string> = {
   "/controls/builder": "Control builder",
   "/controls": "Controls",
   "/connectors/builder": "Connector builder",
+  "/connectors/source-cdk": "Source CDK onboarding",
   "/connectors": "Connectors",
   "/developer": "Developer Tools",
   "/developer/agent-platform": "Agent platform",

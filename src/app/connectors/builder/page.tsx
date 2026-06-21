@@ -11,6 +11,7 @@ import {
   CircleAlert,
   DatabaseZap,
   FileJson2,
+  GitPullRequestArrow,
   KeyRound,
   Lock,
   Plus,
@@ -42,6 +43,7 @@ import {
   defaultConnectorDefinitionDraft,
   normalizeConnectorDefinitionID,
   normalizeCredentialStores,
+  sourceCDKPlanPath,
 } from "@/lib/connectors";
 import { useGRCQuery } from "@/lib/grc-client";
 import { displayDate } from "@/lib/grc";
@@ -477,6 +479,10 @@ function ConnectorBuilderContent() {
                   <ArrowRight className="h-4 w-4" />
                   {working === "promote" ? "Promoting..." : nextStage ? `Promote to ${stageLabel(nextStage)}` : "No promotion available"}
                 </button>
+                <Link href={sourceCDKPlanPath(draft.id, scopedTenantID)} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px]">
+                  <GitPullRequestArrow className="h-4 w-4" />
+                  Plan Source CDK
+                </Link>
               </div>
             </div>
           </Panel>
