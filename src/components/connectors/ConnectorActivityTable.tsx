@@ -5,6 +5,7 @@ import { Activity, CheckCircle2, Clock3, RefreshCw, XCircle } from "lucide-react
 import { Badge, EmptyBlock } from "@/components/grc/Primitives";
 import { displayDate } from "@/lib/grc";
 import { formatDuration } from "@/lib/mission-control";
+import { countLabel } from "@/lib/format";
 import type { ConnectorActivity } from "@/lib/connectors";
 
 const statusIcon = (status: string) => {
@@ -61,7 +62,7 @@ export default function ConnectorActivityTable({ activity }: { activity: Connect
               </td>
               <td>
                 {event.type === "graph" ? (
-                  <span>{event.entities_projected ?? 0} entities</span>
+                  <span>{countLabel(event.entities_projected ?? 0, "entity", "entities")}</span>
                 ) : (
                   <span>{event.records_accepted ?? 0} accepted</span>
                 )}

@@ -4,6 +4,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
+import { countLabel } from "@/lib/format";
+
 export type TableColumn = {
   key: string;
   label?: string;
@@ -24,7 +26,7 @@ export const formatValue = (value: unknown) => {
     return value.toISOString();
   }
   if (Array.isArray(value)) {
-    return value.length > 0 ? `${value.length} items` : "[]";
+    return value.length > 0 ? countLabel(value.length, "item") : "[]";
   }
   if (typeof value === "object") {
     return "{...}";

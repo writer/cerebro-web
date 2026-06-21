@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
+import { countLabel } from "@/lib/format";
 import { GRCFinding, riskSort } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { findingMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
@@ -146,7 +147,7 @@ export default function RiskInboxPage() {
       {!loading && !error && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-slate-900">{findings.length} findings</h2>
+            <h2 className="text-[13px] font-semibold text-slate-900">{countLabel(findings.length, "finding")}</h2>
           </div>
           <FindingTable findings={findings} />
         </div>

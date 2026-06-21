@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApiKey } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
+import { countLabel } from "@/lib/format";
 import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
@@ -137,7 +138,7 @@ export default function Home() {
             <AttentionBanner
               action={<Link href="/risk-inbox" className="rounded-md border border-amber-300 bg-white px-3 py-1 text-[12px] font-medium text-amber-900 hover:bg-amber-50">View</Link>}
             >
-              {summary.overdue_findings} overdue findings and {summary.stale_connectors} stale connectors need attention.
+              {countLabel(summary.overdue_findings, "overdue finding")} and {countLabel(summary.stale_connectors, "stale connector")} need attention.
             </AttentionBanner>
           )}
 
@@ -162,7 +163,7 @@ export default function Home() {
             <MetricCard
               label="Avg Risk Score"
               value={<RiskBadge score={priorityMetrics.averageRisk} />}
-              detail={`${priorityMetrics.criticalRisk} critical-risk findings`}
+              detail={countLabel(priorityMetrics.criticalRisk, "critical-risk finding")}
               intent={priorityMetrics.criticalRisk > 0 ? "danger" : "neutral"}
             />
             <MetricCard
@@ -181,7 +182,7 @@ export default function Home() {
 
           <div className="grid gap-4 lg:grid-cols-3">
             <ProgressCard title="Control Posture" percent={controlProgress} detail={`${passingControls} passing`} total={`${controlTotal} total`} href="/controls" />
-            <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={`${summary.evidence_items} items`} total={`${summary.open_findings} risks`} href="/evidence" />
+            <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
             <ProgressCard title="Connector Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
           </div>
 
@@ -204,7 +205,7 @@ export default function Home() {
                     >
                       <div>
                         <div className="text-[13px] font-medium text-slate-900">{control.framework_name} {control.control_id}</div>
-                        <div className="text-[12px] text-slate-500">{control.open_findings} findings &middot; {control.evidence_items} evidence</div>
+                        <div className="text-[12px] text-slate-500">{countLabel(control.open_findings, "finding")} &middot; {control.evidence_items} evidence</div>
                       </div>
                       <Badge value={control.status} />
                     </Link>

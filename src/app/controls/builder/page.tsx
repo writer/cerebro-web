@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
+import { countLabel } from "@/lib/format";
 import {
   Badge,
   ErrorBlock,
@@ -36,7 +37,7 @@ const profileOptions = (profiles: GRCControlProfilesResponse | null) =>
   (profiles?.profiles ?? []).map((profile) => ({
     id: profile.id,
     label: profile.name || profile.id,
-    detail: `${profile.summary.selected_controls} controls, ${profile.summary.mapped_rules} mapped rules`,
+    detail: `${countLabel(profile.summary.selected_controls, "control")}, ${countLabel(profile.summary.mapped_rules, "mapped rule")}`,
   }));
 
 const downloadYAML = (name: string, content: string) => {
@@ -228,7 +229,7 @@ function CoveragePreview({
                       </td>
                       <td className="px-3 py-3"><Badge value={control.status} /></td>
                       <td className="px-3 py-3 font-mono text-[12px] text-[var(--text-primary)]">{control.evidence_score ?? "-"}</td>
-                      <td className="px-3 py-3 text-[12px] text-[var(--text-secondary)]">{control.evidence_items} items, {control.missing_evidence_items ?? 0} missing</td>
+                      <td className="px-3 py-3 text-[12px] text-[var(--text-secondary)]">{countLabel(control.evidence_items, "item")}, {control.missing_evidence_items ?? 0} missing</td>
                       <td className="px-3 py-3 text-[12px] text-[var(--text-secondary)]">{control.audit_summary || control.reasons?.[0] || "No assessment summary is available."}</td>
                     </tr>
                   ))}
