@@ -97,11 +97,11 @@ const commandOnlyNavLinks: NavigationEntry[] = [
     keywords: ["builder", "custom framework", "control pack", "yaml", "audit", ...supportedGRCFrameworkNames],
   },
   {
-    label: "Source CDK onboarding",
+    label: "Source readiness",
     href: "/connectors/source-cdk",
-    description: "Plan connector definition promotion with grammar proof, generated files, fixture gates, and next commands.",
-    section: "Advanced",
-    keywords: ["source cdk", "connector", "sourcegen", "promotion", "onboarding", "checklist"],
+    description: "See what a source collects, the access it needs, and whether you can trust it yet for your program.",
+    section: "Operator",
+    keywords: ["source", "readiness", "connector", "coverage", "access", "trust", "onboarding"],
   },
 ];
 

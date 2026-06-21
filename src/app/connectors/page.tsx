@@ -9,11 +9,11 @@ import {
   CheckCircle2,
   Database,
   FileJson2,
-  GitPullRequestArrow,
   PlugZap,
   Plus,
   RefreshCw,
   Search,
+  ShieldCheck,
 } from "lucide-react";
 
 import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
@@ -733,8 +733,8 @@ export default function ConnectorsPage() {
               Build custom
             </Link>
             <Link href={`/connectors/source-cdk${debouncedTenantID ? `?tenant_id=${encodeURIComponent(debouncedTenantID)}` : ""}`} className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
-              <GitPullRequestArrow className="h-4 w-4" />
-              Source CDK
+              <ShieldCheck className="h-4 w-4" />
+              Readiness
             </Link>
             <button type="button" onClick={() => { void libraryQuery.reload(); void definitionsQuery.reload(); }} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
               <RefreshCw className="h-4 w-4" />
