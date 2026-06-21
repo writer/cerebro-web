@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
+import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { controlMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
@@ -325,7 +326,7 @@ export default function ControlsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] text-slate-500">
-                      {control.open_findings} findings &middot; {control.evidence_items} evidence &middot; {control.missing_evidence_items ?? 0} missing
+                      {countLabel(control.open_findings, "finding")} &middot; {control.evidence_items} evidence &middot; {control.missing_evidence_items ?? 0} missing
                       {typeof control.evidence_score === "number" ? ` · ${control.evidence_score} score` : ""}
                     </span>
                     <button

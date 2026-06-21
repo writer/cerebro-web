@@ -9,6 +9,7 @@ import { useApiKey } from "@/components/providers";
 import GraphViewer from "@/components/grc/GraphViewer";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
+import { pluralize } from "@/lib/format";
 import { displayDate, GRCAuditPacket, GRCEntityImpact, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 
@@ -495,7 +496,7 @@ export default function FindingDetailPage() {
             <MetricCard label="Severity" value={<div className="flex items-center gap-1.5"><SeverityDot severity={finding.severity} /><Badge value={finding.severity} tone="severity" /></div>} detail={finding.status} intent={finding.severity === "CRITICAL" ? "danger" : "neutral"} />
             <MetricCard label="Owner" value={finding.owner || "Unassigned"} detail={finding.sla_status} intent={!finding.owner || finding.owner === "Unassigned" ? "warning" : "success"} />
             <MetricCard label="Evidence" value={evidence.length} detail={`${finding.evidence_count} total`} />
-            <MetricCard label="Controls" value={controls.length} detail="mapped objectives" />
+            <MetricCard label="Controls" value={controls.length} detail={pluralize(controls.length, "mapped objective")} />
           </div>
 
           <div className="border-b border-slate-200">

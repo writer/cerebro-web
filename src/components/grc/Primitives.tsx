@@ -182,7 +182,7 @@ export function MetricCard({
   return (
     <div className={`surface-panel border-l-[3px] ${accents[stateIntent[state]]} p-4`}>
       <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{displayedValue}</div>
+      <div className="mt-2 break-words text-2xl font-semibold text-[var(--text-primary)]">{displayedValue}</div>
       {(displayedDetail || detail) && <div className="mt-1.5 text-[13px] text-[var(--text-muted)]">{displayedDetail || detail}</div>}
     </div>
   );

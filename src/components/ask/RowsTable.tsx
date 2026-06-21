@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { looksLikeUrn, shortUrn } from "@/lib/ask";
+import { pluralize } from "@/lib/format";
 
 type Row = Record<string, unknown>;
 
@@ -88,7 +89,7 @@ export default function RowsTable({ rows, execMs }: Props) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 text-xs text-slate-500">
-        <span>{rows.length.toLocaleString()} rows · {columns.length} cols</span>
+        <span>{rows.length.toLocaleString()} {pluralize(rows.length, "row")} · {columns.length} {pluralize(columns.length, "col")}</span>
         <div className="flex items-center gap-2">
           <button
             type="button"

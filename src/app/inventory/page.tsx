@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { useApiKey, useCurrentUser } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
+import { countLabel } from "@/lib/format";
 import AssetReportModal from "@/components/grc/AssetReportModal";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import {
@@ -994,7 +995,7 @@ export default function InventoryPage() {
                       <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Review posture</h2>
                       <p className="mt-1 text-[12px] text-[var(--text-muted)]">Accountability coverage after default baseline assets are separated from actionable review.</p>
                     </div>
-                    <Badge value={`${providerCount} sources`} />
+                    <Badge value={countLabel(providerCount, "source")} />
                   </div>
                   <div className="mt-4 grid gap-3">
                     <ProgressCard title="Scoped coverage" percent={hasAssetData ? summary?.scoped_coverage_pct ?? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : 0} detail={hasAssetData ? "assets in review" : "no data"} total={summary?.in_scope_assets ?? assets.length} />
