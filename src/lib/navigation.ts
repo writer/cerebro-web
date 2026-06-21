@@ -24,6 +24,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["findings", "risk", "sla", "triage", "owner", "framework", ...supportedGRCFrameworkNames],
   },
   {
+    label: "Trends",
+    href: "/trends",
+    description: "Finding flow over time: opened versus closed and the running open backlog.",
+    section: "Operator",
+    keywords: ["trends", "history", "over time", "burndown", "opened", "closed", "backlog", "chart"],
+  },
+  {
     label: "Ask graph",
     href: "/ask",
     description: "Ask graph questions. Review drafted Cypher, rows, summaries, and citations.",

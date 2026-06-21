@@ -531,6 +531,23 @@ export type GRCDashboard = {
   generated_at: string;
 };
 
+export type GRCTrendPoint = {
+  date: string;
+  opened: number;
+  opened_critical: number;
+  opened_high: number;
+  closed: number;
+  open_total: number;
+};
+
+export type GRCTrends = {
+  interval: string;
+  start: string;
+  end: string;
+  points: GRCTrendPoint[];
+  generated_at: string;
+};
+
 export type GRCAuditPacket = {
   id: string;
   finding: GRCFinding;
