@@ -96,6 +96,13 @@ const commandOnlyNavLinks: NavigationEntry[] = [
     section: "Operator",
     keywords: ["builder", "custom framework", "control pack", "yaml", "audit", ...supportedGRCFrameworkNames],
   },
+  {
+    label: "Source CDK onboarding",
+    href: "/connectors/source-cdk",
+    description: "Plan connector definition promotion with grammar proof, generated files, fixture gates, and next commands.",
+    section: "Advanced",
+    keywords: ["source cdk", "connector", "sourcegen", "promotion", "onboarding", "checklist"],
+  },
 ];
 
 export const utilityLinks: NavigationEntry[] = [

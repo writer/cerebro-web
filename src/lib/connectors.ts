@@ -536,11 +536,23 @@ export type ConnectorDefinitionResourceFamily = {
   id: string;
   label?: string;
   path: string;
-  method?: "GET" | string;
+  method?: "GET" | "POST" | string;
   list_key?: string;
+  record_selector?: string;
   id_field: string;
   name_field?: string;
   updated_at_field?: string;
+  event?: {
+    kind?: string;
+    schema_ref?: string;
+  };
+  projection?: {
+    template?: string;
+  };
+  coverage?: Array<{
+    type?: string;
+    support?: string;
+  }>;
   event_kind?: string;
   default_enabled?: boolean;
 };
@@ -632,6 +644,79 @@ export type ConnectorDefinitionPromotionResponse = {
   };
 };
 
+export type SourceCDKPlanStatus = "ready" | "warning" | "blocked";
+
+export type SourceCDKSupportCheck = {
+  id: string;
+  category: string;
+  status: "ready" | "missing" | string;
+  detail?: string;
+};
+
+export type SourceCDKSupportReport = {
+  definition_id?: string;
+  source_id?: string;
+  grammar_version?: string;
+  verdict?: "supported" | "extension_required" | "bespoke_required" | string;
+  supported_features?: string[];
+  missing_features?: string[];
+  checks?: SourceCDKSupportCheck[];
+  validation?: ConnectorDefinitionValidation;
+};
+
+export type SourceCDKPromotionPlanStep = {
+  id: string;
+  title: string;
+  category: string;
+  status: SourceCDKPlanStatus | string;
+  detail?: string;
+  action?: string;
+  blocking?: boolean;
+};
+
+export type SourceCDKPromotionPlanMetrics = {
+  resource_families?: number;
+  config_fields?: number;
+  credential_fields?: number;
+  scope_options?: number;
+  generated_files?: number;
+  ready_checks?: number;
+  warning_checks?: number;
+  blocked_checks?: number;
+};
+
+export type SourceCDKScaffoldPlan = {
+  source_id?: string;
+  source_type?: string;
+  auth_model?: string;
+  dry_run?: boolean;
+  files?: string[];
+  health_endpoint?: string;
+  source_health_receipt?: string;
+  pr_body?: string;
+  next_steps?: string[];
+};
+
+export type SourceCDKPromotionPlan = {
+  generated_at?: string;
+  definition?: ConnectorDefinition;
+  support?: SourceCDKSupportReport;
+  status?: SourceCDKPlanStatus | string;
+  summary?: string;
+  next_stage?: ConnectorDefinitionStage | string;
+  checklist?: SourceCDKPromotionPlanStep[];
+  blockers?: string[];
+  warnings?: string[];
+  metrics?: SourceCDKPromotionPlanMetrics;
+  scaffold?: SourceCDKScaffoldPlan;
+  commands?: string[];
+};
+
+export type ConnectorDefinitionPlanResponse = {
+  generated_at?: string;
+  plan?: SourceCDKPromotionPlan;
+};
+
 export const CONNECTOR_CREDENTIAL_TRANSPORT_ALGORITHM = "RSA-OAEP-256+A256GCM";
 export const CONNECTOR_CREDENTIAL_TRANSIT_JWK_ALGORITHM = "RSA-OAEP-256";
 
@@ -659,6 +744,35 @@ export const connectorDefinitionValidationLabel = (status?: string) => {
   if (status === "blocked") return "Blocked";
   return "Not validated";
 };
+
+export const sourceCDKPlanStatusLabel = (status?: string) => {
+  if (status === "ready") return "Ready";
+  if (status === "warning") return "Needs review";
+  if (status === "blocked") return "Blocked";
+  return "Not planned";
+};
+
+export const sourceCDKPlanStatusIntent = (status?: string) => {
+  if (status === "ready") return "success";
+  if (status === "warning") return "warning";
+  if (status === "blocked") return "danger";
+  return "neutral";
+};
+
+export const sourceCDKPlanPath = (definitionID?: string, tenantID?: string) => {
+  const query = new URLSearchParams();
+  if (definitionID) query.set("definition_id", definitionID);
+  if (tenantID) query.set("tenant_id", tenantID);
+  const queryString = query.toString();
+  return `/connectors/source-cdk${queryString ? `?${queryString}` : ""}`;
+};
+
+export const sourceCDKPlanCategoryCounts = (plan?: Pick<SourceCDKPromotionPlan, "checklist"> | null) =>
+  (plan?.checklist ?? []).reduce<Record<string, number>>((counts, step) => {
+    const category = step.category || "other";
+    counts[category] = (counts[category] ?? 0) + 1;
+    return counts;
+  }, {});
 
 export const connectorDefinitionBlockingChecks = (definition?: Pick<ConnectorDefinition, "validation"> | null) =>
   definition?.validation?.checks?.filter((check) => check.blocking || check.status === "blocked").length ?? 0;

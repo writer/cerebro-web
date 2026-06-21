@@ -15,6 +15,9 @@ import {
   connectorDefinitionNextStage,
   connectorDefinitionStatus,
   connectorDisplayMetadata,
+  sourceCDKPlanCategoryCounts,
+  sourceCDKPlanPath,
+  sourceCDKPlanStatusLabel,
   connectorIntegrationDepthLabel,
   connectorIsCatalogOnly,
   connectorMatchesSlug,
@@ -349,5 +352,17 @@ describe("dynamic connector definitions", () => {
     expect(connectorDefinitionStatus(definition)).toBe("blocked");
     expect(connectorDefinitionBlockingChecks(definition)).toBe(1);
     expect(connectorDefinitionNextStage(definition)).toBe("sandbox");
+  });
+
+  it("derives Source CDK plan labels, links, and category counts", () => {
+    expect(sourceCDKPlanStatusLabel("blocked")).toBe("Blocked");
+    expect(sourceCDKPlanPath("tenant-a-example", "tenant-a")).toBe("/connectors/source-cdk?definition_id=tenant-a-example&tenant_id=tenant-a");
+    expect(sourceCDKPlanCategoryCounts({
+      checklist: [
+        { id: "definition.id", title: "Definition ID", category: "definition", status: "ready" },
+        { id: "source_cdk.scaffold", title: "Scaffold", category: "source_cdk", status: "ready" },
+        { id: "source_cdk.fixture", title: "Fixture", category: "source_cdk", status: "ready" },
+      ],
+    })).toEqual({ definition: 1, source_cdk: 2 });
   });
 });
