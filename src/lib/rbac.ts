@@ -229,6 +229,7 @@ export const permissionForCerebroProxyRequest = (
   }
 
   if (normalizedPath === "grc/ask") return "agent:ask";
+  if (normalizedPath === "grc/findings/triage") return "findings:write";
   if (readOnlyPostPaths.has(normalizedPath)) return "cerebro:read";
   if (normalizedPath.startsWith("grc/control-packs/")) return "cerebro:read";
   if (matchesReportRunPath(normalizedPath)) return "reports:run";
