@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
+import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
 import { GRCFinding, riskSort } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { findingMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -61,6 +62,41 @@ export default function RiskInboxPage() {
     ])),
     [data?.findings],
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { mutate, saving, error: mutationError, setError: setMutationError } = useGRCMutation();
+  const selectedCount = useMemo(() => findings.reduce((count, f) => (selectedIds.has(f.id) ? count + 1 : count), 0), [findings, selectedIds]);
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const toggleSelectAll = useCallback((ids: string[], selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (selected ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  const applyDisposition = useCallback(async (disposition: FindingDisposition) => {
+    const batches = triageBatchesByTenant(findings, selectedIds, disposition);
+    if (batches.length === 0) {
+      setMutationError("Selected findings are missing tenant context.");
+      return;
+    }
+    try {
+      for (const batch of batches) {
+        await mutate("/grc/findings/triage", batch);
+      }
+      clearSelection();
+      await reload();
+    } catch {
+      // error surfaced via mutationError
+    }
+  }, [clearSelection, findings, mutate, reload, selectedIds, setMutationError]);
   const metrics = useMemo(() => {
     let critical = 0, high = 0, criticalRisk = 0, overdue = 0, scored = 0, riskTotal = 0, unassigned = 0;
     findings.forEach((f) => {
@@ -146,10 +182,40 @@ export default function RiskInboxPage() {
       {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Findings will appear when the API is reachable." />}
       {!loading && !error && (
         <div>
+          {selectedCount > 0 && (
+            <div className="sticky top-2 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5">
+              <span className="text-[13px] font-semibold text-indigo-900">{countLabel(selectedCount, "finding")} selected</span>
+              <span className="text-[12px] text-indigo-700">Set disposition:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {FINDING_DISPOSITION_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void applyDisposition(option.value)}
+                    className="rounded-md border border-indigo-300 bg-white px-2.5 py-1 text-[12px] font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={clearSelection} className="ml-auto text-[12px] font-medium text-slate-500 transition hover:text-slate-700">
+                Clear
+              </button>
+              {saving && <span className="text-[12px] text-indigo-700">Saving...</span>}
+              {mutationError && <span className="w-full text-[12px] text-red-600">{mutationError}</span>}
+            </div>
+          )}
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-semibold text-slate-900">{countLabel(findings.length, "finding")}</h2>
           </div>
-          <FindingTable findings={findings} />
+          <FindingTable
+            findings={findings}
+            selectable
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAll}
+          />
         </div>
       )}
     </div>

@@ -44,6 +44,7 @@ export type GRCFinding = {
   title: string;
   severity: string;
   status: string;
+  disposition?: string;
   status_reason?: string;
   status_updated_at?: string;
   summary?: string;

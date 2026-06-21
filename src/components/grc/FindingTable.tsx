@@ -46,10 +46,18 @@ export default function FindingTable({
   findings,
   empty = "No findings match this view.",
   initialRows = 100,
+  selectable = false,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
 }: {
   findings: GRCFinding[];
   empty?: string;
   initialRows?: number;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onToggleSelectAll?: (ids: string[], selected: boolean) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("risk_score");
@@ -78,6 +86,9 @@ export default function FindingTable({
     [sorted, initialRows, showAll],
   );
   const hiddenCount = sorted.length - visible.length;
+  const selected = selectedIds ?? new Set<string>();
+  const visibleIds = useMemo(() => visible.map((finding) => finding.id), [visible]);
+  const allVisibleSelected = selectable && visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
 
   if (findings.length === 0) {
     return (
@@ -100,9 +111,21 @@ export default function FindingTable({
       <table className="data-table">
         <thead>
           <tr>
+            {selectable && (
+              <th className={thClass}>
+                <input
+                  type="checkbox"
+                  aria-label="Select all findings"
+                  checked={allVisibleSelected}
+                  onChange={(e) => onToggleSelectAll?.(visibleIds, e.target.checked)}
+                  className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
+                />
+              </th>
+            )}
             <th className={thClass}>{sortable("title", "Finding")}</th>
             <th className={thClass}>{sortable("risk_score", "Risk")}</th>
             <th className={thClass}>{sortable("severity", "Severity")}</th>
+            {selectable && <th className={thClass}>Disposition</th>}
             <th className={thClass}>Entity</th>
             <th className={thClass}>Owner</th>
             <th className={thClass}>SLA</th>
@@ -113,7 +136,18 @@ export default function FindingTable({
         </thead>
         <tbody>
           {visible.map((finding) => (
-            <tr key={finding.id}>
+            <tr key={finding.id} className={selectable && selected.has(finding.id) ? "bg-indigo-50/50" : undefined}>
+              {selectable && (
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${finding.title}`}
+                    checked={selected.has(finding.id)}
+                    onChange={() => onToggleSelect?.(finding.id)}
+                    className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
+                  />
+                </td>
+              )}
               <td className="max-w-xs">
                 <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">
                   {finding.title}
@@ -131,6 +165,11 @@ export default function FindingTable({
                   <Badge value={finding.severity} tone="severity" />
                 </div>
               </td>
+              {selectable && (
+                <td>
+                  {finding.disposition ? <Badge value={finding.disposition} /> : <span className="text-[var(--text-muted)]">--</span>}
+                </td>
+              )}
               <td>
                 <span className="font-mono text-[12px] text-[var(--text-secondary)]">{shortEntity(finding.entity)}</span>
               </td>
