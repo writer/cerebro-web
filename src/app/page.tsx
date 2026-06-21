@@ -8,11 +8,11 @@ import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
-import { grcPath, useGRCQuery } from "@/lib/grc-client";
+import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
-const HOME_DASHBOARD_FINDING_LIMIT = 12;
+const HOME_DASHBOARD_FINDING_LIMIT = DASHBOARD_FINDING_LIMIT;
 
 const connectorLagLabel = (label: string, seconds?: number) => {
   const duration = displayDurationSeconds(seconds);

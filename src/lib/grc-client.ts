@@ -10,6 +10,8 @@ const GRC_QUERY_CACHE_TTL_MS = 30_000;
 const GRC_QUERY_CACHE_MAX_ENTRIES = 200;
 const DEFAULT_GRC_QUERY_TIMEOUT_MS = 30_000;
 
+export const DASHBOARD_FINDING_LIMIT = 12;
+
 const parsePositiveMs = (value: string | undefined, fallback: number) => {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
