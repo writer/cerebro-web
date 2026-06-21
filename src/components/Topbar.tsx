@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
+import { countLabel } from "@/lib/format";
+import type { GRCDashboard } from "@/lib/grc";
+import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
+import { buildNotifications, notificationSignatures, unreadNotifications, type NotificationIntent } from "@/lib/notifications";
 import { authorizationRoleLabelsForUser, effectiveAuthorizationPermissionsForUser } from "@/lib/rbac";
 
 type ConsoleConfig = {
@@ -16,6 +20,28 @@ type ConsoleConfig = {
 };
 
 const displayValues = (values: string[] | undefined) => values?.filter(Boolean).join(", ") || "—";
+
+const NOTIFICATIONS_READ_KEY = "cerebro.notifications.read";
+const NOTIFICATIONS_READ_EVENT = "cerebro-notifications-read";
+
+const subscribeReadSignatures = (callback: () => void) => {
+  window.addEventListener("storage", callback);
+  window.addEventListener(NOTIFICATIONS_READ_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(NOTIFICATIONS_READ_EVENT, callback);
+  };
+};
+
+const getReadSignaturesSnapshot = () => window.localStorage.getItem(NOTIFICATIONS_READ_KEY) ?? "[]";
+const getReadSignaturesServerSnapshot = () => "[]";
+
+const persistReadSignatures = (signatures: string[]) => {
+  window.localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(signatures));
+  window.dispatchEvent(new Event(NOTIFICATIONS_READ_EVENT));
+};
+
+const intentDotClass = (intent: NotificationIntent) => (intent === "danger" ? "bg-rose-500" : "bg-amber-500");
 
 export default function Topbar() {
   const { apiKey, setApiKey } = useApiKey();
@@ -60,6 +86,29 @@ export default function Topbar() {
     { label: "Asset report create", path: "grc/inventory/asset-reports" },
     { label: "Asset report triage", path: "grc/inventory/asset-reports/{id}/triage" },
   ];
+
+  const notificationsQuery = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: DASHBOARD_FINDING_LIMIT }));
+  const notifications = useMemo(
+    () => buildNotifications(notificationsQuery.data),
+    [notificationsQuery.data],
+  );
+  const readSignaturesRaw = useSyncExternalStore(
+    subscribeReadSignatures,
+    getReadSignaturesSnapshot,
+    getReadSignaturesServerSnapshot,
+  );
+  const readSignatures = useMemo<string[]>(() => {
+    try {
+      const parsed = JSON.parse(readSignaturesRaw);
+      return Array.isArray(parsed) ? (parsed as string[]) : [];
+    } catch {
+      return [];
+    }
+  }, [readSignaturesRaw]);
+  const unread = useMemo(() => unreadNotifications(notifications, readSignatures), [notifications, readSignatures]);
+  const unreadCount = unread.length;
+  const hasDangerUnread = unread.some((notification) => notification.intent === "danger");
+  const markAllNotificationsRead = () => persistReadSignatures(notificationSignatures(notifications));
 
   return (
     <header className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
@@ -113,13 +162,20 @@ export default function Topbar() {
             setShowIdentity(false);
             setShowConnection(false);
           }}
-          className={`rounded-md p-1.5 transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] ${showNotifications ? "bg-[var(--surface-hover)] text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
-          aria-label="Notifications"
+          className={`relative rounded-md p-1.5 transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] ${showNotifications ? "bg-[var(--surface-hover)] text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
+          aria-label={unreadCount > 0 ? `Notifications, ${countLabel(unreadCount, "unread alert")}` : "Notifications"}
           aria-expanded={showNotifications}
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022 23.848 23.848 0 0 0 5.455 1.31m5.714 0a3 3 0 1 1-5.714 0" />
           </svg>
+          {unreadCount > 0 && (
+            <span
+              className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none text-white ${hasDangerUnread ? "bg-rose-500" : "bg-amber-500"}`}
+            >
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -148,18 +204,63 @@ export default function Topbar() {
       </div>
 
       {showNotifications && (
-        <div className="surface-raised absolute right-24 top-16 z-50 mt-1 w-[320px] p-4 max-md:right-3">
-          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--border)] pb-3">
+        <div className="surface-raised absolute right-24 top-16 z-50 mt-1 w-[340px] p-0 max-md:right-3">
+          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--border)] p-4">
             <div>
               <div className="text-[14px] font-semibold text-[var(--text-primary)]">Notifications</div>
-              <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Nothing needs attention right now.</div>
+              <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">
+                {notifications.length === 0
+                  ? "Nothing needs attention right now."
+                  : unreadCount > 0
+                    ? countLabel(unreadCount, "unread alert")
+                    : "All caught up."}
+              </div>
             </div>
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${
+                notifications.length === 0
+                  ? "bg-emerald-500"
+                  : notifications.some((notification) => notification.intent === "danger")
+                    ? "bg-rose-500"
+                    : "bg-amber-500"
+              }`}
+            />
           </div>
-          <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">
-            No notifications
-          </div>
-          <div className="flex justify-end border-t border-[color:var(--border)] pt-3">
+          {notifications.length === 0 ? (
+            <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">No notifications</div>
+          ) : (
+            <div className="max-h-[320px] divide-y divide-[color:var(--border)] overflow-y-auto">
+              {notifications.map((notification) => {
+                const isUnread = !readSignatures.includes(notification.signature);
+                return (
+                  <Link
+                    key={notification.id}
+                    href={notification.href}
+                    onClick={() => setShowNotifications(false)}
+                    className="flex items-start gap-3 px-4 py-3 transition hover:bg-[var(--surface-hover)]"
+                  >
+                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${intentDotClass(notification.intent)}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-[13px] font-medium text-[var(--text-primary)]">{notification.title}</span>
+                        {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--primary)]" aria-label="Unread" />}
+                      </div>
+                      <div className="mt-0.5 text-[12px] leading-4 text-[var(--text-muted)]">{notification.detail}</div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex items-center justify-between border-t border-[color:var(--border)] p-3">
+            <button
+              type="button"
+              onClick={markAllNotificationsRead}
+              disabled={unreadCount === 0}
+              className="text-[12px] font-medium text-[var(--text-muted)] transition hover:text-[var(--text-primary)] disabled:opacity-40"
+            >
+              Mark all read
+            </button>
             <button type="button" onClick={() => setShowNotifications(false)} className="text-[12px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               Close
             </button>
