@@ -150,6 +150,26 @@ export type ConnectorActivity = {
   failure_class?: string;
 };
 
+export type ConnectorDiagnosticTimeline = {
+  stage: "setup" | "preflight" | "source_sync" | "contract_probe" | "graph_projection" | "finding_evaluation" | string;
+  stage_order?: number;
+  status: "success" | "warning" | "failed" | "running" | "pending" | string;
+  title: string;
+  description?: string;
+  occurred_at?: string;
+  runtime_id?: string;
+  correlation_id?: string;
+  next_action?: string;
+  failure_class?: string;
+  records_accepted?: number;
+  records_rejected?: number;
+  entities_projected?: number;
+  links_projected?: number;
+  findings_evaluated?: number;
+  findings_opened?: number;
+  duration_seconds?: number;
+};
+
 export type ConnectorDetailResponse = {
   generated_at?: string;
   tenant_id?: string;
@@ -157,6 +177,7 @@ export type ConnectorDetailResponse = {
   summary?: ConnectorOperationsSummary;
   connections?: ConnectorConnectionSummary[];
   activity?: ConnectorActivity[];
+  diagnostic_timeline?: ConnectorDiagnosticTimeline[];
 };
 
 export type ConnectorActivityResponse = {
@@ -164,6 +185,7 @@ export type ConnectorActivityResponse = {
   tenant_id?: string;
   source_id?: string;
   activity?: ConnectorActivity[];
+  diagnostic_timeline?: ConnectorDiagnosticTimeline[];
 };
 
 export type ConnectorCredentialKey = {
@@ -515,6 +537,7 @@ export type ConnectorPreflightResponse = {
   summary: string;
   next_action: string;
   checks: ConnectorPreflightCheck[];
+  diagnostic_timeline?: ConnectorDiagnosticTimeline[];
   scope_preview?: ConnectorScopePreview;
   credential_boundary?: ConnectorCredentialBoundary;
 };
@@ -1503,6 +1526,42 @@ export const connectorRuntimeSurfaceLabel = (
   if (connector.runtime_executable) return "Sourcegen ready";
   if (connector.catalog_status) return connectorCatalogStatusLabel(connector.catalog_status);
   return "Runtime unknown";
+};
+
+export const connectorDiagnosticStageLabel = (stage?: string) => {
+  switch (stage) {
+    case "setup":
+      return "Setup";
+    case "preflight":
+      return "Preflight";
+    case "source_sync":
+      return "Source sync";
+    case "contract_probe":
+      return "Contract probe";
+    case "graph_projection":
+      return "Graph projection";
+    case "finding_evaluation":
+      return "Finding evaluation";
+    default:
+      return stage?.trim() || "Diagnostic stage";
+  }
+};
+
+export const connectorDiagnosticStatusLabel = (status?: string) => {
+  switch (status) {
+    case "success":
+      return "Healthy";
+    case "warning":
+      return "Needs attention";
+    case "failed":
+      return "Failed";
+    case "running":
+      return "Running";
+    case "pending":
+      return "Pending";
+    default:
+      return status?.trim() || "Unknown";
+  }
 };
 
 export const connectorSearchText = (connector: ConnectorCatalogEntry) =>

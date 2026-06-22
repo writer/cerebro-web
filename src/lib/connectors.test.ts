@@ -14,6 +14,8 @@ import {
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStatus,
+  connectorDiagnosticStageLabel,
+  connectorDiagnosticStatusLabel,
   connectorDisplayMetadata,
   sourceCDKPlanCategoryCounts,
   sourceCDKPlanPath,
@@ -35,6 +37,27 @@ import {
   normalizeScopePolicy,
   scopePolicyExclusionCount,
 } from "./connectors";
+
+describe("connector diagnostic timeline labels", () => {
+  it("labels provider-neutral diagnostic stages", () => {
+    expect(connectorDiagnosticStageLabel("setup")).toBe("Setup");
+    expect(connectorDiagnosticStageLabel("preflight")).toBe("Preflight");
+    expect(connectorDiagnosticStageLabel("source_sync")).toBe("Source sync");
+    expect(connectorDiagnosticStageLabel("contract_probe")).toBe("Contract probe");
+    expect(connectorDiagnosticStageLabel("graph_projection")).toBe("Graph projection");
+    expect(connectorDiagnosticStageLabel("finding_evaluation")).toBe("Finding evaluation");
+    expect(connectorDiagnosticStageLabel("custom_stage")).toBe("custom_stage");
+  });
+
+  it("labels diagnostic status values without provider assumptions", () => {
+    expect(connectorDiagnosticStatusLabel("success")).toBe("Healthy");
+    expect(connectorDiagnosticStatusLabel("warning")).toBe("Needs attention");
+    expect(connectorDiagnosticStatusLabel("failed")).toBe("Failed");
+    expect(connectorDiagnosticStatusLabel("running")).toBe("Running");
+    expect(connectorDiagnosticStatusLabel("pending")).toBe("Pending");
+    expect(connectorDiagnosticStatusLabel()).toBe("Unknown");
+  });
+});
 
 describe("connector credential store normalization", () => {
   it("derives a ready Cerebro vault from legacy catalog metadata", () => {
