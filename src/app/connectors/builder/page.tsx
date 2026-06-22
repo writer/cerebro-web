@@ -11,7 +11,6 @@ import {
   CircleAlert,
   DatabaseZap,
   FileJson2,
-  GitPullRequestArrow,
   KeyRound,
   Lock,
   Plus,
@@ -480,8 +479,8 @@ function ConnectorBuilderContent() {
                   {working === "promote" ? "Promoting..." : nextStage ? `Promote to ${stageLabel(nextStage)}` : "No promotion available"}
                 </button>
                 <Link href={sourceCDKPlanPath(draft.id, scopedTenantID)} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px]">
-                  <GitPullRequestArrow className="h-4 w-4" />
-                  Plan Source CDK
+                  <ShieldCheck className="h-4 w-4" />
+                  Check readiness
                 </Link>
               </div>
             </div>
