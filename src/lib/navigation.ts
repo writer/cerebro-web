@@ -66,6 +66,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["graph", "entity", "impact", "affected entities"],
   },
   {
+    label: "Explore",
+    href: "/explore",
+    description: "Free-form graph exploration: expand any entity's neighbors in place.",
+    section: "Operator",
+    keywords: ["graph", "explore", "exploration", "expand", "neighbors", "pivot", "free-form", "entity"],
+  },
+  {
     label: "Reports",
     href: "/reports",
     description: "Build audit packets with evidence, controls, and impact proof.",

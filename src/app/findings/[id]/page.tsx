@@ -627,7 +627,7 @@ export default function FindingDetailPage() {
 
           {tab === "graph" && (
             <div className="space-y-6">
-              <Panel title="Finding Impact Graph">
+              <Panel title="Finding Impact Graph" action={finding?.entity ? <Link href={`/explore?root_urn=${encodeURIComponent(finding.entity)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Explore graph</Link> : undefined}>
                 <GraphViewer graph={data.graph} />
               </Panel>
               {impactData?.graph && impactData.graph.root && (

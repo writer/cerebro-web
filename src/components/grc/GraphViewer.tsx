@@ -96,7 +96,7 @@ const fallbackNode = (urn: string): GRCGraphNode => ({
   attributes: {},
 });
 
-const normalizeGraph = (graph?: GRCGraph) => {
+const normalizeGraph = (graph?: GRCGraph, nodeLimit: number = NODE_LIMIT) => {
   const nodesById = new Map<string, GraphNodeModel>();
   const addNode = (node: GRCGraphNode | undefined, isRoot = false) => {
     if (!node?.urn) return;
@@ -127,7 +127,7 @@ const normalizeGraph = (graph?: GRCGraph) => {
     if (right.isRoot) return 1;
     return (right.risk ?? 0) - (left.risk ?? 0) || left.label.localeCompare(right.label);
   });
-  const nodes = allNodes.slice(0, NODE_LIMIT);
+  const nodes = allNodes.slice(0, nodeLimit);
   const visibleIds = new Set(nodes.map((node) => node.urn));
 
   const edges = (graph?.relations ?? []).flatMap((relation, index): GraphEdgeModel[] => {
@@ -329,7 +329,23 @@ function ActionLink({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
-export default function GraphViewer({ graph }: { graph?: GRCGraph }) {
+type GraphViewerProps = {
+  graph?: GRCGraph;
+  onExpandNode?: (urn: string) => void;
+  onRemoveNode?: (urn: string) => void;
+  expandedURNs?: ReadonlySet<string>;
+  expandingURN?: string | null;
+  nodeLimit?: number;
+};
+
+export default function GraphViewer({
+  graph,
+  onExpandNode,
+  onRemoveNode,
+  expandedURNs,
+  expandingURN,
+  nodeLimit,
+}: GraphViewerProps) {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
@@ -339,7 +355,7 @@ export default function GraphViewer({ graph }: { graph?: GRCGraph }) {
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
 
-  const model = useMemo(() => normalizeGraph(graph), [graph]);
+  const model = useMemo(() => normalizeGraph(graph, nodeLimit ?? NODE_LIMIT), [graph, nodeLimit]);
   const normalizedQuery = query.trim().toLowerCase();
 
   const view = useMemo(() => {
@@ -414,6 +430,8 @@ export default function GraphViewer({ graph }: { graph?: GRCGraph }) {
     ? model.edges.filter((edge) => edge.from_urn === selectedNode.urn || edge.to_urn === selectedNode.urn).slice(0, 8)
     : [];
   const selectedAttributes = Object.entries(selectedNode?.attributes ?? {}).slice(0, 8);
+  const selectedExpanded = selectedNode ? Boolean(expandedURNs?.has(selectedNode.urn)) : false;
+  const selectedExpanding = selectedNode ? expandingURN === selectedNode.urn : false;
   const askHref = selectedNode
     ? `/ask?${new URLSearchParams({
       q: `Explain affected entities and compliance impact for ${selectedNode.urn}.`,
@@ -585,7 +603,31 @@ export default function GraphViewer({ graph }: { graph?: GRCGraph }) {
                 <ActionLink href={`/impact?root_urn=${encodeURIComponent(selectedNode.urn)}`}>Impact</ActionLink>
                 <ActionLink href={`/evidence?graph_root_urn=${encodeURIComponent(selectedNode.urn)}`}>Evidence</ActionLink>
                 <ActionLink href={askHref}>Ask</ActionLink>
+                {!onExpandNode && (
+                  <ActionLink href={`/explore?root_urn=${encodeURIComponent(selectedNode.urn)}`}>Explore</ActionLink>
+                )}
               </div>
+              {onExpandNode && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onExpandNode(selectedNode.urn)}
+                    disabled={selectedExpanding || selectedExpanded}
+                    className="rounded-md bg-[var(--primary)] px-2.5 py-1.5 text-[12px] font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+                  >
+                    {selectedExpanding ? "Expanding…" : selectedExpanded ? "Expanded" : "Expand neighbors"}
+                  </button>
+                  {onRemoveNode && selectedNode.urn !== model.root?.urn && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveNode(selectedNode.urn)}
+                      className="secondary-button px-2.5 py-1.5 text-[12px]"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
               <div>
                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Visible relationships</div>
                 <div className="space-y-2">
