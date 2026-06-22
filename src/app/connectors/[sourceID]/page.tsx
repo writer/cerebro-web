@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import ConnectorActivityTable from "@/components/connectors/ConnectorActivityTable";
+import ConnectorDiagnosticTimelinePanel from "@/components/connectors/ConnectorDiagnosticTimeline";
 import ConnectorSetupForm from "@/components/connectors/ConnectorSetupForm";
 import { useApiKey } from "@/components/providers";
 import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, Panel } from "@/components/grc/Primitives";
@@ -530,6 +531,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const summary: ConnectorOperationsSummary = detailQuery.data?.summary ?? { status: "not_configured" };
   const connections = detailQuery.data?.connections ?? [];
   const activity = detailQuery.data?.activity ?? [];
+  const diagnosticTimeline = detailQuery.data?.diagnostic_timeline ?? [];
   const loading = detailQuery.loading && !detailQuery.data;
 
   if (loading) return <LoadingBlock label="Loading connector..." />;
@@ -793,9 +795,14 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
       )}
 
       {activeTab === "activity" && (
-        <Panel title="Activity" action={<span className="text-[12px] text-[var(--text-muted)]">{activity.length} events</span>}>
-          <ConnectorActivityTable activity={activity} />
-        </Panel>
+        <div className="space-y-4">
+          <Panel title="Diagnostic timeline" action={<span className="text-[12px] text-[var(--text-muted)]">{diagnosticTimeline.length} stages</span>}>
+            <ConnectorDiagnosticTimelinePanel timeline={diagnosticTimeline} />
+          </Panel>
+          <Panel title="Activity" action={<span className="text-[12px] text-[var(--text-muted)]">{activity.length} events</span>}>
+            <ConnectorActivityTable activity={activity} />
+          </Panel>
+        </div>
       )}
 
       {activeTab === "scope" && <ScopeView connector={connector} connections={connections} />}
