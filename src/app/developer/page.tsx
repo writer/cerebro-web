@@ -14,6 +14,7 @@ const developerLinks = [
   { label: "Agent Platform", href: "/developer/agent-platform", description: "Runtime, eval, capability, execution, replay, connector, and knowledge provenance principles." },
   { label: "Identity Contract", href: "/developer/identity", description: "Current user source, avatar initials, actor value, and write-stamp fields." },
   { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and agent entry points for security producers." },
+  { label: "Risk Scoring", href: "/developer/risk-scoring", description: "Tune tenant risk thresholds, signal cutoffs, relation weights, and factor weights." },
   { label: "Raindrop Ask Evals", href: "/developer/evals", description: "Local Ask quality evals, rubric outcomes, and Workshop trace links." },
 ];
 

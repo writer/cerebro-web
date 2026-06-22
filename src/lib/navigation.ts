@@ -104,6 +104,13 @@ const commandOnlyNavLinks: NavigationEntry[] = [
     keywords: ["audit", "wide events", "otel", "trace", "cloudwatch", "runtime", "logs"],
   },
   {
+    label: "Risk scoring",
+    href: "/developer/risk-scoring",
+    description: "Tune tenant risk thresholds, signal cutoffs, relation weights, and factor weights.",
+    section: "Advanced",
+    keywords: ["risk", "scoring", "threshold", "cvss", "epss", "weights", "configuration"],
+  },
+  {
     label: "Control Builder",
     href: "/controls/builder",
     description: "Build custom control packs, preview coverage, and export YAML.",
