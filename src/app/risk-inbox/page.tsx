@@ -26,6 +26,13 @@ export default function RiskInboxPage() {
   const [severity, setSeverity] = useQueryParamState("severity");
   const [status, setStatus] = useQueryParamState("status", "open");
   const [framework, setFramework] = useQueryParamState("framework");
+  const [openedAfter, setOpenedAfter] = useQueryParamState("opened_after");
+  const [openedBefore, setOpenedBefore] = useQueryParamState("opened_before");
+  const [closedAfter, setClosedAfter] = useQueryParamState("closed_after");
+  const [closedBefore, setClosedBefore] = useQueryParamState("closed_before");
+  const [ageMinDays, setAgeMinDays] = useQueryParamState("age_min_days");
+  const [ageMaxDays, setAgeMaxDays] = useQueryParamState("age_max_days");
+  const [slaStatus, setSLAStatus] = useQueryParamState("sla_status");
   const [query, setQuery] = useQueryParamState("q");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
@@ -38,9 +45,17 @@ export default function RiskInboxPage() {
       source_id: debouncedSourceID,
       severity,
       status,
+      framework,
+      opened_after: openedAfter,
+      opened_before: openedBefore,
+      closed_after: closedAfter,
+      closed_before: closedBefore,
+      age_min_days: ageMinDays,
+      age_max_days: ageMaxDays,
+      sla_status: slaStatus,
       limit: 200,
     }),
-    [debouncedRuntimeID, debouncedSourceID, debouncedTenantID, severity, status],
+    [ageMaxDays, ageMinDays, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, framework, openedAfter, openedBefore, severity, slaStatus, status],
   );
   const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
   const { apiKey } = useApiKey();
@@ -53,10 +68,18 @@ export default function RiskInboxPage() {
       source_id: debouncedSourceID,
       severity,
       status,
+      framework,
+      opened_after: openedAfter,
+      opened_before: openedBefore,
+      closed_after: closedAfter,
+      closed_before: closedBefore,
+      age_min_days: ageMinDays,
+      age_max_days: ageMaxDays,
+      sla_status: slaStatus,
     });
     const result = await downloadGRCExport(exportPath, apiKey, grcExportFilename("findings"));
     setExportState(result.ok ? "idle" : "failed");
-  }, [apiKey, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, severity, status]);
+  }, [ageMaxDays, ageMinDays, apiKey, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, framework, openedAfter, openedBefore, severity, slaStatus, status]);
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
   const findings = useMemo(() => {
@@ -132,6 +155,13 @@ export default function RiskInboxPage() {
     { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Severity", value: severity, onClear: () => setSeverity("") },
     { label: "Status", value: status === "open" ? "" : status, onClear: () => setStatus("open") },
+    { label: "Opened after", value: openedAfter, onClear: () => setOpenedAfter("") },
+    { label: "Opened before", value: openedBefore, onClear: () => setOpenedBefore("") },
+    { label: "Closed after", value: closedAfter, onClear: () => setClosedAfter("") },
+    { label: "Closed before", value: closedBefore, onClear: () => setClosedBefore("") },
+    { label: "Age min", value: ageMinDays, onClear: () => setAgeMinDays("") },
+    { label: "Age max", value: ageMaxDays, onClear: () => setAgeMaxDays("") },
+    { label: "SLA", value: slaStatus, onClear: () => setSLAStatus("") },
   ];
   const clearFilters = () => {
     setQuery("");
@@ -141,6 +171,13 @@ export default function RiskInboxPage() {
     setFramework("");
     setSeverity("");
     setStatus("open");
+    setOpenedAfter("");
+    setOpenedBefore("");
+    setClosedAfter("");
+    setClosedBefore("");
+    setAgeMinDays("");
+    setAgeMaxDays("");
+    setSLAStatus("");
   };
 
   return (
@@ -186,6 +223,13 @@ export default function RiskInboxPage() {
           </label>
           <label className={labelClass}>Severity<select value={severity} onChange={(e) => setSeverity(e.target.value)} className={selectClass}><option value="">All</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select></label>
           <label className={labelClass}>Status<select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}><option value="open">Open</option><option value="resolved">Resolved</option><option value="all">All</option></select></label>
+          <label className={labelClass}>SLA<select value={slaStatus} onChange={(e) => setSLAStatus(e.target.value)} className={selectClass}><option value="">All</option><option value="overdue">Overdue</option><option value="due_soon">Due soon</option><option value="on_track">On track</option><option value="no_due_date">No due date</option><option value="closed">Closed</option></select></label>
+          <label className={labelClass}>Opened after<input type="date" value={openedAfter} onChange={(e) => setOpenedAfter(e.target.value)} className={inputClass} /></label>
+          <label className={labelClass}>Opened before<input type="date" value={openedBefore} onChange={(e) => setOpenedBefore(e.target.value)} className={inputClass} /></label>
+          <label className={labelClass}>Closed after<input type="date" value={closedAfter} onChange={(e) => setClosedAfter(e.target.value)} className={inputClass} /></label>
+          <label className={labelClass}>Closed before<input type="date" value={closedBefore} onChange={(e) => setClosedBefore(e.target.value)} className={inputClass} /></label>
+          <label className={labelClass}>Age min days<input value={ageMinDays} onChange={(e) => setAgeMinDays(e.target.value)} placeholder="0" inputMode="numeric" className={inputClass} /></label>
+          <label className={labelClass}>Age max days<input value={ageMaxDays} onChange={(e) => setAgeMaxDays(e.target.value)} placeholder="30" inputMode="numeric" className={inputClass} /></label>
         </div>
         <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </div>
