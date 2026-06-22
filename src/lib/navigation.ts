@@ -83,6 +83,13 @@ export const operatorNavLinks: NavigationEntry[] = [
 
 const commandOnlyNavLinks: NavigationEntry[] = [
   {
+    label: "Report schedules",
+    href: "/reports/schedules",
+    description: "Schedule reports on a fixed interval and review recent scheduled runs.",
+    section: "Operator",
+    keywords: ["schedule", "scheduled", "recurring", "interval", "report", "delivery", "runs", "cron"],
+  },
+  {
     label: "Audit Log",
     href: "/developer/audit-log",
     description: "Wide-event timeline, trace drilldown, source runtime diagnostics, and CloudWatch query detail.",

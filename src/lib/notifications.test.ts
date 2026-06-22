@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { buildNotifications, notificationSignatures, unreadNotifications } from "@/lib/notifications";
+import { buildNotifications, notificationSignatures, reportRunNotifications, unreadNotifications } from "@/lib/notifications";
 import type { GRCDashboard, GRCFinding, GRCSummary } from "@/lib/grc";
+import type { ReportDefinition, ReportRun } from "@/lib/report-schedules";
 
 const makeSummary = (overrides: Partial<GRCSummary> = {}): GRCSummary => ({
   open_findings: 0,
@@ -106,6 +107,50 @@ describe("buildNotifications", () => {
     const after = buildNotifications(makeDashboard({ findings: [makeFinding({ id: "s", severity: "CRITICAL", sla_status: "overdue" })] }));
     expect(before[0].id).toBe(after[0].id);
     expect(before[0].signature).not.toBe(after[0].signature);
+  });
+});
+
+describe("reportRunNotifications", () => {
+  const definitions: ReportDefinition[] = [{ id: "finding-summary", name: "Finding Summary" }];
+  const makeRun = (overrides: Partial<ReportRun> = {}): ReportRun => ({
+    id: "run-1",
+    report_id: "finding-summary",
+    status: "completed",
+    generated_at: "2026-06-22T16:00:00Z",
+    ...overrides,
+  });
+
+  it("returns nothing without runs", () => {
+    expect(reportRunNotifications(undefined)).toEqual([]);
+    expect(reportRunNotifications([])).toEqual([]);
+  });
+
+  it("surfaces a completed run as an info notification linking to schedules", () => {
+    const [item] = reportRunNotifications([makeRun()], definitions);
+    expect(item.id).toBe("report-run:run-1");
+    expect(item.intent).toBe("info");
+    expect(item.title).toBe("Report ready: Finding Summary");
+    expect(item.href).toBe("/reports/schedules");
+  });
+
+  it("marks a failed run as a warning", () => {
+    const [item] = reportRunNotifications([makeRun({ id: "run-2", status: "failed" })], definitions);
+    expect(item.intent).toBe("warning");
+    expect(item.title).toBe("Report failed: Finding Summary");
+  });
+
+  it("falls back to the report id when no definitions are provided", () => {
+    const [item] = reportRunNotifications([makeRun()]);
+    expect(item.title).toBe("Report ready: finding-summary");
+  });
+
+  it("changes the signature when run status changes and caps the list", () => {
+    const completed = reportRunNotifications([makeRun()], definitions)[0];
+    const failed = reportRunNotifications([makeRun({ status: "failed" })], definitions)[0];
+    expect(completed.signature).not.toBe(failed.signature);
+
+    const manyRuns = Array.from({ length: 9 }, (_, index) => makeRun({ id: `run-${index}` }));
+    expect(reportRunNotifications(manyRuns, definitions)).toHaveLength(5);
   });
 });
 

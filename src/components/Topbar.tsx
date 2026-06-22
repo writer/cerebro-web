@@ -10,8 +10,9 @@ import type { GRCDashboard } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
-import { buildNotifications, notificationSignatures, unreadNotifications, type NotificationIntent } from "@/lib/notifications";
+import { buildNotifications, notificationSignatures, reportRunNotifications, unreadNotifications, type NotificationIntent } from "@/lib/notifications";
 import { authorizationRoleLabelsForUser, effectiveAuthorizationPermissionsForUser } from "@/lib/rbac";
+import type { ReportRunListResponse } from "@/lib/report-schedules";
 
 type ConsoleConfig = {
   apiBase: string;
@@ -41,7 +42,8 @@ const persistReadSignatures = (signatures: string[]) => {
   window.dispatchEvent(new Event(NOTIFICATIONS_READ_EVENT));
 };
 
-const intentDotClass = (intent: NotificationIntent) => (intent === "danger" ? "bg-rose-500" : "bg-amber-500");
+const intentDotClass = (intent: NotificationIntent) =>
+  intent === "danger" ? "bg-rose-500" : intent === "info" ? "bg-sky-500" : "bg-amber-500";
 
 export default function Topbar() {
   const { apiKey, setApiKey } = useApiKey();
@@ -88,9 +90,10 @@ export default function Topbar() {
   ];
 
   const notificationsQuery = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: DASHBOARD_FINDING_LIMIT }));
+  const reportRunsQuery = useGRCQuery<ReportRunListResponse>(grcPath("/report-runs", { limit: 5 }));
   const notifications = useMemo(
-    () => buildNotifications(notificationsQuery.data),
-    [notificationsQuery.data],
+    () => [...buildNotifications(notificationsQuery.data), ...reportRunNotifications(reportRunsQuery.data?.runs)],
+    [notificationsQuery.data, reportRunsQuery.data?.runs],
   );
   const readSignaturesRaw = useSyncExternalStore(
     subscribeReadSignatures,
