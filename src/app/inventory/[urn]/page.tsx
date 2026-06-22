@@ -152,7 +152,7 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
           </div>
         </Panel>
 
-        <Panel title="Graph context">
+        <Panel title="Graph context" action={<Link href={`/explore?root_urn=${encodeURIComponent(data.asset.urn)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Explore graph</Link>}>
           <GraphViewer graph={data.graph} />
         </Panel>
       </div>
