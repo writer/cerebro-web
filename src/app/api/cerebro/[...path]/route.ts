@@ -373,6 +373,55 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   });
 }
 
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const [params, currentUser] = await Promise.all([
+    context.params,
+    resolveCurrentUserFromHeadersWithFallback(request.headers),
+  ]);
+  const path = (params.path ?? []).join("/");
+  const normalizedPath = normalizeProxyPath(path);
+  const requiredPermission = permissionForCerebroProxyRequest("DELETE", normalizedPath);
+  const decision = authorizeCurrentUser(currentUser, requiredPermission);
+  const span = startWebSpan(
+    "cerebro.proxy.request",
+    proxySpanAttributes("DELETE", path, request),
+    request.headers.get("traceparent"),
+  );
+  span.annotate(authorizationSpanAttributes(decision, currentUser));
+  if (!decision.allowed) {
+    console.warn("cerebro proxy delete denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
+    return tracedAuthorizationError(decision, span);
+  }
+  const url = new URL(request.url);
+  const target = buildCerebroUrl(path, url.search);
+  const headers = {
+    ...authHeadersFor(request),
+    accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+  };
+
+  let response: Response;
+  try {
+    response = await fetchCerebro(target, {
+      method: "DELETE",
+      headers: headersWithTrace(headers, span),
+      cache: "no-store",
+    });
+  } catch (error) {
+    return tracedProxyError(error, span);
+  }
+
+  const text = await response.text();
+  const nullBodyStatus = response.status === 204 || response.status === 205 || response.status === 304;
+  span.end(response.status >= 500 ? "failed" : "completed", {
+    "http.response.status_code": response.status,
+    ...responseSpanAttributes(response.status, responseHeadersFor(response), text),
+  });
+  return new NextResponse(nullBodyStatus ? null : text, {
+    status: response.status,
+    headers: responseHeadersWithTrace(responseHeadersFor(response), span),
+  });
+}
+
 function normalizeAskRequestBody(body: string): string {
   try {
     const parsed = JSON.parse(body) as Record<string, unknown>;

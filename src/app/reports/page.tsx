@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Download, FileDown, RefreshCw, Search } from "lucide-react";
+import { CalendarClock, Copy, Download, FileDown, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
@@ -213,6 +213,10 @@ export default function ReportsPage() {
               onCopy={() => void copyReport()}
               onDownload={downloadReport}
             />
+            <Link href="/reports/schedules" className={buttonClass}>
+              <CalendarClock className="h-3.5 w-3.5" />
+              Schedules
+            </Link>
             <button type="button" onClick={reload} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
               <RefreshCw className="h-3.5 w-3.5" />
               Refresh

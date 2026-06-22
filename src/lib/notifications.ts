@@ -1,7 +1,8 @@
 import { pluralize } from "@/lib/format";
-import { riskSort, type GRCDashboard, type GRCFinding, type GRCSummary } from "@/lib/grc";
+import { displayDate, riskSort, type GRCDashboard, type GRCFinding, type GRCSummary } from "@/lib/grc";
+import { reportNameForID, type ReportDefinition, type ReportRun } from "@/lib/report-schedules";
 
-export type NotificationIntent = "danger" | "warning";
+export type NotificationIntent = "danger" | "warning" | "info";
 
 export type AppNotification = {
   id: string;
@@ -94,6 +95,31 @@ export function buildNotifications(dashboard: GRCDashboard | null | undefined): 
   }
 
   return [...findingItems, ...summaryItems];
+}
+
+const MAX_REPORT_RUN_NOTIFICATIONS = 5;
+
+export function reportRunNotifications(
+  runs: ReportRun[] | null | undefined,
+  definitions?: ReportDefinition[],
+): AppNotification[] {
+  if (!runs || runs.length === 0) {
+    return [];
+  }
+  return runs.slice(0, MAX_REPORT_RUN_NOTIFICATIONS).map((run) => {
+    const name = reportNameForID(definitions, run.report_id);
+    const status = (run.status ?? "").toLowerCase();
+    const failed = status === "failed" || status === "error";
+    const when = run.generated_at ? displayDate(run.generated_at) : "";
+    return {
+      id: `report-run:${run.id}`,
+      signature: `report-run:${run.id}:${status}`,
+      intent: failed ? "warning" : "info",
+      title: failed ? `Report failed: ${name}` : `Report ready: ${name}`,
+      detail: when ? `Scheduled report · ${when}` : "Scheduled report run",
+      href: "/reports/schedules",
+    };
+  });
 }
 
 export function unreadNotifications(
