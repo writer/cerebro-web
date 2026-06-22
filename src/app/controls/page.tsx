@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
+import { useApiKey } from "@/components/providers";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { controlMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -106,6 +107,17 @@ export default function ControlsPage() {
   const { data, error, loading, reload } = useGRCQuery<GRCControlEvidencePacketResponse>(
     grcPath("/grc/control-packets", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID, limit: 200 }),
   );
+  const { apiKey } = useApiKey();
+  const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
+  const exportControls = useCallback(async () => {
+    setExportState("working");
+    const result = await downloadGRCExport(
+      grcPath("/grc/controls/export", { tenant_id: debouncedTenantID }),
+      apiKey,
+      grcExportFilename("controls"),
+    );
+    setExportState(result.ok ? "idle" : "failed");
+  }, [apiKey, debouncedTenantID]);
   const isInitialLoading = loading && !data;
   const isRefreshing = loading && Boolean(data);
   const runtimeState = runtimeStateForError(error);
@@ -195,6 +207,9 @@ export default function ControlsPage() {
             <Link href="/controls/builder" className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900">
               Build Pack
             </Link>
+            <button type="button" onClick={() => void exportControls()} disabled={exportState === "working"} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+              {exportState === "working" ? "Exporting..." : exportState === "failed" ? "Export failed" : "Export CSV"}
+            </button>
             <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
               Refresh
             </button>

@@ -7,7 +7,8 @@ import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, R
 import { countLabel } from "@/lib/format";
 import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
 import { GRCFinding, riskSort } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { useApiKey } from "@/components/providers";
 import { findingMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -42,6 +43,20 @@ export default function RiskInboxPage() {
     [debouncedRuntimeID, debouncedSourceID, debouncedTenantID, severity, status],
   );
   const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
+  const { apiKey } = useApiKey();
+  const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
+  const exportFindings = useCallback(async () => {
+    setExportState("working");
+    const exportPath = grcPath("/grc/findings/export", {
+      tenant_id: debouncedTenantID,
+      runtime_id: debouncedRuntimeID,
+      source_id: debouncedSourceID,
+      severity,
+      status,
+    });
+    const result = await downloadGRCExport(exportPath, apiKey, grcExportFilename("findings"));
+    setExportState(result.ok ? "idle" : "failed");
+  }, [apiKey, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, severity, status]);
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
   const findings = useMemo(() => {
@@ -135,9 +150,14 @@ export default function RiskInboxPage() {
         title="Risk Inbox"
         description="Triage findings by risk, severity, owner, entity, and SLA."
         action={
-          <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => void exportFindings()} disabled={exportState === "working"} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+              {exportState === "working" ? "Exporting..." : exportState === "failed" ? "Export failed" : "Export CSV"}
+            </button>
+            <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
+              Refresh
+            </button>
+          </div>
         }
       />
 

@@ -161,6 +161,34 @@ export const grcPath = (path: string, params: Record<string, string | number | u
   return queryString ? `${path}?${queryString}` : path;
 };
 
+export const grcExportFilename = (kind: string) =>
+  `cerebro-${kind}-${new Date().toISOString().slice(0, 10)}.csv`;
+
+export type GRCExportResult = { ok: true } | { ok: false; error: string };
+
+// downloadGRCExport fetches a server-rendered CSV export and triggers a browser
+// download. The auditor-grade CSV is produced by the backend, so the client only
+// streams the body into a blob and saves it under a date-stamped filename.
+export const downloadGRCExport = async (
+  path: string,
+  apiKey: string | undefined,
+  filename: string,
+): Promise<GRCExportResult> => {
+  const response = await fetchCerebro<string>(path, apiKey);
+  if (!response.ok) {
+    return { ok: false, error: grcResponseErrorMessage(path, response.status, response.data) };
+  }
+  const contents = typeof response.data === "string" ? response.data : "";
+  const blob = new Blob([contents], { type: "text/csv;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.URL.revokeObjectURL(url);
+  return { ok: true };
+};
+
 export function useDebouncedValue<T>(value: T, delayMs = 300) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
