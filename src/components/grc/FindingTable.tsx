@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import AskAboutLink from "@/components/ask/AskAboutLink";
 import { Badge, RiskBadge, SeverityDot } from "@/components/grc/Primitives";
@@ -42,10 +44,13 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   );
 }
 
+const VIRTUALIZE_THRESHOLD = 50;
+const VIRTUAL_MAX_HEIGHT = 640;
+const ESTIMATED_ROW_HEIGHT = 64;
+
 export default function FindingTable({
   findings,
   empty = "No findings match this view.",
-  initialRows = 100,
   selectable = false,
   selectedIds,
   onToggleSelect,
@@ -53,15 +58,14 @@ export default function FindingTable({
 }: {
   findings: GRCFinding[];
   empty?: string;
-  initialRows?: number;
   selectable?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: (ids: string[], selected: boolean) => void;
 }) {
-  const [showAll, setShowAll] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("risk_score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const toggleSort = useCallback((key: SortKey) => {
     if (sortKey === key) {
@@ -81,14 +85,18 @@ export default function FindingTable({
     return copy;
   }, [findings, sortKey, sortDir]);
 
-  const visible = useMemo(
-    () => (showAll ? sorted : sorted.slice(0, initialRows)),
-    [sorted, initialRows, showAll],
-  );
-  const hiddenCount = sorted.length - visible.length;
   const selected = selectedIds ?? new Set<string>();
-  const visibleIds = useMemo(() => visible.map((finding) => finding.id), [visible]);
-  const allVisibleSelected = selectable && visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+  const allIds = useMemo(() => sorted.map((finding) => finding.id), [sorted]);
+  const allSelected = selectable && allIds.length > 0 && allIds.every((id) => selected.has(id));
+  const isVirtual = sorted.length > VIRTUALIZE_THRESHOLD;
+  const colSpan = selectable ? 11 : 9;
+
+  const rowVirtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    overscan: 12,
+  });
 
   if (findings.length === 0) {
     return (
@@ -106,8 +114,78 @@ export default function FindingTable({
     </button>
   );
 
+  const rowClassName = (finding: GRCFinding) =>
+    selectable && selected.has(finding.id) ? "bg-indigo-50/50" : undefined;
+
+  const renderCells = (finding: GRCFinding) => (
+    <>
+      {selectable && (
+        <td>
+          <input
+            type="checkbox"
+            aria-label={`Select ${finding.title}`}
+            checked={selected.has(finding.id)}
+            onChange={() => onToggleSelect?.(finding.id)}
+            className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
+          />
+        </td>
+      )}
+      <td className="max-w-xs">
+        <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">
+          {finding.title}
+        </Link>
+        <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">
+          {finding.summary || finding.rule_id}
+        </div>
+      </td>
+      <td>
+        <RiskBadge score={finding.risk_score} />
+      </td>
+      <td>
+        <div className="flex items-center gap-1.5">
+          <SeverityDot severity={finding.severity} />
+          <Badge value={finding.severity} tone="severity" />
+        </div>
+      </td>
+      {selectable && (
+        <td>
+          {finding.disposition ? <Badge value={finding.disposition} /> : <span className="text-[var(--text-muted)]">--</span>}
+        </td>
+      )}
+      <td>
+        <span className="font-mono text-[12px] text-[var(--text-secondary)]">{shortEntity(finding.entity)}</span>
+      </td>
+      <td>{finding.owner || <span className="text-[var(--text-muted)]">--</span>}</td>
+      <td><Badge value={finding.sla_status} /></td>
+      <td className="text-center tabular-nums">{finding.evidence_count}</td>
+      <td className="text-[var(--text-muted)]">{displayDate(finding.last_observed_at)}</td>
+      <td>
+        <AskAboutLink
+          question={`Why is ${finding.title} risky and which entities are affected?`}
+          scopeUrn={finding.entity}
+          title="Ask about this finding"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 text-[var(--text-muted)] transition hover:text-[var(--primary)]">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+        </AskAboutLink>
+      </td>
+    </>
+  );
+
+  const virtualItems = isVirtual ? rowVirtualizer.getVirtualItems() : [];
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+      : 0;
+
   return (
-    <div className="surface-panel overflow-x-auto">
+    <div
+      ref={scrollRef}
+      className={`surface-panel ${isVirtual ? "overflow-auto" : "overflow-x-auto"}`}
+      style={isVirtual ? { maxHeight: VIRTUAL_MAX_HEIGHT } : undefined}
+    >
       <table className="data-table">
         <thead>
           <tr>
@@ -116,8 +194,8 @@ export default function FindingTable({
                 <input
                   type="checkbox"
                   aria-label="Select all findings"
-                  checked={allVisibleSelected}
-                  onChange={(e) => onToggleSelectAll?.(visibleIds, e.target.checked)}
+                  checked={allSelected}
+                  onChange={(e) => onToggleSelectAll?.(allIds, e.target.checked)}
                   className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
                 />
               </th>
@@ -135,74 +213,41 @@ export default function FindingTable({
           </tr>
         </thead>
         <tbody>
-          {visible.map((finding) => (
-            <tr key={finding.id} className={selectable && selected.has(finding.id) ? "bg-indigo-50/50" : undefined}>
-              {selectable && (
-                <td>
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${finding.title}`}
-                    checked={selected.has(finding.id)}
-                    onChange={() => onToggleSelect?.(finding.id)}
-                    className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
-                  />
-                </td>
+          {isVirtual ? (
+            <>
+              {paddingTop > 0 && (
+                <tr aria-hidden>
+                  <td colSpan={colSpan} style={{ height: paddingTop, padding: 0, border: "none" }} />
+                </tr>
               )}
-              <td className="max-w-xs">
-                <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">
-                  {finding.title}
-                </Link>
-                <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">
-                  {finding.summary || finding.rule_id}
-                </div>
-              </td>
-              <td>
-                <RiskBadge score={finding.risk_score} />
-              </td>
-              <td>
-                <div className="flex items-center gap-1.5">
-                  <SeverityDot severity={finding.severity} />
-                  <Badge value={finding.severity} tone="severity" />
-                </div>
-              </td>
-              {selectable && (
-                <td>
-                  {finding.disposition ? <Badge value={finding.disposition} /> : <span className="text-[var(--text-muted)]">--</span>}
-                </td>
+              {virtualItems.map((item) => {
+                const finding = sorted[item.index];
+                return (
+                  <tr
+                    key={finding.id}
+                    data-index={item.index}
+                    ref={rowVirtualizer.measureElement}
+                    className={rowClassName(finding)}
+                  >
+                    {renderCells(finding)}
+                  </tr>
+                );
+              })}
+              {paddingBottom > 0 && (
+                <tr aria-hidden>
+                  <td colSpan={colSpan} style={{ height: paddingBottom, padding: 0, border: "none" }} />
+                </tr>
               )}
-              <td>
-                <span className="font-mono text-[12px] text-[var(--text-secondary)]">{shortEntity(finding.entity)}</span>
-              </td>
-              <td>{finding.owner || <span className="text-[var(--text-muted)]">--</span>}</td>
-              <td><Badge value={finding.sla_status} /></td>
-              <td className="text-center tabular-nums">{finding.evidence_count}</td>
-              <td className="text-[var(--text-muted)]">{displayDate(finding.last_observed_at)}</td>
-              <td>
-                <AskAboutLink
-                  question={`Why is ${finding.title} risky and which entities are affected?`}
-                  scopeUrn={finding.entity}
-                  title="Ask about this finding"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 text-[var(--text-muted)] transition hover:text-[var(--primary)]">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                  </svg>
-                </AskAboutLink>
-              </td>
-            </tr>
-          ))}
+            </>
+          ) : (
+            sorted.map((finding) => (
+              <tr key={finding.id} className={rowClassName(finding)}>
+                {renderCells(finding)}
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
-      {hiddenCount > 0 && (
-        <div className="border-t border-[color:var(--border)] px-4 py-3">
-          <button
-            type="button"
-            onClick={() => setShowAll(true)}
-            className="text-[13px] font-medium text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
-          >
-            Show {hiddenCount} more findings
-          </button>
-        </div>
-      )}
     </div>
   );
 }
