@@ -1,25 +1,41 @@
 "use client";
 
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { forwardRef, type ForwardedRef } from "react";
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import type { GRCTrendPoint } from "@/lib/grc";
+import type { GRCTrendPoint, GRCTrendTargets } from "@/lib/grc";
 import { formatTrendDate } from "@/lib/trends";
 
 type TrendsChartProps = {
   points: GRCTrendPoint[];
   height?: number;
+  targets?: GRCTrendTargets;
+  onBucketSelect?: (date: string, kind: "opened" | "closed") => void;
 };
 
-export default function TrendsChart({ points, height = 280 }: TrendsChartProps) {
+type ChartDatum = {
+  date: string;
+  label: string;
+  opened: number;
+  closed: number;
+  open_total: number;
+};
+
+function TrendsChartInner({ points, height = 280, targets, onBucketSelect }: TrendsChartProps, ref: ForwardedRef<HTMLDivElement>) {
   const data = points.map((point) => ({
+    date: point.date,
     label: formatTrendDate(point.date),
     opened: point.opened,
     closed: point.closed,
     open_total: point.open_total,
   }));
+  const selectBucket = (kind: "opened" | "closed") => (entry: unknown) => {
+    const datum = (entry as { payload?: ChartDatum })?.payload;
+    if (datum?.date) onBucketSelect?.(datum.date, kind);
+  };
 
   return (
-    <div style={{ width: "100%", height }}>
+    <div ref={ref} style={{ width: "100%", height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -31,11 +47,16 @@ export default function TrendsChart({ points, height = 280 }: TrendsChartProps) 
             labelStyle={{ color: "#0f172a", fontWeight: 600 }}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar yAxisId="flow" dataKey="opened" name="Opened" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={28} />
-          <Bar yAxisId="flow" dataKey="closed" name="Closed" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={28} />
+          <Bar yAxisId="flow" dataKey="opened" name="Opened" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={28} onClick={selectBucket("opened")} cursor={onBucketSelect ? "pointer" : undefined} />
+          <Bar yAxisId="flow" dataKey="closed" name="Closed" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={28} onClick={selectBucket("closed")} cursor={onBucketSelect ? "pointer" : undefined} />
+          {targets?.backlog ? <ReferenceLine yAxisId="backlog" y={targets.backlog} stroke="#f97316" strokeDasharray="4 4" label={{ value: "Backlog target", fontSize: 11, fill: "#f97316" }} /> : null}
           <Line yAxisId="backlog" type="monotone" dataKey="open_total" name="Open backlog" stroke="#f59e0b" strokeWidth={2} dot={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
 }
+
+const TrendsChart = forwardRef<HTMLDivElement, TrendsChartProps>(TrendsChartInner);
+
+export default TrendsChart;

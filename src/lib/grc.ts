@@ -538,7 +538,40 @@ export type GRCTrendPoint = {
   opened_critical: number;
   opened_high: number;
   closed: number;
+  closed_critical: number;
+  closed_high: number;
+  closed_sla_breached: number;
+  avg_time_to_close_seconds: number;
   open_total: number;
+};
+
+export type GRCTrendAgingBucket = {
+  id: string;
+  label: string;
+  min_days: number;
+  max_days?: number;
+  count: number;
+};
+
+export type GRCTrendTargets = {
+  mttr_seconds?: number;
+  backlog?: number;
+  sla_days?: number;
+};
+
+export type GRCTrendComparison = {
+  previous_start: string;
+  previous_end: string;
+  opened_delta: number;
+  closed_delta: number;
+  current_open_delta: number;
+  avg_time_to_close_seconds_delta: number;
+  closed_sla_breached_delta: number;
+};
+
+export type GRCTrendAccuracy = {
+  status_history: string;
+  caveat: string;
 };
 
 export type GRCTrends = {
@@ -546,6 +579,10 @@ export type GRCTrends = {
   start: string;
   end: string;
   points: GRCTrendPoint[];
+  aging_buckets?: GRCTrendAgingBucket[];
+  targets?: GRCTrendTargets;
+  comparison?: GRCTrendComparison;
+  accuracy?: GRCTrendAccuracy;
   generated_at: string;
 };
 

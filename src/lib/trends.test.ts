@@ -9,6 +9,10 @@ const point = (overrides: Partial<GRCTrendPoint> = {}): GRCTrendPoint => ({
   opened_critical: 0,
   opened_high: 0,
   closed: 0,
+  closed_critical: 0,
+  closed_high: 0,
+  closed_sla_breached: 0,
+  avg_time_to_close_seconds: 0,
   open_total: 0,
   ...overrides,
 });
@@ -26,8 +30,8 @@ describe("summarizeTrends", () => {
     const result = summarizeTrends(
       trends([
         point({ opened: 4, opened_critical: 1, opened_high: 1, closed: 1, open_total: 3 }),
-        point({ date: "2026-03-30", opened: 2, closed: 5, open_total: 0 }),
-        point({ date: "2026-04-06", opened: 6, opened_critical: 2, closed: 1, open_total: 5 }),
+        point({ date: "2026-03-30", opened: 2, closed: 5, closed_high: 1, closed_sla_breached: 1, avg_time_to_close_seconds: 86400, open_total: 0 }),
+        point({ date: "2026-04-06", opened: 6, opened_critical: 2, closed: 1, closed_critical: 1, avg_time_to_close_seconds: 172800, open_total: 5 }),
       ]),
     );
     expect(result.totalOpened).toBe(12);
@@ -37,6 +41,10 @@ describe("summarizeTrends", () => {
     expect(result.peakOpen).toBe(5);
     expect(result.openedCritical).toBe(3);
     expect(result.openedHigh).toBe(1);
+    expect(result.closedCritical).toBe(1);
+    expect(result.closedHigh).toBe(1);
+    expect(result.closedSLABreached).toBe(1);
+    expect(result.avgTimeToCloseSeconds).toBe((5 * 86400 + 172800) / 6);
   });
 
   it("returns zeroes for empty or nullish input", () => {
@@ -48,6 +56,10 @@ describe("summarizeTrends", () => {
       peakOpen: 0,
       openedCritical: 0,
       openedHigh: 0,
+      closedCritical: 0,
+      closedHigh: 0,
+      closedSLABreached: 0,
+      avgTimeToCloseSeconds: 0,
     });
     expect(summarizeTrends(trends([])).currentOpen).toBe(0);
   });
