@@ -8,12 +8,14 @@ type Props = {
   onSubmit: (input: { question: string; model: string; tenantId: string; scopeUrn: string }) => void;
   disabled?: boolean;
   initialScopeUrn?: string;
+  onSaveQuestion?: (input: { question: string; model: string; tenantId: string; scopeUrn: string }) => void;
 };
 
 export default function AskInput({
   onSubmit,
   disabled = false,
   initialScopeUrn = "",
+  onSaveQuestion,
 }: Props) {
   const [question, setQuestion] = useState("");
   const [model, setModel] = useState(defaultAskModel);
@@ -108,6 +110,18 @@ export default function AskInput({
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11px] text-slate-400">{disabled ? "Use Stop on the active turn to cancel" : "⌘+Enter to send"}</span>
+          {onSaveQuestion && (
+            <button
+              type="button"
+              disabled={!question.trim()}
+              onClick={() =>
+                onSaveQuestion({ question: question.trim(), model, tenantId: tenantId.trim(), scopeUrn: scopeUrn.trim() })
+              }
+              className="rounded-md border border-slate-200 px-4 py-1.5 text-[13px] font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Save
+            </button>
+          )}
           <button
             type="submit"
             disabled={disabled || !question.trim()}

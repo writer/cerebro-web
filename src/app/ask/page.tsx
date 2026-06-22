@@ -7,6 +7,7 @@ import { useApiKey } from "@/components/providers";
 import { PageHeader } from "@/components/grc/Primitives";
 import AskInput from "@/components/ask/AskInput";
 import AskThread from "@/components/ask/AskThread";
+import SavedQuestions, { type SavedQuestionDraft } from "@/components/ask/SavedQuestions";
 import {
   type AskHistoryEntry,
   type AskRequest,
@@ -18,6 +19,12 @@ import {
   reduceAskEvent,
   streamAgentAsk,
 } from "@/lib/ask";
+import {
+  type AskQuery,
+  type AskQueryListResponse,
+  askQueryCreatePayload,
+} from "@/lib/ask-queries";
+import { useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 
 const sampleQuestions = [
   "How many findings are there per source family, top 10?",
@@ -144,6 +151,80 @@ function AskPageInner() {
     [runAsk],
   );
 
+  const savedQueriesQuery = useGRCQuery<AskQueryListResponse>("/ask-queries");
+  const { mutate: mutateSavedQuery, saving: savingSavedQuery, error: savedQueryError, setError: setSavedQueryError } =
+    useGRCMutation();
+  const [saveDraft, setSaveDraft] = useState<SavedQuestionDraft | null>(null);
+  const savedQueries = savedQueriesQuery.data?.queries ?? [];
+
+  const requestSaveQuestion = useCallback(
+    (input: SavedQuestionDraft) => {
+      setSavedQueryError(null);
+      setSaveDraft(input);
+    },
+    [setSavedQueryError],
+  );
+
+  const saveDraftAs = useCallback(
+    async (name: string) => {
+      if (!saveDraft) return;
+      try {
+        await mutateSavedQuery(
+          "/ask-queries",
+          askQueryCreatePayload({
+            name,
+            question: saveDraft.question,
+            scopeUrn: saveDraft.scopeUrn,
+            model: saveDraft.model,
+          }),
+        );
+        setSaveDraft(null);
+        void savedQueriesQuery.reload();
+      } catch {
+        // Surfaced via savedQueryError.
+      }
+    },
+    [mutateSavedQuery, saveDraft, savedQueriesQuery],
+  );
+
+  const runSavedQuery = useCallback(
+    (query: AskQuery) => {
+      void runAsk({
+        question: query.question,
+        model: normalizeAskModel(query.model ?? ""),
+        tenantId: query.tenant_id || "",
+        scopeUrn: query.scope_urn ?? "",
+      });
+    },
+    [runAsk],
+  );
+
+  const toggleSavedQueryPin = useCallback(
+    async (query: AskQuery) => {
+      setSavedQueryError(null);
+      try {
+        await mutateSavedQuery(`/ask-queries/${encodeURIComponent(query.id)}`, { pinned: !query.pinned }, "PATCH");
+        void savedQueriesQuery.reload();
+      } catch {
+        // Surfaced via savedQueryError.
+      }
+    },
+    [mutateSavedQuery, savedQueriesQuery, setSavedQueryError],
+  );
+
+  const deleteSavedQuery = useCallback(
+    async (query: AskQuery) => {
+      setSavedQueryError(null);
+      try {
+        await mutateSavedQuery(`/ask-queries/${encodeURIComponent(query.id)}`, undefined, "DELETE");
+        void savedQueriesQuery.reload();
+      } catch {
+        // Surfaced via savedQueryError.
+      }
+    },
+    [mutateSavedQuery, savedQueriesQuery, setSavedQueryError],
+  );
+
   useEffect(() => {
     const question = seededQuestion.trim();
     if (autoFiredRef.current || !question) return;
@@ -197,6 +278,21 @@ function AskPageInner() {
         onSubmit={runAsk}
         disabled={Boolean(activeTurnId)}
         initialScopeUrn={seededScope}
+        onSaveQuestion={requestSaveQuestion}
+      />
+
+      <SavedQuestions
+        queries={savedQueries}
+        loading={savedQueriesQuery.loading}
+        busy={savingSavedQuery}
+        error={savedQueryError}
+        draft={saveDraft}
+        onSaveDraft={saveDraftAs}
+        onDismissDraft={() => setSaveDraft(null)}
+        onRun={runSavedQuery}
+        onTogglePin={toggleSavedQueryPin}
+        onDelete={deleteSavedQuery}
+        disabled={Boolean(activeTurnId)}
       />
 
       {turns.length === 0 && (
