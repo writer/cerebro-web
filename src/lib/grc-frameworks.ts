@@ -4,6 +4,7 @@ import type { GRCControl, GRCControlRef, GRCFinding, GRCInventoryAsset, GRCInven
 export type SupportedGRCFramework = {
   name: string;
   aliases?: string[];
+  lifecycle?: "active" | "upcoming";
 };
 
 export type GRCFrameworkSegment = {
@@ -52,9 +53,17 @@ export const supportedGRCFrameworks: SupportedGRCFramework[] = [
   { name: "CIS GitHub Benchmark", aliases: ["cis github"] },
   { name: "CIS Google Workspace Benchmark", aliases: ["cis google workspace"] },
   { name: "NIST SP 800-177", aliases: ["nist 800 177", "nist email"] },
+  { name: "NIST AI RMF 1.0", aliases: ["nist ai rmf", "ai risk management framework"], lifecycle: "upcoming" },
+  { name: "CSA CCM v4.0", aliases: ["csa ccm", "cloud controls matrix"], lifecycle: "upcoming" },
 ];
 
 export const supportedGRCFrameworkNames = supportedGRCFrameworks.map((framework) => framework.name);
+export const activeGRCFrameworkNames = supportedGRCFrameworks
+  .filter((framework) => framework.lifecycle !== "upcoming")
+  .map((framework) => framework.name);
+export const upcomingGRCFrameworkNames = supportedGRCFrameworks
+  .filter((framework) => framework.lifecycle === "upcoming")
+  .map((framework) => framework.name);
 
 const normalizeFrameworkText = (value: string) =>
   value
@@ -96,6 +105,12 @@ export const findSupportedGRCFramework = (query: string) => {
     ),
   ) ?? null;
 };
+
+export const isUpcomingGRCFramework = (query: string) =>
+  findSupportedGRCFramework(query)?.lifecycle === "upcoming";
+
+export const frameworkOptionLabel = (framework: string) =>
+  isUpcomingGRCFramework(framework) ? `${framework} (Upcoming)` : framework;
 
 const identityTerms = ["identity", "access", "user", "users", "group", "groups", "role", "roles", "mfa", "sso", "iam", "okta", "entra", "duo", "workspace"];
 const cloudTerms = ["aws", "gcp", "azure", "cloud", "compute", "storage", "bucket", "database", "network", "container", "kubernetes", "kms", "key", "logging"];
@@ -320,6 +335,18 @@ const frameworkSegmentCatalog: Record<string, Omit<GRCFrameworkSegment, "framewo
     assetTerms: ["email", "mail", "domain", "dkim", "dmarc", "spf", "tls"],
     connectorFamilies: ["email", "mail", "domain", "dkim", "dmarc", "spf", "tls"],
     sourceIDs: ["emaildomainhealth"],
+  },
+  "NIST AI RMF 1.0": {
+    alertTerms: aiTerms,
+    assetTerms: aiTerms,
+    connectorFamilies: aiTerms,
+    sourceIDs: ["openai", "aws", "gcp", "azure"],
+  },
+  "CSA CCM v4.0": {
+    alertTerms: cloudTerms,
+    assetTerms: cloudTerms,
+    connectorFamilies: cloudTerms,
+    sourceIDs: ["aws", "gcp", "azure", "kubernetes"],
   },
 };
 

@@ -17,7 +17,7 @@ import {
   riskSort,
   shortEntity,
 } from "@/lib/grc";
-import { findingMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { findingMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import {
   redactReportGraph,
@@ -128,6 +128,7 @@ export default function ReportsPage() {
     [controlPacket.data?.controls, findingsQuery.data?.findings],
   );
   const metadata = reportMode === "control" ? controlPacket.data?.metadata : findingPacket.data?.metadata;
+  const selectedUpcomingFramework = reportMode === "control" && isUpcomingGRCFramework(framework);
   const effectiveRedactionMode = metadata ? redactionMode : reportRedactionMode(metadata);
   const rawReportBody = useMemo(() => {
     if (reportMode === "control") return buildControlReportBody(controlPacket.data, framework, controlID);
@@ -135,7 +136,9 @@ export default function ReportsPage() {
   }, [controlID, controlPacket.data, findingPacket.data, framework, reportMode]);
   const displayReportBody = redactReportText(rawReportBody, effectiveRedactionMode);
   const exportHref = reportMode === "control"
-    ? `/api/cerebro${grcPath("/grc/control-packets/export", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID })}`
+    ? selectedUpcomingFramework
+      ? ""
+      : `/api/cerebro${grcPath("/grc/control-packets/export", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID })}`
     : selectedFindingID
       ? `/api/cerebro/grc/audit-packets/${encodeURIComponent(selectedFindingID)}/export`
       : "";
@@ -252,7 +255,7 @@ export default function ReportsPage() {
                 Framework
                 <input value={framework} onChange={(event) => setFramework(event.target.value)} placeholder="SOC 2" list="grc-report-framework-options" className={inputClass} />
                 <datalist id="grc-report-framework-options">
-                  {frameworkOptions.map((name) => <option key={name} value={name} />)}
+                  {frameworkOptions.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
                 </datalist>
               </label>
               <label className={labelClass}>Control<input value={controlID} onChange={(event) => setControlID(event.target.value)} placeholder="CC6.1" className={inputClass} /></label>
@@ -263,7 +266,7 @@ export default function ReportsPage() {
                 Framework
                 <input value={framework} onChange={(event) => setFramework(event.target.value)} placeholder="All frameworks" list="grc-report-framework-options" className={inputClass} />
                 <datalist id="grc-report-framework-options">
-                  {frameworkOptions.map((name) => <option key={name} value={name} />)}
+                  {frameworkOptions.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
                 </datalist>
               </label>
               <label className="md:col-span-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
@@ -297,6 +300,7 @@ export default function ReportsPage() {
           redactionMode={effectiveRedactionMode}
           onRedactionModeChange={setRedactionMode}
           state={metricState}
+          upcomingFrameworkName={selectedUpcomingFramework ? framework.trim() : ""}
         />
       )}
       {reportMode === "finding" && !selectedFindingID && !findingsQuery.loading && !findingsQuery.error && (
@@ -428,6 +432,7 @@ function ControlPacketView({
   redactionMode,
   onRedactionModeChange,
   state,
+  upcomingFrameworkName,
 }: {
   packet: GRCControlEvidencePacketResponse;
   reportBody: string;
@@ -435,18 +440,20 @@ function ControlPacketView({
   redactionMode: ReportRedactionMode;
   onRedactionModeChange: (mode: ReportRedactionMode) => void;
   state: RuntimeState;
+  upcomingFrameworkName?: string;
 }) {
   const controls = packet.packet.controls;
   const visibleControls = controls.slice(0, 50);
   const evidenceCount = controls.reduce((sum, control) => sum + evidenceItemCount(control), 0);
   const readiness = packet.metadata?.readiness;
+  const isUpcoming = Boolean(upcomingFrameworkName?.trim());
   return (
     <>
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Readiness" value={readiness ? `${readiness.score}/100` : "—"} detail={reportReadinessLabel(readiness?.status)} intent={reportReadinessIntent(readiness?.status)} state={state} />
-        <MetricCard label="Controls" value={packet.packet.summary.total} detail={packet.profile.name || packet.profile.id} state={state} />
-        <MetricCard label="Open Findings" value={statusCount(packet, "failing")} detail="mapped to controls" intent={statusCount(packet, "failing") > 0 ? "danger" : "success"} state={state} />
-        <MetricCard label="Evidence" value={evidenceCount} detail={`${packet.metadata?.scope.exclusions.total ?? 0} exclusions`} state={state} />
+        <MetricCard label="Readiness" value={isUpcoming ? "N/A" : readiness ? `${readiness.score}/100` : "—"} detail={isUpcoming ? "upcoming" : reportReadinessLabel(readiness?.status)} intent={reportReadinessIntent(readiness?.status)} state={state} />
+        <MetricCard label="Controls" value={isUpcoming ? "N/A" : packet.packet.summary.total} detail={isUpcoming ? "not measured" : packet.profile.name || packet.profile.id} state={state} />
+        <MetricCard label="Open Findings" value={isUpcoming ? "N/A" : statusCount(packet, "failing")} detail={isUpcoming ? "not measured" : "mapped to controls"} intent={statusCount(packet, "failing") > 0 ? "danger" : "success"} state={state} />
+        <MetricCard label="Evidence" value={isUpcoming ? "N/A" : evidenceCount} detail={isUpcoming ? "not measured" : `${packet.metadata?.scope.exclusions.total ?? 0} exclusions`} state={state} />
       </div>
 
       <ReportBodyPanel
@@ -493,7 +500,12 @@ function ControlPacketView({
               </div>
             </div>
           ))}
-          {controls.length === 0 && (
+          {controls.length === 0 && isUpcoming && (
+            <div className="py-8 text-center text-[13px] text-violet-700">
+              {upcomingFrameworkName} is upcoming. It is discoverable for planning, but not yet available for measured control evidence packets.
+            </div>
+          )}
+          {controls.length === 0 && !isUpcoming && (
             <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">No controls match the selected packet filters.</div>
           )}
         </div>

@@ -20,7 +20,7 @@ import {
   shortEntity,
 } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { inventoryAssetMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { frameworkOptionLabel, inventoryAssetMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import {
   inventoryAccountability,
   inventoryAttr,
@@ -259,7 +259,7 @@ function ScopeModal({
               Framework
               <input value={frameworkQuery} onChange={(event) => setFrameworkQuery(event.target.value)} list="scope-framework-options" placeholder="All frameworks" className={inputClass} />
               <datalist id="scope-framework-options">
-                {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+                {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
               </datalist>
             </label>
             <label className={labelClass}>
@@ -830,7 +830,7 @@ export default function InventoryPage() {
                 Framework
                 <input value={framework} onChange={(event) => { setFramework(event.target.value); setSelectedAssetURNs([]); }} placeholder="FedRAMP Rev. 5" list="inventory-framework-options" className={inputClass} />
                 <datalist id="inventory-framework-options">
-                  {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+                  {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
                 </datalist>
               </label>
               <label className={labelClass}>

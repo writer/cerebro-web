@@ -41,6 +41,7 @@ import {
 } from "@/lib/connectors";
 import {
   connectorScopeOptionMatchesFrameworkSegment,
+  frameworkOptionLabel,
   supportedGRCFrameworkNames,
 } from "@/lib/grc-frameworks";
 
@@ -1468,7 +1469,7 @@ function ScopePolicyBuilder({
               className="control-input w-full px-3 py-2 text-[13px]"
             />
             <datalist id="connector-framework-options">
-              {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+              {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
             </datalist>
           </label>
           <label className="relative min-w-[240px] flex-1">

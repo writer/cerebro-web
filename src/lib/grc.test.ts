@@ -6,8 +6,11 @@ import {
   controlMatchesFrameworkSegment,
   findingMatchesFrameworkSegment,
   findSupportedGRCFramework,
+  frameworkOptionLabel,
   inventoryAssetMatchesFrameworkSegment,
+  isUpcomingGRCFramework,
   supportedGRCFrameworkNames,
+  upcomingGRCFrameworkNames,
 } from "./grc-frameworks";
 
 describe("humanize", () => {
@@ -31,6 +34,8 @@ describe("supported GRC frameworks", () => {
       "CCPA",
       "ISO 27701:2025",
       "ISO 42001",
+      "NIST AI RMF 1.0",
+      "CSA CCM v4.0",
     ]));
   });
 
@@ -43,6 +48,13 @@ describe("supported GRC frameworks", () => {
 
   it("does not duplicate framework names", () => {
     expect(new Set(supportedGRCFrameworkNames).size).toBe(supportedGRCFrameworkNames.length);
+  });
+
+  it("marks upcoming frameworks as discoverable but separately labeled", () => {
+    expect(upcomingGRCFrameworkNames).toEqual(expect.arrayContaining(["NIST AI RMF 1.0", "CSA CCM v4.0"]));
+    expect(isUpcomingGRCFramework("nist ai rmf")).toBe(true);
+    expect(frameworkOptionLabel("NIST AI RMF 1.0")).toBe("NIST AI RMF 1.0 (Upcoming)");
+    expect(isUpcomingGRCFramework("SOC 2")).toBe(false);
   });
 
   it("filters alert findings by direct and overlapping framework mappings", () => {
