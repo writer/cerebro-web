@@ -117,17 +117,9 @@ function RunCard({ run }: { run: AskEvalRun }) {
           </div>
         ))}
       </div>
-      {run.workshopURL && (
-        <a
-          href={run.workshopURL}
-          className="mt-3 inline-flex rounded-md border border-indigo-200 px-2.5 py-1 text-[12px] font-semibold text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50"
-        >
-          Open local Raindrop trace
-        </a>
-      )}
       <a
         href={replayHref(run)}
-        className="ml-2 mt-3 inline-flex rounded-md border border-slate-200 px-2.5 py-1 text-[12px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+        className="mt-3 inline-flex rounded-md border border-slate-200 px-2.5 py-1 text-[12px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
       >
         Replay in Ask
       </a>
@@ -182,7 +174,6 @@ export default function EvalDashboard() {
     [fixtureFilter, runs],
   );
   const generatedAt = useMemo(() => reports?.map((report) => report.generatedAt).sort().at(-1), [reports]);
-  const workshopURL = reports?.[0]?.workshopURL ?? "http://localhost:5899";
   const totals = {
     passed: runs.filter((run) => run.status === "passed").length,
     failed: runs.filter((run) => run.status === "failed").length,
@@ -201,7 +192,7 @@ export default function EvalDashboard() {
     return (
       <Panel title="No Eval Report Found">
         <div className="space-y-3 text-[13px] text-slate-600">
-          <p>Run the local eval suite to generate `.raindrop-evals/ask/latest.json`.</p>
+          <p>Run the local eval suite to generate `.eval-reports/ask/latest.json`.</p>
           <pre className="overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-[12px] text-slate-800">
             npm run eval:ask:local
           </pre>
@@ -213,7 +204,7 @@ export default function EvalDashboard() {
   return (
     <>
       <Panel title="Latest Report">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-md bg-slate-50 p-3">
             <div className="text-[10px] uppercase tracking-wide text-slate-400">Generated</div>
             <div className="text-[13px] font-semibold text-slate-900">{generatedAt ? new Date(generatedAt).toLocaleString() : "—"}</div>
@@ -225,12 +216,6 @@ export default function EvalDashboard() {
           <div className="rounded-md bg-slate-50 p-3">
             <div className="text-[10px] uppercase tracking-wide text-slate-400">Failed</div>
             <div className="text-[13px] font-semibold text-rose-700">{totals.failed}</div>
-          </div>
-          <div className="rounded-md bg-slate-50 p-3">
-            <div className="text-[10px] uppercase tracking-wide text-slate-400">Workshop</div>
-            <a href={workshopURL} className="break-all text-[13px] font-semibold text-indigo-700">
-              {workshopURL}
-            </a>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">

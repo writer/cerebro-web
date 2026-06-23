@@ -1,22 +1,15 @@
 #!/usr/bin/env node
 
 import {
-  DEFAULT_WORKSHOP_URL,
   assertLocalURL,
-  emitWorkshopTrace,
-  makeSpan,
-  normalizeWorkshopURL,
   nowISO,
-  randomHex,
   reportTotals,
   scoreRubrics,
-  stableHex,
   writeReport,
 } from "./eval-lib.mjs";
 
 const agentURL = (process.env.SECURITY_AGENT_PLATFORM_URL ?? "http://127.0.0.1:18080").replace(/\/+$/, "");
-const workshopURL = normalizeWorkshopURL(process.env.RAINDROP_LOCAL_DEBUGGER ?? process.env.RAINDROP_WORKSHOP_URL ?? DEFAULT_WORKSHOP_URL);
-const outputDir = process.env.CEREBRO_SECURITY_AGENT_EVAL_OUT_DIR ?? ".raindrop-evals/security-agent";
+const outputDir = process.env.CEREBRO_SECURITY_AGENT_EVAL_OUT_DIR ?? ".eval-reports/security-agent";
 
 async function requestJSON(url, init) {
   const res = await fetch(url, {
@@ -43,7 +36,6 @@ function latestAssistant(session) {
 
 async function main() {
   assertLocalURL(agentURL, "SECURITY_AGENT_PLATFORM_URL");
-  assertLocalURL(workshopURL, "RAINDROP_LOCAL_DEBUGGER");
 
   const startedAt = Date.now();
   const question = "Use local Cerebro data to summarize open high findings and connector freshness for this repository.";
@@ -51,8 +43,8 @@ async function main() {
     method: "POST",
     body: JSON.stringify({
       agent_id: "investigation",
-      subject: "Raindrop cross-repo local eval",
-      incident_id: "raindrop-cross-repo-local-eval",
+      subject: "Cerebro cross-repo local eval",
+      incident_id: "cerebro-cross-repo-local-eval",
       entity_id: "urn:cerebro:writer:repo:writerinternal/security-agent-platform",
     }),
   });
@@ -92,49 +84,7 @@ async function main() {
   ];
   const score = scoreRubrics(rubrics);
   const status = rubrics.every((rubric) => rubric.passed) ? "passed" : "failed";
-  const traceId = stableHex(`security-agent-eval:${session.id}:${randomHex(4)}`, 16);
-  const rootSpanId = stableHex(`${traceId}:root`, 8);
   const durationMs = completedAt - startedAt;
-
-  await emitWorkshopTrace(workshopURL, [
-    makeSpan({
-      traceId,
-      spanId: rootSpanId,
-      name: "security_agent.cross_repo_eval",
-      kind: "agent_root",
-      startedAt,
-      durationMs,
-      input: { question, session },
-      output: { status, score, response, rubrics },
-      attributes: {
-        "ai.telemetry.metadata.raindrop.eventId": `security-agent-eval:${session.id}`,
-        "ai.telemetry.metadata.raindrop.eventName": "security_agent_cross_repo_eval",
-        "ai.telemetry.metadata.raindrop.userId": "writer",
-        "ai.telemetry.metadata.raindrop.convoId": "cerebro-web-security-agent-evals",
-        "eval.status": status,
-        "eval.score": score,
-        "eval.local_only": true,
-      },
-    }),
-    ...toolRuns.map((run, index) =>
-      makeSpan({
-        traceId,
-        spanId: stableHex(`${traceId}:tool:${index}`, 8),
-        parentSpanId: rootSpanId,
-        name: run.tool_id ?? `tool-${index}`,
-        kind: "tool_call",
-        startedAt: startedAt + 10 + index * 20,
-        durationMs: 15,
-        input: run.request ?? {},
-        output: run.response ?? { error: run.error },
-        status: run.status === "failed" ? "ERROR" : "OK",
-        attributes: {
-          "ai.toolCall.name": run.tool_id ?? `tool-${index}`,
-          "eval.tool_status": run.status ?? "unknown",
-        },
-      }),
-    ),
-  ]);
 
   const run = {
     id: "security-agent-cross-repo",
@@ -149,8 +99,6 @@ async function main() {
     startedAt: new Date(startedAt).toISOString(),
     completedAt: new Date(completedAt).toISOString(),
     durationMs,
-    workshopRunId: traceId,
-    workshopURL: `${workshopURL}/runs/${traceId}`,
     rowCount: toolRuns.length,
     citationCount: 0,
     cypherRefused: false,
@@ -160,7 +108,6 @@ async function main() {
   const report = await writeReport({
     generatedAt: nowISO(),
     localOnly: true,
-    workshopURL,
     totals: reportTotals([run]),
     runs: [run],
   }, outputDir);

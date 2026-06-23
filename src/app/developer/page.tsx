@@ -15,7 +15,7 @@ const developerLinks = [
   { label: "Identity Contract", href: "/developer/identity", description: "Current user source, avatar initials, actor value, and write-stamp fields." },
   { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and agent entry points for security producers." },
   { label: "Risk Scoring", href: "/developer/risk-scoring", description: "Tune tenant risk thresholds, signal cutoffs, relation weights, and factor weights." },
-  { label: "Raindrop Ask Evals", href: "/developer/evals", description: "Local Ask quality evals, rubric outcomes, and Workshop trace links." },
+  { label: "Ask Evals", href: "/developer/evals", description: "Local Ask quality evals and rubric outcomes." },
   { label: "Codegen Status", href: "/developer/codegen", description: "Unified codegen health: catalog coverage, projection templates, generator registry, and staleness." },
 ];
 

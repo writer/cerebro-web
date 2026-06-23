@@ -2,7 +2,6 @@ import {
   buildAskEvalRunFromEvents,
   buildTraceFixtureCandidate,
   nowISO,
-  stableHex,
 } from "./eval-lib.mjs";
 
 export function expandGoldenCorpus(baseScenarios, corpusConfig, options = {}) {
@@ -63,14 +62,12 @@ export function buildCorpusRuns(goldenScenarios, adversarialScenarios, options =
     buildAskEvalRunFromEvents(scenario, scenario.stream, {
       ...options,
       startedAt: Number(options.startedAt ?? 0) + index * 10,
-      workshopRunId: stableHex(`golden:${scenario.id}`, 16),
     }),
   );
   const adversarialRuns = adversarialScenarios.map((scenario, index) =>
     buildAdversarialRun(scenario, {
       ...options,
       startedAt: Number(options.startedAt ?? 0) + (goldenScenarios.length + index) * 10,
-      workshopRunId: stableHex(`adversarial:${scenario.id}`, 16),
     }),
   );
   return [...goldenRuns, ...adversarialRuns];

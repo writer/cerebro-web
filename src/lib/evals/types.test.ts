@@ -7,7 +7,6 @@ describe("Ask eval report contract", () => {
     const report: AskEvalReport = {
       generatedAt: "2026-01-01T00:00:00.000Z",
       localOnly: true,
-      workshopURL: "http://localhost:5899",
       totals: { passed: 1, failed: 0, total: 1 },
       runs: [
         {
@@ -22,8 +21,6 @@ describe("Ask eval report contract", () => {
           startedAt: "2026-01-01T00:00:00.000Z",
           completedAt: "2026-01-01T00:00:00.100Z",
           durationMs: 100,
-          workshopRunId: "trace-1",
-          workshopURL: "http://localhost:5899/runs/trace-1",
           traceId: "upstream-trace",
           rowCount: 1,
           citationCount: 1,
