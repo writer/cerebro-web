@@ -542,6 +542,83 @@ export type ConnectorPreflightResponse = {
   credential_boundary?: ConnectorCredentialBoundary;
 };
 
+export type ConnectorRuntimeObject = {
+  id?: string;
+  source_id?: string;
+  tenant_id?: string;
+  metadata?: {
+    name?: string;
+  };
+  [key: string]: unknown;
+};
+
+export type ConnectorConnectionResponse = {
+  source_id: string;
+  runtime?: ConnectorRuntimeObject;
+  credential?: ConnectorCredential;
+  scope_policy?: ConnectorScopePolicy;
+  status?: "checked" | "stored" | string;
+};
+
+export type ConnectorConnectedContext = {
+  sourceID: string;
+  tenantID: string;
+  runtimeID: string;
+  response?: ConnectorConnectionResponse;
+};
+
+export type ConnectorDepositRequest = {
+  tenant_id?: string;
+  runtime_id: string;
+  family_id?: string;
+  batch_id?: string;
+  idempotency_key?: string;
+  occurred_at?: string;
+  full_state?: boolean;
+  record?: Record<string, unknown>;
+  records?: Record<string, unknown>[];
+};
+
+export type ConnectorDepositResponse = {
+  source_id: string;
+  runtime_id: string;
+  tenant_id: string;
+  family_id: string;
+  records_accepted: number;
+  records_rejected: number;
+  events_appended: number;
+  entities_projected: number;
+  links_projected: number;
+  errors?: Array<{
+    index: number;
+    source_event_id?: string;
+    detail: string;
+  }>;
+};
+
+const runtimeRecordValue = (value: unknown, keys: string[]) => {
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  return "";
+};
+
+export const connectorConnectedContextFromResponse = (
+  response: ConnectorConnectionResponse | undefined,
+  fallback: { sourceID: string; tenantID: string; runtimeID: string },
+): ConnectorConnectedContext => {
+  const runtime = response?.runtime;
+  return {
+    sourceID: response?.source_id?.trim() || response?.credential?.source_id?.trim() || runtimeRecordValue(runtime, ["source_id", "sourceId"]) || fallback.sourceID,
+    tenantID: response?.credential?.tenant_id?.trim() || runtimeRecordValue(runtime, ["tenant_id", "tenantId"]) || fallback.tenantID,
+    runtimeID: response?.credential?.runtime_id?.trim() || runtimeRecordValue(runtime, ["id", "runtime_id", "runtimeId"]) || runtime?.metadata?.name?.trim() || fallback.runtimeID,
+    response,
+  };
+};
+
 export type ConnectorDefinitionStage = "draft" | "sandbox" | "pilot" | "approved" | "certified";
 export type ConnectorDefinitionValidationStatus = "ready" | "warning" | "blocked";
 
@@ -1768,6 +1845,16 @@ export const connectorCredentialRotatePath = (sourceID: string, credentialID: st
 
 export const connectorCredentialRevokePath = (sourceID: string, credentialID: string) =>
   `${connectorCredentialPath(sourceID, credentialID)}/revoke`;
+
+export const connectorDepositsPath = (sourceID: string) =>
+  `/connectors/${encodeURIComponent(sourceID)}/deposits`;
+
+export const sourceRuntimeSyncPath = (runtimeID: string, pageLimit = 1) => {
+  const query = new URLSearchParams();
+  if (pageLimit > 0) query.set("page_limit", String(pageLimit));
+  const queryString = query.toString();
+  return `/source-runtimes/${encodeURIComponent(runtimeID)}/sync${queryString ? `?${queryString}` : ""}`;
+};
 
 export const connectorCredentialStatusLabel = (status?: ConnectorCredentialStatus) => {
   switch (status) {

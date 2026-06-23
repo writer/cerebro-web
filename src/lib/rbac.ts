@@ -276,7 +276,7 @@ const matchesConnectorDefinitionWritePath = (path: string) =>
   (path.startsWith("connector-definitions/") && path.endsWith("/promote"));
 
 const matchesConnectorWritePath = (path: string) =>
-  path.startsWith("connectors/") && (path.endsWith("/preflight") || path.endsWith("/connections"));
+  path.startsWith("connectors/") && (path.endsWith("/preflight") || path.endsWith("/connections") || path.endsWith("/deposits"));
 
 const matchesFindingLifecyclePath = (path: string) =>
   path.startsWith("findings/") && (

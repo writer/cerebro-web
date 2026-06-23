@@ -214,7 +214,24 @@ describe("ConnectorSetupForm", () => {
     const preflightCall = fetchCerebroMock.mock.calls.find((call) => call[0] === "/connectors/aws/preflight");
     expect(preflightCall).toBeDefined();
 
-    fetchCerebroMock.mockResolvedValueOnce({ ok: true, data: {} } as never);
+    fetchCerebroMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        source_id: "aws",
+        runtime: { id: "runtime-from-response", source_id: "aws", tenant_id: "writer" },
+        credential: {
+          id: "cred_aws",
+          tenant_id: "writer",
+          source_id: "aws",
+          runtime_id: "runtime-from-response",
+          credential_store_id: "environment_managed",
+          auth_method: "aws_sso_profile",
+          status: "valid",
+          key_id: "environment",
+          fields: [],
+        },
+      },
+    } as never);
     const form = container.querySelector("form");
     expect(form).not.toBeNull();
     await act(async () => {
@@ -225,6 +242,11 @@ describe("ConnectorSetupForm", () => {
     expect(connectionCall).toBeDefined();
     const payload = JSON.parse(String(connectionCall?.[2]?.body ?? "{}"));
     expect(payload.scope_policy?.excluded_families ?? []).not.toContain("aws.identity_center");
+    expect(onConnected).toHaveBeenCalledWith(expect.objectContaining({
+      sourceID: "aws",
+      tenantID: "writer",
+      runtimeID: "runtime-from-response",
+    }));
   });
 
   it("applies generated AWS Secrets Manager references to credential fields", async () => {
