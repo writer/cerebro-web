@@ -225,7 +225,7 @@ export default function FrameworkDetailPage() {
 
           {!isUpcoming && (
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-              <Panel title="SOC 2 tracking snapshot">
+              <Panel title={`${displayName} tracking snapshot`}>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                     <div className="text-xl font-semibold text-[var(--text-primary)]">{humanize(framework.maturity?.status || "not configured")}</div>
