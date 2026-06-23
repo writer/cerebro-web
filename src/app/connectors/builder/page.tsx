@@ -466,8 +466,9 @@ function ConnectorBuilderContent() {
               <label className={labelClass}>
                 Expected status
                 <input
-                  value={(draft.transport?.verification?.expect_status ?? [200]).join(", ")}
-                  onChange={(event) => { const parsed = event.target.value.split(",").map((value) => Number.parseInt(value.trim(), 10)).filter(Number.isFinite); updateVerification({ expect_status: parsed.length > 0 ? parsed : undefined }); }}
+                  key={(draft.transport?.verification?.expect_status ?? [200]).join(",")}
+                  defaultValue={(draft.transport?.verification?.expect_status ?? [200]).join(", ")}
+                  onBlur={(event) => { const parsed = event.target.value.split(",").map((value) => Number.parseInt(value.trim(), 10)).filter(Number.isFinite); updateVerification({ expect_status: parsed.length > 0 ? parsed : undefined }); }}
                   placeholder="200"
                   className={inputClass}
                 />
