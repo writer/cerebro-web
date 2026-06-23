@@ -33,12 +33,11 @@ function parseArgs(argv) {
 function usage() {
   return `Usage:
   node scripts/generate-ask-eval-candidates.mjs --source fixture:scripts/fixtures/ask-eval-scenarios.json
-  node scripts/generate-ask-eval-candidates.mjs --source report:.raindrop-evals/ask/latest.json
+  node scripts/generate-ask-eval-candidates.mjs --source report:.eval-reports/ask/latest.json
   node scripts/generate-ask-eval-candidates.mjs --source jsonl:/tmp/cerebro-ask-telemetry.jsonl
   node scripts/generate-ask-eval-candidates.mjs --source local_sse:http://127.0.0.1:8080/grc/ask/demo
-  node scripts/generate-ask-eval-candidates.mjs --source workshop_export:/tmp/workshop-trace.json
 
-Candidates are sanitized and written to .raindrop-evals/ask/candidates by default.`;
+Candidates are sanitized and written to .eval-reports/ask/candidates by default.`;
 }
 
 async function loadCandidates(source) {
@@ -56,8 +55,6 @@ async function loadCandidates(source) {
       return loadJSONLCandidates(location);
     case "local_sse":
       return loadLocalSSECandidates(location);
-    case "workshop_export":
-      return loadWorkshopExportCandidates(location);
     case "cloudwatch":
       throw new Error("cloudwatch source is intentionally disabled until a reviewed production adapter adds allowlists, audit logging, retention, and redaction tests");
     default:
@@ -80,27 +77,6 @@ async function loadLocalSSECandidates(location) {
       model: "unknown",
       stream,
     }, { source: "local_sse", synthetic: false }),
-  ];
-}
-
-async function loadWorkshopExportCandidates(location) {
-  const payload = JSON.parse(await readFile(location, "utf8"));
-  const spans = payload.resourceSpans?.flatMap((resourceSpan) => resourceSpan.scopeSpans ?? [])
-    .flatMap((scopeSpan) => scopeSpan.spans ?? []) ?? payload.spans ?? [];
-  const stream = spans
-    .filter((span) => String(span.name ?? "").startsWith("ask."))
-    .map((span) => {
-      const output = spanAttributeJSON(span, "traceloop.entity.output");
-      return { event: String(span.name).replace(/^ask\./, ""), data: output ?? {} };
-    });
-  return [
-    buildTraceFixtureCandidate({
-      id: `workshop-export-${Date.now()}`,
-      question: "<redacted local Workshop export>",
-      tenant_id: "local",
-      model: "unknown",
-      stream,
-    }, { source: "workshop_export", synthetic: false }),
   ];
 }
 
@@ -202,17 +178,6 @@ function parseSSE(text) {
     events.push({ event: name, data: data ? JSON.parse(data) : {} });
   }
   return events;
-}
-
-function spanAttributeJSON(span, key) {
-  const attr = (span.attributes ?? []).find((candidate) => candidate.key === key);
-  const raw = attr?.value?.stringValue;
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }
 
 async function main() {

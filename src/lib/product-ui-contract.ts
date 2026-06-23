@@ -4,7 +4,7 @@ export const REQUIRED_DEVELOPER_UTILITY_LABELS = [
   "Agent Platform",
   "Identity Contract",
   "Security Producers",
-  "Raindrop Ask Evals",
+  "Ask Evals",
 ] as const;
 
 export const BANNED_PRODUCT_UI_PATTERNS = [

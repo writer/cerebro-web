@@ -3,10 +3,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  DEFAULT_WORKSHOP_URL,
-  buildWorkshopSpansFromEvalRun,
-  emitWorkshopTrace,
-  normalizeWorkshopURL,
   nowISO,
   reportTotals,
   writeReport,
@@ -27,9 +23,7 @@ function parseArgs(argv) {
   const args = {
     count: 2400,
     adversarialCount: 600,
-    outDir: process.env.CEREBRO_ASK_ADVERSARIAL_OUT_DIR ?? ".raindrop-evals/ask/adversarial",
-    workshopURL: normalizeWorkshopURL(process.env.RAINDROP_LOCAL_DEBUGGER ?? process.env.RAINDROP_WORKSHOP_URL ?? DEFAULT_WORKSHOP_URL),
-    emitWorkshop: false,
+    outDir: process.env.CEREBRO_ASK_ADVERSARIAL_OUT_DIR ?? ".eval-reports/ask/adversarial",
     writeCandidates: true,
     fixturePaths: process.env.CEREBRO_ASK_CORPUS_FIXTURES?.split(",").filter(Boolean),
   };
@@ -41,8 +35,6 @@ function parseArgs(argv) {
       args.adversarialCount = Number(argv[++index]);
     } else if (arg === "--out") {
       args.outDir = argv[++index];
-    } else if (arg === "--workshop") {
-      args.emitWorkshop = true;
     } else if (arg === "--fixture") {
       args.fixturePaths = [...(args.fixturePaths ?? []), argv[++index]];
     } else if (arg === "--no-candidates") {
@@ -59,7 +51,7 @@ function parseArgs(argv) {
 function usage() {
   return `Usage:
   npm run eval:ask:adversarial -- --count 2400 --adversarial-count 600
-  npm run eval:ask:adversarial -- --count 100 --adversarial-count 25 --workshop
+  npm run eval:ask:adversarial -- --count 100 --adversarial-count 25
 
 This is local-only. It generates synthetic golden-corpus traces plus adversarial mutations,
 scores them with the Ask rubric suite, and writes sanitized candidate JSONL alongside the report.`;
@@ -87,26 +79,16 @@ async function main() {
   const startedAt = Date.now();
   const runs = buildCorpusRuns(goldenScenarios, adversarialScenarios, {
     startedAt,
-    workshopURL: args.workshopURL,
   });
-
-  if (args.emitWorkshop) {
-    for (const scenario of [...goldenScenarios, ...adversarialScenarios]) {
-      const run = runs.find((candidate) => candidate.id === scenario.id);
-      await emitWorkshopTrace(args.workshopURL, buildWorkshopSpansFromEvalRun(scenario, scenario.stream, run));
-    }
-  }
 
   const summary = corpusSummary(runs);
   const report = await writeReport({
     generatedAt: nowISO(),
     localOnly: true,
-    workshopURL: args.workshopURL,
     corpus: {
       schemaVersion: corpusConfig.schema_version,
       requestedGoldenCount: args.count,
       requestedAdversarialCount: args.adversarialCount,
-      emittedWorkshop: args.emitWorkshop,
     },
     adversarial: summary,
     totals: reportTotals(runs),

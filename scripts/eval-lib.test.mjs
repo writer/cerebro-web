@@ -80,7 +80,7 @@ describe("Ask eval helpers", () => {
       { event: "rows", data: { rows } },
       { event: "summary", data: { markdown: summary, citations: [{ urn: "urn:cerebro:writer:finding:alpha", span: [4, 36] }] } },
       { event: "done", data: { trace_id: "trace-1", total_ms: 25 } },
-    ], { startedAt: 0, workshopRunId: "workshop-1" });
+    ], { startedAt: 0 });
     expect(run.status).toBe("passed");
     expect(run.rubrics.map((rubric) => rubric.id)).toContain("citation-integrity");
     expect(run.events).toHaveLength(5);
@@ -136,7 +136,7 @@ describe("Ask eval helpers", () => {
         { id: "ungrounded_summary_urn", label: "Ungrounded", expected_detection: "summary-grounding" },
       ],
     }, { count: 1 });
-    const run = buildAdversarialRun(scenario, { startedAt: 0, workshopRunId: "attack-1" });
+    const run = buildAdversarialRun(scenario, { startedAt: 0 });
     expect(run.status).toBe("passed");
     expect(run.rubrics[0].id).toBe("adversarial-detected");
     expect(run.judges?.adversarialDetection.passed).toBe(true);

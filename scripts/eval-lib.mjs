@@ -2,14 +2,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export const DEFAULT_WORKSHOP_URL = "http://localhost:5899";
-export const DEFAULT_OUT_DIR = ".raindrop-evals/ask";
-export const DEFAULT_CANDIDATE_OUT_DIR = ".raindrop-evals/ask/candidates";
+export const DEFAULT_OUT_DIR = ".eval-reports/ask";
+export const DEFAULT_CANDIDATE_OUT_DIR = ".eval-reports/ask/candidates";
 export const TRACE_FIXTURE_SCHEMA_VERSION = "cerebro.trace-fixture/v1";
-
-export function normalizeWorkshopURL(value = DEFAULT_WORKSHOP_URL) {
-  return String(value).replace(/\/+$/, "");
-}
 
 export function assertLocalURL(raw, label) {
   const url = new URL(raw);
@@ -31,84 +26,6 @@ export function randomHex(bytes) {
   return randomBytes(bytes).toString("hex");
 }
 
-export function attr(key, value) {
-  if (value === undefined || value === null) return null;
-  if (typeof value === "number") return { key, value: { doubleValue: value } };
-  if (typeof value === "boolean") return { key, value: { boolValue: value } };
-  return { key, value: { stringValue: String(value) } };
-}
-
-export function attrs(values) {
-  return Object.entries(values).flatMap(([key, value]) => {
-    const next = attr(key, value);
-    return next ? [next] : [];
-  });
-}
-
-export function otelTime(ms) {
-  return `${BigInt(Math.max(0, Math.floor(ms))) * 1_000_000n}`;
-}
-
-export function makeSpan({
-  traceId,
-  spanId,
-  parentSpanId,
-  name,
-  kind,
-  startedAt,
-  durationMs,
-  status = "OK",
-  input,
-  output,
-  attributes = {},
-}) {
-  const end = startedAt + durationMs;
-  return {
-    traceId,
-    spanId,
-    parentSpanId,
-    name,
-    startTimeUnixNano: otelTime(startedAt),
-    endTimeUnixNano: otelTime(end),
-    status: { code: status === "ERROR" ? 2 : 1 },
-    attributes: attrs({
-      "raindrop.span.kind": kind,
-      "traceloop.entity.input": input === undefined ? undefined : JSON.stringify(input),
-      "traceloop.entity.output": output === undefined ? undefined : JSON.stringify(output),
-      "traceloop.entity.duration_ms": durationMs,
-      ...attributes,
-    }),
-  };
-}
-
-export async function emitWorkshopTrace(workshopURL, spans) {
-  const res = await fetch(`${normalizeWorkshopURL(workshopURL)}/v1/traces`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      resourceSpans: [
-        {
-          resource: {
-            attributes: attrs({
-              "service.name": "cerebro-web-evals",
-            }),
-          },
-          scopeSpans: [
-            {
-              scope: { name: "cerebro-web-eval-runner" },
-              spans,
-            },
-          ],
-        },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Workshop trace export failed (${res.status}): ${text}`);
-  }
-}
-
 export async function writeReport(report, outDir = DEFAULT_OUT_DIR) {
   await mkdir(outDir, { recursive: true });
   const filename = `ask-eval-${new Date(report.generatedAt).toISOString().replaceAll(":", "-")}.json`;
@@ -116,27 +33,12 @@ export async function writeReport(report, outDir = DEFAULT_OUT_DIR) {
   const withPath = { ...report, outputPath };
   await writeFile(outputPath, JSON.stringify(withPath, null, 2));
   await writeFile(path.join(outDir, "latest.json"), JSON.stringify(withPath, null, 2));
-  if (outDir.startsWith(".raindrop-evals")) {
+  if (outDir.startsWith(".eval-reports")) {
     const publicDir = path.join("public", "evals", path.basename(outDir));
     await mkdir(publicDir, { recursive: true });
     await writeFile(path.join(publicDir, "latest.json"), JSON.stringify(withPath, null, 2));
   }
   return withPath;
-}
-
-export function eventSpanBase(scenario, event, index, startedAt) {
-  return {
-    name: `ask.${event.event}`,
-    startedAt: startedAt + 20 + index * 7,
-    durationMs: 5,
-    input: { scenario_id: scenario.id, event: event.event },
-    output: event.data,
-    attributes: {
-      "ai.toolCall.name": `ask.${event.event}`,
-      "eval.scenario_id": scenario.id,
-      "eval.event": event.event,
-    },
-  };
 }
 
 export function summaryFromEvents(events) {
@@ -348,8 +250,6 @@ export function summaryDiff(baseline, current) {
 
 export function buildAskEvalRunFromEvents(scenario, events, options = {}) {
   const startedAt = options.startedAt ?? Date.now();
-  const workshopURL = normalizeWorkshopURL(options.workshopURL ?? DEFAULT_WORKSHOP_URL);
-  const traceId = options.workshopRunId ?? stableHex(`ask-eval:${scenario.id}:${startedAt}:${randomHex(4)}`, 16);
   const rows = rowsFromEvents(events);
   const citations = citationsFromEvents(events);
   const done = doneFromEvents(events);
@@ -375,8 +275,6 @@ export function buildAskEvalRunFromEvents(scenario, events, options = {}) {
     startedAt: new Date(startedAt).toISOString(),
     completedAt: new Date(completedAtMs).toISOString(),
     durationMs,
-    workshopRunId: traceId,
-    workshopURL: `${workshopURL}/runs/${traceId}`,
     traceId: done.trace_id,
     rowCount: rows.length,
     citationCount: citations.length,
@@ -398,109 +296,6 @@ export function buildAskEvalRunFromEvents(scenario, events, options = {}) {
     rubrics,
     cypherPreview: String(cypher.cypher ?? "").slice(0, 240),
   };
-}
-
-export function buildWorkshopSpansFromEvalRun(scenario, events, run) {
-  const startedAt = Date.parse(run.startedAt);
-  const completedAtMs = startedAt + run.durationMs;
-  const traceId = run.workshopRunId;
-  const rootSpanId = stableHex(`${traceId}:root`, 8);
-  const cypher = cypherFromEvents(events);
-  const queryPlan = queryPlanFromEvents(events);
-  return [
-    makeSpan({
-      traceId,
-      spanId: rootSpanId,
-      name: "cerebro.ask.eval",
-      kind: "agent_root",
-      startedAt,
-      durationMs: run.durationMs,
-      input: {
-        question: scenario.question,
-        tenant_id: scenario.tenant_id,
-        scope_urn: scenario.scope_urn,
-        model: scenario.model,
-      },
-      output: {
-        status: run.status,
-        score: run.score,
-        summary: run.summary,
-        queryPlan,
-        rubrics: run.rubrics,
-      },
-      attributes: {
-        "ai.telemetry.metadata.raindrop.eventId": `ask-eval:${scenario.id}`,
-        "ai.telemetry.metadata.raindrop.eventName": "cerebro_ask_eval",
-        "ai.telemetry.metadata.raindrop.userId": scenario.tenant_id,
-        "ai.telemetry.metadata.raindrop.convoId": "cerebro-web-ask-evals",
-        "ai.model.id": scenario.model,
-        "eval.scenario_id": scenario.id,
-        "eval.status": run.status,
-        "eval.score": run.score,
-        "eval.local_only": true,
-      },
-    }),
-    makeSpan({
-      traceId,
-      spanId: stableHex(`${traceId}:cypher-validation`, 8),
-      parentSpanId: rootSpanId,
-      name: "ask.cypher_validation",
-      kind: "tool_call",
-      startedAt: startedAt + 8,
-      durationMs: 6,
-      input: { cypher: cypher.cypher ?? "", expect_refusal: Boolean(scenario.expect_refusal) },
-      output: cypher.validator ?? { ok: !scenario.expect_refusal },
-      attributes: {
-        "ai.toolCall.name": "ask.cypher_validation",
-        "eval.scenario_id": scenario.id,
-      },
-    }),
-    makeSpan({
-      traceId,
-      spanId: stableHex(`${traceId}:query-plan`, 8),
-      parentSpanId: rootSpanId,
-      name: "ask.query_plan",
-      kind: "tool_call",
-      startedAt: startedAt + 12,
-      durationMs: 6,
-      input: {
-        question: scenario.question,
-        expect_conversion_diagnostics: Boolean(scenario.expect_conversion_diagnostics),
-      },
-      output: queryPlan,
-      attributes: {
-        "ai.toolCall.name": "ask.query_plan",
-        "eval.scenario_id": scenario.id,
-        "eval.query_plan.intent": queryPlan.plan?.intent,
-        "eval.query_plan.source": queryPlan.source,
-        "eval.query_plan.corrected": queryPlan.corrected,
-      },
-    }),
-    ...events.map((event, index) =>
-      makeSpan({
-        traceId,
-        spanId: stableHex(`${traceId}:${event.event}:${index}`, 8),
-        parentSpanId: rootSpanId,
-        kind: "tool_call",
-        ...eventSpanBase(scenario, event, index, startedAt),
-      }),
-    ),
-    makeSpan({
-      traceId,
-      spanId: stableHex(`${traceId}:rubrics`, 8),
-      parentSpanId: rootSpanId,
-      name: "ask.rubric_score",
-      kind: "tool_call",
-      startedAt: completedAtMs - 4,
-      durationMs: 4,
-      input: { scenario_id: scenario.id },
-      output: { status: run.status, score: run.score, rubrics: run.rubrics },
-      attributes: {
-        "ai.toolCall.name": "ask.rubric_score",
-        "eval.scenario_id": scenario.id,
-      },
-    }),
-  ];
 }
 
 export function reportTotals(runs) {

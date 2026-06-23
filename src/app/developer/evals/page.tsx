@@ -5,8 +5,8 @@ export default function DeveloperEvalsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Raindrop Ask Evals"
-        description="Local-only Ask quality regression runs, rubric results, and links to Workshop traces."
+        title="Ask Evals"
+        description="Local-only Ask quality regression runs and rubric results."
       />
 
       <Panel title="Local Commands">

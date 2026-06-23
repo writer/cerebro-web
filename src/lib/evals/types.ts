@@ -42,8 +42,6 @@ export type AskEvalRun = {
   startedAt: string;
   completedAt: string;
   durationMs: number;
-  workshopRunId?: string;
-  workshopURL?: string;
   traceId?: string;
   rowCount: number;
   citationCount: number;
@@ -66,7 +64,6 @@ export type AskEvalRun = {
 export type AskEvalReport = {
   generatedAt: string;
   localOnly: boolean;
-  workshopURL: string;
   outputPath?: string;
   totals: {
     passed: number;
