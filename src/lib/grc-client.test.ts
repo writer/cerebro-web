@@ -36,7 +36,10 @@ describe("grc export helpers", () => {
   it("streams a successful CSV response into a browser download", async () => {
     const csv = "id,title\nfinding-1,Risky";
     vi.stubGlobal("fetch", vi.fn(async () => new Response(csv, { status: 200, headers: { "content-type": "text/csv" } })));
-    const createObjectURL = vi.fn(() => "blob:csv");
+    const createObjectURL = vi.fn((blob: Blob | MediaSource) => {
+      void blob;
+      return "blob:csv";
+    });
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("window", { URL: { createObjectURL, revokeObjectURL } });
     const anchor = { href: "", download: "", click: vi.fn() };

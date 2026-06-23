@@ -37,6 +37,7 @@ import {
   normalizeScopePolicy,
   scopePolicyExclusionCount,
 } from "./connectors";
+import type { ConnectorDefinition } from "./connectors";
 
 describe("connector diagnostic timeline labels", () => {
   it("labels provider-neutral diagnostic stages", () => {
@@ -111,7 +112,7 @@ describe("connector credential store normalization", () => {
       nativeResolutionAvailable: true,
     });
     expect(stores.find((store) => store.id === "aws_secrets_manager")?.requiredConfig).toHaveLength(1);
-    expect(stores.some((store) => store.id === "unknown_store")).toBe(false);
+    expect(stores.some((store) => String(store.id) === "unknown_store")).toBe(false);
   });
 
   it("uses backend-advertised connection methods and field metadata", () => {
@@ -214,8 +215,6 @@ describe("connector catalog metadata", () => {
 
   it("treats advertised connection methods as a live runtime surface", () => {
     expect(connectorIsCatalogOnly({
-      source_id: "aws",
-      name: "AWS",
       catalog_status: "generateable",
       connection_methods: [{ id: "encrypted_submission" }],
     })).toBe(false);
@@ -350,12 +349,13 @@ describe("dynamic connector definitions", () => {
       },
     });
     expect(draft.config_fields?.[0]).toMatchObject({ key: "base_url", required: true });
+    expect(draft.transport).toMatchObject({ base_url: "${config.base_url}", verification: { path: "/health" } });
     expect(draft.auth.credential_fields?.[0]).toMatchObject({ key: "token", secret: true, reference_only: true });
     expect(draft.resource_families?.[0]).toMatchObject({ id: "assets", method: "GET", id_field: "id" });
   });
 
   it("derives lifecycle and validation status from backend gates", () => {
-    const definition = {
+    const definition: ConnectorDefinition = {
       tenant_id: "tenant-a",
       source_id: "example",
       display_name: "Example",
@@ -370,7 +370,7 @@ describe("dynamic connector definitions", () => {
         ],
       },
       promotion: { eligible_stages: ["sandbox"] },
-    } as const;
+    };
 
     expect(connectorDefinitionStatus(definition)).toBe("blocked");
     expect(connectorDefinitionBlockingChecks(definition)).toBe(1);
