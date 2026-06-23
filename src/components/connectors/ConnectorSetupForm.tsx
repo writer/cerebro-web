@@ -8,6 +8,8 @@ import { Badge, ErrorBlock } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import type {
   ConnectorCatalogEntry,
+  ConnectorConnectedContext,
+  ConnectorConnectionResponse,
   ConnectorConnectionMethod,
   ConnectorConnectionMethodID,
   ConnectorDeploymentGuide,
@@ -32,6 +34,7 @@ import {
   connectorCredentialRotatePath,
   connectorCredentialsPath,
   connectorCredentialStatusLabel,
+  connectorConnectedContextFromResponse,
   connectorScopeOptionFamilies,
   connectorSubmitErrorMessage,
   defaultCredentialStoreID,
@@ -1981,7 +1984,7 @@ export default function ConnectorSetupForm({
   apiKey?: string;
   credentialStores: NormalizedCredentialStore[];
   initialFramework?: string;
-  onConnected: () => Promise<void> | void;
+  onConnected: (context: ConnectorConnectedContext) => Promise<void> | void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const methods = useMemo(() => connectionMethodsForConnector(connector, credentialStores), [connector, credentialStores]);
@@ -2214,10 +2217,16 @@ export default function ConnectorSetupForm({
         setPreflight(response.data);
         setSuccess(null);
       } else {
+        const connection = response.data as ConnectorConnectionResponse;
+        const context = connectorConnectedContextFromResponse(connection, {
+          sourceID: connector.source_id,
+          tenantID: tenant,
+          runtimeID,
+        });
         setPreflight(null);
         resetForm();
-        setSuccess({ runtimeID, tenant, storeLabel: selectedStore.label, status: "saved" });
-        await onConnected();
+        setSuccess({ runtimeID: context.runtimeID, tenant: context.tenantID, storeLabel: selectedStore.label, status: "saved" });
+        await onConnected(context);
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : connectorSubmitErrorMessage());

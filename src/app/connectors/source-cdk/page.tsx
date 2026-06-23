@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -15,22 +15,33 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import ConnectorSetupForm from "@/components/connectors/ConnectorSetupForm";
 import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
+import { useApiKey } from "@/components/providers";
+import { fetchCerebro } from "@/lib/cerebro-client";
 import { withQuery } from "@/lib/cerebro-data";
 import {
+  ConnectorCatalogEntry,
+  ConnectorConnectedContext,
+  ConnectorConnectionSummary,
   ConnectorDefinition,
   ConnectorDefinitionPlanResponse,
   ConnectorDefinitionListResponse,
   ConnectorDefinitionResourceFamily,
+  ConnectorDetailResponse,
+  ConnectorLibraryResponse,
   SourceCDKPromotionPlan,
+  connectorDepositsPath,
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStageLabels,
   connectorDefinitionStages,
   connectorDefinitionStatus,
+  normalizeCredentialStores,
   sourceCDKPlanCategoryCounts,
   sourceCDKPlanPath,
   sourceCDKPlanStatusLabel,
+  sourceRuntimeSyncPath,
 } from "@/lib/connectors";
 import { useGRCQuery } from "@/lib/grc-client";
 
@@ -547,10 +558,114 @@ function SourcesQueue({
   );
 }
 
+function firstConnection(connections: ConnectorConnectionSummary[] | undefined, tenantID: string) {
+  const cleanTenant = tenantID.trim();
+  return (connections ?? []).find((connection) => !cleanTenant || connection.tenant_id === cleanTenant) ?? connections?.[0];
+}
+
+function depositSample(definition: ConnectorDefinition, runtimeID: string, tenantID: string) {
+  const family = definition.ingest?.deposit?.resource_families?.[0] || definition.resource_families?.[0]?.id || "assets";
+  return JSON.stringify({
+    tenant_id: tenantID || definition.tenant_id,
+    runtime_id: runtimeID || `${tenantID || definition.tenant_id || "tenant"}-${definition.source_id}-connection`,
+    family_id: family,
+    batch_id: "snapshot-2026-06-23",
+    full_state: definition.ingest?.deposit?.full_state_sync ?? false,
+    records: [{ id: "record-1", name: "Example record" }],
+  }, null, 2);
+}
+
+function RuntimeActivationPanel({
+  definition,
+  connector,
+  credentialStores,
+  tenantID,
+  apiKey,
+  existingConnection,
+  loading,
+  error,
+  onConnected,
+  onRunSync,
+  syncStatus,
+  syncing,
+}: {
+  definition?: ConnectorDefinition;
+  connector?: ConnectorCatalogEntry;
+  credentialStores: ReturnType<typeof normalizeCredentialStores>;
+  tenantID: string;
+  apiKey?: string;
+  existingConnection?: ConnectorConnectionSummary;
+  loading: boolean;
+  error?: string | null;
+  onConnected: (context: ConnectorConnectedContext) => Promise<void>;
+  onRunSync: (runtimeID: string) => void;
+  syncStatus: { type: "success" | "error"; message: string } | null;
+  syncing: boolean;
+}) {
+  const runtimeID = existingConnection?.runtime_id ?? "";
+  const isDeposit = definition?.ingest?.mode === "deposit";
+  return (
+    <Panel title="Activate runtime" action={definition ? <Badge value={isDeposit ? "Deposit ingest" : "Pull runtime"} /> : undefined}>
+      {!definition && <EmptyBlock label="Choose a source to activate its runtime." />}
+      {definition && (
+        <div className="space-y-4">
+          <p className="text-[13px] leading-6 text-[var(--text-muted)]">
+            Save a runtime connection for this source, then {isDeposit ? "send typed records to its deposit endpoint." : "run a bounded initial sync to confirm events enter the graph."}
+          </p>
+          {loading && !connector && <LoadingBlock label="Loading connector setup metadata..." />}
+          {error && <ErrorBlock error={error} recoveryDetail="Refresh the connector library, then try activation again." />}
+          {connector ? (
+            <ConnectorSetupForm
+              connector={connector}
+              tenantID={tenantID || definition.tenant_id}
+              apiKey={apiKey}
+              credentialStores={credentialStores}
+              onConnected={onConnected}
+            />
+          ) : !loading && !error ? (
+            <EmptyBlock label="Connector setup metadata is not available for this definition yet." />
+          ) : null}
+          {runtimeID && !isDeposit && (
+            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[13px] font-semibold text-[var(--text-primary)]">Initial sync</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">Run one page for {runtimeID} to verify runtime collection.</div>
+                </div>
+                <button type="button" disabled={syncing} onClick={() => onRunSync(runtimeID)} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px] disabled:opacity-60">
+                  <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+                  {syncing ? "Running..." : "Run initial sync"}
+                </button>
+              </div>
+            </div>
+          )}
+          {definition && isDeposit && (
+            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">Deposit endpoint</div>
+              <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
+                Post JSON records to <code className="rounded bg-[var(--surface-muted)] px-1 py-0.5">{connectorDepositsPath(definition.source_id)}</code>. Use a stable batch_id or idempotency_key when retrying.
+              </div>
+              <pre className="mt-3 max-h-64 overflow-auto rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 text-[11px] leading-5 text-[var(--text-secondary)]">{depositSample(definition, runtimeID, tenantID)}</pre>
+            </div>
+          )}
+          {syncStatus && (
+            <div className={`rounded-lg border p-3 text-[12px] ${syncStatus.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-100" : "border-red-200 bg-red-50 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-100"}`}>
+              {syncStatus.message}
+            </div>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function SourceReadinessContent() {
+  const { apiKey } = useApiKey();
   const searchParams = useSearchParams();
   const tenantID = searchParams.get("tenant_id") ?? "";
   const requestedDefinitionID = searchParams.get("definition_id") ?? "";
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: tenantID }));
   const definitions = useMemo(() => definitionsQuery.data?.definitions ?? [], [definitionsQuery.data?.definitions]);
   const selectedDefinitionID = requestedDefinitionID || definitions[0]?.id || "";
@@ -558,7 +673,42 @@ function SourceReadinessContent() {
   const planQuery = useGRCQuery<ConnectorDefinitionPlanResponse>(
     selectedDefinitionID ? `/connector-definitions/${encodeURIComponent(selectedDefinitionID)}/promotion-plan` : null,
   );
+  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: tenantID }));
+  const detailQuery = useGRCQuery<ConnectorDetailResponse>(
+    selectedDefinition?.source_id ? withQuery(`/connectors/${encodeURIComponent(selectedDefinition.source_id)}`, { tenant_id: tenantID }) : null,
+  );
   const plan = planQuery.data?.plan;
+  const credentialStores = useMemo(() => normalizeCredentialStores(libraryQuery.data), [libraryQuery.data]);
+  const connector = detailQuery.data?.connector ?? libraryQuery.data?.connectors?.find((entry) => entry.source_id === selectedDefinition?.source_id);
+  const existingConnection = firstConnection(detailQuery.data?.connections, tenantID);
+  const reloadActivation = async () => {
+    await Promise.all([
+      definitionsQuery.reload(),
+      planQuery.reload(),
+      libraryQuery.reload(),
+      detailQuery.reload(),
+    ]);
+  };
+  const handleConnected = async (context: ConnectorConnectedContext) => {
+    setSyncStatus({ type: "success", message: `Saved runtime ${context.runtimeID}.` });
+    await reloadActivation();
+  };
+  const runInitialSync = async (runtimeID: string) => {
+    setSyncing(true);
+    setSyncStatus(null);
+    try {
+      const response = await fetchCerebro(sourceRuntimeSyncPath(runtimeID, 1), apiKey, { method: "POST" });
+      if (!response.ok) {
+        throw new Error(`Initial sync failed (${response.status}).`);
+      }
+      setSyncStatus({ type: "success", message: `Initial sync started for ${runtimeID}.` });
+      await reloadActivation();
+    } catch (syncError) {
+      setSyncStatus({ type: "error", message: syncError instanceof Error ? syncError.message : "Initial sync failed." });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -576,7 +726,7 @@ function SourceReadinessContent() {
             </Link>
             <button
               type="button"
-              onClick={() => { void definitionsQuery.reload(); void planQuery.reload(); }}
+              onClick={() => { void reloadActivation(); }}
               className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]"
             >
               <RefreshCw className="h-4 w-4" />
@@ -609,6 +759,20 @@ function SourceReadinessContent() {
             <AccessSafetyPanel definition={selectedDefinition} />
           </div>
           <RuntimeActivationPlanPanel plan={plan} />
+          <RuntimeActivationPanel
+            definition={selectedDefinition}
+            connector={connector}
+            credentialStores={credentialStores}
+            tenantID={tenantID}
+            apiKey={apiKey}
+            existingConnection={existingConnection}
+            loading={detailQuery.loading || libraryQuery.loading}
+            error={detailQuery.error || libraryQuery.error}
+            onConnected={handleConnected}
+            onRunSync={(runtimeID) => { void runInitialSync(runtimeID); }}
+            syncStatus={syncStatus}
+            syncing={syncing}
+          />
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.5fr)]">
             <TrustLadder definition={selectedDefinition} />
             <ReadinessChecklist definition={selectedDefinition} />

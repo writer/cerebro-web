@@ -10,7 +10,9 @@ import {
   connectorCredentialRotatePath,
   connectorCredentialsPath,
   connectorCredentialStatusLabel,
+  connectorConnectedContextFromResponse,
   connectorDefinitionOriginLabel,
+  connectorDepositsPath,
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStatus,
@@ -20,6 +22,7 @@ import {
   sourceCDKPlanCategoryCounts,
   sourceCDKPlanPath,
   sourceCDKPlanStatusLabel,
+  sourceRuntimeSyncPath,
   connectorIntegrationDepthLabel,
   connectorIsCatalogOnly,
   connectorMatchesSlug,
@@ -283,9 +286,33 @@ describe("connector credential transport", () => {
     expect(connectorCredentialPath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123");
     expect(connectorCredentialRotatePath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123/rotate");
     expect(connectorCredentialRevokePath("aws", "cred_123")).toBe("/connectors/aws/credentials/cred_123/revoke");
+    expect(connectorDepositsPath("custom source")).toBe("/connectors/custom%20source/deposits");
+    expect(sourceRuntimeSyncPath("runtime a", 1)).toBe("/source-runtimes/runtime%20a/sync?page_limit=1");
     expect(connectorCredentialStatusLabel("valid")).toBe("Valid");
     expect(connectorCredentialHealth({ status: "valid" })).toBe("healthy");
     expect(connectorCredentialHealth({ status: "revoked" })).toBe("bad");
+  });
+
+  it("derives connected runtime context from save responses", () => {
+    expect(connectorConnectedContextFromResponse({
+      source_id: "aws",
+      runtime: { id: "runtime-from-runtime", tenant_id: "tenant-a" },
+      credential: {
+        id: "cred-1",
+        tenant_id: "tenant-b",
+        source_id: "aws",
+        runtime_id: "runtime-from-credential",
+        credential_store_id: "environment_managed",
+        auth_method: "environment_managed",
+        status: "valid",
+        key_id: "environment",
+        fields: [],
+      },
+    }, { sourceID: "fallback", tenantID: "tenant-c", runtimeID: "runtime-fallback" })).toMatchObject({
+      sourceID: "aws",
+      tenantID: "tenant-b",
+      runtimeID: "runtime-from-credential",
+    });
   });
 });
 

@@ -61,6 +61,7 @@ describe("Cerebro proxy route permissions", () => {
   it("maps sensitive write families to dedicated permissions", () => {
     expect(permissionForCerebroProxyRequest("GET", "connectors/github/credentials")).toBe("connector-credentials:read");
     expect(permissionForCerebroProxyRequest("POST", "connectors/github/credentials")).toBe("connector-credentials:write");
+    expect(permissionForCerebroProxyRequest("POST", "connectors/custom/deposits")).toBe("connectors:write");
     expect(permissionForCerebroProxyRequest("POST", "connector-definitions/plan")).toBe("connector-definitions:write");
     expect(permissionForCerebroProxyRequest("POST", "connector-definitions/preview")).toBe("connector-definitions:write");
     expect(permissionForCerebroProxyRequest("POST", "connector-definitions/github/promote")).toBe("connector-definitions:write");
