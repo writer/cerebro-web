@@ -36,7 +36,9 @@ const searchCommands = (query: string, askGraph: (question: string) => void): Co
     ? `/controls?framework=${encodeURIComponent(frameworkMatch.name)}`
     : `/controls?control=${encoded}`;
   const controlsLabel = frameworkMatch
-    ? `Filter controls by ${frameworkMatch.name}`
+    ? frameworkMatch.lifecycle === "upcoming"
+      ? `Plan for upcoming framework ${frameworkMatch.name}`
+      : `Filter controls by ${frameworkMatch.name}`
     : `Filter controls by "${trimmed}"`;
   return [
     { id: "ask-graph", label: `Ask graph: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Send this question to the graph query panel.", section: "Operator", keywords: ["ask", "agent", "graph", "cypher"], onRun: () => askGraph(trimmed) },

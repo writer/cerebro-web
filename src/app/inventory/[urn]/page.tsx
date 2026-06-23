@@ -22,7 +22,7 @@ import {
   shortEntity,
 } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
-import { controlMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { controlMatchesFrameworkSegment, frameworkOptionLabel, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { inventoryAccountability, inventoryReviewDetail, inventoryReviewLabel, inventoryReviewState } from "@/lib/inventory-review";
 
 type Tab = "overview" | "vulnerabilities" | "tests" | "framework" | "reports" | "timeline";
@@ -226,7 +226,7 @@ function TestsPane({ tests }: { tests: GRCInventoryTest[] }) {
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className={inputClass} />
         <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="Framework" list="asset-test-framework-options" className={inputClass} />
         <datalist id="asset-test-framework-options">
-          {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+          {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
         </datalist>
         <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Status</button>
         <button type="button" className="text-[13px] font-medium text-[var(--text-secondary)]">Due date</button>
@@ -268,7 +268,7 @@ function FrameworkPane({ data }: { data: GRCInventoryAssetDetail }) {
           Framework
           <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="All frameworks" list="asset-framework-options" className={`${inputClass} mt-1 w-full`} />
           <datalist id="asset-framework-options">
-            {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} />)}
+            {supportedGRCFrameworkNames.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
           </datalist>
         </label>
       </div>
