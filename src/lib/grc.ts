@@ -94,6 +94,7 @@ export type GRCControl = {
   framework_name: string;
   framework_id?: string;
   framework_version?: string;
+  framework_lifecycle?: "active" | "upcoming" | string;
   family_id?: string;
   family_name?: string;
   control_id: string;
@@ -242,6 +243,7 @@ export type GRCControlCoverageControl = {
   framework_id?: string;
   framework_name: string;
   framework_version?: string;
+  framework_lifecycle?: "active" | "upcoming" | string;
   family_id: string;
   family_name: string;
   control_id: string;
@@ -265,6 +267,45 @@ export type GRCControlCoverageProfile = {
   summary: GRCControlCoverageSummary;
   controls?: GRCControlCoverageControl[];
   unmapped_controls?: GRCControlRef[];
+};
+
+export type GRCFramework = {
+  id?: string;
+  name: string;
+  framework_version?: string;
+  lifecycle: "active" | "upcoming" | string;
+  description?: string;
+  tags?: string[];
+  family_count: number;
+  control_count: number;
+  maturity?: {
+    status: string;
+    score: number;
+    summary?: string;
+  };
+  coverage?: {
+    selected_controls: number;
+    mapped_controls: number;
+    unmapped_controls: number;
+    mapped_rules: number;
+  };
+  readiness?: {
+    auditor_ready_controls: number;
+    needs_enrichment_controls: number;
+    placeholder_controls: number;
+  };
+  gap_actions?: Array<{
+    code: string;
+    label: string;
+    priority: number;
+    count?: number;
+  }>;
+};
+
+export type GRCFrameworksResponse = {
+  version: string;
+  frameworks: GRCFramework[];
+  generated_at: string;
 };
 
 export type GRCControlPackSummary = {
@@ -662,6 +703,7 @@ export type GRCControlPacketControl = {
     framework_id?: string;
     framework_name: string;
     framework_version?: string;
+    framework_lifecycle?: "active" | "upcoming" | string;
     family_id?: string;
     family_name?: string;
     control_id: string;

@@ -9,7 +9,7 @@ import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHe
 import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { controlMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { controlMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -139,6 +139,7 @@ export default function ControlsPage() {
     return { controls: visible, critical, failing, missingEvidence, openFindings };
   }, [controlID, data?.controls, framework]);
   const { controls, critical, failing, missingEvidence, openFindings } = controlView;
+  const selectedUpcomingFramework = isUpcomingGRCFramework(framework);
   const visibleControls = showAllControls ? controls : controls.slice(0, INITIAL_CONTROL_RENDER_LIMIT);
   const hiddenControlCount = controls.length - visibleControls.length;
   const queueControls = useMemo(
@@ -231,7 +232,7 @@ export default function ControlsPage() {
             Framework
             <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="SOC 2, DORA, FedRAMP Rev. 5" list="grc-framework-options" className={inputClass} />
             <datalist id="grc-framework-options">
-              {frameworkOptions.map((name) => <option key={name} value={name} />)}
+              {frameworkOptions.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
             </datalist>
           </label>
           <label className={labelClass}>Control<input value={controlID} onChange={(e) => setControlID(e.target.value)} placeholder="CC6.1" className={inputClass} /></label>
@@ -240,10 +241,10 @@ export default function ControlsPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Controls" value={controls.length} detail="in scope" state={metricState} />
-        <MetricCard label="Failing" value={failing} detail="with open findings" intent={failing > 0 ? "danger" : "success"} state={metricState} />
-        <MetricCard label="Missing Evidence" value={missingEvidence} detail="required items" intent={missingEvidence > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Open Findings" value={openFindings} detail={`${critical} critical`} intent={openFindings > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Controls" value={selectedUpcomingFramework ? "N/A" : controls.length} detail={selectedUpcomingFramework ? "upcoming" : "in scope"} state={metricState} />
+        <MetricCard label="Failing" value={selectedUpcomingFramework ? "N/A" : failing} detail={selectedUpcomingFramework ? "not measured" : "with open findings"} intent={failing > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Missing Evidence" value={selectedUpcomingFramework ? "N/A" : missingEvidence} detail={selectedUpcomingFramework ? "not measured" : "required items"} intent={missingEvidence > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Open Findings" value={selectedUpcomingFramework ? "N/A" : openFindings} detail={selectedUpcomingFramework ? "not measured" : `${critical} critical`} intent={openFindings > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
       {data && !error && queueControls.length > 0 && (
@@ -387,7 +388,12 @@ export default function ControlsPage() {
               Show {hiddenControlCount} more controls
             </button>
           )}
-          {controls.length === 0 && (
+          {controls.length === 0 && selectedUpcomingFramework && (
+            <div className="flex items-center justify-center rounded-lg border border-dashed border-violet-200 bg-violet-50/60 p-8 text-center text-[13px] text-violet-700">
+              {framework.trim()} is upcoming. It is discoverable for planning, but not yet included in measured compliance posture or audit packets.
+            </div>
+          )}
+          {controls.length === 0 && !selectedUpcomingFramework && (
             <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
               No controls match the current filters.
             </div>

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
 import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
 import { useCommandPalette } from "@/components/providers";
-import { findSupportedGRCFramework } from "@/lib/grc-frameworks";
+import { findSupportedGRCFramework, frameworkRouteSegment } from "@/lib/grc-frameworks";
 import { LiveSearchCommand, useLiveSearchCommands } from "@/lib/live-search";
 import { NavigationEntry, navigationEntries } from "@/lib/navigation";
 
@@ -35,12 +35,18 @@ const searchCommands = (query: string, askGraph: (question: string) => void): Co
   const controlsHref = frameworkMatch
     ? `/controls?framework=${encodeURIComponent(frameworkMatch.name)}`
     : `/controls?control=${encoded}`;
+  const frameworkHref = frameworkMatch
+    ? `/frameworks/${frameworkRouteSegment(frameworkMatch)}`
+    : "/frameworks";
   const controlsLabel = frameworkMatch
-    ? `Filter controls by ${frameworkMatch.name}`
+    ? frameworkMatch.lifecycle === "upcoming"
+      ? `Plan for upcoming framework ${frameworkMatch.name}`
+      : `Filter controls by ${frameworkMatch.name}`
     : `Filter controls by "${trimmed}"`;
   return [
     { id: "ask-graph", label: `Ask graph: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Send this question to the graph query panel.", section: "Operator", keywords: ["ask", "agent", "graph", "cypher"], onRun: () => askGraph(trimmed) },
     { id: "search-risk-inbox", label: `Search Risk Inbox for "${trimmed}"`, href: riskInboxHref, description: "Filter findings by title, framework, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk", "framework"] },
+    { id: "open-framework", label: frameworkMatch ? `Open ${frameworkMatch.name} framework tracking` : `Open framework catalog for "${trimmed}"`, href: frameworkHref, description: "Open maturity, gaps, planning, controls, findings, and exports.", section: "Operator", keywords: ["framework", "catalog", "maturity", "soc2"] },
     { id: "open-finding", label: `Open finding "${trimmed}"`, href: `/findings/${encoded}`, description: "Jump to a finding detail page by ID.", section: "Operator", keywords: ["finding", "detail"] },
     { id: "open-impact", label: `Open impact map for "${trimmed}"`, href: `/impact?root_urn=${encoded}`, description: "Use as entity URN or graph root.", section: "Operator", keywords: ["impact", "graph"] },
     { id: "search-inventory", label: `Search inventory for "${trimmed}"`, href: inventoryHref, description: "Filter assets and resources by framework, label, type, owner, or URN.", section: "Operator", keywords: ["inventory", "assets", "resources", "framework", "scope"] },

@@ -1,9 +1,10 @@
 import type { ConnectorScopeOption } from "@/lib/connectors";
-import type { GRCControl, GRCControlRef, GRCFinding, GRCInventoryAsset, GRCInventoryTest } from "@/lib/grc";
+import type { GRCControl, GRCControlRef, GRCFinding, GRCFramework, GRCInventoryAsset, GRCInventoryTest } from "@/lib/grc";
 
 export type SupportedGRCFramework = {
   name: string;
   aliases?: string[];
+  lifecycle?: "active" | "upcoming";
 };
 
 export type GRCFrameworkSegment = {
@@ -52,9 +53,17 @@ export const supportedGRCFrameworks: SupportedGRCFramework[] = [
   { name: "CIS GitHub Benchmark", aliases: ["cis github"] },
   { name: "CIS Google Workspace Benchmark", aliases: ["cis google workspace"] },
   { name: "NIST SP 800-177", aliases: ["nist 800 177", "nist email"] },
+  { name: "NIST AI RMF 1.0", aliases: ["nist ai rmf", "ai risk management framework"], lifecycle: "upcoming" },
+  { name: "CSA CCM v4.0", aliases: ["csa ccm", "cloud controls matrix"], lifecycle: "upcoming" },
 ];
 
 export const supportedGRCFrameworkNames = supportedGRCFrameworks.map((framework) => framework.name);
+export const activeGRCFrameworkNames = supportedGRCFrameworks
+  .filter((framework) => framework.lifecycle !== "upcoming")
+  .map((framework) => framework.name);
+export const upcomingGRCFrameworkNames = supportedGRCFrameworks
+  .filter((framework) => framework.lifecycle === "upcoming")
+  .map((framework) => framework.name);
 
 const normalizeFrameworkText = (value: string) =>
   value
@@ -65,6 +74,55 @@ const normalizeFrameworkText = (value: string) =>
     .trim();
 
 const compactFrameworkText = (value: string) => normalizeFrameworkText(value).replace(/\s+/g, "");
+
+export const frameworkRouteSegment = (framework: { id?: string; name: string }) =>
+  encodeURIComponent(
+    (framework.id?.trim() || framework.name.trim())
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, ""),
+  );
+
+export const frameworkMatchesRouteSegment = (framework: { id?: string; name: string }, segment: string) => {
+  const decoded = decodeURIComponent(segment).trim().toLowerCase();
+  return decoded === framework.id?.trim().toLowerCase() || decoded === decodeURIComponent(frameworkRouteSegment(framework));
+};
+
+export const staticGRCFrameworkCatalog: GRCFramework[] = supportedGRCFrameworks.map((framework) => {
+  const upcoming = framework.lifecycle === "upcoming";
+  return {
+    id: frameworkRouteSegment(framework),
+    name: framework.name,
+    lifecycle: framework.lifecycle ?? "active",
+    family_count: 0,
+    control_count: 0,
+    maturity: {
+      status: upcoming ? "planning" : "not_configured",
+      score: 0,
+      summary: upcoming
+        ? "Framework is discoverable for scoping, but controls are not measured yet."
+        : "Live framework metadata is not available yet.",
+    },
+    coverage: {
+      selected_controls: 0,
+      mapped_controls: 0,
+      unmapped_controls: 0,
+      mapped_rules: 0,
+    },
+    readiness: {
+      auditor_ready_controls: 0,
+      needs_enrichment_controls: 0,
+      placeholder_controls: 0,
+    },
+    gap_actions: [{
+      code: upcoming ? "plan_framework_scope" : "select_controls",
+      label: upcoming
+        ? "Define applicability, owners, and initial control scope."
+        : "Connect the backend framework catalog to populate live maturity.",
+      priority: 1,
+    }],
+  };
+});
 
 export const frameworkSearchTerms = (framework: SupportedGRCFramework) => [
   framework.name,
@@ -96,6 +154,12 @@ export const findSupportedGRCFramework = (query: string) => {
     ),
   ) ?? null;
 };
+
+export const isUpcomingGRCFramework = (query: string) =>
+  findSupportedGRCFramework(query)?.lifecycle === "upcoming";
+
+export const frameworkOptionLabel = (framework: string) =>
+  isUpcomingGRCFramework(framework) ? `${framework} (Upcoming)` : framework;
 
 const identityTerms = ["identity", "access", "user", "users", "group", "groups", "role", "roles", "mfa", "sso", "iam", "okta", "entra", "duo", "workspace"];
 const cloudTerms = ["aws", "gcp", "azure", "cloud", "compute", "storage", "bucket", "database", "network", "container", "kubernetes", "kms", "key", "logging"];
@@ -320,6 +384,18 @@ const frameworkSegmentCatalog: Record<string, Omit<GRCFrameworkSegment, "framewo
     assetTerms: ["email", "mail", "domain", "dkim", "dmarc", "spf", "tls"],
     connectorFamilies: ["email", "mail", "domain", "dkim", "dmarc", "spf", "tls"],
     sourceIDs: ["emaildomainhealth"],
+  },
+  "NIST AI RMF 1.0": {
+    alertTerms: aiTerms,
+    assetTerms: aiTerms,
+    connectorFamilies: aiTerms,
+    sourceIDs: ["openai", "aws", "gcp", "azure"],
+  },
+  "CSA CCM v4.0": {
+    alertTerms: cloudTerms,
+    assetTerms: cloudTerms,
+    connectorFamilies: cloudTerms,
+    sourceIDs: ["aws", "gcp", "azure", "kubernetes"],
   },
 };
 

@@ -9,7 +9,7 @@ import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant 
 import { GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useApiKey } from "@/components/providers";
-import { findingMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { findingMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -101,6 +101,7 @@ export default function RiskInboxPage() {
     [data?.findings],
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedUpcomingFramework = isUpcomingGRCFramework(framework);
   const { mutate, saving, error: mutationError, setError: setMutationError } = useGRCMutation();
   const selectedCount = useMemo(() => findings.reduce((count, f) => (selectedIds.has(f.id) ? count + 1 : count), 0), [findings, selectedIds]);
   const toggleSelect = useCallback((id: string) => {
@@ -218,7 +219,7 @@ export default function RiskInboxPage() {
             Framework
             <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="DORA" list="risk-framework-options" className={inputClass} />
             <datalist id="risk-framework-options">
-              {frameworkOptions.map((name) => <option key={name} value={name} />)}
+              {frameworkOptions.map((name) => <option key={name} value={name} label={frameworkOptionLabel(name)} />)}
             </datalist>
           </label>
           <label className={labelClass}>Severity<select value={severity} onChange={(e) => setSeverity(e.target.value)} className={selectClass}><option value="">All</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select></label>
@@ -235,12 +236,18 @@ export default function RiskInboxPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-5">
-        <MetricCard label="Findings" value={findings.length} detail="in scope" state={metricState} />
-        <MetricCard label="Avg Risk" value={<RiskBadge score={metrics.averageRisk} />} detail={`${metrics.criticalRisk} critical-risk`} intent={metrics.criticalRisk > 0 ? "danger" : "neutral"} state={metricState} />
-        <MetricCard label="Critical / High" value={`${metrics.critical} / ${metrics.high}`} intent={metrics.critical > 0 ? "danger" : "neutral"} state={metricState} />
-        <MetricCard label="Overdue" value={metrics.overdue} detail="past SLA" intent={metrics.overdue > 0 ? "danger" : "success"} state={metricState} />
-        <MetricCard label="Unassigned" value={metrics.unassigned} detail="needs owner" intent={metrics.unassigned > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Findings" value={selectedUpcomingFramework ? "N/A" : findings.length} detail={selectedUpcomingFramework ? "upcoming" : "in scope"} state={metricState} />
+        <MetricCard label="Avg Risk" value={selectedUpcomingFramework ? "N/A" : <RiskBadge score={metrics.averageRisk} />} detail={selectedUpcomingFramework ? "not measured" : `${metrics.criticalRisk} critical-risk`} intent={metrics.criticalRisk > 0 ? "danger" : "neutral"} state={metricState} />
+        <MetricCard label="Critical / High" value={selectedUpcomingFramework ? "N/A" : `${metrics.critical} / ${metrics.high}`} detail={selectedUpcomingFramework ? "not measured" : undefined} intent={metrics.critical > 0 ? "danger" : "neutral"} state={metricState} />
+        <MetricCard label="Overdue" value={selectedUpcomingFramework ? "N/A" : metrics.overdue} detail={selectedUpcomingFramework ? "not measured" : "past SLA"} intent={metrics.overdue > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Unassigned" value={selectedUpcomingFramework ? "N/A" : metrics.unassigned} detail={selectedUpcomingFramework ? "not measured" : "needs owner"} intent={metrics.unassigned > 0 ? "warning" : "success"} state={metricState} />
       </div>
+
+      {selectedUpcomingFramework && (
+        <div className="rounded-lg border border-dashed border-violet-200 bg-violet-50/60 p-6 text-center text-[13px] text-violet-700">
+          {framework.trim()} is upcoming. It is discoverable for planning, but not yet included in measured finding posture.
+        </div>
+      )}
 
       {loading && <LoadingBlock label="Loading findings..." />}
       {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Findings will appear when the API is reachable." />}
