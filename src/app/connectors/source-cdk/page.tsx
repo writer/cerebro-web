@@ -340,6 +340,7 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
   const referenceOnly = Boolean(auth?.requires_references) || (credFields.length > 0 && credFields.every((field) => field.reference_only));
   const stores = auth?.supported_store_ids ?? [];
   const reviewScopes = (definition?.scope_options ?? []).filter((scope) => scope.needs_user_review);
+  const ingestMode = definition?.ingest?.mode === "deposit" ? "deposit" : "pull";
   if (!definition) {
     return (
       <Panel title="Access and safety" action={<KeyRound className="h-4 w-4 text-[var(--primary)]" />}>
@@ -350,7 +351,15 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
   return (
     <Panel title="Access and safety" action={<KeyRound className="h-4 w-4 text-[var(--primary)]" />}>
       <div className="space-y-2">
-        <SafetyRow ok title="Read-only access" detail="Cerebro only reads from this source. It never writes back or changes anything." />
+        <SafetyRow
+          ok
+          title={ingestMode === "deposit" ? "Typed deposit ingest" : "Read-only pull access"}
+          detail={
+            ingestMode === "deposit"
+              ? "Customers post records that match this manifest. Cerebro appends typed events and projects them through the same graph pipeline."
+              : "Cerebro only reads from this source. It never writes back or changes anything."
+          }
+        />
         <SafetyRow
           ok={referenceOnly}
           title={referenceOnly ? "Credentials stay in your vault" : "Credentials provided directly"}
@@ -399,19 +408,19 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
   );
 }
 
-function SourceCDKPlanPanel({ plan }: { plan?: SourceCDKPromotionPlan }) {
+function RuntimeActivationPlanPanel({ plan }: { plan?: SourceCDKPromotionPlan }) {
   const counts = sourceCDKPlanCategoryCounts(plan);
   const blockers = plan?.blockers ?? [];
   return (
-    <Panel title="Runtime and Source CDK plan" action={<Badge value={sourceCDKPlanStatusLabel(plan?.status)} />}>
+    <Panel title="Runtime activation plan" action={<Badge value={sourceCDKPlanStatusLabel(plan?.status)} />}>
       {!plan ? (
-        <EmptyBlock label="Choose a saved source to compute the runtime and Source CDK promotion plan." />
+        <EmptyBlock label="Choose a saved source to compute the runtime activation plan." />
       ) : (
         <div className="space-y-3">
           <p className="text-[13px] leading-6 text-[var(--text-muted)]">{plan.summary}</p>
           <div className="grid gap-2 md:grid-cols-3">
             <KeyStat label="Runtime families" value={plan.metrics?.resource_families ?? 0} />
-            <KeyStat label="Generated files" value={plan.metrics?.generated_files ?? 0} />
+            <KeyStat label="Scope options" value={plan.metrics?.scope_options ?? 0} />
             <KeyStat label="Blocking checks" value={plan.metrics?.blocked_checks ?? blockers.length} />
           </div>
           {Object.keys(counts).length > 0 && (
@@ -554,8 +563,8 @@ function SourceReadinessContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Source readiness"
-        description="See what a source will collect, the access it needs, and whether you can trust it yet for your security and compliance program."
+        title="Runtime source activation"
+        description="Promote a source definition, preview the data it emits, and connect it at runtime without a GitHub handoff."
         action={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -583,12 +592,12 @@ function SourceReadinessContent() {
         <ErrorBlock
           error={definitionsQuery.error}
           onRetry={() => void definitionsQuery.reload()}
-          recoveryDetail="Source readiness needs the connector definitions service."
+          recoveryDetail="Runtime activation needs the connector definitions service."
         />
       )}
       {definitionsQuery.loading && !definitionsQuery.data && <LoadingBlock label="Loading your sources..." />}
-      {planQuery.error && <ErrorBlock error={planQuery.error} onRetry={() => void planQuery.reload()} recoveryDetail="Save or select a connector definition, then refresh the runtime plan." />}
-      {planQuery.loading && selectedDefinitionID && !planQuery.data && <LoadingBlock label="Computing runtime promotion plan..." />}
+      {planQuery.error && <ErrorBlock error={planQuery.error} onRetry={() => void planQuery.reload()} recoveryDetail="Save or select a connector definition, then refresh the runtime activation plan." />}
+      {planQuery.loading && selectedDefinitionID && !planQuery.data && <LoadingBlock label="Computing runtime activation plan..." />}
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(260px,0.3fr)_minmax(0,0.7fr)]">
         <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
@@ -599,7 +608,7 @@ function SourceReadinessContent() {
             <DataCoveragePanel definition={selectedDefinition} />
             <AccessSafetyPanel definition={selectedDefinition} />
           </div>
-          <SourceCDKPlanPanel plan={plan} />
+          <RuntimeActivationPlanPanel plan={plan} />
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.5fr)]">
             <TrustLadder definition={selectedDefinition} />
             <ReadinessChecklist definition={selectedDefinition} />
@@ -612,7 +621,7 @@ function SourceReadinessContent() {
 
 export default function SourceReadinessPage() {
   return (
-    <Suspense fallback={<LoadingBlock label="Loading source readiness..." />}>
+    <Suspense fallback={<LoadingBlock label="Loading runtime activation..." />}>
       <SourceReadinessContent />
     </Suspense>
   );

@@ -27,6 +27,7 @@ import { withQuery } from "@/lib/cerebro-data";
 import {
   ConnectorDefinition,
   ConnectorDefinitionListResponse,
+  ConnectorDefinitionPreviewResponse,
   ConnectorDefinitionPromotionResponse,
   ConnectorDefinitionResponse,
   ConnectorDefinitionResourceFamily,
@@ -160,11 +161,14 @@ function CheckList({ definition }: { definition: ConnectorDefinition }) {
 
 function FamilyEditor({
   families,
+  ingestMode,
   onChange,
 }: {
   families: ConnectorDefinitionResourceFamily[];
+  ingestMode?: string;
   onChange: (families: ConnectorDefinitionResourceFamily[]) => void;
 }) {
+  const depositMode = ingestMode === "deposit";
   const updateFamily = (index: number, patch: Partial<ConnectorDefinitionResourceFamily>) => {
     onChange(families.map((family, current) => current === index ? { ...family, ...patch } : family));
   };
@@ -181,7 +185,7 @@ function FamilyEditor({
     onChange([...families, {
       id: `resource_${nextIndex}`,
       label: `Resource ${nextIndex}`,
-      path: `/v1/resources/${nextIndex}`,
+      path: depositMode ? "" : `/v1/resources/${nextIndex}`,
       method: "GET",
       list_key: "items",
       id_field: "id",
@@ -201,7 +205,7 @@ function FamilyEditor({
             <div className="grid gap-3 md:grid-cols-2">
               <label className={labelClass}>Family ID<input value={family.id} onChange={(event) => updateFamily(index, { id: normalizeConnectorDefinitionID(event.target.value) })} className={inputClass} /></label>
               <label className={labelClass}>Label<input value={family.label ?? ""} onChange={(event) => updateFamily(index, { label: event.target.value })} className={inputClass} /></label>
-              <label className={labelClass}>Path<input value={family.path} onChange={(event) => updateFamily(index, { path: event.target.value })} className={inputClass} /></label>
+              <label className={labelClass}>{depositMode ? "Path (optional for deposit)" : "Path"}<input value={family.path ?? ""} onChange={(event) => updateFamily(index, { path: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>List key<input value={family.list_key ?? ""} onChange={(event) => updateFamily(index, { list_key: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>ID field<input value={family.id_field} onChange={(event) => updateFamily(index, { id_field: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>Name field<input value={family.name_field ?? ""} onChange={(event) => updateFamily(index, { name_field: event.target.value })} className={inputClass} /></label>
@@ -241,7 +245,9 @@ function ConnectorBuilderContent() {
   const [selectedDefinitionID, setSelectedDefinitionID] = useState(initialDefinitionID);
   const [message, setMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [working, setWorking] = useState<"validate" | "save" | "promote" | null>(null);
+  const [working, setWorking] = useState<"validate" | "preview" | "save" | "promote" | null>(null);
+  const [previewConfig, setPreviewConfig] = useState("{}");
+  const [preview, setPreview] = useState<ConnectorDefinitionPreviewResponse | null>(null);
 
   const detailQuery = useGRCQuery<ConnectorDefinitionResponse>(selectedDefinitionID ? `/connector-definitions/${encodeURIComponent(selectedDefinitionID)}` : null);
   const loadedDefinition = detailQuery.data?.definition;
@@ -258,6 +264,7 @@ function ConnectorBuilderContent() {
   const nextStage = connectorDefinitionNextStage(draft);
   const blockingChecks = connectorDefinitionBlockingChecks(draft);
   const tenantScoped = Boolean(scopedTenantID);
+  const ingestMode = draft.ingest?.mode === "deposit" ? "deposit" : "pull";
   const runtimeState: RuntimeState = selectedDefinitionID && detailQuery.loading ? "loading" : "ready";
 
   const loadDefinition = (definition: ConnectorDefinition) => {
@@ -293,6 +300,20 @@ function ConnectorBuilderContent() {
     });
   };
 
+  const updateIngestMode = (mode: "pull" | "deposit") => {
+    setDraftOverride((current) => {
+      const base = current ?? draft;
+      return {
+        ...base,
+        ingest: {
+          ...(base.ingest ?? {}),
+          mode,
+          deposit: mode === "deposit" ? { resource_families: base.resource_families?.map((family) => family.id) ?? [] } : undefined,
+        },
+      };
+    });
+  };
+
   const toggleStore = (storeID: string) => {
     const nextStores = selectedStores.includes(storeID)
       ? selectedStores.filter((id) => id !== storeID)
@@ -323,6 +344,32 @@ function ConnectorBuilderContent() {
       setMessage(response.validation?.summary ?? "Validation finished.");
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Validation failed.");
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const previewDefinition = async () => {
+    setWorking("preview");
+    setSubmitError(null);
+    try {
+      let config: Record<string, string> = {};
+      if (previewConfig.trim()) {
+        const parsed = JSON.parse(previewConfig) as Record<string, unknown>;
+        config = Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value ?? "")]));
+      }
+      const response = await submitDefinition<ConnectorDefinitionPreviewResponse>("/connector-definitions/preview", "POST", {
+        definition: draft,
+        config,
+        page_limit: 1,
+      });
+      if (response.definition) {
+        setDraftOverride(response.definition);
+      }
+      setPreview(response);
+      setMessage(response.status === "previewed" ? "Live preview returned sample events." : "Preview check passed.");
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Preview failed.");
     } finally {
       setWorking(null);
     }
@@ -409,7 +456,7 @@ function ConnectorBuilderContent() {
         <MetricCard label="Validation" value={connectorDefinitionValidationLabel(draft.validation?.status)} detail={`${blockingChecks} blocking gates`} intent={validationStatus === "blocked" ? "danger" : validationStatus === "warning" ? "warning" : "success"} state={metricState} />
         <MetricCard label="Resources" value={resourceFamilies.length} detail="resource families" state={metricState} />
         <MetricCard label="Secret Stores" value={selectedStores.length} detail={secretStoreDetail} intent={secretStoreIntent} state={metricState} />
-        <MetricCard label="Version" value={draft.current_version ?? 0} detail={draft.updated_at ? displayDate(draft.updated_at) : "unsaved"} state={metricState} />
+        <MetricCard label="Ingest" value={ingestMode === "deposit" ? "Deposit" : "Pull"} detail={ingestMode === "deposit" ? "customer-pushed records" : "scheduled runtime pull"} state={metricState} />
       </div>
 
       <StageRail definition={draft} />
@@ -449,11 +496,23 @@ function ConnectorBuilderContent() {
                   {authModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
                 </select>
               </label>
+              <label className={labelClass}>
+                Ingest mode
+                <select value={ingestMode} onChange={(event) => updateIngestMode(event.target.value === "deposit" ? "deposit" : "pull")} className={inputClass}>
+                  <option value="pull">Pull from provider</option>
+                  <option value="deposit">Deposit records</option>
+                </select>
+              </label>
               <label className={`${labelClass} md:col-span-2`}>Description<textarea value={draft.description ?? ""} onChange={(event) => updateDraft({ description: event.target.value })} rows={3} className={`${inputClass} min-h-20`} /></label>
             </div>
           </Panel>
 
-          <Panel title="Runtime transport">
+          <Panel title={ingestMode === "deposit" ? "Deposit transport" : "Runtime transport"}>
+            {ingestMode === "deposit" && (
+              <div className="mb-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 text-[12px] leading-5 text-[var(--text-muted)]">
+                Deposit mode uses the same resource schema and graph projection, but records are posted into a connector-scoped inbox instead of pulled from an API. Path fields are optional for deposit-only families.
+              </div>
+            )}
             <div className="grid gap-3 md:grid-cols-2">
               <label className={`${labelClass} md:col-span-2`}>
                 Base URL template
@@ -502,12 +561,50 @@ function ConnectorBuilderContent() {
             </div>
           </Panel>
 
-          <FamilyEditor families={resourceFamilies} onChange={(families) => updateDraft({ resource_families: families })} />
+          <FamilyEditor families={resourceFamilies} ingestMode={ingestMode} onChange={(families) => updateDraft({ resource_families: families })} />
         </div>
 
         <div className="space-y-5">
           <DefinitionList definitions={definitions} selectedID={selectedDefinitionID || draft.id} onLoad={loadDefinition} />
           <CheckList definition={draft} />
+          <Panel title="Live preview">
+            <div className="space-y-3">
+              <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
+                <div className="text-[12px] font-semibold text-[var(--text-primary)]">Runtime config JSON</div>
+                <textarea
+                  value={previewConfig}
+                  onChange={(event) => setPreviewConfig(event.target.value)}
+                  rows={4}
+                  className={`${inputClass} font-mono`}
+                  placeholder={'{"base_url":"https://api.example.com"}'}
+                />
+                <div className="mt-2 text-[11px] leading-4 text-[var(--text-muted)]">
+                  Used only for this bounded check and sample read. Secrets should stay as credential references.
+                </div>
+              </div>
+              <button type="button" onClick={previewDefinition} disabled={Boolean(working) || blockingChecks > 0} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50">
+                <DatabaseZap className="h-4 w-4" />
+                {working === "preview" ? "Previewing..." : "Run live preview"}
+              </button>
+              {preview && (
+                <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[12px] font-semibold text-[var(--text-primary)]">Preview result</div>
+                    <Badge value={preview.status ?? "checked"} />
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[12px] text-[var(--text-muted)]">
+                    <span>{preview.pages_read ?? 0} page read</span>
+                    <span>{preview.events?.length ?? 0} sample events</span>
+                  </div>
+                  {(preview.events?.length ?? 0) > 0 && (
+                    <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-[var(--surface-muted)] p-3 text-[11px] leading-5 text-[var(--text-secondary)]">
+                      {JSON.stringify(preview.events?.slice(0, 3), null, 2)}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          </Panel>
           <Panel title="Promotion">
             <div className="space-y-3">
               <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
@@ -532,7 +629,7 @@ function ConnectorBuilderContent() {
                 </button>
                 <Link href={sourceCDKPlanPath(draft.id, scopedTenantID)} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-2 text-[13px]">
                   <ShieldCheck className="h-4 w-4" />
-                  Check readiness
+                  Open activation view
                 </Link>
               </div>
             </div>

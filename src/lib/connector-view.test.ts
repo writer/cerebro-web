@@ -81,7 +81,7 @@ describe("connector view model", () => {
 
     expect(cards[0]).toMatchObject({ source_id: "auth0", readiness: "not_configured" });
     expect(connectorPrimaryAction(cards[0])).toBe("Inspect");
-    expect(filterConnectorCards(cards, "sourcegen", "all")).toHaveLength(1);
+    expect(filterConnectorCards(cards, "runtime ready", "all")).toHaveLength(1);
   });
 
   it("keeps restricted API-owned connectors visible without setup actions", () => {
@@ -114,7 +114,7 @@ describe("connector view model", () => {
     expect(connectorCapabilityLabel("grc")).toBe("GRC");
   });
 
-  it("prefers catalog resource families as capability chips for sourcegen entries", () => {
+  it("prefers catalog resource families as capability chips for runtime-ready entries", () => {
     expect(connectorCapabilities({
       emitted_kinds: ["crowdstrike_falcon.findings"],
       catalog_categories: ["security", "endpoint"],

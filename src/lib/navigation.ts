@@ -125,11 +125,11 @@ const commandOnlyNavLinks: NavigationEntry[] = [
     keywords: ["builder", "custom framework", "control pack", "yaml", "audit", ...supportedGRCFrameworkNames],
   },
   {
-    label: "Source readiness",
+    label: "Runtime activation",
     href: "/connectors/source-cdk",
     description: "See what a source collects, the access it needs, and whether you can trust it yet for your program.",
     section: "Operator",
-    keywords: ["source", "readiness", "connector", "coverage", "access", "trust", "onboarding"],
+    keywords: ["source", "activation", "connector", "coverage", "access", "trust", "onboarding"],
   },
 ];
 

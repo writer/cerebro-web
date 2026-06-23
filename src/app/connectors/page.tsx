@@ -514,13 +514,13 @@ function CustomConnectorPanel({
 
 function CatalogDemandPanel({ cards, tenantID }: { cards: ConnectorCard[]; tenantID: string }) {
   const requestable = cards.filter((card) => !connectorSetupAllowed(card) && card.requestable);
-  const sourcegenReady = requestable.filter((card) => card.readiness_stage === "sourcegen_ready").length;
+  const runtimeReady = requestable.filter((card) => card.readiness_stage === "sourcegen_ready").length;
   const authNeeded = requestable.filter((card) => card.readiness_stage === "auth_extension_required").length;
   const runtimeNeeded = requestable.filter((card) => card.readiness_stage === "runtime_required").length;
   return (
     <Panel title="Catalog demand" action={<Badge value={`${requestable.length} requestable`} />}>
       <div className="grid grid-cols-3 gap-2">
-        <SourceSignal label="Sourcegen" value={sourcegenReady} />
+        <SourceSignal label="Runtime ready" value={runtimeReady} />
         <SourceSignal label="Auth" value={authNeeded} attention={authNeeded > 0} />
         <SourceSignal label="Runtime" value={runtimeNeeded} attention={runtimeNeeded > 0} />
       </div>
@@ -734,7 +734,7 @@ export default function ConnectorsPage() {
             </Link>
             <Link href={`/connectors/source-cdk${debouncedTenantID ? `?tenant_id=${encodeURIComponent(debouncedTenantID)}` : ""}`} className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
               <ShieldCheck className="h-4 w-4" />
-              Readiness
+              Activation
             </Link>
             <button type="button" onClick={() => { void libraryQuery.reload(); void definitionsQuery.reload(); }} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
               <RefreshCw className="h-4 w-4" />

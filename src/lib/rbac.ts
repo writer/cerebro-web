@@ -271,6 +271,7 @@ const matchesConnectorCredentialWritePath = (path: string) =>
 const matchesConnectorDefinitionWritePath = (path: string) =>
   path === "connector-definitions" ||
   path === "connector-definitions/plan" ||
+  path === "connector-definitions/preview" ||
   path === "connector-definitions/validate" ||
   (path.startsWith("connector-definitions/") && path.endsWith("/promote"));
 
