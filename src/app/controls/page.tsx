@@ -242,9 +242,9 @@ export default function ControlsPage() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Controls" value={selectedUpcomingFramework ? "N/A" : controls.length} detail={selectedUpcomingFramework ? "upcoming" : "in scope"} state={metricState} />
-        <MetricCard label="Failing" value={selectedUpcomingFramework ? "N/A" : failing} detail={selectedUpcomingFramework ? "not measured" : "with open findings"} intent={failing > 0 ? "danger" : "success"} state={metricState} />
-        <MetricCard label="Missing Evidence" value={selectedUpcomingFramework ? "N/A" : missingEvidence} detail={selectedUpcomingFramework ? "not measured" : "required items"} intent={missingEvidence > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Open Findings" value={selectedUpcomingFramework ? "N/A" : openFindings} detail={selectedUpcomingFramework ? "not measured" : `${critical} critical`} intent={openFindings > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Failing" value={selectedUpcomingFramework ? "N/A" : failing} detail={selectedUpcomingFramework ? "not measured" : "with open findings"} intent={selectedUpcomingFramework ? "neutral" : failing > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Missing Evidence" value={selectedUpcomingFramework ? "N/A" : missingEvidence} detail={selectedUpcomingFramework ? "not measured" : "required items"} intent={selectedUpcomingFramework ? "neutral" : missingEvidence > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Open Findings" value={selectedUpcomingFramework ? "N/A" : openFindings} detail={selectedUpcomingFramework ? "not measured" : `${critical} critical`} intent={selectedUpcomingFramework ? "neutral" : openFindings > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
       {data && !error && queueControls.length > 0 && (

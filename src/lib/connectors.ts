@@ -580,6 +580,17 @@ export type ConnectorDefinitionResourceFamily = {
   default_enabled?: boolean;
 };
 
+export type ConnectorDefinitionTransport = {
+  base_url?: string;
+  headers?: Record<string, string>;
+  query?: Record<string, string>;
+  verification?: {
+    method?: string;
+    path?: string;
+    expect_status?: number[];
+  };
+};
+
 export type ConnectorDefinitionScopeOption = {
   id?: string;
   label?: string;
@@ -624,6 +635,7 @@ export type ConnectorDefinition = {
   stage: ConnectorDefinitionStage | string;
   current_version?: number;
   config_fields?: ConnectorDefinitionField[];
+  transport?: ConnectorDefinitionTransport;
   auth: {
     model: "none" | "api_key" | "bearer_token" | "basic" | "oauth_client_credentials" | string;
     credential_fields?: ConnectorDefinitionField[];
@@ -835,6 +847,14 @@ export const defaultConnectorDefinitionDraft = (tenantID = ""): ConnectorDefinit
       placeholder: "https://api.example.com",
     },
   ],
+  transport: {
+    base_url: "${config.base_url}",
+    verification: {
+      method: "GET",
+      path: "/health",
+      expect_status: [200],
+    },
+  },
   auth: {
     model: "bearer_token",
     requires_references: true,

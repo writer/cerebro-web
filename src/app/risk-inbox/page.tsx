@@ -237,10 +237,10 @@ export default function RiskInboxPage() {
 
       <div className="grid gap-4 md:grid-cols-5">
         <MetricCard label="Findings" value={selectedUpcomingFramework ? "N/A" : findings.length} detail={selectedUpcomingFramework ? "upcoming" : "in scope"} state={metricState} />
-        <MetricCard label="Avg Risk" value={selectedUpcomingFramework ? "N/A" : <RiskBadge score={metrics.averageRisk} />} detail={selectedUpcomingFramework ? "not measured" : `${metrics.criticalRisk} critical-risk`} intent={metrics.criticalRisk > 0 ? "danger" : "neutral"} state={metricState} />
-        <MetricCard label="Critical / High" value={selectedUpcomingFramework ? "N/A" : `${metrics.critical} / ${metrics.high}`} detail={selectedUpcomingFramework ? "not measured" : undefined} intent={metrics.critical > 0 ? "danger" : "neutral"} state={metricState} />
-        <MetricCard label="Overdue" value={selectedUpcomingFramework ? "N/A" : metrics.overdue} detail={selectedUpcomingFramework ? "not measured" : "past SLA"} intent={metrics.overdue > 0 ? "danger" : "success"} state={metricState} />
-        <MetricCard label="Unassigned" value={selectedUpcomingFramework ? "N/A" : metrics.unassigned} detail={selectedUpcomingFramework ? "not measured" : "needs owner"} intent={metrics.unassigned > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Avg Risk" value={selectedUpcomingFramework ? "N/A" : <RiskBadge score={metrics.averageRisk} />} detail={selectedUpcomingFramework ? "not measured" : `${metrics.criticalRisk} critical-risk`} intent={selectedUpcomingFramework ? "neutral" : metrics.criticalRisk > 0 ? "danger" : "neutral"} state={metricState} />
+        <MetricCard label="Critical / High" value={selectedUpcomingFramework ? "N/A" : `${metrics.critical} / ${metrics.high}`} detail={selectedUpcomingFramework ? "not measured" : undefined} intent={selectedUpcomingFramework ? "neutral" : metrics.critical > 0 ? "danger" : "neutral"} state={metricState} />
+        <MetricCard label="Overdue" value={selectedUpcomingFramework ? "N/A" : metrics.overdue} detail={selectedUpcomingFramework ? "not measured" : "past SLA"} intent={selectedUpcomingFramework ? "neutral" : metrics.overdue > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Unassigned" value={selectedUpcomingFramework ? "N/A" : metrics.unassigned} detail={selectedUpcomingFramework ? "not measured" : "needs owner"} intent={selectedUpcomingFramework ? "neutral" : metrics.unassigned > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
       {selectedUpcomingFramework && (

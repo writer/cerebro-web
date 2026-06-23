@@ -30,6 +30,7 @@ import {
   ConnectorDefinitionPromotionResponse,
   ConnectorDefinitionResponse,
   ConnectorDefinitionResourceFamily,
+  ConnectorDefinitionTransport,
   ConnectorDefinitionValidationResponse,
   ConnectorLibraryResponse,
   connectorDefinitionBlockingChecks,
@@ -167,6 +168,14 @@ function FamilyEditor({
   const updateFamily = (index: number, patch: Partial<ConnectorDefinitionResourceFamily>) => {
     onChange(families.map((family, current) => current === index ? { ...family, ...patch } : family));
   };
+  const updateFamilyEvent = (index: number, patch: NonNullable<ConnectorDefinitionResourceFamily["event"]>) => {
+    const current = families[index]?.event ?? {};
+    updateFamily(index, { event: { ...current, ...patch } });
+  };
+  const updateFamilyProjection = (index: number, patch: NonNullable<ConnectorDefinitionResourceFamily["projection"]>) => {
+    const current = families[index]?.projection ?? {};
+    updateFamily(index, { projection: { ...current, ...patch } });
+  };
   const addFamily = () => {
     const nextIndex = families.length + 1;
     onChange([...families, {
@@ -196,6 +205,9 @@ function FamilyEditor({
               <label className={labelClass}>List key<input value={family.list_key ?? ""} onChange={(event) => updateFamily(index, { list_key: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>ID field<input value={family.id_field} onChange={(event) => updateFamily(index, { id_field: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>Name field<input value={family.name_field ?? ""} onChange={(event) => updateFamily(index, { name_field: event.target.value })} className={inputClass} /></label>
+              <label className={labelClass}>Event kind<input value={family.event?.kind ?? ""} onChange={(event) => updateFamilyEvent(index, { kind: normalizeConnectorDefinitionID(event.target.value).replace(/-/g, "_") })} placeholder="custom_asset" className={inputClass} /></label>
+              <label className={labelClass}>Schema ref<input value={family.event?.schema_ref ?? ""} onChange={(event) => updateFamilyEvent(index, { schema_ref: event.target.value })} placeholder="schemas/custom_asset.json" className={inputClass} /></label>
+              <label className={labelClass}>Projection template<input value={family.projection?.template ?? ""} onChange={(event) => updateFamilyProjection(index, { template: event.target.value })} placeholder="asset" className={inputClass} /></label>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 border-t border-[color:var(--border)] pt-3">
               <label className="inline-flex items-center gap-2 text-[12px] font-semibold text-[var(--text-secondary)]">
@@ -263,6 +275,21 @@ function ConnectorBuilderContent() {
     setDraftOverride((current) => {
       const base = current ?? draft;
       return { ...base, auth: { ...base.auth, ...patch } };
+    });
+  };
+
+  const updateTransport = (patch: Partial<ConnectorDefinitionTransport>) => {
+    setDraftOverride((current) => {
+      const base = current ?? draft;
+      return { ...base, transport: { ...(base.transport ?? {}), ...patch } };
+    });
+  };
+
+  const updateVerification = (patch: NonNullable<ConnectorDefinitionTransport["verification"]>) => {
+    setDraftOverride((current) => {
+      const base = current ?? draft;
+      const transport = base.transport ?? {};
+      return { ...base, transport: { ...transport, verification: { ...(transport.verification ?? {}), ...patch } } };
     });
   };
 
@@ -402,14 +429,16 @@ function ConnectorBuilderContent() {
           <Panel title="Definition">
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3 md:col-span-2">
-                <div className={labelClass}>Tenant boundary</div>
-                <div className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
-                  <Lock className="h-4 w-4 text-[var(--primary)]" />
-                  <span>{draft.tenant_id || "No tenant selected"}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className={labelClass}>Tenant boundary</div>
                   <Badge value={tenantScoped ? "ready" : "blocked"} />
                 </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <Lock className="h-4 w-4 shrink-0 text-[var(--primary)]" />
+                  <input value={draft.tenant_id} onChange={(event) => updateDraft({ tenant_id: event.target.value, id: undefined })} placeholder="tenant-id" className={inputClass} />
+                </div>
                 <div className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">
-                  {tenantScoped ? "Bound to the selected tenant." : "Choose a tenant-bound library view before saving."}
+                  {tenantScoped ? "Bound to this tenant and eligible to appear in that tenant's connector library." : "Enter a tenant ID before saving or connecting this custom source."}
                 </div>
               </div>
               <label className={labelClass}>Source ID<input value={draft.source_id} onChange={(event) => updateDraft({ source_id: normalizeConnectorDefinitionID(event.target.value), id: undefined })} placeholder="custom_api" className={inputClass} /></label>
@@ -421,6 +450,29 @@ function ConnectorBuilderContent() {
                 </select>
               </label>
               <label className={`${labelClass} md:col-span-2`}>Description<textarea value={draft.description ?? ""} onChange={(event) => updateDraft({ description: event.target.value })} rows={3} className={`${inputClass} min-h-20`} /></label>
+            </div>
+          </Panel>
+
+          <Panel title="Runtime transport">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className={`${labelClass} md:col-span-2`}>
+                Base URL template
+                <input value={draft.transport?.base_url ?? ""} onChange={(event) => updateTransport({ base_url: event.target.value })} placeholder="${config.base_url}" className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                Verification path
+                <input value={draft.transport?.verification?.path ?? ""} onChange={(event) => updateVerification({ path: event.target.value })} placeholder="/health" className={inputClass} />
+              </label>
+              <label className={labelClass}>
+                Expected status
+                <input
+                  key={(draft.transport?.verification?.expect_status ?? [200]).join(",")}
+                  defaultValue={(draft.transport?.verification?.expect_status ?? [200]).join(", ")}
+                  onBlur={(event) => { const parsed = event.target.value.split(",").map((value) => Number.parseInt(value.trim(), 10)).filter(Number.isFinite); updateVerification({ expect_status: parsed.length > 0 ? parsed : undefined }); }}
+                  placeholder="200"
+                  className={inputClass}
+                />
+              </label>
             </div>
           </Panel>
 

@@ -19,14 +19,18 @@ import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel } from "
 import { withQuery } from "@/lib/cerebro-data";
 import {
   ConnectorDefinition,
+  ConnectorDefinitionPlanResponse,
   ConnectorDefinitionListResponse,
   ConnectorDefinitionResourceFamily,
+  SourceCDKPromotionPlan,
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStageLabels,
   connectorDefinitionStages,
   connectorDefinitionStatus,
+  sourceCDKPlanCategoryCounts,
   sourceCDKPlanPath,
+  sourceCDKPlanStatusLabel,
 } from "@/lib/connectors";
 import { useGRCQuery } from "@/lib/grc-client";
 
@@ -395,6 +399,42 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
   );
 }
 
+function SourceCDKPlanPanel({ plan }: { plan?: SourceCDKPromotionPlan }) {
+  const counts = sourceCDKPlanCategoryCounts(plan);
+  const blockers = plan?.blockers ?? [];
+  return (
+    <Panel title="Runtime and Source CDK plan" action={<Badge value={sourceCDKPlanStatusLabel(plan?.status)} />}>
+      {!plan ? (
+        <EmptyBlock label="Choose a saved source to compute the runtime and Source CDK promotion plan." />
+      ) : (
+        <div className="space-y-3">
+          <p className="text-[13px] leading-6 text-[var(--text-muted)]">{plan.summary}</p>
+          <div className="grid gap-2 md:grid-cols-3">
+            <KeyStat label="Runtime families" value={plan.metrics?.resource_families ?? 0} />
+            <KeyStat label="Generated files" value={plan.metrics?.generated_files ?? 0} />
+            <KeyStat label="Blocking checks" value={plan.metrics?.blocked_checks ?? blockers.length} />
+          </div>
+          {Object.keys(counts).length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(counts).map(([category, count]) => (
+                <Badge key={category} value={`${humanize(category)}: ${count}`} />
+              ))}
+            </div>
+          )}
+          {blockers.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-500/25 dark:bg-red-500/10">
+              <div className="text-[12px] font-semibold text-[var(--text-primary)]">Blocked by</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {blockers.map((blocker) => <Badge key={blocker} value={blocker} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function ReadinessChecklist({ definition }: { definition?: ConnectorDefinition }) {
   const checks = definition?.validation?.checks ?? [];
   const open = checks.filter((check) => check.blocking || check.status === "blocked" || check.status === "warning");
@@ -506,6 +546,10 @@ function SourceReadinessContent() {
   const definitions = useMemo(() => definitionsQuery.data?.definitions ?? [], [definitionsQuery.data?.definitions]);
   const selectedDefinitionID = requestedDefinitionID || definitions[0]?.id || "";
   const selectedDefinition = definitions.find((definition) => definition.id === selectedDefinitionID) ?? definitions[0];
+  const planQuery = useGRCQuery<ConnectorDefinitionPlanResponse>(
+    selectedDefinitionID ? `/connector-definitions/${encodeURIComponent(selectedDefinitionID)}/promotion-plan` : null,
+  );
+  const plan = planQuery.data?.plan;
 
   return (
     <div className="space-y-6">
@@ -523,7 +567,7 @@ function SourceReadinessContent() {
             </Link>
             <button
               type="button"
-              onClick={() => void definitionsQuery.reload()}
+              onClick={() => { void definitionsQuery.reload(); void planQuery.reload(); }}
               className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]"
             >
               <RefreshCw className="h-4 w-4" />
@@ -543,6 +587,8 @@ function SourceReadinessContent() {
         />
       )}
       {definitionsQuery.loading && !definitionsQuery.data && <LoadingBlock label="Loading your sources..." />}
+      {planQuery.error && <ErrorBlock error={planQuery.error} onRetry={() => void planQuery.reload()} recoveryDetail="Save or select a connector definition, then refresh the runtime plan." />}
+      {planQuery.loading && selectedDefinitionID && !planQuery.data && <LoadingBlock label="Computing runtime promotion plan..." />}
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(260px,0.3fr)_minmax(0,0.7fr)]">
         <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
@@ -553,6 +599,7 @@ function SourceReadinessContent() {
             <DataCoveragePanel definition={selectedDefinition} />
             <AccessSafetyPanel definition={selectedDefinition} />
           </div>
+          <SourceCDKPlanPanel plan={plan} />
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.5fr)]">
             <TrustLadder definition={selectedDefinition} />
             <ReadinessChecklist definition={selectedDefinition} />
