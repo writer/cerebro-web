@@ -1,5 +1,5 @@
 import type { ConnectorScopeOption } from "@/lib/connectors";
-import type { GRCControl, GRCControlRef, GRCFinding, GRCInventoryAsset, GRCInventoryTest } from "@/lib/grc";
+import type { GRCControl, GRCControlRef, GRCFinding, GRCFramework, GRCInventoryAsset, GRCInventoryTest } from "@/lib/grc";
 
 export type SupportedGRCFramework = {
   name: string;
@@ -87,6 +87,42 @@ export const frameworkMatchesRouteSegment = (framework: { id?: string; name: str
   const decoded = decodeURIComponent(segment).trim().toLowerCase();
   return decoded === framework.id?.trim().toLowerCase() || decoded === decodeURIComponent(frameworkRouteSegment(framework));
 };
+
+export const staticGRCFrameworkCatalog: GRCFramework[] = supportedGRCFrameworks.map((framework) => {
+  const upcoming = framework.lifecycle === "upcoming";
+  return {
+    id: frameworkRouteSegment(framework),
+    name: framework.name,
+    lifecycle: framework.lifecycle ?? "active",
+    family_count: 0,
+    control_count: 0,
+    maturity: {
+      status: upcoming ? "planning" : "not_configured",
+      score: 0,
+      summary: upcoming
+        ? "Framework is discoverable for scoping, but controls are not measured yet."
+        : "Live framework metadata is not available yet.",
+    },
+    coverage: {
+      selected_controls: 0,
+      mapped_controls: 0,
+      unmapped_controls: 0,
+      mapped_rules: 0,
+    },
+    readiness: {
+      auditor_ready_controls: 0,
+      needs_enrichment_controls: 0,
+      placeholder_controls: 0,
+    },
+    gap_actions: [{
+      code: upcoming ? "plan_framework_scope" : "select_controls",
+      label: upcoming
+        ? "Define applicability, owners, and initial control scope."
+        : "Connect the backend framework catalog to populate live maturity.",
+      priority: 1,
+    }],
+  };
+});
 
 export const frameworkSearchTerms = (framework: SupportedGRCFramework) => [
   framework.name,

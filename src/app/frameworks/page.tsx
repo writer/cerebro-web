@@ -7,7 +7,7 @@ import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "
 import type { GRCFramework, GRCFrameworksResponse } from "@/lib/grc";
 import { humanize } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
-import { frameworkRouteSegment } from "@/lib/grc-frameworks";
+import { frameworkRouteSegment, staticGRCFrameworkCatalog } from "@/lib/grc-frameworks";
 
 const inputClass = "control-input px-3 py-1.5 text-[13px]";
 
@@ -69,7 +69,7 @@ export default function FrameworksPage() {
   const [query, setQuery] = useState("");
   const [lifecycle, setLifecycle] = useState<"all" | "active" | "upcoming">("all");
   const { data, error, loading, reload } = useGRCQuery<GRCFrameworksResponse>(grcPath("/grc/frameworks"));
-  const frameworks = useMemo(() => data?.frameworks ?? [], [data?.frameworks]);
+  const frameworks = useMemo(() => data?.frameworks?.length ? data.frameworks : staticGRCFrameworkCatalog, [data?.frameworks]);
   const filteredFrameworks = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return frameworks.filter((framework) => {
@@ -122,8 +122,14 @@ export default function FrameworksPage() {
           </div>
         }
       >
-        {error && <ErrorBlock error={error} onRetry={reload} />}
-        {loading && !data && <LoadingBlock label="Loading frameworks..." />}
+        {error && data?.frameworks?.length ? <ErrorBlock error={error} onRetry={reload} /> : null}
+        {error && !data?.frameworks?.length ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+            Live framework metadata is unavailable, showing the local catalog.
+            <button type="button" onClick={reload} className="ml-2 font-medium text-amber-950 underline">Retry</button>
+          </div>
+        ) : null}
+        {loading && !data && <LoadingBlock label="Loading live framework metadata..." />}
         {!loading && !error && filteredFrameworks.length === 0 && (
           <div className="rounded-lg border border-dashed border-[color:var(--border-strong)] p-8 text-center text-[13px] text-[var(--text-muted)]">No frameworks match the current filters.</div>
         )}

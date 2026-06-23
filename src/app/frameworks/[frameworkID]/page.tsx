@@ -11,7 +11,7 @@ import { useApiKey } from "@/components/providers";
 import type { GRCControl, GRCControlEvidencePacketResponse, GRCFinding, GRCFramework, GRCFrameworksResponse, GRCTrends } from "@/lib/grc";
 import { displayDate, humanize, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcPath, useGRCQuery } from "@/lib/grc-client";
-import { frameworkMatchesRouteSegment, frameworkRouteSegment, isUpcomingGRCFramework } from "@/lib/grc-frameworks";
+import { frameworkMatchesRouteSegment, frameworkRouteSegment, isUpcomingGRCFramework, staticGRCFrameworkCatalog } from "@/lib/grc-frameworks";
 import { hasTrendActivity } from "@/lib/trends";
 
 type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
@@ -143,9 +143,13 @@ export default function FrameworkDetailPage() {
   const params = useParams<{ frameworkID?: string }>();
   const routeSegment = String(params.frameworkID ?? "");
   const frameworksQuery = useGRCQuery<GRCFrameworksResponse>(grcPath("/grc/frameworks"));
+  const frameworks = useMemo(
+    () => frameworksQuery.data?.frameworks?.length ? frameworksQuery.data.frameworks : staticGRCFrameworkCatalog,
+    [frameworksQuery.data?.frameworks],
+  );
   const framework = useMemo(
-    () => frameworksQuery.data?.frameworks.find((item) => frameworkMatchesRouteSegment(item, routeSegment)),
-    [frameworksQuery.data?.frameworks, routeSegment],
+    () => frameworks.find((item) => frameworkMatchesRouteSegment(item, routeSegment)),
+    [frameworks, routeSegment],
   );
   const displayName = framework?.name || frameworkNameFromSegment(routeSegment);
   const isUpcoming = framework?.lifecycle === "upcoming" || isUpcomingGRCFramework(displayName);
@@ -170,9 +174,9 @@ export default function FrameworkDetailPage() {
   const maturityScore = framework?.maturity?.score ?? 0;
   const evidenceGapCount = (framework?.readiness?.needs_enrichment_controls ?? 0) + (framework?.readiness?.placeholder_controls ?? 0);
   const measuredControlCount = framework?.coverage?.selected_controls ?? 0;
-  const isLoadingFramework = frameworksQuery.loading && !frameworksQuery.data;
+  const isLoadingFramework = frameworksQuery.loading && !frameworksQuery.data && !framework;
 
-  if (!isLoadingFramework && frameworksQuery.data && !framework) {
+  if (!isLoadingFramework && !framework) {
     return (
       <div className="space-y-6">
         <PageHeader contractId="framework-detail" title="Framework not found" description={`No framework matched "${routeSegment}".`} />
@@ -200,7 +204,7 @@ export default function FrameworkDetailPage() {
         }
       />
 
-      {frameworksQuery.error && <ErrorBlock error={frameworksQuery.error} onRetry={frameworksQuery.reload} />}
+      {frameworksQuery.error && frameworksQuery.data?.frameworks?.length ? <ErrorBlock error={frameworksQuery.error} onRetry={frameworksQuery.reload} /> : null}
       {isLoadingFramework && <LoadingBlock label="Loading framework..." />}
 
       {framework && (
