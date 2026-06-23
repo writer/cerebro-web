@@ -467,7 +467,7 @@ function ConnectorBuilderContent() {
                 Expected status
                 <input
                   value={(draft.transport?.verification?.expect_status ?? [200]).join(", ")}
-                  onChange={(event) => updateVerification({ expect_status: event.target.value.split(",").map((value) => Number.parseInt(value.trim(), 10)).filter(Number.isFinite) })}
+                  onChange={(event) => { const parsed = event.target.value.split(",").map((value) => Number.parseInt(value.trim(), 10)).filter(Number.isFinite); updateVerification({ expect_status: parsed.length > 0 ? parsed : undefined }); }}
                   placeholder="200"
                   className={inputClass}
                 />
