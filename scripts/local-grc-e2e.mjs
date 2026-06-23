@@ -458,6 +458,10 @@ async function validateFailureModes() {
   const warmImpact = await requestJSON(staleImpactUrl, proxyCacheProbeOptions);
   expect(warmImpact.status === 200, `warm impact status ${warmImpact.status}`);
   expect(warmImpact.headers.get("x-cerebro-cache") === "miss", `warm impact cache ${warmImpact.headers.get("x-cerebro-cache")}`);
+
+  const staleDashboardUrl = `${webBase}/api/cerebro/grc/dashboard?tenant_id=${tenantID}&limit=100&cache_probe=api-stale-${Date.now()}`;
+  const warmDashboard = await requestJSON(staleDashboardUrl, proxyCacheProbeOptions);
+  expect(warmDashboard.status === 200, `warm dashboard status ${warmDashboard.status}`);
   await sleep(proxyCacheTtlMs + 500);
   await stopNeo4j();
   const staleImpact = await requestJSON(staleImpactUrl, proxyCacheProbeOptions);
@@ -466,9 +470,6 @@ async function validateFailureModes() {
   expect(staleImpact.headers.get("warning")?.includes("stale"), "stale impact missing warning header");
   expect(staleImpact.json.graph.root.urn === adminURN, "stale impact payload mismatch");
 
-  const staleDashboardUrl = `${webBase}/api/cerebro/grc/dashboard?tenant_id=${tenantID}&limit=100&cache_probe=api-stale-${Date.now()}`;
-  const warmDashboard = await requestJSON(staleDashboardUrl, proxyCacheProbeOptions);
-  expect(warmDashboard.status === 200, `warm dashboard status ${warmDashboard.status}`);
   await sleep(proxyCacheTtlMs + 500);
   await stopChild(backendProcess);
   backendProcess = null;
