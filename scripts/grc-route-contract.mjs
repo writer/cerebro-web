@@ -3,6 +3,7 @@ export function grcBrowserRouteContracts({ adminURN }) {
     { route: "/", pageId: "overview", heading: "Overview" },
     { route: "/risk-inbox", pageId: "risk-inbox", heading: "Risk Inbox" },
     { route: "/controls", pageId: "controls", heading: "Controls" },
+    { route: "/frameworks", pageId: "frameworks", heading: "Frameworks" },
     { route: "/controls/builder", pageId: "control-builder", heading: "Control Builder" },
     { route: "/evidence", pageId: "evidence", heading: "Evidence" },
     { route: "/connectors", pageId: "connectors", heading: "Connectors" },

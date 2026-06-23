@@ -278,6 +278,28 @@ export type GRCFramework = {
   tags?: string[];
   family_count: number;
   control_count: number;
+  maturity?: {
+    status: string;
+    score: number;
+    summary?: string;
+  };
+  coverage?: {
+    selected_controls: number;
+    mapped_controls: number;
+    unmapped_controls: number;
+    mapped_rules: number;
+  };
+  readiness?: {
+    auditor_ready_controls: number;
+    needs_enrichment_controls: number;
+    placeholder_controls: number;
+  };
+  gap_actions?: Array<{
+    code: string;
+    label: string;
+    priority: number;
+    count?: number;
+  }>;
 };
 
 export type GRCFrameworksResponse = {

@@ -75,6 +75,19 @@ const normalizeFrameworkText = (value: string) =>
 
 const compactFrameworkText = (value: string) => normalizeFrameworkText(value).replace(/\s+/g, "");
 
+export const frameworkRouteSegment = (framework: { id?: string; name: string }) =>
+  encodeURIComponent(
+    (framework.id?.trim() || framework.name.trim())
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, ""),
+  );
+
+export const frameworkMatchesRouteSegment = (framework: { id?: string; name: string }, segment: string) => {
+  const decoded = decodeURIComponent(segment).trim().toLowerCase();
+  return decoded === framework.id?.trim().toLowerCase() || decoded === decodeURIComponent(frameworkRouteSegment(framework));
+};
+
 export const frameworkSearchTerms = (framework: SupportedGRCFramework) => [
   framework.name,
   ...(framework.aliases ?? []),

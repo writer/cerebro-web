@@ -7,6 +7,8 @@ import {
   findingMatchesFrameworkSegment,
   findSupportedGRCFramework,
   frameworkOptionLabel,
+  frameworkMatchesRouteSegment,
+  frameworkRouteSegment,
   inventoryAssetMatchesFrameworkSegment,
   isUpcomingGRCFramework,
   supportedGRCFrameworkNames,
@@ -55,6 +57,13 @@ describe("supported GRC frameworks", () => {
     expect(isUpcomingGRCFramework("nist ai rmf")).toBe(true);
     expect(frameworkOptionLabel("NIST AI RMF 1.0")).toBe("NIST AI RMF 1.0 (Upcoming)");
     expect(isUpcomingGRCFramework("SOC 2")).toBe(false);
+  });
+
+  it("builds stable framework detail route segments", () => {
+    const framework = { id: "soc2", name: "SOC 2" };
+    expect(frameworkRouteSegment(framework)).toBe("soc2");
+    expect(frameworkMatchesRouteSegment(framework, "soc2")).toBe(true);
+    expect(frameworkMatchesRouteSegment({ name: "ISO 27001:2022" }, "iso-27001-2022")).toBe(true);
   });
 
   it("filters alert findings by direct and overlapping framework mappings", () => {
