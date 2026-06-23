@@ -194,15 +194,15 @@ describe("connector catalog metadata", () => {
       ],
     };
 
-    expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Sourcegen ready");
+    expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Runtime ready");
     expect(connectorAccessStatusLabel(connector.access_status)).toBe("Catalog only");
-    expect(connectorReadinessStageLabel(connector.readiness_stage)).toBe("Sourcegen ready");
+    expect(connectorReadinessStageLabel(connector.readiness_stage)).toBe("Runtime ready");
     expect(connectorDefinitionOriginLabel(connector.definition_origin)).toBe("Built-in catalog");
     expect(connectorIntegrationDepthLabel(connector)).toBe("Ready · 68/100");
     expect(connectorRequestActionLabel(connector)).toBe("Request connector");
     expect(connectorSetupAllowed(connector)).toBe(false);
     expect(connectorIsCatalogOnly(connector)).toBe(true);
-    expect(connectorRuntimeSurfaceLabel(connector)).toBe("Sourcegen ready");
+    expect(connectorRuntimeSurfaceLabel(connector)).toBe("Runtime ready");
     expect(connectorDisplayMetadata(connector)).toMatchObject({
       category: "Identity and access",
       provider: "Auth0",

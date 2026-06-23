@@ -558,7 +558,7 @@ export type ConnectorDefinitionField = {
 export type ConnectorDefinitionResourceFamily = {
   id: string;
   label?: string;
-  path: string;
+  path?: string;
   method?: "GET" | "POST" | string;
   list_key?: string;
   record_selector?: string;
@@ -578,6 +578,16 @@ export type ConnectorDefinitionResourceFamily = {
   }>;
   event_kind?: string;
   default_enabled?: boolean;
+};
+
+export type ConnectorDefinitionIngestMode = "pull" | "deposit";
+
+export type ConnectorDefinitionIngest = {
+  mode?: ConnectorDefinitionIngestMode | string;
+  deposit?: {
+    resource_families?: string[];
+    full_state_sync?: boolean;
+  };
 };
 
 export type ConnectorDefinitionTransport = {
@@ -636,6 +646,7 @@ export type ConnectorDefinition = {
   current_version?: number;
   config_fields?: ConnectorDefinitionField[];
   transport?: ConnectorDefinitionTransport;
+  ingest?: ConnectorDefinitionIngest;
   auth: {
     model: "none" | "api_key" | "bearer_token" | "basic" | "oauth_client_credentials" | string;
     credential_fields?: ConnectorDefinitionField[];
@@ -677,6 +688,15 @@ export type ConnectorDefinitionPromotionResponse = {
     target_stage?: ConnectorDefinitionStage | string;
     next_action?: string;
   };
+};
+
+export type ConnectorDefinitionPreviewResponse = {
+  generated_at?: string;
+  definition?: ConnectorDefinition;
+  status?: "checked" | "previewed" | string;
+  events?: unknown[];
+  pages_read?: number;
+  next_cursor?: string;
 };
 
 export type SourceCDKPlanStatus = "ready" | "warning" | "blocked";
@@ -854,6 +874,9 @@ export const defaultConnectorDefinitionDraft = (tenantID = ""): ConnectorDefinit
       path: "/health",
       expect_status: [200],
     },
+  },
+  ingest: {
+    mode: "pull",
   },
   auth: {
     model: "bearer_token",
@@ -1451,7 +1474,7 @@ export const connectorCatalogStatusLabel = (status?: string) => {
     case "catalog_ready":
       return "Catalog ready";
     case "generateable":
-      return "Sourcegen ready";
+      return "Runtime ready";
     case "needs_auth_extension":
       return "Auth extension needed";
     case "needs_bespoke_runtime":
@@ -1489,7 +1512,7 @@ export const connectorReadinessStageLabel = (stage?: string) => {
       return "API restricted";
     case "sourcegen_ready":
     case "generateable":
-      return "Sourcegen ready";
+      return "Runtime ready";
     case "catalog_ready":
       return "Catalog ready";
     case "auth_extension_required":
@@ -1543,7 +1566,7 @@ export const connectorRuntimeSurfaceLabel = (
 ) => {
   if (connectorSetupAllowed(connector)) return "Runtime supported";
   if (connector.access_status === "restricted") return "Restricted";
-  if (connector.runtime_executable) return "Sourcegen ready";
+  if (connector.runtime_executable) return "Runtime ready";
   if (connector.catalog_status) return connectorCatalogStatusLabel(connector.catalog_status);
   return "Runtime unknown";
 };
