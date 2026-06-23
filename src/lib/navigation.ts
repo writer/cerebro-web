@@ -45,6 +45,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["soc2", "iso", "framework", "control", "audit", "builder", "custom", ...supportedGRCFrameworkNames],
   },
   {
+    label: "Frameworks",
+    href: "/frameworks",
+    description: "Framework directory, SOC 2 tracking, maturity, gaps, planning, and exports.",
+    section: "Operator",
+    keywords: ["soc2", "iso", "framework", "catalog", "maturity", "gap", "planning", "export", ...supportedGRCFrameworkNames],
+  },
+  {
     label: "Evidence",
     href: "/evidence",
     description: "Evidence register linked to findings, rules, runs, and graph roots.",
@@ -102,6 +109,13 @@ const commandOnlyNavLinks: NavigationEntry[] = [
     description: "Wide-event timeline, trace drilldown, source runtime diagnostics, and CloudWatch query detail.",
     section: "Advanced",
     keywords: ["audit", "wide events", "otel", "trace", "cloudwatch", "runtime", "logs"],
+  },
+  {
+    label: "Risk scoring",
+    href: "/developer/risk-scoring",
+    description: "Tune tenant risk thresholds, signal cutoffs, relation weights, and factor weights.",
+    section: "Advanced",
+    keywords: ["risk", "scoring", "threshold", "cvss", "epss", "weights", "configuration"],
   },
   {
     label: "Control Builder",

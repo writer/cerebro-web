@@ -337,9 +337,15 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const normalizedPath = normalizeProxyPath(path);
   const requiredPermission = permissionForCerebroProxyRequest("PUT", normalizedPath);
   const decision = authorizeCurrentUser(currentUser, requiredPermission);
+  const span = startWebSpan(
+    "cerebro.proxy.request",
+    proxySpanAttributes("PUT", path, request, requestBody),
+    request.headers.get("traceparent"),
+  );
+  span.annotate(authorizationSpanAttributes(decision, currentUser));
   if (!decision.allowed) {
     console.warn("cerebro proxy put denied", { ...currentUserServerAuditFields(currentUser), permission: requiredPermission });
-    return authorizationErrorResponse(decision);
+    return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
   const target = buildCerebroUrl(path, url.search);
@@ -358,18 +364,22 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     response = await fetchCerebro(target, {
       method: "PUT",
-      headers,
+      headers: headersWithTrace(headers, span),
       body,
       cache: "no-store",
     });
   } catch (error) {
-    return proxyFetchError(error);
+    return tracedProxyError(error, span);
   }
 
   const text = await response.text();
+  span.end(response.status >= 500 ? "failed" : "completed", {
+    "http.response.status_code": response.status,
+    ...responseSpanAttributes(response.status, responseHeadersFor(response), text),
+  });
   return new NextResponse(text, {
     status: response.status,
-    headers: responseHeadersFor(response),
+    headers: responseHeadersWithTrace(responseHeadersFor(response), span),
   });
 }
 
