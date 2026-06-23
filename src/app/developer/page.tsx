@@ -16,6 +16,7 @@ const developerLinks = [
   { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and agent entry points for security producers." },
   { label: "Risk Scoring", href: "/developer/risk-scoring", description: "Tune tenant risk thresholds, signal cutoffs, relation weights, and factor weights." },
   { label: "Raindrop Ask Evals", href: "/developer/evals", description: "Local Ask quality evals, rubric outcomes, and Workshop trace links." },
+  { label: "Codegen Status", href: "/developer/codegen", description: "Unified codegen health: catalog coverage, projection templates, generator registry, and staleness." },
 ];
 
 export default function DeveloperPage() {
