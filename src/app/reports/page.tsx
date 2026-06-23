@@ -450,9 +450,9 @@ function ControlPacketView({
   return (
     <>
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Readiness" value={isUpcoming ? "N/A" : readiness ? `${readiness.score}/100` : "—"} detail={isUpcoming ? "upcoming" : reportReadinessLabel(readiness?.status)} intent={reportReadinessIntent(readiness?.status)} state={state} />
+        <MetricCard label="Readiness" value={isUpcoming ? "N/A" : readiness ? `${readiness.score}/100` : "—"} detail={isUpcoming ? "upcoming" : reportReadinessLabel(readiness?.status)} intent={isUpcoming ? "neutral" : reportReadinessIntent(readiness?.status)} state={state} />
         <MetricCard label="Controls" value={isUpcoming ? "N/A" : packet.packet.summary.total} detail={isUpcoming ? "not measured" : packet.profile.name || packet.profile.id} state={state} />
-        <MetricCard label="Open Findings" value={isUpcoming ? "N/A" : statusCount(packet, "failing")} detail={isUpcoming ? "not measured" : "mapped to controls"} intent={statusCount(packet, "failing") > 0 ? "danger" : "success"} state={state} />
+        <MetricCard label="Open Findings" value={isUpcoming ? "N/A" : statusCount(packet, "failing")} detail={isUpcoming ? "not measured" : "mapped to controls"} intent={isUpcoming ? "neutral" : statusCount(packet, "failing") > 0 ? "danger" : "success"} state={state} />
         <MetricCard label="Evidence" value={isUpcoming ? "N/A" : evidenceCount} detail={isUpcoming ? "not measured" : `${packet.metadata?.scope.exclusions.total ?? 0} exclusions`} state={state} />
       </div>
 
