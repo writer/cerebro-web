@@ -13,6 +13,16 @@ export type ExploreGraphState = {
 export const relationKey = (relation: Pick<GRCGraphRelation, "from_urn" | "relation" | "to_urn">) =>
   `${relation.from_urn}|${relation.relation}|${relation.to_urn}`;
 
+const relationAttributeKey = (attributes: Record<string, string> | undefined) => {
+  const entries = Object.entries(attributes ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  return entries.map(([key, value]) => `${key}=${value}`).join("&");
+};
+
+const relationInstanceKey = (relation: GRCGraphRelation) => {
+  const attributes = relationAttributeKey(relation.attributes);
+  return attributes ? `${relationKey(relation)}|${attributes}` : relationKey(relation);
+};
+
 export const emptyExploreState = (seedURN: string): ExploreGraphState => ({
   seedURN: seedURN.trim(),
   nodes: {},
@@ -49,7 +59,7 @@ export const mergeNeighborhood = (
   (graph?.neighbors ?? []).forEach((node) => addNode(nodes, node));
   (graph?.relations ?? []).forEach((relation) => {
     if (!relation || !relation.from_urn || !relation.to_urn) return;
-    relations[relationKey(relation)] = {
+    relations[relationInstanceKey(relation)] = {
       from_urn: relation.from_urn,
       relation: relation.relation,
       to_urn: relation.to_urn,

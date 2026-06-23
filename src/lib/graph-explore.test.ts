@@ -69,6 +69,26 @@ describe("mergeNeighborhood", () => {
     expect(expanded.nodes["urn:cerebro:local:package:left-pad"].attributes).toEqual({ risk_score: "60" });
   });
 
+  it("preserves distinct relation evidence between the same endpoints", () => {
+    const first = mergeNeighborhood(emptyExploreState(seed), seed, {
+      root: seedGraph.root,
+      neighbors: seedGraph.neighbors,
+      relations: [
+        { from_urn: seed, relation: "supports", to_urn: "urn:cerebro:local:identity:alice", attributes: { evidence_id: "ev-1" } },
+      ],
+    });
+    const expanded = mergeNeighborhood(first, seed, {
+      root: seedGraph.root,
+      neighbors: seedGraph.neighbors,
+      relations: [
+        { from_urn: seed, relation: "supports", to_urn: "urn:cerebro:local:identity:alice", attributes: { evidence_id: "ev-2" } },
+      ],
+    });
+
+    expect(exploreRelationCount(expanded)).toBe(2);
+    expect(toGRCGraph(expanded).relations?.map((relation) => relation.attributes?.evidence_id).sort()).toEqual(["ev-1", "ev-2"]);
+  });
+
   it("marks a node expanded and present even when the neighborhood is empty", () => {
     const seeded = mergeNeighborhood(emptyExploreState(seed), seed, seedGraph);
     const expanded = mergeNeighborhood(seeded, "urn:cerebro:local:identity:alice", undefined);

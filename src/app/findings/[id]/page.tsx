@@ -28,6 +28,10 @@ const formatDateInput = (value?: string) => {
   return parsed.toISOString().slice(0, 10);
 };
 
+const focusElement = (id: string) => {
+  window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+};
+
 function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -76,7 +80,19 @@ function ResourceURNsPanel({ urns }: { urns?: string[] }) {
   );
 }
 
-function TimelinePanel({ finding, evidence }: { finding: GRCAuditPacket["finding"]; evidence: GRCAuditPacket["evidence"] }) {
+function TimelinePanel({
+  evidence,
+  finding,
+  onOpenEvidence,
+  onOpenRemediation,
+  onOpenWaiver,
+}: {
+  evidence: GRCAuditPacket["evidence"];
+  finding: GRCAuditPacket["finding"];
+  onOpenEvidence: () => void;
+  onOpenRemediation: () => void;
+  onOpenWaiver: () => void;
+}) {
   const events = useMemo(() => {
     const items: { date: string; label: string; detail: string; type: "finding" | "evidence" | "sla" }[] = [];
     if (finding.first_observed_at) {
@@ -121,6 +137,29 @@ function TimelinePanel({ finding, evidence }: { finding: GRCAuditPacket["finding
               <span className="shrink-0 text-[12px] text-slate-500">{displayDate(event.date)}</span>
             </div>
             <div className="text-[12px] text-slate-500">{event.detail}</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {event.type === "finding" && finding.entity && (
+                <>
+                  <Link href={`/impact?root_urn=${encodeURIComponent(finding.entity)}`} className={secondaryButtonClass}>Open evidence graph</Link>
+                  <Link href={`/explore?root_urn=${encodeURIComponent(finding.entity)}`} className={secondaryButtonClass}>Explore impact</Link>
+                </>
+              )}
+              {event.type === "evidence" && (
+                <button type="button" onClick={onOpenEvidence} className={secondaryButtonClass}>
+                  Review evidence
+                </button>
+              )}
+              {event.type === "sla" && (
+                <>
+                  <button type="button" onClick={onOpenRemediation} className={primaryButtonClass}>
+                    Create remediation
+                  </button>
+                  <button type="button" onClick={onOpenWaiver} className={secondaryButtonClass}>
+                    Create waiver
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       ))}
@@ -242,7 +281,7 @@ function FindingWorkflowPanel({
           </div>
         </form>
 
-        <form onSubmit={onTicket} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+        <form id="finding-remediation" onSubmit={onTicket} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
           <div className="grid gap-2">
             <label className={labelClass}>Ticket URL<input value={ticketURL} onChange={(event) => setTicketURL(event.target.value)} placeholder="https://tracker.example.com/browse/SEC-123" className={inputClass} /></label>
             <label className={labelClass}>Name<input value={ticketName} onChange={(event) => setTicketName(event.target.value)} placeholder="SEC-123" className={inputClass} /></label>
@@ -267,7 +306,7 @@ function FindingWorkflowPanel({
               </button>
             </div>
           </form>
-          <form onSubmit={onSuppress} className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+          <form id="finding-waiver" onSubmit={onSuppress} className="rounded-lg border border-amber-100 bg-amber-50 p-3">
             <label className="text-[11px] font-medium uppercase tracking-wider text-amber-700">
               Suppression reason
               <textarea value={suppressReason} onChange={(event) => setSuppressReason(event.target.value)} placeholder="Accepted exception, false positive, compensating control..." className={`${inputClass} min-h-16 normal-case tracking-normal`} />
@@ -462,6 +501,28 @@ export default function FindingDetailPage() {
     if (ok) setSuppressReason("");
   };
 
+  const openEvidenceFromTimeline = () => {
+    setTab("evidence");
+    focusElement("finding-evidence");
+  };
+
+  const openRemediationFromTimeline = () => {
+    setTab("overview");
+    if (finding) {
+      setTicketName((current) => current || `Remediate ${finding.id}`);
+      setTicketExternalID((current) => current || finding.id);
+    }
+    focusElement("finding-remediation");
+  };
+
+  const openWaiverFromTimeline = () => {
+    setTab("overview");
+    if (finding) {
+      setSuppressReason((current) => current || `Temporary exception requested for ${finding.id}: `);
+    }
+    focusElement("finding-waiver");
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -586,7 +647,7 @@ export default function FindingDetailPage() {
           )}
 
           {tab === "evidence" && (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div id="finding-evidence" className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
               <table className="w-full text-left text-[13px]">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80">
@@ -640,7 +701,13 @@ export default function FindingDetailPage() {
 
           {tab === "timeline" && (
             <Panel title="Finding Lifecycle">
-              <TimelinePanel finding={finding} evidence={evidence} />
+              <TimelinePanel
+                finding={finding}
+                evidence={evidence}
+                onOpenEvidence={openEvidenceFromTimeline}
+                onOpenRemediation={openRemediationFromTimeline}
+                onOpenWaiver={openWaiverFromTimeline}
+              />
             </Panel>
           )}
         </>

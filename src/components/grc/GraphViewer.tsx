@@ -96,7 +96,7 @@ const fallbackNode = (urn: string): GRCGraphNode => ({
   attributes: {},
 });
 
-const normalizeGraph = (graph?: GRCGraph, nodeLimit: number = NODE_LIMIT) => {
+const normalizeGraph = (graph?: GRCGraph, nodeLimit: number = NODE_LIMIT, pinnedURNs: ReadonlySet<string> = new Set()) => {
   const nodesById = new Map<string, GraphNodeModel>();
   const addNode = (node: GRCGraphNode | undefined, isRoot = false) => {
     if (!node?.urn) return;
@@ -125,6 +125,9 @@ const normalizeGraph = (graph?: GRCGraph, nodeLimit: number = NODE_LIMIT) => {
   const allNodes = Array.from(nodesById.values()).sort((left, right) => {
     if (left.isRoot) return -1;
     if (right.isRoot) return 1;
+    const leftPinned = pinnedURNs.has(left.urn);
+    const rightPinned = pinnedURNs.has(right.urn);
+    if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
     return (right.risk ?? 0) - (left.risk ?? 0) || left.label.localeCompare(right.label);
   });
   const nodes = allNodes.slice(0, nodeLimit);
@@ -329,6 +332,15 @@ function ActionLink({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
+const withQueryParams = (path: string, params: Record<string, string | undefined>) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value?.trim()) query.set(key, value.trim());
+  });
+  const queryString = query.toString();
+  return queryString ? `${path}?${queryString}` : path;
+};
+
 type GraphViewerProps = {
   graph?: GRCGraph;
   onExpandNode?: (urn: string) => void;
@@ -336,6 +348,8 @@ type GraphViewerProps = {
   expandedURNs?: ReadonlySet<string>;
   expandingURN?: string | null;
   nodeLimit?: number;
+  pinnedURNs?: ReadonlySet<string>;
+  tenantID?: string;
 };
 
 export default function GraphViewer({
@@ -345,17 +359,25 @@ export default function GraphViewer({
   expandedURNs,
   expandingURN,
   nodeLimit,
+  pinnedURNs,
+  tenantID,
 }: GraphViewerProps) {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
+  const graphSignatureRef = useRef("");
   const [selectedURN, setSelectedURN] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
 
-  const model = useMemo(() => normalizeGraph(graph, nodeLimit ?? NODE_LIMIT), [graph, nodeLimit]);
+  const effectivePinnedURNs = useMemo(() => {
+    const next = new Set(pinnedURNs ? Array.from(pinnedURNs) : []);
+    if (selectedURN) next.add(selectedURN);
+    return next;
+  }, [pinnedURNs, selectedURN]);
+  const model = useMemo(() => normalizeGraph(graph, nodeLimit ?? NODE_LIMIT, effectivePinnedURNs), [effectivePinnedURNs, graph, nodeLimit]);
   const normalizedQuery = query.trim().toLowerCase();
 
   const view = useMemo(() => {
@@ -426,25 +448,32 @@ export default function GraphViewer({
     ? selectedURN
     : model.root?.urn ?? view.nodes[0]?.urn ?? null;
   const selectedNode = activeSelectedURN ? model.nodeById.get(activeSelectedURN) : undefined;
-  const selectedEdges = selectedNode
-    ? model.edges.filter((edge) => edge.from_urn === selectedNode.urn || edge.to_urn === selectedNode.urn).slice(0, 8)
+  const selectedAllEdges = selectedNode
+    ? model.edges.filter((edge) => edge.from_urn === selectedNode.urn || edge.to_urn === selectedNode.urn)
     : [];
+  const selectedVisibleEdges = selectedNode
+    ? view.edges.filter((edge) => edge.from_urn === selectedNode.urn || edge.to_urn === selectedNode.urn)
+    : [];
+  const selectedRelationshipRows = selectedVisibleEdges.slice(0, 8);
+  const selectedHiddenRelationships = Math.max(0, selectedAllEdges.length - selectedVisibleEdges.length);
   const selectedAttributes = Object.entries(selectedNode?.attributes ?? {}).slice(0, 8);
   const selectedExpanded = selectedNode ? Boolean(expandedURNs?.has(selectedNode.urn)) : false;
   const selectedExpanding = selectedNode ? expandingURN === selectedNode.urn : false;
   const askHref = selectedNode
-    ? `/ask?${new URLSearchParams({
+    ? withQueryParams("/ask", {
       q: `Explain affected entities and compliance impact for ${selectedNode.urn}.`,
       scope_urn: selectedNode.urn,
-    }).toString()}`
+      tenant_id: tenantID,
+    })
     : "/ask";
+  const inventoryHref = selectedNode ? withQueryParams(`/inventory/${encodeURIComponent(selectedNode.urn)}`, { tenant_id: tenantID }) : "/inventory";
+  const impactHref = selectedNode ? withQueryParams("/impact", { root_urn: selectedNode.urn, tenant_id: tenantID }) : "/impact";
+  const evidenceHref = selectedNode ? withQueryParams("/evidence", { graph_root_urn: selectedNode.urn, tenant_id: tenantID }) : "/evidence";
+  const exploreHref = selectedNode ? withQueryParams("/explore", { root_urn: selectedNode.urn, tenant_id: tenantID }) : "/explore";
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || view.elements.length === 0) return;
-
+  const styledElements = useMemo(() => {
     const colors = cytoscapeColors();
-    const styledElements = view.elements.map((element) => {
+    return view.elements.map((element) => {
       if (element.group !== "edges" || element.data?.color) return element;
       return {
         ...element,
@@ -454,10 +483,25 @@ export default function GraphViewer({
         },
       };
     });
+  }, [view.elements]);
+  const graphSignature = useMemo(
+    () => [
+      model.nodes.map((node) => node.urn).join("|"),
+      model.edges.map((edge) => edge.id).join("|"),
+      layoutMode,
+      theme,
+    ].join("\n"),
+    [layoutMode, model.edges, model.nodes, theme],
+  );
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || cyRef.current) return;
+
     const instance = cytoscape({
       container,
-      elements: styledElements,
-      style: graphStyles(colors),
+      elements: [],
+      style: graphStyles(cytoscapeColors()),
       minZoom: 0.18,
       maxZoom: 3,
       wheelSensitivity: 0.18,
@@ -465,13 +509,6 @@ export default function GraphViewer({
       autoungrabify: false,
     });
     cyRef.current = instance;
-
-    const options = layoutOptions(layoutMode);
-    if (layoutMode === "breadthfirst" && model.root?.urn) {
-      options.roots = instance.getElementById(model.root.urn);
-    }
-    instance.layout(options as unknown as cytoscape.LayoutOptions).run();
-    window.requestAnimationFrame(() => instance.fit(undefined, 42));
 
     const selectNode = (event: cytoscape.EventObject) => {
       const node = event.target as cytoscape.NodeSingular;
@@ -503,7 +540,32 @@ export default function GraphViewer({
         cyRef.current = null;
       }
     };
-  }, [layoutMode, model.root?.urn, view.elements]);
+  }, []);
+
+  useEffect(() => {
+    const instance = cyRef.current;
+    if (!instance) return;
+
+    const colors = cytoscapeColors();
+    const previousSignature = graphSignatureRef.current;
+    const shouldRunLayout = previousSignature !== graphSignature;
+    graphSignatureRef.current = graphSignature;
+
+    instance.batch(() => {
+      instance.elements().remove();
+      instance.add(styledElements);
+      instance.style(graphStyles(colors)).update();
+    });
+    if (styledElements.length === 0) return;
+    if (shouldRunLayout) {
+      const options = layoutOptions(layoutMode);
+      if (layoutMode === "breadthfirst" && model.root?.urn) {
+        options.roots = instance.getElementById(model.root.urn);
+      }
+      instance.layout(options as unknown as cytoscape.LayoutOptions).run();
+      window.requestAnimationFrame(() => instance.fit(undefined, 42));
+    }
+  }, [graphSignature, layoutMode, model.root?.urn, styledElements]);
 
   useEffect(() => {
     const instance = cyRef.current;
@@ -527,10 +589,11 @@ export default function GraphViewer({
   return (
     <div className="surface-panel overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-[12px]">
-        <span className="font-semibold text-[var(--text-primary)]">{view.nodes.length} nodes</span>
-        <span className="text-[var(--text-muted)]">{view.edges.length} edges</span>
+        <span className="font-semibold text-[var(--text-primary)]">{view.nodes.length} of {model.totalNodes} nodes</span>
+        <span className="text-[var(--text-muted)]">{view.edges.length} of {model.totalEdges} edges</span>
         <span className="text-[var(--text-muted)]">Root: <span className="font-semibold text-[var(--primary)]">{graph.root.label}</span></span>
         {model.hiddenNodes > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">{model.hiddenNodes} hidden by cap</span>}
+        {model.hiddenEdges > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">{model.hiddenEdges} hidden edges</span>}
         {(view.filteredNodes > 0 || view.filteredEdges > 0) && <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[var(--text-muted)]">{view.filteredNodes} filtered</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {model.typeCounts.map(([type, count]) => (
@@ -595,16 +658,16 @@ export default function GraphViewer({
                 </div>
                 <div className="rounded-md bg-[var(--surface-muted)] px-3 py-2">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Links</div>
-                  <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{selectedEdges.length}</div>
+                  <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{selectedVisibleEdges.length}/{selectedAllEdges.length}</div>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <ActionLink href={`/inventory/${encodeURIComponent(selectedNode.urn)}`}>Inventory</ActionLink>
-                <ActionLink href={`/impact?root_urn=${encodeURIComponent(selectedNode.urn)}`}>Impact</ActionLink>
-                <ActionLink href={`/evidence?graph_root_urn=${encodeURIComponent(selectedNode.urn)}`}>Evidence</ActionLink>
+                <ActionLink href={inventoryHref}>Inventory</ActionLink>
+                <ActionLink href={impactHref}>Impact</ActionLink>
+                <ActionLink href={evidenceHref}>Evidence</ActionLink>
                 <ActionLink href={askHref}>Ask</ActionLink>
                 {!onExpandNode && (
-                  <ActionLink href={`/explore?root_urn=${encodeURIComponent(selectedNode.urn)}`}>Explore</ActionLink>
+                  <ActionLink href={exploreHref}>Explore</ActionLink>
                 )}
               </div>
               {onExpandNode && (
@@ -629,9 +692,12 @@ export default function GraphViewer({
                 </div>
               )}
               <div>
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Visible relationships</div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Showing {selectedRelationshipRows.length} of {selectedVisibleEdges.length} visible relationships
+                  {selectedHiddenRelationships > 0 ? ` (${selectedHiddenRelationships} hidden by filters or cap)` : ""}
+                </div>
                 <div className="space-y-2">
-                  {selectedEdges.map((edge) => {
+                  {selectedRelationshipRows.map((edge) => {
                     const otherURN = edge.from_urn === selectedNode.urn ? edge.to_urn : edge.from_urn;
                     const other = model.nodeById.get(otherURN);
                     return (
@@ -646,7 +712,7 @@ export default function GraphViewer({
                       </button>
                     );
                   })}
-                  {selectedEdges.length === 0 && <div className="text-[13px] text-[var(--text-muted)]">No visible relationships.</div>}
+                  {selectedVisibleEdges.length === 0 && <div className="text-[13px] text-[var(--text-muted)]">No visible relationships.</div>}
                 </div>
               </div>
               {selectedAttributes.length > 0 && (
@@ -667,6 +733,70 @@ export default function GraphViewer({
             <div className="mt-3 text-[13px] text-[var(--text-muted)]">Select a node to inspect relationships and actions.</div>
           )}
         </aside>
+      </div>
+
+      <div className="border-t border-[color:var(--border)] bg-[var(--surface)] px-4 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[12px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Accessible node list</div>
+            <div className="mt-1 text-[12px] text-[var(--text-muted)]">Keyboard-select nodes and run the same graph actions without using the canvas.</div>
+          </div>
+          <div className="text-[12px] text-[var(--text-muted)]">{view.nodes.length} visible nodes</div>
+        </div>
+        <div className="mt-3 max-h-72 overflow-auto rounded-lg border border-[color:var(--border)]">
+          <table className="w-full min-w-[720px] text-left text-[12px]">
+            <thead className="sticky top-0 bg-[var(--surface-muted)] text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+              <tr>
+                <th className="px-3 py-2 font-semibold">Node</th>
+                <th className="px-3 py-2 font-semibold">Type</th>
+                <th className="px-3 py-2 font-semibold">Risk</th>
+                <th className="px-3 py-2 font-semibold">Links</th>
+                <th className="px-3 py-2 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[color:var(--border)]">
+              {view.nodes.map((node) => {
+                const visibleLinks = view.edges.filter((edge) => edge.from_urn === node.urn || edge.to_urn === node.urn).length;
+                const nodeExpanded = Boolean(expandedURNs?.has(node.urn));
+                const nodeExpanding = expandingURN === node.urn;
+                return (
+                  <tr key={node.urn} className={node.urn === activeSelectedURN ? "bg-[var(--nav-active)]" : "bg-[var(--surface)]"}>
+                    <td className="px-3 py-2 align-top">
+                      <button type="button" onClick={() => setSelectedURN(node.urn)} className="text-left font-semibold text-[var(--text-primary)] hover:text-[var(--primary)]">
+                        {node.label}
+                      </button>
+                      <div className="mt-1 max-w-[340px] truncate font-mono text-[11px] text-[var(--text-muted)]">{node.urn}</div>
+                    </td>
+                    <td className="px-3 py-2 align-top text-[var(--text-secondary)]">{node.entity_type}</td>
+                    <td className="px-3 py-2 align-top text-[var(--text-secondary)]">{node.risk ?? "—"}</td>
+                    <td className="px-3 py-2 align-top text-[var(--text-secondary)]">{visibleLinks}</td>
+                    <td className="px-3 py-2 align-top">
+                      <div className="flex flex-wrap gap-1.5">
+                        <ActionLink href={withQueryParams("/impact", { root_urn: node.urn, tenant_id: tenantID })}>Impact</ActionLink>
+                        <ActionLink href={withQueryParams("/evidence", { graph_root_urn: node.urn, tenant_id: tenantID })}>Evidence</ActionLink>
+                        {onExpandNode && (
+                          <button
+                            type="button"
+                            onClick={() => onExpandNode(node.urn)}
+                            disabled={nodeExpanding || nodeExpanded}
+                            className="rounded-md bg-[var(--primary)] px-2.5 py-1.5 text-[12px] font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+                          >
+                            {nodeExpanding ? "Expanding…" : nodeExpanded ? "Expanded" : "Expand"}
+                          </button>
+                        )}
+                        {onRemoveNode && node.urn !== model.root?.urn && (
+                          <button type="button" onClick={() => onRemoveNode(node.urn)} className="secondary-button px-2.5 py-1.5 text-[12px]">
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="sr-only" aria-live="polite">

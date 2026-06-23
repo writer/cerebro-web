@@ -132,7 +132,7 @@ export const fetchCachedGRC = async <T,>(
     return inflight as Promise<Awaited<ReturnType<typeof fetchCerebro<T>>>>;
   }
 
-  const requestInit = force ? withFreshCacheHeaders(init) : withoutAbortSignal(init);
+  const requestInit = force ? withFreshCacheHeaders(init) : init.signal ? init : withoutAbortSignal(init);
   const request = fetchCerebro<T>(path, apiKey, requestInit).then((response) => {
     if (response.ok) {
       writeGRCQueryCache(key, response);
@@ -144,7 +144,7 @@ export const fetchCachedGRC = async <T,>(
       grcQueryInflight.delete(key);
     }
   });
-  if (!force) {
+  if (!force && !init.signal) {
     grcQueryInflight.set(key, request);
   }
   return request;
