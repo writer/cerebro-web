@@ -16,7 +16,8 @@ import {
   sortCustomDashboards,
   validateCustomDashboardName,
 } from "@/lib/custom-dashboards";
-import { useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { useQueryParamState } from "@/lib/query-params";
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const selectClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
@@ -24,16 +25,18 @@ const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-
 
 export default function CustomDashboardsPage() {
   const router = useRouter();
-  const [tenantID, setTenantID] = useState(() => initialSearchParam("tenant_id"));
+  const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [workspaceID, setWorkspaceID] = useState("");
   const [name, setName] = useState("GRC trends dashboard");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"private" | "workspace" | "organization">("private");
   const [template, setTemplate] = useState<CustomDashboardTemplateID>("trends");
-  const [severity, setSeverity] = useState(() => initialSearchParam("severity"));
-  const [framework, setFramework] = useState(() => initialSearchParam("framework"));
+  const [severity, setSeverity] = useQueryParamState("severity");
+  const [framework, setFramework] = useQueryParamState("framework");
   const [formError, setFormError] = useState<string | null>(null);
-  const listPath = useMemo(() => customDashboardListPath({ tenantID, workspaceID }), [tenantID, workspaceID]);
+  const debouncedTenantID = useDebouncedValue(tenantID.trim());
+  const debouncedWorkspaceID = useDebouncedValue(workspaceID.trim());
+  const listPath = useMemo(() => customDashboardListPath({ tenantID: debouncedTenantID, workspaceID: debouncedWorkspaceID }), [debouncedTenantID, debouncedWorkspaceID]);
   const dashboardsQuery = useGRCQuery<CustomDashboardListResponse>(listPath);
   const createMutation = useGRCMutation<CustomDashboardResponse>();
   const dashboards = sortCustomDashboards(dashboardsQuery.data?.dashboards ?? []);
@@ -132,8 +135,3 @@ export default function CustomDashboardsPage() {
     </div>
   );
 }
-
-const initialSearchParam = (key: string) => {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get(key) ?? "";
-};
