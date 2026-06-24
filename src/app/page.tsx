@@ -148,6 +148,21 @@ export default function Home() {
               {countLabel(summary.overdue_findings, "overdue finding")} and {countLabel(summary.stale_connectors, "stale connector")} need attention.
             </AttentionBanner>
           )}
+          {readinessQuery.error && (
+            <AttentionBanner
+              action={
+                <button
+                  type="button"
+                  onClick={() => void readinessQuery.reload()}
+                  className="rounded-md border border-amber-300 bg-white px-3 py-1 text-[12px] font-medium text-amber-900 hover:bg-amber-50"
+                >
+                  Retry
+                </button>
+              }
+            >
+              Audit readiness is unavailable; showing sampled dashboard values.
+            </AttentionBanner>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-slate-200 border-l-[3px] border-l-red-500 bg-white p-4">
