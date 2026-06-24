@@ -31,14 +31,22 @@ export default function CustomDashboardDetailPage() {
 
   const cloneDashboard = async () => {
     if (!dashboard) return;
-    const response = await cloneMutation.mutate(customDashboardClonePath(dashboard.id), { name: `Copy of ${dashboard.name}` });
-    router.push(`/trends/dashboards/${encodeURIComponent(response.dashboard.id)}`);
+    try {
+      const response = await cloneMutation.mutate(customDashboardClonePath(dashboard.id), { name: `Copy of ${dashboard.name}` });
+      router.push(`/trends/dashboards/${encodeURIComponent(response.dashboard.id)}`);
+    } catch {
+      // Error surfaced via cloneMutation.error.
+    }
   };
 
   const deleteDashboard = async () => {
     if (!dashboard) return;
-    await deleteMutation.mutate(customDashboardPath(dashboard.id), {}, "DELETE");
-    router.push("/trends/dashboards");
+    try {
+      await deleteMutation.mutate(customDashboardPath(dashboard.id), {}, "DELETE");
+      router.push("/trends/dashboards");
+    } catch {
+      // Error surfaced via deleteMutation.error.
+    }
   };
 
   if (dashboardQuery.loading) {
@@ -117,13 +125,17 @@ function DashboardSettings({
       return;
     }
     setFormError(null);
-    await updateMutation.mutate(customDashboardPath(dashboard.id), {
-      name: validation.name,
-      description,
-      visibility,
-      workspace_id: workspaceID,
-    }, "PATCH");
-    await onReload();
+    try {
+      await updateMutation.mutate(customDashboardPath(dashboard.id), {
+        name: validation.name,
+        description,
+        visibility,
+        workspace_id: workspaceID,
+      }, "PATCH");
+      await onReload();
+    } catch {
+      // Error surfaced via updateMutation.error.
+    }
   };
 
   return (

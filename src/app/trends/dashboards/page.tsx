@@ -48,20 +48,24 @@ export default function CustomDashboardsPage() {
       return;
     }
     setFormError(null);
-    const response = await createMutation.mutate("/grc/dashboards", customDashboardCreatePayload({
-      name: validation.name,
-      description,
-      tenantID,
-      workspaceID,
-      visibility,
-      widgets: customDashboardTemplateWidgets(template),
-      filters: {
-        tenant_id: tenantID,
-        framework,
-        severity,
-      },
-    }));
-    router.push(`/trends/dashboards/${encodeURIComponent(response.dashboard.id)}`);
+    try {
+      const response = await createMutation.mutate("/grc/dashboards", customDashboardCreatePayload({
+        name: validation.name,
+        description,
+        tenantID,
+        workspaceID,
+        visibility,
+        widgets: customDashboardTemplateWidgets(template),
+        filters: {
+          tenant_id: tenantID,
+          framework,
+          severity,
+        },
+      }));
+      router.push(`/trends/dashboards/${encodeURIComponent(response.dashboard.id)}`);
+    } catch {
+      // Error surfaced via createMutation.error.
+    }
   };
 
   return (
