@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
+import CustomDashboardBuilder from "@/components/grc/CustomDashboardBuilder";
 import CustomDashboardRenderer from "@/components/grc/CustomDashboardRenderer";
 import { ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
 import {
@@ -83,6 +84,8 @@ export default function CustomDashboardDetailPage() {
         onReload={() => dashboardQuery.reload()}
         onDelete={() => void deleteDashboard()}
       />
+
+      <CustomDashboardBuilder key={`${dashboard.id}:${dashboard.updated_at}`} dashboard={dashboard} onSaved={() => dashboardQuery.reload()} />
 
       <CustomDashboardRenderer dashboard={dashboard} />
     </div>

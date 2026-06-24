@@ -21,7 +21,9 @@ export type CustomDashboardWidget = {
   title?: string;
   query?: {
     endpoint?: string;
+    source_id?: string;
     params?: Record<string, string | number | boolean | undefined>;
+    limit?: number;
   };
   layout?: {
     x?: number;
