@@ -24,6 +24,20 @@ const icons: Record<string, React.ReactNode> = {
   "/developer": <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />,
 };
 
+const sidebarNavLinks = [...operatorNavLinks, ...utilityLinks];
+
+function matchesPathname(pathname: string, href: string) {
+  return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function isSidebarLinkActive(pathname: string, href: string, links: { href: string }[] = sidebarNavLinks) {
+  if (!matchesPathname(pathname, href)) return false;
+
+  return !links.some(
+    (link) => link.href !== href && link.href.length > href.length && matchesPathname(pathname, link.href),
+  );
+}
+
 function NavIcon({ href }: { href: string }) {
   const d = icons[href];
   if (!d) return <span className="h-[18px] w-[18px]" />;
@@ -50,8 +64,7 @@ export default function Sidebar() {
   const { openCommandPalette } = useCommandPalette();
   const { collapsed, toggleSidebar } = useSidebar();
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) => isSidebarLinkActive(pathname, href);
 
   const renderLink = (link: { href: string; label: string }) => {
     const active = isActive(link.href);
