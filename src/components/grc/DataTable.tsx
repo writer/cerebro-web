@@ -6,10 +6,10 @@ import { useMemo, useState } from "react";
 
 import { countLabel } from "@/lib/format";
 
-export type TableColumn = {
+export type TableColumn<Row extends object = Record<string, unknown>> = {
   key: string;
   label?: string;
-  render?: (value: unknown, row: Record<string, unknown>) => ReactNode;
+  render?: (value: unknown, row: Row) => ReactNode;
 };
 
 export const formatValue = (value: unknown) => {
@@ -69,7 +69,24 @@ export function KeyValueList({
   );
 }
 
-export default function DataTable({
+export type DataTableProps<Row extends object = Record<string, unknown>> = {
+  rows: Row[];
+  columns?: TableColumn<Row>[];
+  emptyMessage?: string;
+  searchPlaceholder?: string;
+  filterKeys?: string[];
+  pageSize?: number;
+  getRowHref?: (row: Row) => string | undefined;
+  getRowKey?: (row: Row, index: number) => string;
+  onRowClick?: (row: Row) => void;
+  rowActions?: (row: Row) => ReactNode;
+  selectedRowKey?: string | null;
+};
+
+const rowValue = <Row extends object>(row: Row, key: string) =>
+  (row as Record<string, unknown>)[key];
+
+export default function DataTable<Row extends object = Record<string, unknown>>({
   rows,
   columns,
   emptyMessage = "No rows available.",
@@ -77,18 +94,14 @@ export default function DataTable({
   filterKeys,
   pageSize = 10,
   getRowHref,
-}: {
-  rows: Record<string, unknown>[];
-  columns?: TableColumn[];
-  emptyMessage?: string;
-  searchPlaceholder?: string;
-  filterKeys?: string[];
-  pageSize?: number;
-  getRowHref?: (row: Record<string, unknown>) => string | undefined;
-}) {
+  getRowKey,
+  onRowClick,
+  rowActions,
+  selectedRowKey,
+}: DataTableProps<Row>) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const resolvedColumns = useMemo<TableColumn[]>(
+  const resolvedColumns = useMemo<TableColumn<Row>[]>(
     () => columns ?? Object.keys(rows?.[0] ?? {}).slice(0, 6).map((key) => ({ key })),
     [columns, rows],
   );
@@ -99,7 +112,7 @@ export default function DataTable({
   const rowSearchText = useMemo(
     () =>
       (rows ?? []).map((row) =>
-        searchableKeys.map((key) => valueText(row[key])).join("\n").toLowerCase(),
+        searchableKeys.map((key) => valueText(rowValue(row, key))).join("\n").toLowerCase(),
       ),
     [rows, searchableKeys],
   );
@@ -157,21 +170,25 @@ export default function DataTable({
                   </th>
                 ))}
                 {getRowHref && <th className="px-3 py-2 font-semibold">Link</th>}
+                {rowActions && <th className="px-3 py-2 font-semibold"></th>}
               </tr>
             </thead>
             <tbody>
               {visibleRows.map((row, index) => {
                 const href = getRowHref?.(row);
+                const key = getRowKey?.(row, pageStart + index) ?? String(rowValue(row, "id") ?? `${pageStart}-${index}`);
+                const selected = selectedRowKey !== undefined && selectedRowKey !== null && key === selectedRowKey;
                 return (
                   <tr
-                    key={row.id?.toString() ?? `${pageStart}-${index}`}
-                    className="border-b border-slate-100 hover:bg-slate-50/60"
+                    key={key}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={`border-b border-slate-100 hover:bg-slate-50/60 ${onRowClick ? "cursor-pointer" : ""} ${selected ? "bg-indigo-50/60" : ""}`}
                   >
                     {resolvedColumns.map((column) => (
                       <td key={column.key} className="px-3 py-2">
                         {column.render
-                          ? column.render(row[column.key], row)
-                          : formatValue(row[column.key])}
+                          ? column.render(rowValue(row, column.key), row)
+                          : formatValue(rowValue(row, column.key))}
                       </td>
                     ))}
                     {getRowHref && (
@@ -183,6 +200,11 @@ export default function DataTable({
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
+                      </td>
+                    )}
+                    {rowActions && (
+                      <td className="px-3 py-2 text-right">
+                        {rowActions(row)}
                       </td>
                     )}
                   </tr>
@@ -215,6 +237,39 @@ export default function DataTable({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+export function WorklistTable<Row extends object = Record<string, unknown>>({
+  title,
+  description,
+  action,
+  refreshing,
+  ...tableProps
+}: DataTableProps<Row> & {
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+  refreshing?: boolean;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+        <div>
+          <h2 className="text-[13px] font-semibold text-slate-900">{title}</h2>
+          {description && <p className="mt-0.5 text-[12px] text-slate-500">{description}</p>}
+        </div>
+        {action}
+      </div>
+      {refreshing && (
+        <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-[12px] text-slate-500">
+          Refreshing...
+        </div>
+      )}
+      <div className="p-4">
+        <DataTable {...tableProps} />
+      </div>
     </div>
   );
 }

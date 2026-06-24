@@ -361,6 +361,126 @@ export type GRCConnector = {
   last_synced_at?: string;
 };
 
+export type GRCSourceRuntimeHealthSummary = {
+  source_id: string;
+  total: number;
+  healthy?: number;
+  stale?: number;
+  failed?: number;
+  cursor_pending?: number;
+  contract_probe_not_configured?: number;
+  graph_not_observed?: number;
+};
+
+export type GRCCoverageRecord = Record<string, unknown>;
+export type GRCCoverageSummary = Record<string, unknown>;
+
+export type GRCProgramReadinessSummary = {
+  status: string;
+  score: number;
+  controls: number;
+  passing_controls: number;
+  failing_controls: number;
+  missing_evidence_controls: number;
+  stale_evidence_controls: number;
+  manual_review_controls: number;
+  evidence_items: number;
+  missing_evidence_items: number;
+  stale_evidence_items: number;
+  open_findings: number;
+  critical_findings: number;
+  high_findings: number;
+  connectors: number;
+  stale_connectors: number;
+  coverage_blind_spots: number;
+  readiness_blockers?: GRCReportReadinessBlocker[];
+};
+
+export type GRCProgramFramework = {
+  framework_name: string;
+  framework_id?: string;
+  framework_version?: string;
+  framework_lifecycle?: string;
+  status: string;
+  score: number;
+  controls: number;
+  passing_controls: number;
+  failing_controls: number;
+  missing_evidence_controls: number;
+  stale_evidence_controls: number;
+  manual_review_controls: number;
+  open_findings: number;
+  evidence_items: number;
+};
+
+export type GRCProgramControl = {
+  framework_name: string;
+  framework_id?: string;
+  framework_version?: string;
+  framework_lifecycle?: string;
+  control_id: string;
+  title?: string;
+  owner_domain?: string;
+  status: string;
+  score: number;
+  open_findings: number;
+  critical_findings: number;
+  high_findings: number;
+  evidence_items: number;
+  missing_evidence_items?: number;
+  stale_evidence_items?: number;
+  evidence_expectations?: number;
+  evidence_quality?: string;
+  action: string;
+  href?: string;
+  reasons?: string[];
+};
+
+export type GRCProgramWorkItem = {
+  id: string;
+  kind: string;
+  title: string;
+  framework_name?: string;
+  control_id?: string;
+  status: string;
+  action: string;
+  owner_domain?: string;
+  open_findings?: number;
+  critical_findings?: number;
+  missing_evidence_items?: number;
+  stale_evidence_items?: number;
+  href?: string;
+  reasons?: string[];
+};
+
+export type GRCProgramProofBundle = {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  score: number;
+  control_packet_path: string;
+  export_path: string;
+  reports_path: string;
+  readiness: GRCReportReadiness;
+  generated_at: string;
+};
+
+export type GRCProgramReadiness = {
+  profile: GRCControlPacketProfile;
+  summary: GRCProgramReadinessSummary;
+  frameworks: GRCProgramFramework[];
+  controls: GRCProgramControl[];
+  work_items: GRCProgramWorkItem[];
+  proof_bundle: GRCProgramProofBundle;
+  connectors: GRCConnector[];
+  source_summaries?: GRCSourceRuntimeHealthSummary[];
+  coverage_blind_spots?: GRCCoverageRecord[];
+  coverage_summaries?: GRCCoverageSummary[];
+  metadata: GRCReportMetadata;
+  generated_at: string;
+};
+
 export type GRCGraphNode = {
   urn: string;
   entity_type: string;

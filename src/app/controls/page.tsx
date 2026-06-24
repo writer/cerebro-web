@@ -9,6 +9,7 @@ import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHe
 import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { useGRCFilterState } from "@/lib/grc-filters";
 import { controlMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -161,18 +162,12 @@ export default function ControlsPage() {
     ])),
     [data?.controls],
   );
-  const filterChips = [
-    { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
-    { label: "Profile", value: selectedProfileID === DEFAULT_CONTROL_PROFILE_ID && !profileID ? "" : selectedProfileID, onClear: () => setProfileID("") },
-    { label: "Framework", value: framework, onClear: () => setFramework("") },
-    { label: "Control", value: controlID, onClear: () => setControlID("") },
-  ];
-  const clearFilters = () => {
-    setTenantID("");
-    setProfileID("");
-    setFramework("");
-    setControlID("");
-  };
+  const filterState = useGRCFilterState([
+    { key: "tenant_id", label: "Tenant", value: tenantID, setValue: setTenantID },
+    { key: "profile", label: "Profile", value: selectedProfileID === DEFAULT_CONTROL_PROFILE_ID && !profileID ? "" : selectedProfileID, setValue: setProfileID },
+    { key: "framework", label: "Framework", value: framework, setValue: setFramework },
+    { key: "control", label: "Control", value: controlID, setValue: setControlID },
+  ]);
   const auditPacketHref = (control: GRCControl) => {
     const params = new URLSearchParams({
       profile: selectedProfileID,
@@ -237,7 +232,7 @@ export default function ControlsPage() {
           </label>
           <label className={labelClass}>Control<input value={controlID} onChange={(e) => setControlID(e.target.value)} placeholder="CC6.1" className={inputClass} /></label>
         </div>
-        <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
+        <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
