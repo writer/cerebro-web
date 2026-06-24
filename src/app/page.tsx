@@ -8,7 +8,7 @@ import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/TrendsChart";
 import { countLabel } from "@/lib/format";
-import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCTrends, riskSort, shortEntity } from "@/lib/grc";
+import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 import { hasTrendActivity } from "@/lib/trends";
@@ -66,9 +66,11 @@ function SeverityDonut({ critical, high, medium, low }: { critical: number; high
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
+  const data = dashboard.data;
+  const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
   const evidenceQuery = useGRCQuery<EvidenceResponse>(showEvidence ? grcPath("/grc/evidence", { limit: 8 }) : null);
   const trendsQuery = useGRCQuery<GRCTrends>(grcPath("/grc/trends", { interval: "week", days: 90 }));
-  const data = dashboard.data;
+  const readiness = readinessQuery.data?.summary;
   const priorityFindings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
   const priorityMetrics = useMemo(() => {
     let criticalRisk = 0;
@@ -104,6 +106,7 @@ export default function Home() {
 
   const reload = () => {
     void dashboard.reload();
+    void readinessQuery.reload();
     void trendsQuery.reload();
     if (showEvidence) void evidenceQuery.reload();
   };
@@ -145,6 +148,21 @@ export default function Home() {
               {countLabel(summary.overdue_findings, "overdue finding")} and {countLabel(summary.stale_connectors, "stale connector")} need attention.
             </AttentionBanner>
           )}
+          {readinessQuery.error && (
+            <AttentionBanner
+              action={
+                <button
+                  type="button"
+                  onClick={() => void readinessQuery.reload()}
+                  className="rounded-md border border-amber-300 bg-white px-3 py-1 text-[12px] font-medium text-amber-900 hover:bg-amber-50"
+                >
+                  Retry
+                </button>
+              }
+            >
+              Audit readiness is unavailable; showing sampled dashboard values.
+            </AttentionBanner>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-slate-200 border-l-[3px] border-l-red-500 bg-white p-4">
@@ -184,7 +202,14 @@ export default function Home() {
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <ProgressCard
+              title="Audit Readiness"
+              percent={readiness?.score ?? controlProgress}
+              detail={humanize(readiness?.status ?? "sampling")}
+              total={countLabel(readiness?.controls ?? controlTotal, "control")}
+              href={readinessQuery.data?.proof_bundle?.reports_path ?? "/reports"}
+            />
             <ProgressCard title="Control Posture" percent={controlProgress} detail={`${passingControls} passing`} total={`${controlTotal} total`} href="/controls" />
             <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
             <ProgressCard title="Connector Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />

@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import type { TableColumn } from "@/components/grc/DataTable";
+import { WorklistTable } from "@/components/grc/DataTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
 import { displayDate, GRCEvidence, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { useGRCFilterState } from "@/lib/grc-filters";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -55,22 +58,49 @@ export default function EvidencePage() {
   }, [data?.evidence]);
   const { claims, events, evidence, graphRoots } = evidenceView;
   const selectedEvidence = evidence.find((item) => item.id === selectedEvidenceID) ?? null;
-  const filterChips = [
-    { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
-    { label: "Finding", value: findingID, onClear: () => setFindingID("") },
-    { label: "Run", value: runID, onClear: () => setRunID("") },
-    { label: "Rule", value: ruleID, onClear: () => setRuleID("") },
-    { label: "Graph root", value: graphRoot, onClear: () => setGraphRoot("") },
-  ];
-  const clearFilters = () => {
-    setTenantID("");
-    setFindingID("");
-    setRunID("");
-    setRuleID("");
-    setGraphRoot("");
-  };
-
-  const thClass = "px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500";
+  const filterState = useGRCFilterState([
+    { key: "tenant_id", label: "Tenant", value: tenantID, setValue: setTenantID },
+    { key: "finding_id", label: "Finding", value: findingID, setValue: setFindingID },
+    { key: "run_id", label: "Run", value: runID, setValue: setRunID },
+    { key: "rule_id", label: "Rule", value: ruleID, setValue: setRuleID },
+    { key: "graph_root_urn", label: "Graph root", value: graphRoot, setValue: setGraphRoot },
+  ]);
+  const evidenceColumns = useMemo<TableColumn<GRCEvidence>[]>(() => [
+    { key: "id", label: "Evidence", render: (_value, item) => <span className="font-mono text-[12px] text-slate-600">{item.id}</span> },
+    {
+      key: "finding_id",
+      label: "Finding",
+      render: (_value, item) => item.finding_id ? (
+        <Link href={`/findings/${encodeURIComponent(item.finding_id)}`} className="font-medium text-slate-900 hover:text-indigo-600">
+          {item.finding_title || item.finding_id}
+        </Link>
+      ) : <span className="text-slate-400">&mdash;</span>,
+    },
+    {
+      key: "run_id",
+      label: "Run / Rule",
+      render: (_value, item) => (
+        <div className="text-[12px] text-slate-500">
+          <div>{shortEntity(item.run_id)}</div>
+          <div>{shortEntity(item.rule_id)}</div>
+        </div>
+      ),
+    },
+    { key: "claim_ids", label: "Claims", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.claim_ids?.length ?? 0}</span> },
+    { key: "event_ids", label: "Events", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.event_ids?.length ?? 0}</span> },
+    {
+      key: "graph_root_urns",
+      label: "Graph Roots",
+      render: (_value, item) => (
+        <>
+          {(item.graph_root_urns ?? []).slice(0, 2).map((urn) => (
+            <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="mr-2 text-indigo-600 hover:text-indigo-800">{shortEntity(urn)}</Link>
+          ))}
+        </>
+      ),
+    },
+    { key: "created_at", label: "Created", render: (_value, item) => <span className="text-slate-500">{displayDate(item.created_at)}</span> },
+  ], []);
   const detailRows = selectedEvidence ? [
     ["Evidence ID", selectedEvidence.id],
     ["Finding", selectedEvidence.finding_id || "—"],
@@ -101,7 +131,7 @@ export default function EvidencePage() {
           <label className={labelClass}>Rule<input value={ruleID} onChange={(e) => setRuleID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Graph Root<input value={graphRoot} onChange={(e) => setGraphRoot(e.target.value)} placeholder="urn:cerebro:..." className={inputClass} /></label>
         </div>
-        <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
+        <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -116,61 +146,25 @@ export default function EvidencePage() {
 
       {data && !error && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            {isRefreshing && (
-              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-[12px] text-slate-500">
-                Refreshing evidence...
-              </div>
+          <WorklistTable
+            title="Evidence register"
+            description="Search proof items by finding, run, rule, claim, event, or graph root."
+            rows={evidence}
+            columns={evidenceColumns}
+            emptyMessage="No evidence matches this view."
+            searchPlaceholder="Search evidence"
+            filterKeys={["id", "finding_id", "finding_title", "run_id", "rule_id", "claim_ids", "event_ids", "graph_root_urns"]}
+            pageSize={50}
+            getRowKey={(item) => item.id}
+            selectedRowKey={selectedEvidenceID}
+            onRowClick={(item) => setSelectedEvidenceID(item.id)}
+            refreshing={isRefreshing}
+            rowActions={(item) => (
+              <button type="button" onClick={() => setSelectedEvidenceID(item.id)} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
+                Inspect
+              </button>
             )}
-            <table className="w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80">
-                  <th className={thClass}>Evidence</th>
-                  <th className={thClass}>Finding</th>
-                  <th className={thClass}>Run / Rule</th>
-                  <th className={thClass}>Claims</th>
-                  <th className={thClass}>Events</th>
-                  <th className={thClass}>Graph Roots</th>
-                  <th className={thClass}>Created</th>
-                  <th className={thClass}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {evidence.map((item) => (
-                  <tr key={item.id} className={`border-b border-slate-50 transition hover:bg-slate-50/60 ${selectedEvidenceID === item.id ? "bg-indigo-50/60" : ""}`}>
-                    <td className="px-3 py-3 font-mono text-[12px] text-slate-600">{item.id}</td>
-                    <td className="px-3 py-3">
-                      {item.finding_id ? (
-                        <Link href={`/findings/${encodeURIComponent(item.finding_id)}`} className="font-medium text-slate-900 hover:text-indigo-600">
-                          {item.finding_title || item.finding_id}
-                        </Link>
-                      ) : <span className="text-slate-400">&mdash;</span>}
-                    </td>
-                    <td className="px-3 py-3 text-[12px] text-slate-500">
-                      <div>{shortEntity(item.run_id)}</div>
-                      <div>{shortEntity(item.rule_id)}</div>
-                    </td>
-                    <td className="px-3 py-3 tabular-nums text-slate-600">{item.claim_ids?.length ?? 0}</td>
-                    <td className="px-3 py-3 tabular-nums text-slate-600">{item.event_ids?.length ?? 0}</td>
-                    <td className="px-3 py-3 text-[12px]">
-                      {(item.graph_root_urns ?? []).slice(0, 2).map((urn) => (
-                        <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="mr-2 text-indigo-600 hover:text-indigo-800">{shortEntity(urn)}</Link>
-                      ))}
-                    </td>
-                    <td className="px-3 py-3 text-slate-500">{displayDate(item.created_at)}</td>
-                    <td className="px-3 py-3 text-right">
-                      <button type="button" onClick={() => setSelectedEvidenceID(item.id)} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
-                        Inspect
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {evidence.length === 0 && (
-              <div className="flex items-center justify-center p-8 text-[13px] text-slate-500">No evidence matches this view.</div>
-            )}
-          </div>
+          />
 
           <aside className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
