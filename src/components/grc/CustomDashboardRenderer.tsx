@@ -16,6 +16,17 @@ import {
 import type { GRCDashboard, GRCFinding, GRCFrameworksResponse, GRCTrends } from "@/lib/grc";
 import { displayDurationSeconds, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { useGRCQuery } from "@/lib/grc-client";
+import {
+  buildWidgetReportQuery,
+  catalogWidgetSourceID,
+  extractReportTable,
+  findSource,
+  useReportCatalog,
+  useReportQuery,
+  type ReportSource,
+} from "@/lib/grc-report-catalog";
+
+type CatalogContext = { sources: ReportSource[]; loading: boolean; error: string | null };
 import { formatTrendDuration, hasTrendActivity, summarizeTrends, trendBucketEndDate } from "@/lib/trends";
 
 type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
@@ -33,6 +44,9 @@ const signedDurationLabel = (seconds: number) => `${seconds > 0 ? "+" : "-"}${fo
 
 export default function CustomDashboardRenderer({ dashboard }: Props) {
   const widgets = Array.isArray(dashboard.widgets) ? dashboard.widgets : [];
+  const hasCatalogWidget = widgets.some((widget) => catalogWidgetSourceID(widget) !== "");
+  const catalog = useReportCatalog(hasCatalogWidget);
+  const catalogContext: CatalogContext = { sources: catalog.sources, loading: catalog.loading, error: catalog.error };
   if (widgets.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-[13px] text-slate-500">
@@ -43,19 +57,22 @@ export default function CustomDashboardRenderer({ dashboard }: Props) {
   return (
     <div className="grid gap-6 xl:grid-cols-12">
       {widgets.map((widget) => (
-        <DashboardWidget key={widget.id} dashboard={dashboard} widget={widget} />
+        <DashboardWidget key={widget.id} dashboard={dashboard} widget={widget} catalog={catalogContext} />
       ))}
     </div>
   );
 }
 
-function DashboardWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget: CustomDashboardWidget }) {
+function DashboardWidget({ dashboard, widget, catalog }: { dashboard: CustomDashboard; widget: CustomDashboardWidget; catalog: CatalogContext }) {
   const width = Math.max(3, Math.min(12, Number(widget.layout?.w) || 12));
   const className = width >= 12 ? "xl:col-span-12" : width >= 8 ? "xl:col-span-8" : width >= 6 ? "xl:col-span-6" : "xl:col-span-4";
-  return <div className={className}>{renderWidget(dashboard, widget)}</div>;
+  return <div className={className}>{renderWidget(dashboard, widget, catalog)}</div>;
 }
 
-function renderWidget(dashboard: CustomDashboard, widget: CustomDashboardWidget) {
+function renderWidget(dashboard: CustomDashboard, widget: CustomDashboardWidget, catalog: CatalogContext) {
+  if (catalogWidgetSourceID(widget) !== "") {
+    return <CatalogWidget dashboard={dashboard} widget={widget} catalog={catalog} />;
+  }
   if (widget.type.startsWith("trend_")) {
     return <TrendWidget dashboard={dashboard} widget={widget} />;
   }
@@ -316,6 +333,71 @@ function FrameworkProgressWidget({ dashboard, widget }: { dashboard: CustomDashb
     </Panel>
   );
 }
+
+function CatalogWidget({ dashboard, widget, catalog }: { dashboard: CustomDashboard; widget: CustomDashboardWidget; catalog: CatalogContext }) {
+  const sourceID = catalogWidgetSourceID(widget);
+  const source = findSource(catalog.sources, sourceID);
+  const reportQuery = source ? buildWidgetReportQuery(source, dashboard.filters, widget) : null;
+  const result = useReportQuery(reportQuery);
+  const title = widget.title ?? source?.title ?? "Report";
+
+  if (catalog.loading) return <LoadingBlock label={`Loading ${title}...`} />;
+  if (catalog.error) return <ErrorBlock error={catalog.error} recoveryDetail="The report catalog will load when the API is reachable." />;
+  if (!source) {
+    return (
+      <Panel title={title}>
+        <div className="rounded-lg border border-dashed border-slate-300 p-6 text-[13px] text-slate-500">
+          Report source <span className="font-medium text-slate-700">{sourceID}</span> is no longer available.
+        </div>
+      </Panel>
+    );
+  }
+  if (result.loading) return <LoadingBlock label={`Loading ${title}...`} />;
+  if (result.error) {
+    return <ErrorBlock error={result.error} onRetry={() => void result.reload()} recoveryDetail="Report data will appear when the API is reachable." />;
+  }
+  const table = extractReportTable(result.data?.data);
+  return (
+    <Panel title={title}>
+      {table ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-[13px]">
+            <caption className="sr-only">{title}</caption>
+            <thead className="text-[11px] uppercase tracking-wider text-slate-500">
+              <tr>
+                {table.columns.map((column) => (
+                  <th key={column} scope="col" className="px-3 py-2">{humanize(column)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.slice(0, 50).map((row, index) => (
+                <tr key={rowKey(row, index)} className="border-t border-slate-100">
+                  {table.columns.map((column) => (
+                    <td key={column} className="px-3 py-2 text-slate-700">{cellValue(row[column])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyBlock label="No tabular results for this report." />
+      )}
+    </Panel>
+  );
+}
+
+const rowKey = (row: Record<string, unknown>, index: number) => {
+  const id = row.id ?? row.runtime_id ?? row.name;
+  return typeof id === "string" || typeof id === "number" ? String(id) : `row-${index}`;
+};
+
+const cellValue = (value: unknown) => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+};
 
 function MarkdownNoteWidget({ widget }: { widget: CustomDashboardWidget }) {
   const text = stringValue(widget.query?.params?.text).trim();
