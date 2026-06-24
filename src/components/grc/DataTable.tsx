@@ -81,6 +81,7 @@ export type DataTableProps<Row extends object = Record<string, unknown>> = {
   onRowClick?: (row: Row) => void;
   rowActions?: (row: Row) => ReactNode;
   selectedRowKey?: string | null;
+  tableContainerClassName?: string;
 };
 
 const rowValue = <Row extends object>(row: Row, key: string) =>
@@ -98,6 +99,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   onRowClick,
   rowActions,
   selectedRowKey,
+  tableContainerClassName = "overflow-auto rounded-lg border border-slate-200 bg-white",
 }: DataTableProps<Row>) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -160,7 +162,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
           No rows match the current filter.
         </div>
       ) : (
-        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+        <div className={tableContainerClassName}>
           <table className="w-full text-left text-xs text-slate-800">
             <thead className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               <tr>
@@ -268,7 +270,7 @@ export function WorklistTable<Row extends object = Record<string, unknown>>({
         </div>
       )}
       <div className="p-4">
-        <DataTable {...tableProps} />
+        <DataTable {...tableProps} tableContainerClassName="overflow-auto" />
       </div>
     </div>
   );
