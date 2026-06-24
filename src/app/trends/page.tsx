@@ -148,6 +148,12 @@ export default function TrendsPage() {
             >
               Refresh
             </button>
+            <Link
+              href={grcPath("/trends/dashboards", { tenant_id: tenantID, runtime_id: runtimeID, source_id: sourceID, severity, framework })}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600"
+            >
+              Custom dashboards
+            </Link>
             <button
               type="button"
               disabled={!trends}

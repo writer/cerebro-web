@@ -31,6 +31,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["trends", "history", "over time", "burndown", "opened", "closed", "backlog", "chart"],
   },
   {
+    label: "Dashboards",
+    href: "/trends/dashboards",
+    description: "Saved custom trend dashboards with reusable filters, widgets, and sharing scope.",
+    section: "Operator",
+    keywords: ["custom dashboard", "dashboards", "trends", "widgets", "workspace", "saved views"],
+  },
+  {
     label: "Ask graph",
     href: "/ask",
     description: "Ask graph questions. Review drafted Cypher, rows, summaries, and citations.",
