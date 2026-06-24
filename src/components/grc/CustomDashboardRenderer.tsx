@@ -4,13 +4,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef } from "react";
 
-import { ErrorBlock, LoadingBlock, MetricCard, Panel } from "@/components/grc/Primitives";
+import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/TrendsChart";
 import type { CustomDashboard, CustomDashboardWidget } from "@/lib/custom-dashboards";
-import { customDashboardTrendPath } from "@/lib/custom-dashboards";
-import type { GRCTrends } from "@/lib/grc";
+import {
+  customDashboardFindingsPath,
+  customDashboardFrameworksPath,
+  customDashboardSummaryPath,
+  customDashboardTrendPath,
+} from "@/lib/custom-dashboards";
+import type { GRCDashboard, GRCFinding, GRCFrameworksResponse, GRCTrends } from "@/lib/grc";
+import { displayDurationSeconds, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { useGRCQuery } from "@/lib/grc-client";
 import { formatTrendDuration, hasTrendActivity, summarizeTrends, trendBucketEndDate } from "@/lib/trends";
+
+type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
 type Props = {
   dashboard: CustomDashboard;
@@ -44,22 +52,33 @@ export default function CustomDashboardRenderer({ dashboard }: Props) {
 function DashboardWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget: CustomDashboardWidget }) {
   const width = Math.max(3, Math.min(12, Number(widget.layout?.w) || 12));
   const className = width >= 12 ? "xl:col-span-12" : width >= 8 ? "xl:col-span-8" : width >= 6 ? "xl:col-span-6" : "xl:col-span-4";
-  if (!widget.type.startsWith("trend_")) {
-    return (
-      <div className={className}>
+  return <div className={className}>{renderWidget(dashboard, widget)}</div>;
+}
+
+function renderWidget(dashboard: CustomDashboard, widget: CustomDashboardWidget) {
+  if (widget.type.startsWith("trend_")) {
+    return <TrendWidget dashboard={dashboard} widget={widget} />;
+  }
+  switch (widget.type) {
+    case "summary_metrics":
+      return <SummaryMetricsWidget dashboard={dashboard} widget={widget} />;
+    case "connector_health":
+      return <ConnectorHealthWidget dashboard={dashboard} widget={widget} />;
+    case "findings_table":
+      return <FindingsTableWidget dashboard={dashboard} widget={widget} />;
+    case "framework_progress":
+      return <FrameworkProgressWidget dashboard={dashboard} widget={widget} />;
+    case "markdown_note":
+      return <MarkdownNoteWidget widget={widget} />;
+    default:
+      return (
         <Panel title={widget.title ?? "Unsupported widget"}>
           <div className="rounded-lg border border-dashed border-slate-300 p-6 text-[13px] text-slate-500">
             Widget type {widget.type} is not supported yet.
           </div>
         </Panel>
-      </div>
-    );
+      );
   }
-  return (
-    <div className={className}>
-      <TrendWidget dashboard={dashboard} widget={widget} />
-    </div>
-  );
 }
 
 function TrendWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget: CustomDashboardWidget }) {
@@ -173,6 +192,142 @@ function TrendWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget
     default:
       return null;
   }
+}
+
+function SummaryMetricsWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget: CustomDashboardWidget }) {
+  const path = useMemo(() => customDashboardSummaryPath(dashboard, widget), [dashboard, widget]);
+  const query = useGRCQuery<GRCDashboard>(path);
+  if (query.loading) return <LoadingBlock label={`Loading ${widget.title ?? "summary"}...`} />;
+  if (query.error) return <ErrorBlock error={query.error} onRetry={() => void query.reload()} recoveryDetail="Summary will appear when the API is reachable." />;
+  const summary = query.data?.summary;
+  if (!summary) {
+    return <Panel title={widget.title ?? "Program summary"}><EmptyBlock label="No summary available." /></Panel>;
+  }
+  return (
+    <Panel title={widget.title ?? "Program summary"}>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <MetricCard label="Open Findings" value={summary.open_findings} detail={`${summary.critical_findings} critical · ${summary.high_findings} high`} intent={summary.critical_findings > 0 ? "danger" : "neutral"} />
+        <MetricCard label="Overdue" value={summary.overdue_findings} detail="past due date" intent={summary.overdue_findings > 0 ? "warning" : "success"} />
+        <MetricCard label="Unassigned" value={summary.unassigned} detail="awaiting owner" intent={summary.unassigned > 0 ? "warning" : "success"} />
+        <MetricCard label="Controls Failing" value={summary.controls_failing} intent={summary.controls_failing > 0 ? "warning" : "success"} />
+        <MetricCard label="Evidence Items" value={summary.evidence_items} />
+        <MetricCard label="Stale Connectors" value={summary.stale_connectors} detail={`${summary.connectors} total`} intent={summary.stale_connectors > 0 ? "warning" : "success"} />
+      </div>
+    </Panel>
+  );
+}
+
+function ConnectorHealthWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget: CustomDashboardWidget }) {
+  const path = useMemo(() => customDashboardSummaryPath(dashboard, widget), [dashboard, widget]);
+  const query = useGRCQuery<GRCDashboard>(path);
+  if (query.loading) return <LoadingBlock label={`Loading ${widget.title ?? "connectors"}...`} />;
+  if (query.error) return <ErrorBlock error={query.error} onRetry={() => void query.reload()} recoveryDetail="Connector health will appear when the API is reachable." />;
+  const connectors = query.data?.connectors ?? [];
+  return (
+    <Panel title={widget.title ?? "Connector health"}>
+      {connectors.length === 0 ? (
+        <EmptyBlock label="No connectors reporting." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-[13px]">
+            <caption className="sr-only">Connector freshness</caption>
+            <thead className="text-[11px] uppercase tracking-wider text-slate-500">
+              <tr><th scope="col" className="px-3 py-2">Connector</th><th scope="col" className="px-3 py-2">Freshness</th><th scope="col" className="px-3 py-2 text-right">Sync lag</th></tr>
+            </thead>
+            <tbody>
+              {connectors.map((connector) => (
+                <tr key={connector.runtime_id} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-medium text-slate-900">{shortEntity(connector.runtime_id)}</td>
+                  <td className="px-3 py-2"><Badge value={connector.freshness || connector.status} tone="status" /></td>
+                  <td className="px-3 py-2 text-right text-slate-700">{displayDurationSeconds(connector.sync_lag_seconds)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function FindingsTableWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget: CustomDashboardWidget }) {
+  const path = useMemo(() => customDashboardFindingsPath(dashboard, widget), [dashboard, widget]);
+  const query = useGRCQuery<FindingsResponse>(path);
+  if (query.loading) return <LoadingBlock label={`Loading ${widget.title ?? "findings"}...`} />;
+  if (query.error) return <ErrorBlock error={query.error} onRetry={() => void query.reload()} recoveryDetail="Findings will appear when the API is reachable." />;
+  const findings = [...(query.data?.findings ?? [])].sort(riskSort);
+  return (
+    <Panel title={widget.title ?? "Findings"}>
+      {findings.length === 0 ? (
+        <EmptyBlock label="No findings match this dashboard's filters." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-[13px]">
+            <caption className="sr-only">Findings by risk</caption>
+            <thead className="text-[11px] uppercase tracking-wider text-slate-500">
+              <tr><th scope="col" className="px-3 py-2">Finding</th><th scope="col" className="px-3 py-2">Severity</th><th scope="col" className="px-3 py-2">Status</th><th scope="col" className="px-3 py-2 text-right">Risk</th></tr>
+            </thead>
+            <tbody>
+              {findings.map((finding) => (
+                <tr key={finding.id} className="border-t border-slate-100">
+                  <td className="px-3 py-2"><Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-medium text-indigo-600 hover:text-indigo-800">{finding.title}</Link></td>
+                  <td className="px-3 py-2"><Badge value={finding.severity} tone="severity" /></td>
+                  <td className="px-3 py-2 text-slate-700">{humanize(finding.status)}</td>
+                  <td className="px-3 py-2 text-right"><RiskBadge score={finding.risk_score} level={finding.likelihood_level} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function FrameworkProgressWidget({ dashboard, widget }: { dashboard: CustomDashboard; widget: CustomDashboardWidget }) {
+  const path = useMemo(() => customDashboardFrameworksPath(dashboard, widget), [dashboard, widget]);
+  const query = useGRCQuery<GRCFrameworksResponse>(path);
+  if (query.loading) return <LoadingBlock label={`Loading ${widget.title ?? "frameworks"}...`} />;
+  if (query.error) return <ErrorBlock error={query.error} onRetry={() => void query.reload()} recoveryDetail="Frameworks will appear when the API is reachable." />;
+  const frameworks = (query.data?.frameworks ?? []).filter((framework) => framework.lifecycle !== "upcoming");
+  return (
+    <Panel title={widget.title ?? "Framework coverage"}>
+      {frameworks.length === 0 ? (
+        <EmptyBlock label="No active frameworks selected." />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {frameworks.map((framework) => {
+            const mapped = framework.coverage?.mapped_controls ?? 0;
+            const total = mapped + (framework.coverage?.unmapped_controls ?? 0);
+            const percent = total > 0 ? (mapped / total) * 100 : 0;
+            return (
+              <ProgressCard
+                key={framework.id ?? framework.name}
+                title={framework.name}
+                percent={percent}
+                detail={`${mapped}/${total} controls mapped`}
+                total={`${framework.control_count} total`}
+                href={framework.id ? `/frameworks/${encodeURIComponent(framework.id)}` : undefined}
+              />
+            );
+          })}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function MarkdownNoteWidget({ widget }: { widget: CustomDashboardWidget }) {
+  const text = stringValue(widget.query?.params?.text).trim();
+  return (
+    <Panel title={widget.title ?? "Note"}>
+      {text ? (
+        <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600">{text}</div>
+      ) : (
+        <EmptyBlock label="Set this note's text in the widget params." />
+      )}
+    </Panel>
+  );
 }
 
 const stringValue = (value: unknown) => {

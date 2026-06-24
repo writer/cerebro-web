@@ -8,8 +8,11 @@ import { ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Pr
 import {
   type CustomDashboardListResponse,
   type CustomDashboardResponse,
+  type CustomDashboardTemplateID,
   customDashboardCreatePayload,
   customDashboardListPath,
+  customDashboardTemplates,
+  customDashboardTemplateWidgets,
   sortCustomDashboards,
   validateCustomDashboardName,
 } from "@/lib/custom-dashboards";
@@ -26,6 +29,7 @@ export default function CustomDashboardsPage() {
   const [name, setName] = useState("GRC trends dashboard");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"private" | "workspace" | "organization">("private");
+  const [template, setTemplate] = useState<CustomDashboardTemplateID>("trends");
   const [severity, setSeverity] = useState(() => initialSearchParam("severity"));
   const [framework, setFramework] = useState(() => initialSearchParam("framework"));
   const [formError, setFormError] = useState<string | null>(null);
@@ -47,6 +51,7 @@ export default function CustomDashboardsPage() {
       tenantID,
       workspaceID,
       visibility,
+      widgets: customDashboardTemplateWidgets(template),
       filters: {
         tenant_id: tenantID,
         framework,
@@ -76,6 +81,7 @@ export default function CustomDashboardsPage() {
           <label className={labelClass}>Workspace<input value={workspaceID} onChange={(event) => setWorkspaceID(event.target.value)} placeholder="Optional" className={inputClass} /></label>
           <label className={`${labelClass} md:col-span-2`}>Description<input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional" className={inputClass} /></label>
           <label className={labelClass}>Visibility<select value={visibility} onChange={(event) => setVisibility(event.target.value as typeof visibility)} className={selectClass}><option value="private">Private</option><option value="workspace">Workspace</option><option value="organization">Organization</option></select></label>
+          <label className={labelClass}>Template<select value={template} onChange={(event) => setTemplate(event.target.value as CustomDashboardTemplateID)} className={selectClass}>{customDashboardTemplates.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>
           <label className={labelClass}>Framework<input value={framework} onChange={(event) => setFramework(event.target.value)} placeholder="All frameworks" className={inputClass} /></label>
           <label className={labelClass}>Severity<select value={severity} onChange={(event) => setSeverity(event.target.value)} className={selectClass}><option value="">All severities</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select></label>
         </div>

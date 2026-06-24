@@ -6,7 +6,14 @@ export type CustomDashboardWidgetType =
   | "trend_metric_cards"
   | "trend_chart"
   | "trend_aging_table"
-  | "trend_period_comparison";
+  | "trend_period_comparison"
+  | "summary_metrics"
+  | "findings_table"
+  | "framework_progress"
+  | "connector_health"
+  | "markdown_note";
+
+export const CUSTOM_DASHBOARD_SCHEMA_VERSION = 1;
 
 export type CustomDashboardWidget = {
   id: string;
@@ -94,6 +101,39 @@ export const customDashboardTrendPath = (dashboard: CustomDashboard, widget: Cus
   });
 };
 
+const mergedWidgetParams = (dashboard: CustomDashboard, widget: CustomDashboardWidget) => ({
+  ...dashboard.filters,
+  ...(widget.query?.params ?? {}),
+});
+
+export const customDashboardSummaryPath = (dashboard: CustomDashboard, widget: CustomDashboardWidget) => {
+  const params = mergedWidgetParams(dashboard, widget);
+  return grcPath("/grc/dashboard", {
+    tenant_id: stringParam(params.tenant_id),
+    limit: numberParam(params.limit, 100),
+  });
+};
+
+export const customDashboardFindingsPath = (dashboard: CustomDashboard, widget: CustomDashboardWidget) => {
+  const params = mergedWidgetParams(dashboard, widget);
+  return grcPath("/grc/findings", {
+    tenant_id: stringParam(params.tenant_id),
+    runtime_id: stringParam(params.runtime_id),
+    source_id: stringParam(params.source_id),
+    severity: stringParam(params.severity),
+    framework: stringParam(params.framework),
+    status: stringParam(params.status, "open"),
+    limit: numberParam(params.limit, 10),
+  });
+};
+
+export const customDashboardFrameworksPath = (dashboard: CustomDashboard, widget: CustomDashboardWidget) => {
+  const params = mergedWidgetParams(dashboard, widget);
+  return grcPath("/grc/frameworks", {
+    tenant_id: stringParam(params.tenant_id),
+  });
+};
+
 export const defaultTrendDashboardWidgets = (): CustomDashboardWidget[] => [
   {
     id: "trend-metrics",
@@ -124,6 +164,47 @@ export const defaultTrendDashboardWidgets = (): CustomDashboardWidget[] => [
     layout: { x: 0, y: 6, w: 6, h: 3 },
   },
 ];
+
+export const defaultOverviewDashboardWidgets = (): CustomDashboardWidget[] => [
+  {
+    id: "overview-summary",
+    type: "summary_metrics",
+    title: "Program summary",
+    query: { endpoint: "/grc/dashboard", params: { limit: 100 } },
+    layout: { x: 0, y: 0, w: 12, h: 2 },
+  },
+  {
+    id: "overview-findings",
+    type: "findings_table",
+    title: "Top open findings",
+    query: { endpoint: "/grc/findings", params: { status: "open", limit: 10 } },
+    layout: { x: 0, y: 2, w: 8, h: 4 },
+  },
+  {
+    id: "overview-connectors",
+    type: "connector_health",
+    title: "Connector health",
+    query: { endpoint: "/grc/dashboard", params: { limit: 100 } },
+    layout: { x: 8, y: 2, w: 4, h: 4 },
+  },
+  {
+    id: "overview-frameworks",
+    type: "framework_progress",
+    title: "Framework coverage",
+    query: { endpoint: "/grc/frameworks", params: {} },
+    layout: { x: 0, y: 6, w: 12, h: 3 },
+  },
+];
+
+export type CustomDashboardTemplateID = "trends" | "overview";
+
+export const customDashboardTemplates: Array<{ id: CustomDashboardTemplateID; label: string; widgets: () => CustomDashboardWidget[] }> = [
+  { id: "trends", label: "Trends", widgets: defaultTrendDashboardWidgets },
+  { id: "overview", label: "Program overview", widgets: defaultOverviewDashboardWidgets },
+];
+
+export const customDashboardTemplateWidgets = (template: CustomDashboardTemplateID): CustomDashboardWidget[] =>
+  (customDashboardTemplates.find((entry) => entry.id === template) ?? customDashboardTemplates[0]).widgets();
 
 export const customDashboardCreatePayload = (input: {
   name: string;

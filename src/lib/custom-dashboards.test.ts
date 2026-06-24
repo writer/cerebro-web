@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   customDashboardCreatePayload,
+  customDashboardFindingsPath,
+  customDashboardFrameworksPath,
+  customDashboardSummaryPath,
+  customDashboardTemplateWidgets,
   customDashboardTrendPath,
   sortCustomDashboards,
   validateCustomDashboardName,
@@ -57,5 +61,22 @@ describe("custom dashboard helpers", () => {
     expect(path).toContain("severity=HIGH");
     expect(path).toContain("interval=month");
     expect(path).not.toContain("compare=");
+  });
+
+  it("builds broadened widget paths from dashboard filters", () => {
+    const dash = dashboard("dash", "2026-06-23T00:00:00Z");
+    expect(customDashboardSummaryPath(dash, { id: "s", type: "summary_metrics" })).toContain("/grc/dashboard?");
+    const findings = customDashboardFindingsPath(dash, { id: "f", type: "findings_table", query: { params: { limit: 5 } } });
+    expect(findings).toContain("/grc/findings?");
+    expect(findings).toContain("severity=HIGH");
+    expect(findings).toContain("status=open");
+    expect(findings).toContain("limit=5");
+    expect(customDashboardFrameworksPath(dash, { id: "fw", type: "framework_progress" })).toContain("/grc/frameworks?");
+  });
+
+  it("resolves template widget sets with known widget types", () => {
+    expect(customDashboardTemplateWidgets("trends").map((w) => w.type)).toContain("trend_chart");
+    const overview = customDashboardTemplateWidgets("overview").map((w) => w.type);
+    expect(overview).toEqual(expect.arrayContaining(["summary_metrics", "findings_table", "framework_progress", "connector_health"]));
   });
 });
