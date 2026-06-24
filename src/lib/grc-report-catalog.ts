@@ -123,7 +123,7 @@ export const buildWidgetReportQuery = (
     }
   }
   for (const [key, value] of Object.entries(widget.query?.params ?? {})) {
-    if (value !== undefined && String(value).trim() !== "") {
+    if (declared.has(key) && value !== undefined && String(value).trim() !== "") {
       params[key] = String(value).trim();
     }
   }
@@ -179,8 +179,60 @@ export const useReportCatalog = (enabled = true) => {
   return { ...query, sources: query.data?.sources ?? [] };
 };
 
+const REPORT_QUERY_CACHE_TTL_MS = 30_000;
+const REPORT_QUERY_CACHE_MAX_ENTRIES = 200;
+
+type CachedReportQueryResponse = Awaited<ReturnType<typeof fetchCerebro<ReportQueryResponse>>>;
+
+const reportQueryCache = new Map<string, { expiresAt: number; response: CachedReportQueryResponse }>();
+const reportQueryInflight = new Map<string, Promise<CachedReportQueryResponse>>();
+
+const reportQueryCacheKey = (body: string, apiKey?: string) => `${apiKey ?? ""}\n${body}`;
+
+const reportQueryCached = (body: string, apiKey?: string) => {
+  const cached = reportQueryCache.get(reportQueryCacheKey(body, apiKey));
+  return cached && cached.expiresAt > Date.now() ? cached.response : null;
+};
+
+// fetchCachedReportQuery mirrors fetchCachedGRC for the POST /grc/query read:
+// successful responses are cached briefly and concurrent identical queries are
+// de-duplicated, so a dashboard with many report widgets (or remounts) does not
+// multiply backend traffic. force bypasses both the cache and in-flight entry.
+const fetchCachedReportQuery = (body: string, apiKey: string | undefined, force: boolean): Promise<CachedReportQueryResponse> => {
+  const cacheKey = reportQueryCacheKey(body, apiKey);
+  const cached = reportQueryCached(body, apiKey);
+  if (!force && cached) {
+    return Promise.resolve(cached);
+  }
+  const inflight = reportQueryInflight.get(cacheKey);
+  if (!force && inflight) {
+    return inflight;
+  }
+  const request = fetchCerebro<ReportQueryResponse>(REPORT_QUERY_PATH, apiKey, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  })
+    .then((response) => {
+      if (response.ok) {
+        if (reportQueryCache.size >= REPORT_QUERY_CACHE_MAX_ENTRIES) {
+          const firstKey = reportQueryCache.keys().next().value;
+          if (firstKey) reportQueryCache.delete(firstKey);
+        }
+        reportQueryCache.set(cacheKey, { expiresAt: Date.now() + REPORT_QUERY_CACHE_TTL_MS, response });
+      }
+      return response;
+    })
+    .finally(() => {
+      if (reportQueryInflight.get(cacheKey) === request) reportQueryInflight.delete(cacheKey);
+    });
+  reportQueryInflight.set(cacheKey, request);
+  return request;
+};
+
 // useReportQuery runs one bounded report query through POST /grc/query. It
-// re-runs whenever the query body changes and ignores stale responses.
+// re-runs whenever the query body changes, shares the brief response cache
+// above, and ignores stale or post-unmount responses via a request counter.
 export const useReportQuery = (query: WidgetReportQuery | null) => {
   const { apiKey } = useApiKey();
   const [data, setData] = useState<ReportQueryResponse | null>(null);
@@ -190,7 +242,7 @@ export const useReportQuery = (query: WidgetReportQuery | null) => {
   const key = query ? JSON.stringify(query) : "";
 
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (force = false) => {
       if (key === "") {
         setData(null);
         setError(null);
@@ -199,18 +251,13 @@ export const useReportQuery = (query: WidgetReportQuery | null) => {
       }
       const currentRequestID = requestID.current + 1;
       requestID.current = currentRequestID;
-      setLoading(true);
+      setLoading(!(!force && reportQueryCached(key, apiKey)));
       setError(null);
       let response;
       try {
-        response = await fetchCerebro<ReportQueryResponse>(REPORT_QUERY_PATH, apiKey, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: key,
-          signal,
-        });
+        response = await fetchCachedReportQuery(key, apiKey, force);
       } catch (err) {
-        if (signal?.aborted || currentRequestID !== requestID.current) return;
+        if (currentRequestID !== requestID.current) return;
         setError(err instanceof Error ? err.message : grcResponseErrorMessage(REPORT_QUERY_PATH, 0, null));
         setLoading(false);
         return;
@@ -228,14 +275,13 @@ export const useReportQuery = (query: WidgetReportQuery | null) => {
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => void load(controller.signal), 0);
+    const timer = window.setTimeout(() => void load(false), 0);
     return () => {
       window.clearTimeout(timer);
-      controller.abort();
+      requestID.current += 1;
     };
   }, [load]);
 
-  const reload = useCallback(() => load(), [load]);
+  const reload = useCallback(() => load(true), [load]);
   return { data, error, loading, reload };
 };

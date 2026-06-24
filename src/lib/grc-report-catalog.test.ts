@@ -91,8 +91,12 @@ describe("grc report catalog helpers", () => {
     expect(query).toEqual({ source_id: "findings", params: { runtime_id: "rt-1", severity: "HIGH", status: "open" }, limit: 25 });
   });
 
-  it("lets widget params override dashboard filters and drops empty values", () => {
-    const widget: CustomDashboardWidget = { id: "w", type: "report", query: { source_id: "findings", params: { severity: "CRITICAL", status: "" } } };
+  it("lets widget params override dashboard filters and drops empty or undeclared params", () => {
+    const widget: CustomDashboardWidget = {
+      id: "w",
+      type: "report",
+      query: { source_id: "findings", params: { severity: "CRITICAL", status: "", framework: "soc2" } },
+    };
     const query = buildWidgetReportQuery(findingsSource, dashboard({ severity: "LOW" }).filters, widget);
     expect(query.params).toEqual({ severity: "CRITICAL" });
     expect(query.limit).toBeUndefined();
