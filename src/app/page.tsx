@@ -66,10 +66,10 @@ function SeverityDonut({ critical, high, medium, low }: { critical: number; high
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
-  const readinessQuery = useGRCQuery<GRCProgramReadiness>(grcPath("/grc/program-readiness", { limit: 200 }));
+  const data = dashboard.data;
+  const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
   const evidenceQuery = useGRCQuery<EvidenceResponse>(showEvidence ? grcPath("/grc/evidence", { limit: 8 }) : null);
   const trendsQuery = useGRCQuery<GRCTrends>(grcPath("/grc/trends", { interval: "week", days: 90 }));
-  const data = dashboard.data;
   const readiness = readinessQuery.data?.summary;
   const priorityFindings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
   const priorityMetrics = useMemo(() => {
