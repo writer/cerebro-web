@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { useCommandPalette, useSidebar } from "@/components/providers";
+import { useCommandPalette, usePersonaLens, useSidebar } from "@/components/providers";
 import { appVersionLabel } from "@/lib/app-version";
-import { operatorNavLinks, utilityLinks } from "@/lib/navigation";
+import { navigationEntries, utilityLinks } from "@/lib/navigation";
+import { personaLenses } from "@/lib/persona-lenses";
 
 const icons: Record<string, React.ReactNode> = {
   "/": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />,
@@ -20,11 +21,15 @@ const icons: Record<string, React.ReactNode> = {
   "/impact": <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />,
   "/explore": <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503-13.498 4.875 2.437c.381.19.622.58.622 1.006v11.21c0 .765-.804 1.262-1.489.92l-4.508-2.254a1.125 1.125 0 0 0-1.006 0l-3.494 1.747a1.125 1.125 0 0 1-1.006 0l-4.875-2.437A1.125 1.125 0 0 1 3 15.37V4.16c0-.765.804-1.262 1.489-.92l4.508 2.254c.317.158.69.158 1.006 0l3.494-1.747a1.125 1.125 0 0 1 1.006 0Z" />,
   "/reports": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />,
+  "/reports/schedules": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />,
   "/connectors": <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />,
+  "/connectors/source-cdk": <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />,
+  "/controls/builder": <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />,
   "/developer": <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />,
 };
 
-const sidebarNavLinks = [...operatorNavLinks, ...utilityLinks];
+const sidebarNavLinks = navigationEntries;
+const navEntryByHref = new Map(sidebarNavLinks.map((entry) => [entry.href, entry]));
 
 function matchesPathname(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -59,12 +64,28 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function entriesForRoutes(routes: { href: string }[]) {
+  const seen = new Set<string>();
+  return routes.flatMap((route) => {
+    const entry = navEntryByHref.get(route.href);
+    if (!entry || seen.has(entry.href)) return [];
+    seen.add(entry.href);
+    return [entry];
+  });
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { openCommandPalette } = useCommandPalette();
+  const { activeLens, activeLensID, setActiveLensID } = usePersonaLens();
   const { collapsed, toggleSidebar } = useSidebar();
+  const focusLinks = entriesForRoutes(activeLens.primaryRoutes);
+  const supportingLinks = entriesForRoutes(activeLens.secondaryRoutes);
+  const focusHrefs = new Set([...focusLinks, ...supportingLinks].map((link) => link.href));
+  const advancedLinks = utilityLinks.filter((link) => !focusHrefs.has(link.href));
+  const visibleSidebarLinks = [...focusLinks, ...supportingLinks, ...advancedLinks];
 
-  const isActive = (href: string) => isSidebarLinkActive(pathname, href);
+  const isActive = (href: string) => isSidebarLinkActive(pathname, href, visibleSidebarLinks);
 
   const renderLink = (link: { href: string; label: string }) => {
     const active = isActive(link.href);
@@ -94,13 +115,32 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="ml-2 max-md:hidden">
             <span className="block text-[15px] font-semibold text-[var(--text-primary)]">Cerebro</span>
-            <span className="block text-[11px] text-[var(--sidebar-muted)]">Controls and evidence</span>
+            <span className="block text-[11px] text-[var(--sidebar-muted)]">{activeLens.shortLabel} lens</span>
           </div>
         )}
       </div>
 
       {!collapsed && (
-        <div className="px-3 pb-3 max-md:hidden">
+        <div className="space-y-3 px-3 pb-3 max-md:hidden">
+          <div>
+            <label htmlFor="cerebro-persona-lens" className="mb-1.5 block px-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)]">
+              View lens
+            </label>
+            <select
+              id="cerebro-persona-lens"
+              value={activeLensID}
+              onChange={(event) => setActiveLensID(event.target.value as typeof activeLensID)}
+              className="control-input w-full px-2.5 py-2 text-[13px] font-medium"
+            >
+              {personaLenses.map((lens) => (
+                <option key={lens.id} value={lens.id}>{lens.label}</option>
+              ))}
+            </select>
+            <div className="mt-2 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+              <div className="text-[12px] font-semibold text-[var(--text-primary)]">{activeLens.shortLabel}</div>
+              <div className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{activeLens.tagline}</div>
+            </div>
+          </div>
           <button
             type="button"
             onClick={openCommandPalette}
@@ -115,7 +155,12 @@ export default function Sidebar() {
         </div>
       )}
 
-      <div className={`${collapsed ? "flex" : "hidden max-md:flex"} justify-center pb-3`}>
+      <div className={`${collapsed ? "flex" : "hidden max-md:flex"} flex-col items-center gap-2 pb-3`}>
+          {collapsed && (
+            <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[10px] font-semibold text-[var(--text-secondary)]" title={`${activeLens.label} lens`}>
+              {activeLens.shortLabel.slice(0, 1)}
+            </div>
+          )}
           <button
             type="button"
             onClick={openCommandPalette}
@@ -130,16 +175,22 @@ export default function Sidebar() {
 
       <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? "px-1.5" : "px-3 max-md:px-1.5"}`}>
         {!collapsed && (
-          <div className="px-2 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Operator</div>
+          <div className="px-2 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Focus</div>
         )}
-        {operatorNavLinks.map(renderLink)}
+        {focusLinks.map(renderLink)}
 
-        {!collapsed && (
+        {supportingLinks.length > 0 && !collapsed && (
+          <div className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Supporting</div>
+        )}
+        {collapsed && supportingLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
+        {supportingLinks.map(renderLink)}
+
+        {advancedLinks.length > 0 && !collapsed && (
           <div className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Advanced</div>
         )}
         {collapsed && <div className="my-3 border-t border-[color:var(--border)]" />}
         {!collapsed && <div className="my-3 hidden border-t border-[color:var(--border)] max-md:block" />}
-        {utilityLinks.map(renderLink)}
+        {advancedLinks.map(renderLink)}
       </nav>
 
       <div className="flex items-center justify-between border-t border-[color:var(--border)] px-3 py-2.5">

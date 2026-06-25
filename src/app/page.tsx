@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
-import { useApiKey } from "@/components/providers";
+import { useApiKey, usePersonaLens } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/LazyTrendsChart";
@@ -13,6 +13,7 @@ import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFind
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 import { buildGRCProductAreaViews, hasGRCProductAreaContext, type GRCProductAreaView } from "@/lib/grc-product-areas";
+import { personaLenses } from "@/lib/persona-lenses";
 import { hasTrendActivity } from "@/lib/trends";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
@@ -88,14 +89,18 @@ function CoverageBlindSpotsPanel({
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="grid gap-2 md:grid-cols-2">
           {records.slice(0, 6).map((record) => (
-            <Link
+            <div
               key={`${record.source_id}-${record.dimension_id}`}
-              href={`/connectors/${encodeURIComponent(record.source_id)}?tab=scope`}
               className="rounded-lg border border-slate-200 bg-white p-3 transition hover:border-indigo-200 hover:bg-indigo-50/40"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-slate-900">{record.title || humanize(record.dimension_id)}</div>
+                  <Link
+                    href={`/connectors/${encodeURIComponent(record.source_id)}?tab=scope`}
+                    className="block truncate text-[13px] font-semibold text-slate-900 transition hover:text-indigo-600"
+                  >
+                    {record.title || humanize(record.dimension_id)}
+                  </Link>
                   <div className="mt-0.5 font-mono text-[11px] text-slate-500">{record.source_id} · {record.dimension_type}</div>
                 </div>
                 <Badge value={record.state || record.support_level || "gap"} />
@@ -103,7 +108,7 @@ function CoverageBlindSpotsPanel({
               <div className="mt-3">
                 <CoverageMetadata item={record} compact showNotes />
               </div>
-            </Link>
+            </div>
           ))}
           {records.length === 0 && (
             <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-[13px] text-slate-500">
@@ -200,8 +205,87 @@ function ProductAreaMap({ areas }: { areas: GRCProductAreaView[] }) {
   );
 }
 
+function PersonaLensOverview() {
+  const { activeLens, activeLensID, setActiveLensID } = usePersonaLens();
+  const primaryRoutes = activeLens.primaryRoutes.slice(0, 4);
+  const supportingRoutes = activeLens.secondaryRoutes.slice(0, 3);
+
+  return (
+    <section className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {personaLenses.map((lens) => {
+          const active = lens.id === activeLensID;
+          return (
+            <button
+              key={lens.id}
+              type="button"
+              onClick={() => setActiveLensID(lens.id)}
+              className={`surface-panel min-h-[112px] p-4 text-left transition hover:border-[color:var(--ring)] ${
+                active ? "border-[color:var(--ring)] bg-[var(--primary-soft)]" : ""
+              }`}
+              aria-pressed={active}
+            >
+              <div className="text-[13px] font-semibold text-[var(--text-primary)]">{lens.label}</div>
+              <div className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">{lens.tagline}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
+        <section className="surface-panel p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Lens focus</div>
+              <h2 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{activeLens.label}</h2>
+              <p className="mt-2 max-w-3xl text-[13px] leading-5 text-[var(--text-muted)]">{activeLens.description}</p>
+            </div>
+            <Link href={primaryRoutes[0]?.href ?? "/"} className="secondary-button px-3 py-1.5 text-[13px]">
+              Open first view
+            </Link>
+          </div>
+          <div className="mt-5 divide-y divide-[color:var(--border)]">
+            {primaryRoutes.map((route) => (
+              <Link key={route.href} href={route.href} className="flex items-center justify-between gap-4 py-3 transition hover:text-[var(--primary)]">
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-[var(--text-primary)]">{route.label}</span>
+                  <span className="mt-0.5 block text-[12px] leading-5 text-[var(--text-muted)]">{route.detail}</span>
+                </span>
+                <span className="shrink-0 text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">›</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="surface-panel p-5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Priorities</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {activeLens.priorities.map((priority) => (
+              <span key={priority} className="rounded-md bg-[var(--surface-muted)] px-2.5 py-1 text-[12px] font-medium text-[var(--text-secondary)]">
+                {priority}
+              </span>
+            ))}
+          </div>
+          <div className="mt-5 border-t border-[color:var(--border)] pt-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Supporting views</div>
+            <div className="mt-2 space-y-2">
+              {supportingRoutes.map((route) => (
+                <Link key={route.href} href={route.href} className="block rounded-md px-2 py-1.5 text-[12px] transition hover:bg-[var(--surface-hover)]">
+                  <span className="font-semibold text-[var(--text-primary)]">{route.label}</span>
+                  <span className="ml-1 text-[var(--text-muted)]">{route.detail}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
+  const { activeLens } = usePersonaLens();
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const data = dashboard.data;
   const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
@@ -263,8 +347,8 @@ export default function Home() {
     <div className="space-y-6">
       <PageHeader
         contractId="overview"
-        title="Overview"
-        description="Open findings, failing controls, evidence freshness, and connector health."
+        title={`${activeLens.shortLabel} Overview`}
+        description="One graph, focused entry points for security, compliance, platform, and leadership work."
         action={
           <div className="flex items-center gap-2">
             <Link
@@ -283,6 +367,8 @@ export default function Home() {
           </div>
         }
       />
+
+      <PersonaLensOverview />
 
       {dashboard.loading && <LoadingBlock label="Loading dashboard..." />}
       {dashboard.error && <ErrorBlock error={dashboard.error} onRetry={() => void dashboard.reload()} recoveryDetail="Overview metrics will appear when the API is reachable." />}
