@@ -161,6 +161,9 @@ export const grcPath = (path: string, params: Record<string, string | number | u
   return queryString ? `${path}?${queryString}` : path;
 };
 
+export const grcEntityImpactPath = (rootURN: string, params: Record<string, string | number | undefined> = {}) =>
+  grcPath("/grc/entities/_/impact", { root_urn: rootURN, ...params });
+
 export const grcExportFilename = (kind: string) =>
   `cerebro-${kind}-${new Date().toISOString().slice(0, 10)}.csv`;
 

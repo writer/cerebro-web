@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { downloadGRCExport, grcExportFilename, grcResponseErrorMessage, grcTimeoutMessage } from "./grc-client";
+import { downloadGRCExport, grcEntityImpactPath, grcExportFilename, grcResponseErrorMessage, grcTimeoutMessage } from "./grc-client";
 
 describe("grc client error copy", () => {
   it("includes status, endpoint, elapsed time, and upstream text", () => {
@@ -18,6 +18,19 @@ describe("grc client error copy", () => {
   it("formats client-side timeouts as unavailable API errors", () => {
     expect(grcTimeoutMessage("/grc/evidence", 30_000)).toBe(
       "Cerebro request timed out after 30s for /grc/evidence",
+    );
+  });
+});
+
+describe("grc client paths", () => {
+  it("keeps impact root URNs out of the proxy path segment", () => {
+    const path = grcEntityImpactPath("urn:cerebro:writer:github_code_repository:writer/cerebro", {
+      tenant_id: "writer",
+      limit: 50,
+    });
+
+    expect(path).toBe(
+      "/grc/entities/_/impact?root_urn=urn%3Acerebro%3Awriter%3Agithub_code_repository%3Awriter%2Fcerebro&tenant_id=writer&limit=50",
     );
   });
 });
