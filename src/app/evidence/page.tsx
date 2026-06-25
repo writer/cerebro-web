@@ -55,6 +55,7 @@ export default function EvidencePage() {
   const isRefreshing = loading && Boolean(data);
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
+  const packagedMetricState: RuntimeState = packagedError ? "unavailable" : packagedLoading && !packagedData ? "loading" : "ready";
   const evidenceView = useMemo(() => {
     const evidence = data?.evidence ?? [];
     const roots = new Set<string>();
@@ -182,12 +183,12 @@ export default function EvidencePage() {
           </button>
         </div>
         <div className="grid gap-4 md:grid-cols-4">
-          <MetricCard label="Program" value={evidencePacketReadinessLabel(packagedData?.program.status)} detail={`${packagedData?.program.readiness_score ?? 0}% readiness`} state={packagedError ? "error" : packagedLoading && !packagedData ? "loading" : "ready"} />
-          <MetricCard label="Requests" value={packagedMetrics.requests} detail={`${packagedMetrics.missingRequests} missing, ${packagedMetrics.staleRequests} stale`} state={packagedError ? "error" : "ready"} />
-          <MetricCard label="Packets" value={packagedMetrics.packets} detail={`${packagedMetrics.readyPackets} ready`} state={packagedError ? "error" : "ready"} />
-          <MetricCard label="Reviews" value={packagedMetrics.openReviews} detail="open review records" intent={packagedMetrics.openReviews > 0 ? "warning" : "success"} state="ready" />
+          <MetricCard label="Program" value={evidencePacketReadinessLabel(packagedData?.program.status)} detail={`${packagedData?.program.readiness_score ?? 0}% readiness`} state={packagedMetricState} />
+          <MetricCard label="Requests" value={packagedMetrics.requests} detail={`${packagedMetrics.missingRequests} missing, ${packagedMetrics.staleRequests} stale`} state={packagedMetricState} />
+          <MetricCard label="Packets" value={packagedMetrics.packets} detail={`${packagedMetrics.readyPackets} ready`} state={packagedMetricState} />
+          <MetricCard label="Reviews" value={packagedMetrics.openReviews} detail="open review records" intent={packagedMetrics.openReviews > 0 ? "warning" : "success"} state={packagedMetricState} />
         </div>
-        {packagedError && <ErrorBlock error={packagedError} onRetry={() => void reloadPackaged()} recoveryDetail="Packaged evidence will appear when the API is reachable." />}
+        {packagedError && !packagedData && <p className="text-[13px] text-slate-500">Packaged evidence records will appear when this endpoint is available.</p>}
         {packagedData && !packagedError && (
           <div className="grid gap-4 xl:grid-cols-2">
             <WorklistTable

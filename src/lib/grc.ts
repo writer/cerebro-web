@@ -344,7 +344,7 @@ export type GRCPackagedEvidencePacket = {
   manual?: boolean;
   citations: GRCEvidenceCitations;
   freshness: GRCEvidenceFreshness;
-  review: GRCEvidenceReview;
+  review?: GRCEvidenceReview;
   export_artifact: { format: string; path?: string };
 };
 
