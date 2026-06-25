@@ -24,21 +24,29 @@ describe("ci workflow cost controls", () => {
     expect(ciWorkflow).toContain("- name: Install Playwright browser");
     expect(ciWorkflow).toContain("- name: Local GRC E2E\n        run: npm run e2e:grc:local -- --browser");
     expect(ciWorkflow).toContain("- name: Upload Local GRC E2E artifacts");
-    expect(ciWorkflow).toContain("if: failure()");
+    expect(ciWorkflow).toContain("if: always()");
     expect(ciWorkflow).toContain("uses: actions/upload-artifact@");
+    expect(ciWorkflow).toContain("/tmp/cerebro-grc-e2e-*/summary.json");
     expect(ciWorkflow).toContain("/tmp/cerebro-grc-e2e-*/logs/**");
     expect(ciWorkflow).toContain("/tmp/cerebro-grc-e2e-*/*.png");
+  });
+
+  it("runs standalone static chunk smoke in node validation", () => {
+    expect(ciWorkflow).toContain("- name: Developer environment doctor\n        run: npm run doctor -- --ci");
+    expect(ciWorkflow).toContain("- name: Standalone smoke\n        run: npm run smoke:standalone -- --skip-build");
   });
 
   it("runs cached Docker validation in a scoped parallel job", () => {
     expect(ciWorkflow).toContain("docker-build:");
     expect(ciWorkflow).toContain("if: needs.scope.outputs.needs_docker == 'true'");
     expect(ciWorkflow).toContain("- name: Set up Buildx");
+    expect(ciWorkflow).toContain("- name: Setup Node");
     expect(ciWorkflow).toContain("- name: Docker build");
     expect(ciWorkflow).toContain("uses: docker/build-push-action@");
     expect(ciWorkflow).toContain("cache-from: type=gha,scope=cerebro-web-ci");
     expect(ciWorkflow).toContain("cache-to: type=gha,mode=max,scope=cerebro-web-ci");
     expect(ciWorkflow).toContain("load: true");
+    expect(ciWorkflow).toContain("- name: Docker smoke\n        run: node scripts/smoke-docker.mjs cerebro-web:ci");
   });
 
   it("keeps validate as the aggregate required check", () => {

@@ -60,6 +60,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Developer environment doctor
+        run: npm run doctor -- --ci
+
       - name: Lint
         run: npm run lint
 
@@ -68,6 +71,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Standalone smoke
+        run: npm run smoke:standalone -- --skip-build
 
       - name: OSS audit
         run: npm run oss:audit
@@ -120,13 +126,15 @@ jobs:
         env:
           CEREBRO_REPO: ${{ github.workspace }}/cerebro
           CEREBRO_GRC_E2E_BROWSER_PROVIDER: playwright
+          CEREBRO_GRC_E2E_RETAIN_ARTIFACTS: "1"
 
       - name: Upload Local GRC E2E artifacts
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: local-grc-e2e-artifacts
           path: |
+            /tmp/cerebro-grc-e2e-*/summary.json
             /tmp/cerebro-grc-e2e-*/logs/**
             /tmp/cerebro-grc-e2e-*/*.png
           if-no-files-found: ignore
@@ -144,6 +152,11 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+
       - name: Docker build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
@@ -153,6 +166,9 @@ jobs:
           tags: cerebro-web:ci
           cache-from: type=gha,scope=cerebro-web-ci
           cache-to: type=gha,mode=max,scope=cerebro-web-ci
+
+      - name: Docker smoke
+        run: node scripts/smoke-docker.mjs cerebro-web:ci
 
   validate:
     name: validate
