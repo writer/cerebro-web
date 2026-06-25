@@ -9,11 +9,19 @@ export type EvidencePacketMetrics = {
   missingRequests: number;
   staleRequests: number;
   readyPackets: number;
+  sources: number;
+  evidenceItems: number;
+  resources: number;
+  lineage: number;
+  collectedSources: number;
+  linkedLineage: number;
 };
 
 export const evidencePacketMetrics = (response?: GRCEvidencePacketsResponse | null): EvidencePacketMetrics => {
   const requests = response?.evidence_requests ?? [];
   const packets = response?.evidence_packets ?? [];
+  const sources = response?.collection_sources ?? [];
+  const lineage = response?.evidence_lineage ?? [];
   return {
     frameworks: response?.frameworks?.length ?? 0,
     controls: response?.controls?.length ?? 0,
@@ -23,6 +31,12 @@ export const evidencePacketMetrics = (response?: GRCEvidencePacketsResponse | nu
     missingRequests: requests.filter((request) => request.status === "missing").length,
     staleRequests: requests.filter((request) => request.status === "stale").length,
     readyPackets: packets.filter((packet) => packet.review?.status === "ready").length,
+    sources: sources.length,
+    evidenceItems: response?.evidence_items?.length ?? 0,
+    resources: response?.resource_subjects?.length ?? 0,
+    lineage: lineage.length,
+    collectedSources: sources.filter((source) => source.status === "collected").length,
+    linkedLineage: lineage.filter((item) => (item.evidence_packet_ids?.length ?? 0) > 0 && (item.control_ids?.length ?? 0) > 0).length,
   };
 };
 

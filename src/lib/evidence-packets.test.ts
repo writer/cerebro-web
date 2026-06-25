@@ -18,6 +18,13 @@ describe("evidencePacketMetrics", () => {
         { id: "packet-1", review: { status: "ready" } },
         { id: "packet-2", review: { status: "needs_review" } },
       ],
+      collection_sources: [{ id: "source-1", status: "collected" }],
+      evidence_items: [{ id: "evidence-1" }],
+      resource_subjects: [{ id: "resource-1" }],
+      evidence_lineage: [
+        { id: "lineage-1", control_ids: ["control-1"], evidence_packet_ids: ["packet-1"] },
+        { id: "lineage-2", control_ids: [], evidence_packet_ids: ["packet-2"] },
+      ],
     } as unknown as GRCEvidencePacketsResponse;
 
     expect(evidencePacketMetrics(response)).toEqual({
@@ -29,6 +36,12 @@ describe("evidencePacketMetrics", () => {
       missingRequests: 1,
       staleRequests: 1,
       readyPackets: 1,
+      sources: 1,
+      evidenceItems: 1,
+      resources: 1,
+      lineage: 2,
+      collectedSources: 1,
+      linkedLineage: 1,
     });
   });
 });

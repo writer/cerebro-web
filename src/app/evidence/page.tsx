@@ -7,7 +7,7 @@ import type { TableColumn } from "@/components/grc/DataTable";
 import { WorklistTable } from "@/components/grc/DataTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
 import { evidencePacketMetrics, evidencePacketReadinessLabel, evidenceReviewState } from "@/lib/evidence-packets";
-import type { GRCControlPosture, GRCEvidence, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
+import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
 import { displayDate, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
@@ -130,6 +130,30 @@ export default function EvidencePage() {
     { key: "stale_evidence_items", label: "Stale", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.stale_evidence_items}</span> },
     { key: "evidence_request_ids", label: "Requests", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_request_ids?.length ?? 0}</span> },
   ], []);
+  const sourceColumns = useMemo<TableColumn<GRCCollectionSource>[]>(() => [
+    { key: "source_id", label: "Source", render: (_value, item) => <span className="font-mono text-[12px] text-slate-700">{item.source_id || shortEntity(item.runtime_id)}</span> },
+    { key: "runtime_id", label: "Runtime", render: (_value, item) => <span className="font-mono text-[12px] text-slate-500">{shortEntity(item.runtime_id)}</span> },
+    { key: "status", label: "Status", render: (_value, item) => <StatusPill status={item.status} /> },
+    { key: "evidence_item_count", label: "Evidence", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_item_count}</span> },
+    { key: "finding_count", label: "Findings", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.finding_count}</span> },
+    { key: "last_synced_at", label: "Synced", render: (_value, item) => <span className="text-slate-500">{displayDate(item.last_synced_at)}</span> },
+  ], []);
+  const itemColumns = useMemo<TableColumn<GRCEvidenceItemRecord>[]>(() => [
+    { key: "id", label: "Evidence", render: (_value, item) => <span className="font-mono text-[12px] text-slate-700">{shortEntity(item.id)}</span> },
+    { key: "finding_id", label: "Finding", render: (_value, item) => <span className="font-mono text-[12px] text-slate-500">{shortEntity(item.finding_id)}</span> },
+    { key: "rule_id", label: "Rule", render: (_value, item) => <span className="font-mono text-[12px] text-slate-500">{shortEntity(item.rule_id)}</span> },
+    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_packet_ids?.length ?? 0}</span> },
+    { key: "graph_root_urns", label: "Roots", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.graph_root_urns?.length ?? 0}</span> },
+    { key: "last_observed_at", label: "Observed", render: (_value, item) => <span className="text-slate-500">{displayDate(item.last_observed_at)}</span> },
+  ], []);
+  const lineageColumns = useMemo<TableColumn<GRCEvidenceLineage>[]>(() => [
+    { key: "evidence_id", label: "Evidence", render: (_value, item) => <span className="font-mono text-[12px] text-slate-700">{shortEntity(item.evidence_id)}</span> },
+    { key: "control_ids", label: "Controls", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.control_ids?.length ?? 0}</span> },
+    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_packet_ids?.length ?? 0}</span> },
+    { key: "claim_ids", label: "Claims", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.claim_ids?.length ?? 0}</span> },
+    { key: "event_ids", label: "Events", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.event_ids?.length ?? 0}</span> },
+    { key: "graph_root_urns", label: "Roots", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.graph_root_urns?.length ?? 0}</span> },
+  ], []);
   const detailRows = selectedEvidence ? [
     ["Evidence ID", selectedEvidence.id],
     ["Finding", selectedEvidence.finding_id || "—"],
@@ -188,6 +212,12 @@ export default function EvidencePage() {
           <MetricCard label="Packets" value={packagedMetrics.packets} detail={`${packagedMetrics.readyPackets} ready`} state={packagedMetricState} />
           <MetricCard label="Reviews" value={packagedMetrics.openReviews} detail="open review records" intent={packagedMetrics.openReviews > 0 ? "warning" : "success"} state={packagedMetricState} />
         </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          <MetricCard label="Sources" value={packagedMetrics.sources} detail={`${packagedMetrics.collectedSources} collected`} state={packagedMetricState} />
+          <MetricCard label="Evidence Items" value={packagedMetrics.evidenceItems} detail="raw proof records" state={packagedMetricState} />
+          <MetricCard label="Lineage" value={packagedMetrics.lineage} detail={`${packagedMetrics.linkedLineage} fully linked`} state={packagedMetricState} />
+          <MetricCard label="Resources" value={packagedMetrics.resources} detail="graph subjects" state={packagedMetricState} />
+        </div>
         {packagedError && !packagedData && <p className="text-[13px] text-slate-500">Packaged evidence records will appear when this endpoint is available.</p>}
         {packagedData && !packagedError && (
           <div className="grid gap-4 xl:grid-cols-2">
@@ -211,6 +241,42 @@ export default function EvidencePage() {
               emptyMessage="No packaged controls are available."
               searchPlaceholder="Search controls"
               filterKeys={["id", "framework_name", "title", "status", "evidence_quality", "mapped_rules"]}
+              pageSize={25}
+              getRowKey={(item) => item.id}
+              refreshing={packagedLoading}
+            />
+            <WorklistTable
+              title="Collection sources"
+              description="Runtime collection status, sync freshness, and evidence coverage."
+              rows={packagedData.collection_sources ?? []}
+              columns={sourceColumns}
+              emptyMessage="No collection source records are available."
+              searchPlaceholder="Search sources"
+              filterKeys={["id", "runtime_id", "source_id", "tenant_id", "status"]}
+              pageSize={25}
+              getRowKey={(item) => item.id}
+              refreshing={packagedLoading}
+            />
+            <WorklistTable
+              title="Evidence items"
+              description="Raw proof records linked to findings, requests, packets, and graph anchors."
+              rows={packagedData.evidence_items ?? []}
+              columns={itemColumns}
+              emptyMessage="No evidence item records are available."
+              searchPlaceholder="Search evidence items"
+              filterKeys={["id", "finding_id", "rule_id", "run_id", "source_id", "runtime_id", "graph_root_urns"]}
+              pageSize={25}
+              getRowKey={(item) => item.id}
+              refreshing={packagedLoading}
+            />
+            <WorklistTable
+              title="Evidence lineage"
+              description="End-to-end links from raw proof through packets, controls, claims, events, and graph roots."
+              rows={packagedData.evidence_lineage ?? []}
+              columns={lineageColumns}
+              emptyMessage="No evidence lineage records are available."
+              searchPlaceholder="Search lineage"
+              filterKeys={["id", "evidence_id", "finding_id", "rule_id", "source_id", "runtime_id", "graph_root_urns"]}
               pageSize={25}
               getRowKey={(item) => item.id}
               refreshing={packagedLoading}
