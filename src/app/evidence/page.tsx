@@ -6,7 +6,9 @@ import { useMemo, useState } from "react";
 import type { TableColumn } from "@/components/grc/DataTable";
 import { WorklistTable } from "@/components/grc/DataTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
-import { displayDate, GRCEvidence, shortEntity } from "@/lib/grc";
+import { evidencePacketMetrics, evidencePacketReadinessLabel, evidenceReviewState } from "@/lib/evidence-packets";
+import type { GRCControlPosture, GRCEvidence, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
+import { displayDate, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
 import { useQueryParamState } from "@/lib/query-params";
@@ -40,7 +42,15 @@ export default function EvidencePage() {
     }),
     [debouncedFindingID, debouncedGraphRoot, debouncedRuleID, debouncedRunID, debouncedTenantID],
   );
+  const packagedPath = useMemo(
+    () => grcPath("/grc/evidence-packets", {
+      tenant_id: debouncedTenantID,
+      limit: 200,
+    }),
+    [debouncedTenantID],
+  );
   const { data, error, loading, reload } = useGRCQuery<EvidenceResponse>(path);
+  const { data: packagedData, error: packagedError, loading: packagedLoading, reload: reloadPackaged } = useGRCQuery<GRCEvidencePacketsResponse>(packagedPath);
   const isInitialLoading = loading && !data;
   const isRefreshing = loading && Boolean(data);
   const runtimeState = runtimeStateForError(error);
@@ -57,6 +67,7 @@ export default function EvidencePage() {
     return { claims, events, evidence, graphRoots: roots.size };
   }, [data?.evidence]);
   const { claims, events, evidence, graphRoots } = evidenceView;
+  const packagedMetrics = useMemo(() => evidencePacketMetrics(packagedData), [packagedData]);
   const selectedEvidence = evidence.find((item) => item.id === selectedEvidenceID) ?? null;
   const filterState = useGRCFilterState([
     { key: "tenant_id", label: "Tenant", value: tenantID, setValue: setTenantID },
@@ -101,6 +112,23 @@ export default function EvidencePage() {
     },
     { key: "created_at", label: "Created", render: (_value, item) => <span className="text-slate-500">{displayDate(item.created_at)}</span> },
   ], []);
+  const requestColumns = useMemo<TableColumn<GRCEvidenceRequest>[]>(() => [
+    { key: "title", label: "Request", render: (_value, item) => <span className="font-medium text-slate-900">{item.title || shortEntity(item.id)}</span> },
+    { key: "control_id", label: "Control", render: (_value, item) => <span className="font-mono text-[12px] text-slate-600">{shortEntity(item.control_id)}</span> },
+    { key: "status", label: "Status", render: (_value, item) => <StatusPill status={item.status} /> },
+    { key: "quality", label: "Quality", render: (_value, item) => <StatusPill status={item.quality} /> },
+    { key: "review_status", label: "Review", render: (_value, item) => <ReviewPill status={item.review_status} /> },
+    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_packet_ids?.length ?? 0}</span> },
+  ], []);
+  const controlColumns = useMemo<TableColumn<GRCControlPosture>[]>(() => [
+    { key: "title", label: "Control", render: (_value, item) => <span className="font-medium text-slate-900">{item.title || shortEntity(item.id)}</span> },
+    { key: "framework_name", label: "Framework", render: (_value, item) => <span className="text-slate-600">{item.framework_name || "—"}</span> },
+    { key: "status", label: "Status", render: (_value, item) => <StatusPill status={item.status} /> },
+    { key: "evidence_score", label: "Score", render: (_value, item) => <span className="tabular-nums text-slate-700">{item.evidence_score}</span> },
+    { key: "missing_evidence_items", label: "Missing", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.missing_evidence_items}</span> },
+    { key: "stale_evidence_items", label: "Stale", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.stale_evidence_items}</span> },
+    { key: "evidence_request_ids", label: "Requests", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_request_ids?.length ?? 0}</span> },
+  ], []);
   const detailRows = selectedEvidence ? [
     ["Evidence ID", selectedEvidence.id],
     ["Finding", selectedEvidence.finding_id || "—"],
@@ -140,6 +168,55 @@ export default function EvidencePage() {
         <MetricCard label="Claims" value={claims} detail="claim references" state={metricState} />
         <MetricCard label="Graph Roots" value={graphRoots} detail="impact anchors" state={metricState} />
       </div>
+
+      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[15px] font-semibold text-slate-900">Packaged evidence workflow</h2>
+            <p className="mt-1 text-[13px] text-slate-500">
+              Program, framework, control, request, packet, review, activity, export, and snapshot records assembled from the same evidence substrate.
+            </p>
+          </div>
+          <button type="button" onClick={() => void reloadPackaged()} className="rounded-md border border-slate-200 px-3 py-1.5 text-[13px] font-medium text-slate-600 transition hover:border-indigo-200 hover:text-indigo-700">
+            Refresh package
+          </button>
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          <MetricCard label="Program" value={evidencePacketReadinessLabel(packagedData?.program.status)} detail={`${packagedData?.program.readiness_score ?? 0}% readiness`} state={packagedError ? "error" : packagedLoading && !packagedData ? "loading" : "ready"} />
+          <MetricCard label="Requests" value={packagedMetrics.requests} detail={`${packagedMetrics.missingRequests} missing, ${packagedMetrics.staleRequests} stale`} state={packagedError ? "error" : "ready"} />
+          <MetricCard label="Packets" value={packagedMetrics.packets} detail={`${packagedMetrics.readyPackets} ready`} state={packagedError ? "error" : "ready"} />
+          <MetricCard label="Reviews" value={packagedMetrics.openReviews} detail="open review records" intent={packagedMetrics.openReviews > 0 ? "warning" : "success"} state="ready" />
+        </div>
+        {packagedError && <ErrorBlock error={packagedError} onRetry={() => void reloadPackaged()} recoveryDetail="Packaged evidence will appear when the API is reachable." />}
+        {packagedData && !packagedError && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            <WorklistTable
+              title="Evidence requests"
+              description="Requested proof units with quality, freshness, and review posture."
+              rows={packagedData.evidence_requests ?? []}
+              columns={requestColumns}
+              emptyMessage="No packaged evidence requests are available."
+              searchPlaceholder="Search requests"
+              filterKeys={["id", "control_id", "title", "status", "quality", "review_status"]}
+              pageSize={25}
+              getRowKey={(item) => item.id}
+              refreshing={packagedLoading}
+            />
+            <WorklistTable
+              title="Control posture"
+              description="Control-level evidence packaging status and mapped request counts."
+              rows={packagedData.controls ?? []}
+              columns={controlColumns}
+              emptyMessage="No packaged controls are available."
+              searchPlaceholder="Search controls"
+              filterKeys={["id", "framework_name", "title", "status", "evidence_quality", "mapped_rules"]}
+              pageSize={25}
+              getRowKey={(item) => item.id}
+              refreshing={packagedLoading}
+            />
+          </div>
+        )}
+      </section>
 
       {isInitialLoading && <LoadingBlock label="Loading evidence..." />}
       {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Evidence will appear when the API is reachable." />}
@@ -218,4 +295,30 @@ export default function EvidencePage() {
       )}
     </div>
   );
+}
+
+function StatusPill({ status }: { status?: string }) {
+  const normalized = (status ?? "unknown").toLowerCase();
+  const tone =
+    normalized.includes("missing") || normalized.includes("fail") || normalized.includes("blocked")
+      ? "bg-red-50 text-red-700 ring-red-100"
+      : normalized.includes("stale") || normalized.includes("partial") || normalized.includes("manual")
+        ? "bg-amber-50 text-amber-700 ring-amber-100"
+        : normalized.includes("satisfied") || normalized.includes("strong") || normalized.includes("ready") || normalized.includes("passing")
+          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+          : "bg-slate-50 text-slate-600 ring-slate-100";
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${tone}`}>{status || "unknown"}</span>;
+}
+
+function ReviewPill({ status }: { status?: string }) {
+  const state = evidenceReviewState(status);
+  const tone =
+    state === "blocked"
+      ? "bg-red-50 text-red-700 ring-red-100"
+      : state === "attention"
+        ? "bg-amber-50 text-amber-700 ring-amber-100"
+        : state === "ready"
+          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+          : "bg-slate-50 text-slate-600 ring-slate-100";
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${tone}`}>{status || "unknown"}</span>;
 }
