@@ -161,8 +161,9 @@ export default function Home() {
   }, [priorityFindings, apiKey]);
 
   const summary = data?.summary;
-  const coverageBlindSpots = readinessQuery.data?.coverage_blind_spots ?? [];
-  const coverageSummaries = readinessQuery.data?.coverage_summaries ?? [];
+  const dashboardBackedReadiness = Boolean(readinessQuery.error && data);
+  const coverageBlindSpots = readinessQuery.data?.coverage_blind_spots ?? data?.coverage_blind_spots ?? [];
+  const coverageSummaries = readinessQuery.data?.coverage_summaries ?? data?.coverage_summaries ?? [];
   const coverageBlindSpotCount = readiness?.coverage_blind_spots ?? coverageBlindSpots.length;
   const attentionItems = [
     summary?.overdue_findings ? countLabel(summary.overdue_findings, "overdue finding") : "",
@@ -237,7 +238,7 @@ export default function Home() {
                 </button>
               }
             >
-              Audit readiness is unavailable; showing sampled dashboard values.
+              Audit readiness is unavailable; showing dashboard-backed control and coverage values.
             </AttentionBanner>
           )}
 
@@ -274,7 +275,7 @@ export default function Home() {
             <MetricCard
               label="Failing Controls"
               value={summary.controls_failing}
-              detail={`${controlTotal} sampled total`}
+              detail={`${controlTotal} dashboard controls`}
               intent={summary.controls_failing > 0 ? "warning" : "success"}
             />
           </div>
@@ -283,7 +284,7 @@ export default function Home() {
             <ProgressCard
               title="Audit Readiness"
               percent={readiness?.score ?? controlProgress}
-              detail={humanize(readiness?.status ?? "sampling")}
+              detail={readiness ? humanize(readiness.status) : dashboardBackedReadiness ? "dashboard-backed" : "loading"}
               total={countLabel(readiness?.controls ?? controlTotal, "control")}
               href={readinessQuery.data?.proof_bundle?.reports_path ?? "/reports"}
             />

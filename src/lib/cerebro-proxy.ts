@@ -126,6 +126,7 @@ export const isCacheableCerebroPath = (path: string) => {
   const normalized = path.replace(/^\/+|\/+$/g, "");
   return [
     "grc/dashboard",
+    "grc/program-readiness",
     "grc/controls",
     "grc/control-packets",
     "grc/control-packets/detail",
