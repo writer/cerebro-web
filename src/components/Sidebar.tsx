@@ -115,7 +115,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="ml-2 max-md:hidden">
             <span className="block text-[15px] font-semibold text-[var(--text-primary)]">Cerebro</span>
-            <span className="block text-[11px] text-[var(--sidebar-muted)]">{activeLens.shortLabel} lens</span>
+            <span className="block text-[11px] text-[var(--sidebar-muted)]">{activeLens.shortLabel} priorities</span>
           </div>
         )}
       </div>
@@ -124,7 +124,7 @@ export default function Sidebar() {
         <div className="space-y-3 px-3 pb-3 max-md:hidden">
           <div>
             <label htmlFor="cerebro-persona-lens" className="mb-1.5 block px-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)]">
-              View lens
+              Prioritize for
             </label>
             <select
               id="cerebro-persona-lens"
@@ -157,7 +157,7 @@ export default function Sidebar() {
 
       <div className={`${collapsed ? "flex" : "hidden max-md:flex"} flex-col items-center gap-2 pb-3`}>
           {collapsed && (
-            <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[10px] font-semibold text-[var(--text-secondary)]" title={`${activeLens.label} lens`}>
+            <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[10px] font-semibold text-[var(--text-secondary)]" title={`${activeLens.label} priorities`}>
               {activeLens.shortLabel.slice(0, 1)}
             </div>
           )}
@@ -175,12 +175,12 @@ export default function Sidebar() {
 
       <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? "px-1.5" : "px-3 max-md:px-1.5"}`}>
         {!collapsed && (
-          <div className="px-2 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Focus</div>
+          <div className="px-2 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Work</div>
         )}
         {focusLinks.map(renderLink)}
 
         {supportingLinks.length > 0 && !collapsed && (
-          <div className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Supporting</div>
+          <div className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">More</div>
         )}
         {collapsed && supportingLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
         {supportingLinks.map(renderLink)}

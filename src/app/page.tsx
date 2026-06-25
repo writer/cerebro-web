@@ -9,11 +9,11 @@ import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/LazyTrendsChart";
 import { countLabel } from "@/lib/format";
-import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCSourceCoverageRecord, GRCSourceCoverageSummary, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
+import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCSourceCoverageRecord, GRCSourceCoverageSummary, GRCSummary, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 import { buildGRCProductAreaViews, hasGRCProductAreaContext, type GRCProductAreaView } from "@/lib/grc-product-areas";
-import { personaLenses } from "@/lib/persona-lenses";
+import { personaLenses, type PersonaLensID } from "@/lib/persona-lenses";
 import { hasTrendActivity } from "@/lib/trends";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
@@ -205,87 +205,229 @@ function ProductAreaMap({ areas }: { areas: GRCProductAreaView[] }) {
   );
 }
 
-function PersonaLensOverview() {
-  const { activeLens, activeLensID, setActiveLensID } = usePersonaLens();
-  const primaryRoutes = activeLens.primaryRoutes.slice(0, 4);
-  const supportingRoutes = activeLens.secondaryRoutes.slice(0, 3);
+type SignalTone = "danger" | "warning" | "success" | "neutral";
+
+const signalToneClass: Record<SignalTone, string> = {
+  danger: "border-red-200 bg-red-50 text-red-900",
+  warning: "border-amber-200 bg-amber-50 text-amber-900",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  neutral: "border-slate-200 bg-white text-slate-900",
+};
+
+const mutedSignalToneClass: Record<SignalTone, string> = {
+  danger: "text-red-700",
+  warning: "text-amber-700",
+  success: "text-emerald-700",
+  neutral: "text-slate-500",
+};
+
+const askPrompts: Record<PersonaLensID, string[]> = {
+  security: [
+    "What should security fix first and why?",
+    "Which open risks have no owner?",
+    "Explain the affected assets for the top finding.",
+  ],
+  compliance: [
+    "Which controls are blocked by missing evidence?",
+    "What changed since the last audit packet?",
+    "Which findings affect SOC 2 readiness?",
+  ],
+  platform: [
+    "Which stale sources are weakening trust?",
+    "Which high-risk assets need an owner?",
+    "What source coverage gaps should we close first?",
+  ],
+  leadership: [
+    "Summarize material risk for this week.",
+    "What is getting better or worse?",
+    "Which owners need follow-up before review?",
+  ],
+};
+
+function RiskSignalCard({
+  detail,
+  href,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  href: string;
+  label: string;
+  tone: SignalTone;
+  value: string | number;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`rounded-lg border p-4 transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-sm)] ${signalToneClass[tone]}`}
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-wider opacity-70">{label}</div>
+      <div className="mt-2 text-2xl font-semibold">{value}</div>
+      <div className={`mt-1.5 text-[12px] leading-5 ${mutedSignalToneClass[tone]}`}>{detail}</div>
+    </Link>
+  );
+}
+
+function SecurityWorkBriefing({
+  activeLensID,
+  coverageBlindSpotCount,
+  criticalRiskCount,
+  findings,
+  missingEvidenceItems,
+  setActiveLensID,
+  staleEvidenceItems,
+  summary,
+}: {
+  activeLensID: PersonaLensID;
+  coverageBlindSpotCount: number;
+  criticalRiskCount: number;
+  findings: GRCFinding[];
+  missingEvidenceItems: number;
+  setActiveLensID: (value: PersonaLensID) => void;
+  staleEvidenceItems: number;
+  summary: GRCSummary;
+}) {
+  const evidenceIssues = missingEvidenceItems + staleEvidenceItems;
+  const topFindings = findings.slice(0, 3);
+  const prompts = askPrompts[activeLensID];
 
   return (
-    <section className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {personaLenses.map((lens) => {
-          const active = lens.id === activeLensID;
-          return (
-            <button
-              key={lens.id}
-              type="button"
-              onClick={() => setActiveLensID(lens.id)}
-              className={`surface-panel min-h-[112px] p-4 text-left transition hover:border-[color:var(--ring)] ${
-                active ? "border-[color:var(--ring)] bg-[var(--primary-soft)]" : ""
-              }`}
-              aria-pressed={active}
-            >
-              <div className="text-[13px] font-semibold text-[var(--text-primary)]">{lens.label}</div>
-              <div className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">{lens.tagline}</div>
-            </button>
-          );
-        })}
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+      <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <RiskSignalCard
+            href="/risk-inbox?severity=critical"
+            label="Critical risks"
+            value={summary.critical_findings}
+            detail={`${summary.high_findings} high severity need triage`}
+            tone={summary.critical_findings > 0 ? "danger" : "success"}
+          />
+          <RiskSignalCard
+            href="/risk-inbox?owner=unassigned"
+            label="Missing owners"
+            value={summary.unassigned}
+            detail="Assign accountability before work stalls"
+            tone={summary.unassigned > 0 ? "warning" : "success"}
+          />
+          <RiskSignalCard
+            href="/evidence"
+            label="Evidence not ready"
+            value={evidenceIssues}
+            detail={`${missingEvidenceItems} missing, ${staleEvidenceItems} stale`}
+            tone={evidenceIssues > 0 ? "warning" : "success"}
+          />
+          <RiskSignalCard
+            href="/impact"
+            label="High-impact paths"
+            value={criticalRiskCount}
+            detail="Risk score 85+; inspect affected assets"
+            tone={criticalRiskCount > 0 ? "danger" : "success"}
+          />
+          <RiskSignalCard
+            href="/connectors"
+            label="Stale sources"
+            value={summary.stale_connectors}
+            detail={`${summary.connectors} connected sources monitored`}
+            tone={summary.stale_connectors > 0 ? "warning" : "success"}
+          />
+          <RiskSignalCard
+            href="/connectors"
+            label="Coverage gaps"
+            value={coverageBlindSpotCount}
+            detail="Close blind spots before audit review"
+            tone={coverageBlindSpotCount > 0 ? "warning" : "success"}
+          />
+        </div>
+
+        <section className="surface-panel p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Fix first</h2>
+              <p className="mt-1 text-[13px] text-[var(--text-muted)]">Highest-risk open findings with owner, evidence, and due-date context.</p>
+            </div>
+            <Link href="/risk-inbox" className="secondary-button px-3 py-1.5 text-[13px]">View all risks</Link>
+          </div>
+          <div className="mt-4 divide-y divide-[color:var(--border)]">
+            {topFindings.map((finding) => (
+              <Link key={finding.id} href={`/findings/${encodeURIComponent(finding.id)}`} className="grid gap-3 py-3 transition hover:text-[var(--primary)] md:grid-cols-[minmax(0,1fr)_160px_120px]">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{finding.title}</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{shortEntity(finding.entity || finding.id)} · {finding.evidence_count} evidence</div>
+                </div>
+                <div className="text-[12px] text-[var(--text-secondary)]">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Owner</span>
+                  {finding.owner || "Unassigned"}
+                </div>
+                <div className="flex items-center justify-between gap-2 md:justify-end">
+                  <RiskBadge score={finding.risk_score} />
+                  <span className="text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">›</span>
+                </div>
+              </Link>
+            ))}
+            {topFindings.length === 0 && (
+              <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No open findings need triage right now.</div>
+            )}
+          </div>
+        </section>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
+      <aside className="space-y-4">
         <section className="surface-panel p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Lens focus</div>
-              <h2 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{activeLens.label}</h2>
-              <p className="mt-2 max-w-3xl text-[13px] leading-5 text-[var(--text-muted)]">{activeLens.description}</p>
-            </div>
-            <Link href={primaryRoutes[0]?.href ?? "/"} className="secondary-button px-3 py-1.5 text-[13px]">
-              Open first view
-            </Link>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Prioritize for</div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {personaLenses.map((lens) => {
+              const active = lens.id === activeLensID;
+              return (
+                <button
+                  key={lens.id}
+                  type="button"
+                  onClick={() => setActiveLensID(lens.id)}
+                  className={`rounded-md border px-3 py-2 text-left text-[12px] font-semibold transition ${
+                    active
+                      ? "border-[color:var(--ring)] bg-[var(--primary-soft)] text-[var(--text-primary)]"
+                      : "border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[color:var(--border-strong)]"
+                  }`}
+                  aria-pressed={active}
+                >
+                  {lens.shortLabel}
+                </button>
+              );
+            })}
           </div>
-          <div className="mt-5 divide-y divide-[color:var(--border)]">
-            {primaryRoutes.map((route) => (
-              <Link key={route.href} href={route.href} className="flex items-center justify-between gap-4 py-3 transition hover:text-[var(--primary)]">
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-semibold text-[var(--text-primary)]">{route.label}</span>
-                  <span className="mt-0.5 block text-[12px] leading-5 text-[var(--text-muted)]">{route.detail}</span>
-                </span>
-                <span className="shrink-0 text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">›</span>
+          <p className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">
+            This changes what gets promoted first; it does not change permissions or hide underlying graph facts.
+          </p>
+        </section>
+
+        <section className="surface-panel p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Ask Cerebro</h2>
+              <p className="mt-1 text-[12px] text-[var(--text-muted)]">Start with the questions operators ask during triage.</p>
+            </div>
+            <Link href="/ask" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Open</Link>
+          </div>
+          <div className="mt-4 space-y-2">
+            {prompts.map((prompt) => (
+              <Link
+                key={prompt}
+                href={`/ask?q=${encodeURIComponent(prompt)}`}
+                className="block rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+              >
+                {prompt}
               </Link>
             ))}
           </div>
         </section>
-
-        <section className="surface-panel p-5">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Priorities</div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {activeLens.priorities.map((priority) => (
-              <span key={priority} className="rounded-md bg-[var(--surface-muted)] px-2.5 py-1 text-[12px] font-medium text-[var(--text-secondary)]">
-                {priority}
-              </span>
-            ))}
-          </div>
-          <div className="mt-5 border-t border-[color:var(--border)] pt-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Supporting views</div>
-            <div className="mt-2 space-y-2">
-              {supportingRoutes.map((route) => (
-                <Link key={route.href} href={route.href} className="block rounded-md px-2 py-1.5 text-[12px] transition hover:bg-[var(--surface-hover)]">
-                  <span className="font-semibold text-[var(--text-primary)]">{route.label}</span>
-                  <span className="ml-1 text-[var(--text-muted)]">{route.detail}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
+      </aside>
     </section>
   );
 }
 
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
-  const { activeLens } = usePersonaLens();
+  const { activeLensID, setActiveLensID } = usePersonaLens();
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const data = dashboard.data;
   const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
@@ -318,6 +460,8 @@ export default function Home() {
   const coverageBlindSpots = readinessQuery.data?.coverage_blind_spots ?? data?.coverage_blind_spots ?? [];
   const coverageSummaries = readinessQuery.data?.coverage_summaries ?? data?.coverage_summaries ?? [];
   const coverageBlindSpotCount = readiness?.coverage_blind_spots ?? coverageBlindSpots.length;
+  const missingEvidenceItems = (data?.controls ?? []).reduce((total, control) => total + (control.missing_evidence_items ?? 0), 0);
+  const staleEvidenceItems = (data?.controls ?? []).reduce((total, control) => total + (control.stale_evidence_items ?? 0), 0);
   const attentionItems = [
     summary?.overdue_findings ? countLabel(summary.overdue_findings, "overdue finding") : "",
     summary?.stale_connectors ? countLabel(summary.stale_connectors, "stale connector") : "",
@@ -335,6 +479,10 @@ export default function Home() {
     : 100;
   const recentEvidence = evidenceQuery.data?.evidence ?? [];
   const productAreas = buildGRCProductAreaViews({ coverageBlindSpots, summary });
+  const criticalOrHighFindings = (summary?.critical_findings ?? 0) + (summary?.high_findings ?? 0);
+  const pageDescription = summary
+    ? `${summary.unassigned} without an owner, ${criticalOrHighFindings} critical or high, ${missingEvidenceItems + staleEvidenceItems} evidence issues.`
+    : "What is risky, what changed, who owns it, and what to fix first.";
 
   const reload = () => {
     void dashboard.reload();
@@ -347,15 +495,15 @@ export default function Home() {
     <div className="space-y-6">
       <PageHeader
         contractId="overview"
-        title={`${activeLens.shortLabel} Overview`}
-        description="One graph, focused entry points for security, compliance, platform, and leadership work."
+        title={summary ? `${summary.open_findings} active risks need attention` : "Security briefing"}
+        description={pageDescription}
         action={
           <div className="flex items-center gap-2">
             <Link
               href="/risk-inbox"
               className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600"
             >
-              Risk inbox
+              View risks
             </Link>
             <button
               type="button"
@@ -368,13 +516,22 @@ export default function Home() {
         }
       />
 
-      <PersonaLensOverview />
-
       {dashboard.loading && <LoadingBlock label="Loading dashboard..." />}
       {dashboard.error && <ErrorBlock error={dashboard.error} onRetry={() => void dashboard.reload()} recoveryDetail="Overview metrics will appear when the API is reachable." />}
 
       {data && summary && (
         <>
+          <SecurityWorkBriefing
+            activeLensID={activeLensID}
+            coverageBlindSpotCount={coverageBlindSpotCount}
+            criticalRiskCount={priorityMetrics.criticalRisk}
+            findings={priorityFindings}
+            missingEvidenceItems={missingEvidenceItems}
+            setActiveLensID={setActiveLensID}
+            staleEvidenceItems={staleEvidenceItems}
+            summary={summary}
+          />
+
           {attentionItems.length > 0 && (
             <AttentionBanner
               action={<Link href={attentionActionHref} className="rounded-md border border-amber-300 bg-white px-3 py-1 text-[12px] font-medium text-amber-900 hover:bg-amber-50">View</Link>}

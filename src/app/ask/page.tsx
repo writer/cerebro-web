@@ -94,10 +94,10 @@ function AskPageInner() {
         history,
         context: {
           route: "/ask",
-          routeLabel: "Ask console",
+          routeLabel: "Ask Cerebro",
           scopeUrn: input.scopeUrn || undefined,
           chips: [
-            { label: "Screen", value: "Ask console" },
+            { label: "Screen", value: "Ask Cerebro" },
             ...(input.scopeUrn ? [{ label: "Scope", value: input.scopeUrn }] : []),
           ],
         },
@@ -244,8 +244,8 @@ function AskPageInner() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ask graph"
-        description="Ask graph questions, then inspect tool progress, Cypher, rows, summaries, and trace metadata."
+        title="Ask Cerebro"
+        description="Ask about risky changes, owners, evidence gaps, affected assets, and what to fix first."
         action={
           turns.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">

@@ -160,14 +160,14 @@ export default function CerebroAgentPanel() {
         type="button"
         onClick={() => openAgent()}
         className={`agent-surface agent-launcher fixed bottom-5 right-5 z-40 hidden items-center gap-3 rounded-lg border border-slate-200 bg-white text-left shadow-[0_18px_45px_rgba(15,23,42,0.15)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_22px_55px_rgba(15,23,42,0.18)] sm:flex ${quietLauncher ? "w-[58px] justify-center px-2.5 py-2.5" : "w-[234px] px-3 py-3"}`}
-        aria-label="Open graph query panel"
-        title={quietLauncher ? `Open graph query for ${pageContext.routeLabel ?? "this screen"}` : undefined}
+        aria-label="Open Ask Cerebro"
+        title={quietLauncher ? `Ask Cerebro about ${pageContext.routeLabel ?? "this screen"}` : undefined}
       >
         <span className={`grid shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-950 text-white ${quietLauncher ? "h-9 w-9" : "h-10 w-10"}`}>
           {activeTurn ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
         </span>
         <span className={quietLauncher ? "sr-only" : "min-w-0 flex-1 max-sm:sr-only"}>
-          <span className="block text-[14px] font-semibold text-slate-950">Ask graph</span>
+          <span className="block text-[14px] font-semibold text-slate-950">Ask Cerebro</span>
           <span className="mt-0.5 block truncate text-[12px] text-slate-500">
             {activeTurn ? "Query running" : pageContext.routeLabel ?? "Ask across current data"}
           </span>
@@ -197,7 +197,7 @@ export default function CerebroAgentPanel() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-[16px] font-semibold text-slate-950">Ask graph</h2>
+                  <h2 className="truncate text-[16px] font-semibold text-slate-950">Ask Cerebro</h2>
                   <span className={`agent-mono rounded-full border px-2 py-0.5 text-[10px] uppercase ${statusTone(latestTurn)}`}>
                     {statusLabel(latestTurn)}
                   </span>
@@ -212,7 +212,7 @@ export default function CerebroAgentPanel() {
               <Link
                 href="/ask"
                 className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-                title="Open full Ask console"
+                title="Open full Ask Cerebro"
               >
                 <Maximize2 className={iconClass} />
               </Link>
@@ -220,7 +220,7 @@ export default function CerebroAgentPanel() {
                 type="button"
                 onClick={() => setOpen(false)}
                 className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-                title="Close graph query panel"
+                title="Close Ask Cerebro"
               >
                 <X className={iconClass} />
               </button>
