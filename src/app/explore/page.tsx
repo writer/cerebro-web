@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AskAboutLink from "@/components/ask/AskAboutLink";
-import GraphViewer from "@/components/grc/GraphViewer";
+import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { useApiKey } from "@/components/providers";
 import { GRCEntityImpact, GRCFinding, shortEntity } from "@/lib/grc";

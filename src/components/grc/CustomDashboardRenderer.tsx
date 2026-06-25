@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef } from "react";
 
 import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
-import TrendsChart from "@/components/grc/TrendsChart";
+import TrendsChart from "@/components/grc/LazyTrendsChart";
 import type { CustomDashboard, CustomDashboardWidget } from "@/lib/custom-dashboards";
 import {
   customDashboardFindingsPath,

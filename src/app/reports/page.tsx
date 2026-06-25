@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
-import GraphViewer from "@/components/grc/GraphViewer";
+import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown } from "@/components/grc/Primitives";
 import {
   displayDate,

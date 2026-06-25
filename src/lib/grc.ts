@@ -1158,6 +1158,21 @@ export type GRCTrendComparison = {
   closed_sla_breached_delta: number;
 };
 
+export type GRCTrendSummary = {
+  total_opened: number;
+  total_closed: number;
+  net: number;
+  current_open: number;
+  peak_open: number;
+  opened_critical: number;
+  opened_high: number;
+  closed_critical: number;
+  closed_high: number;
+  closed_sla_breached: number;
+  avg_time_to_close_seconds: number;
+  closed_sla_breached_rate?: number;
+};
+
 export type GRCTrendAccuracy = {
   status_history: string;
   caveat: string;
@@ -1169,6 +1184,7 @@ export type GRCTrends = {
   end: string;
   points: GRCTrendPoint[];
   aging_buckets?: GRCTrendAgingBucket[];
+  summary?: GRCTrendSummary;
   targets?: GRCTrendTargets;
   comparison?: GRCTrendComparison;
   accuracy?: GRCTrendAccuracy;

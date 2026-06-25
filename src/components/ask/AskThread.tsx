@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { type AskTurnState } from "@/lib/ask";
-import GraphViewer from "@/components/grc/GraphViewer";
+import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/grc/Primitives";
 import CypherBlock from "./CypherBlock";
 import MarkdownSummary from "./MarkdownSummary";

@@ -1,16 +1,18 @@
 "use client";
 
-import { forwardRef, type ForwardedRef } from "react";
+import type { Ref } from "react";
+import { useCallback, useMemo } from "react";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import type { GRCTrendPoint, GRCTrendTargets } from "@/lib/grc";
 import { formatTrendDate } from "@/lib/trends";
 
-type TrendsChartProps = {
+export type TrendsChartProps = {
   points: GRCTrendPoint[];
   height?: number;
   targets?: GRCTrendTargets;
   onBucketSelect?: (date: string, kind: "opened" | "closed") => void;
+  containerRef?: Ref<HTMLDivElement>;
 };
 
 type ChartDatum = {
@@ -21,21 +23,21 @@ type ChartDatum = {
   open_total: number;
 };
 
-function TrendsChartInner({ points, height = 280, targets, onBucketSelect }: TrendsChartProps, ref: ForwardedRef<HTMLDivElement>) {
-  const data = points.map((point) => ({
+export default function TrendsChart({ points, height = 280, targets, onBucketSelect, containerRef }: TrendsChartProps) {
+  const data = useMemo(() => points.map((point) => ({
     date: point.date,
     label: formatTrendDate(point.date),
     opened: point.opened,
     closed: point.closed,
     open_total: point.open_total,
-  }));
-  const selectBucket = (kind: "opened" | "closed") => (entry: unknown) => {
+  })), [points]);
+  const selectBucket = useCallback((kind: "opened" | "closed") => (entry: unknown) => {
     const datum = (entry as { payload?: ChartDatum })?.payload;
     if (datum?.date) onBucketSelect?.(datum.date, kind);
-  };
+  }, [onBucketSelect]);
 
   return (
-    <div ref={ref} style={{ width: "100%", height }}>
+    <div ref={containerRef} style={{ width: "100%", height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -56,7 +58,3 @@ function TrendsChartInner({ points, height = 280, targets, onBucketSelect }: Tre
     </div>
   );
 }
-
-const TrendsChart = forwardRef<HTMLDivElement, TrendsChartProps>(TrendsChartInner);
-
-export default TrendsChart;

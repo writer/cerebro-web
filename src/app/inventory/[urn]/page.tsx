@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { useApiKey, useCurrentUser } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import AssetReportModal from "@/components/grc/AssetReportModal";
-import GraphViewer from "@/components/grc/GraphViewer";
+import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, SeverityDot } from "@/components/grc/Primitives";
 import {
   displayDate,
