@@ -424,7 +424,9 @@ export const frameworkSegmentFor = (query: string): GRCFrameworkSegment | null =
 
 const stringValues = (values: unknown[]) =>
   values
-    .flatMap((value): unknown[] => Array.isArray(value) ? value : [value])
+    .flatMap(function flatten(value): unknown[] {
+      return Array.isArray(value) ? value.flatMap(flatten) : [value];
+    })
     .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
     .map((value) => String(value));
 

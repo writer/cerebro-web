@@ -169,6 +169,7 @@ export default function Home() {
     summary?.stale_connectors ? countLabel(summary.stale_connectors, "stale connector") : "",
     coverageBlindSpotCount ? countLabel(coverageBlindSpotCount, "coverage blind spot") : "",
   ].filter(Boolean);
+  const attentionActionHref = summary?.overdue_findings || summary?.stale_connectors ? "/risk-inbox" : "/connectors";
   const controlTotal = data?.controls?.length ?? 0;
   const passingControls = Math.max(0, controlTotal - (summary?.controls_failing ?? 0));
   const controlProgress = controlTotal === 0 ? 100 : (passingControls / controlTotal) * 100;
@@ -219,7 +220,7 @@ export default function Home() {
         <>
           {attentionItems.length > 0 && (
             <AttentionBanner
-              action={<Link href="/risk-inbox" className="rounded-md border border-amber-300 bg-white px-3 py-1 text-[12px] font-medium text-amber-900 hover:bg-amber-50">View</Link>}
+              action={<Link href={attentionActionHref} className="rounded-md border border-amber-300 bg-white px-3 py-1 text-[12px] font-medium text-amber-900 hover:bg-amber-50">View</Link>}
             >
               {attentionItems.join(", ")} need attention.
             </AttentionBanner>
