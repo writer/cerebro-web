@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import ConnectorActivityTable from "@/components/connectors/ConnectorActivityTable";
+import { CoverageMetadata, CoverageMetadataList } from "@/components/connectors/CoverageMetadata";
 import ConnectorDiagnosticTimelinePanel from "@/components/connectors/ConnectorDiagnosticTimeline";
 import ConnectorSetupForm from "@/components/connectors/ConnectorSetupForm";
 import { useApiKey } from "@/components/providers";
@@ -391,6 +392,11 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
                 {family.projection_template && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)]">{family.projection_template}</span>}
                 {family.event_kind && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{family.event_kind}</span>}
               </div>
+              {family.coverage && family.coverage.length > 0 && (
+                <div className="mt-3 border-t border-[color:var(--border)] pt-2">
+                  <CoverageMetadataList items={family.coverage} compact showNotes />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -479,6 +485,9 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
               <div key={option.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
                 <div className="text-[12px] font-semibold text-[var(--text-primary)]">{option.label}</div>
                 <div className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">{option.families?.join(", ") || option.id}</div>
+                <div className="mt-2">
+                  <CoverageMetadata item={option} compact showNotes />
+                </div>
               </div>
             ))}
           </div>

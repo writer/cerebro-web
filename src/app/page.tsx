@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
 import { useApiKey } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/TrendsChart";
 import { countLabel } from "@/lib/format";
-import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
+import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCSourceCoverageRecord, GRCSourceCoverageSummary, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 import { hasTrendActivity } from "@/lib/trends";
@@ -63,6 +64,73 @@ function SeverityDonut({ critical, high, medium, low }: { critical: number; high
   );
 }
 
+function CoverageBlindSpotsPanel({
+  records,
+  summaries,
+}: {
+  records: GRCSourceCoverageRecord[];
+  summaries: GRCSourceCoverageSummary[];
+}) {
+  const sourceTotals = summaries
+    .filter((summary) => summary.blind_spots > 0)
+    .slice()
+    .sort((a, b) => b.blind_spots - a.blind_spots)
+    .slice(0, 4);
+
+  if (records.length === 0 && sourceTotals.length === 0) return null;
+
+  return (
+    <Panel
+      title="Source Coverage Blind Spots"
+      action={<Link href="/connectors" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Review connectors</Link>}
+    >
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="grid gap-2 md:grid-cols-2">
+          {records.slice(0, 6).map((record) => (
+            <Link
+              key={`${record.source_id}-${record.dimension_id}`}
+              href={`/connectors/${encodeURIComponent(record.source_id)}?tab=scope`}
+              className="rounded-lg border border-slate-200 bg-white p-3 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-slate-900">{record.title || humanize(record.dimension_id)}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-slate-500">{record.source_id} · {record.dimension_type}</div>
+                </div>
+                <Badge value={record.state || record.support_level || "gap"} />
+              </div>
+              <div className="mt-3">
+                <CoverageMetadata item={record} compact showNotes />
+              </div>
+            </Link>
+          ))}
+          {records.length === 0 && (
+            <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-[13px] text-slate-500">
+              Coverage summaries are available, but no individual blind-spot records were returned.
+            </div>
+          )}
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">By source</div>
+          <div className="mt-2 space-y-2">
+            {sourceTotals.map((summary) => (
+              <Link
+                key={summary.source_id}
+                href={`/connectors/${encodeURIComponent(summary.source_id)}?tab=scope`}
+                className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-[12px] transition hover:bg-indigo-50"
+              >
+                <span className="font-mono text-slate-700">{summary.source_id}</span>
+                <span className="font-semibold text-slate-900">{summary.blind_spots}/{summary.total}</span>
+              </Link>
+            ))}
+            {sourceTotals.length === 0 && <div className="text-[12px] text-slate-500">No source summary gaps.</div>}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
@@ -93,6 +161,14 @@ export default function Home() {
   }, [priorityFindings, apiKey]);
 
   const summary = data?.summary;
+  const coverageBlindSpots = readinessQuery.data?.coverage_blind_spots ?? [];
+  const coverageSummaries = readinessQuery.data?.coverage_summaries ?? [];
+  const coverageBlindSpotCount = readiness?.coverage_blind_spots ?? coverageBlindSpots.length;
+  const attentionItems = [
+    summary?.overdue_findings ? countLabel(summary.overdue_findings, "overdue finding") : "",
+    summary?.stale_connectors ? countLabel(summary.stale_connectors, "stale connector") : "",
+    coverageBlindSpotCount ? countLabel(coverageBlindSpotCount, "coverage blind spot") : "",
+  ].filter(Boolean);
   const controlTotal = data?.controls?.length ?? 0;
   const passingControls = Math.max(0, controlTotal - (summary?.controls_failing ?? 0));
   const controlProgress = controlTotal === 0 ? 100 : (passingControls / controlTotal) * 100;
@@ -141,11 +217,11 @@ export default function Home() {
 
       {data && summary && (
         <>
-          {(summary.overdue_findings > 0 || summary.stale_connectors > 0) && (
+          {attentionItems.length > 0 && (
             <AttentionBanner
               action={<Link href="/risk-inbox" className="rounded-md border border-amber-300 bg-white px-3 py-1 text-[12px] font-medium text-amber-900 hover:bg-amber-50">View</Link>}
             >
-              {countLabel(summary.overdue_findings, "overdue finding")} and {countLabel(summary.stale_connectors, "stale connector")} need attention.
+              {attentionItems.join(", ")} need attention.
             </AttentionBanner>
           )}
           {readinessQuery.error && (
@@ -214,6 +290,8 @@ export default function Home() {
             <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
             <ProgressCard title="Connector Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
           </div>
+
+          <CoverageBlindSpotsPanel records={coverageBlindSpots} summaries={coverageSummaries} />
 
           <Panel
             title="Finding Trends"

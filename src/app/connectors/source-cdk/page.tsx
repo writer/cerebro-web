@@ -15,6 +15,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { CoverageMetadata, CoverageMetadataList } from "@/components/connectors/CoverageMetadata";
 import ConnectorSetupForm from "@/components/connectors/ConnectorSetupForm";
 import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
 import { useApiKey } from "@/components/providers";
@@ -336,6 +337,11 @@ function DataCoveragePanel({ definition }: { definition?: ConnectorDefinition })
                   Appears as {entityLabel(family)}
                   {isMapped(family) ? "." : " (stored, not yet mapped to graph entities)."}
                 </div>
+                {family.coverage && family.coverage.length > 0 && (
+                  <div className="mt-3 border-t border-[color:var(--border)] pt-2">
+                    <CoverageMetadataList items={family.coverage} compact showNotes />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -406,9 +412,15 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
             <div className="text-[12px] font-semibold text-[var(--text-primary)]">Review what you are granting</div>
             <ul className="mt-2 space-y-1">
               {reviewScopes.map((scope) => (
-                <li key={scope.id ?? scope.label} className="text-[12px] leading-5 text-[var(--text-secondary)]">
-                  {(scope.label || humanize(scope.id ?? "")) + ": "}
-                  {scope.permission_note || "Confirm this access is appropriate for your program."}
+                <li key={scope.id ?? scope.label} className="rounded-md bg-white/55 p-2 text-[12px] leading-5 text-[var(--text-secondary)] dark:bg-white/5">
+                  <div>
+                    <span className="font-semibold text-[var(--text-primary)]">{scope.label || humanize(scope.id ?? "")}</span>
+                    {": "}
+                    {scope.permission_note || "Confirm this access is appropriate for your program."}
+                  </div>
+                  <div className="mt-2">
+                    <CoverageMetadata item={scope} compact showNotes />
+                  </div>
                 </li>
               ))}
             </ul>

@@ -92,6 +92,25 @@ describe("supported GRC frameworks", () => {
       owner: "appsec",
       sla_status: "active",
     }, "CIS GitHub")).toBe(true);
+
+    expect(findingMatchesFrameworkSegment({
+      id: "finding-3",
+      title: "Generated source coverage blind spot",
+      severity: "HIGH",
+      status: "open",
+      source_id: "custom_identity",
+      source_coverage_refs: [{
+        source_id: "custom_identity",
+        dimension_id: "custom_identity.users",
+        dimension_type: "app_entitlement",
+        support_level: "partial",
+        evidence_types: ["identity_configuration"],
+        matched_control_refs: [{ framework_name: "SOC 2", control_id: "CC6.1" }],
+      }],
+      evidence_count: 1,
+      owner: "identity",
+      sla_status: "active",
+    }, "SOC 2")).toBe(true);
   });
 
   it("maps framework segmentation onto inventory assets", () => {
@@ -130,6 +149,15 @@ describe("supported GRC frameworks", () => {
       label: "Repositories",
       families: ["github.repository"],
     }, "CIS Google Workspace Benchmark", "github")).toBe(false);
+
+    expect(connectorScopeOptionMatchesFrameworkSegment({
+      id: "custom.users.identity",
+      label: "Custom identity entitlements",
+      families: ["custom.user"],
+      evidence_types: ["identity_configuration"],
+      control_domains: ["identity_and_access"],
+      control_refs: [{ framework_name: "SOC 2", control_id: "CC6.1" }],
+    }, "SOC 2", "custom_identity")).toBe(true);
   });
 
   it("falls back to text matching for custom framework lenses", () => {
