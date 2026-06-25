@@ -17,7 +17,7 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["dashboard", "overview", "metrics", "home"],
   },
   {
-    label: "Risk inbox",
+    label: "Risks",
     href: "/risk-inbox",
     description: "Triage findings by severity, owner, entity, SLA, and evidence.",
     section: "Operator",
@@ -38,9 +38,9 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["custom dashboard", "dashboards", "trends", "widgets", "workspace", "saved views"],
   },
   {
-    label: "Ask graph",
+    label: "Ask Cerebro",
     href: "/ask",
-    description: "Ask graph questions. Review drafted Cypher, rows, summaries, and citations.",
+    description: "Ask questions about risks, owners, evidence, affected assets, and what changed.",
     section: "Operator",
     keywords: ["ask", "graph", "cypher", "nlq", "query", "search"],
   },
@@ -73,9 +73,9 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities", "framework", ...supportedGRCFrameworkNames],
   },
   {
-    label: "Impact map",
+    label: "Affected assets",
     href: "/impact",
-    description: "Entity impact graph and affected risk paths.",
+    description: "Impacted entities and affected risk paths.",
     section: "Operator",
     keywords: ["graph", "entity", "impact", "affected entities"],
   },
@@ -160,8 +160,8 @@ const routeLabels: Record<string, string> = Object.fromEntries(
   navigationEntries.map((entry) => [entry.href, entry.label]),
 );
 
-routeLabels["/"] = "Overview";
-routeLabels["/ask"] = "Ask console";
+routeLabels["/"] = "Home";
+routeLabels["/ask"] = "Ask Cerebro";
 routeLabels["/evidence"] = "Evidence register";
 routeLabels["/findings"] = "Finding detail";
 routeLabels["/connectors/builder"] = "Connector builder";

@@ -4,8 +4,8 @@ import { routeLabelForPath } from "./route-labels";
 
 describe("route labels", () => {
   it("uses curated labels for known app routes", () => {
-    expect(routeLabelForPath("/")).toBe("Overview");
-    expect(routeLabelForPath("/impact")).toBe("Impact map");
+    expect(routeLabelForPath("/")).toBe("Home");
+    expect(routeLabelForPath("/impact")).toBe("Affected assets");
     expect(routeLabelForPath("/controls/builder")).toBe("Control builder");
     expect(routeLabelForPath("/connectors/builder")).toBe("Connector builder");
     expect(routeLabelForPath("/connectors/source-cdk")).toBe("Runtime activation");
