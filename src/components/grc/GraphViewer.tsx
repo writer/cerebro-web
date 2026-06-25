@@ -341,7 +341,7 @@ const withQueryParams = (path: string, params: Record<string, string | undefined
   return queryString ? `${path}?${queryString}` : path;
 };
 
-type GraphViewerProps = {
+export type GraphViewerProps = {
   graph?: GRCGraph;
   onExpandNode?: (urn: string) => void;
   onRemoveNode?: (urn: string) => void;

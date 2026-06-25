@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
-import TrendsChart from "@/components/grc/TrendsChart";
+import TrendsChart from "@/components/grc/LazyTrendsChart";
 import { useApiKey } from "@/components/providers";
 import type { GRCControl, GRCControlEvidencePacketResponse, GRCFinding, GRCFramework, GRCFrameworksResponse, GRCTrends } from "@/lib/grc";
 import { displayDate, humanize, riskSort } from "@/lib/grc";

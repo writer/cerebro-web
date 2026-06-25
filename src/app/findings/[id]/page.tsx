@@ -7,7 +7,7 @@ import { FormEvent, useMemo, useState } from "react";
 import AskAboutLink from "@/components/ask/AskAboutLink";
 import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
 import { useApiKey } from "@/components/providers";
-import GraphViewer from "@/components/grc/GraphViewer";
+import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { pluralize } from "@/lib/format";

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 import AskAboutLink from "@/components/ask/AskAboutLink";
 import FindingTable from "@/components/grc/FindingTable";
-import GraphViewer from "@/components/grc/GraphViewer";
+import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
 import { averageRiskScore, GRCEntityImpact, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";

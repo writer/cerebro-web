@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppliedFilterChips, AttentionBanner, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
-import TrendsChart from "@/components/grc/TrendsChart";
-import { GRCTrends } from "@/lib/grc";
+import TrendsChart from "@/components/grc/LazyTrendsChart";
+import type { GRCTrendAgingBucket, GRCTrendPoint, GRCTrends } from "@/lib/grc";
 import { grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { downloadTrendPNG, downloadTrendsCSV, formatTrendDuration, hasTrendActivity, summarizeTrends, trendBucketEndDate } from "@/lib/trends";
+import { buildSeverityFlow, buildTrendSignals, downloadTrendPNG, downloadTrendsCSV, formatTrendDuration, formatTrendPercent, hasTrendActivity, summarizeTrends, trendBucketEndDate } from "@/lib/trends";
 import { useQueryParamState } from "@/lib/query-params";
 
 const INTERVALS = [
@@ -29,6 +29,9 @@ type IntervalValue = (typeof INTERVALS)[number]["value"];
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const selectClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
+const actionButtonClass = "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50";
+const EMPTY_POINTS: GRCTrendPoint[] = [];
+const EMPTY_AGING_BUCKETS: GRCTrendAgingBucket[] = [];
 
 const toggleClass = (active: boolean) =>
   `rounded px-2.5 py-1 text-[12px] font-medium transition ${
@@ -42,11 +45,22 @@ const deltaLabel = (value: number, formatter = (n: number) => `${n > 0 ? "+" : "
 
 const signedDurationLabel = (seconds: number) => `${seconds > 0 ? "+" : "-"}${formatTrendDuration(Math.abs(seconds))}`;
 
+const signalValueClass = (intent: "neutral" | "danger" | "warning" | "success") => {
+  const classes = {
+    danger: "text-red-700",
+    warning: "text-amber-700",
+    success: "text-emerald-700",
+    neutral: "text-slate-900",
+  };
+  return classes[intent];
+};
+
 export default function TrendsPage() {
   const router = useRouter();
   const chartRef = useRef<HTMLDivElement | null>(null);
   const [bucket, setBucket] = useState<IntervalValue>("week");
   const [days, setDays] = useState<number>(90);
+  const [isPending, startTransition] = useTransition();
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [runtimeID, setRuntimeID] = useQueryParamState("runtime_id");
   const [sourceID, setSourceID] = useQueryParamState("source_id");
@@ -80,44 +94,53 @@ export default function TrendsPage() {
   const trendsQuery = useGRCQuery<GRCTrends>(trendsPath);
   const trends = trendsQuery.data;
   const summary = useMemo(() => summarizeTrends(trends), [trends]);
-  const points = trends?.points ?? [];
-  const metricState = trendsQuery.loading ? "loading" : "ready";
+  const signals = useMemo(() => buildTrendSignals(trends), [trends]);
+  const severityFlow = useMemo(() => buildSeverityFlow(summary), [summary]);
+  const points = trends?.points ?? EMPTY_POINTS;
+  const agingBuckets = trends?.aging_buckets ?? EMPTY_AGING_BUCKETS;
+  const metricState = trendsQuery.loading || isPending ? "loading" : "ready";
   const showChart = !trendsQuery.loading && !trendsQuery.error && hasTrendActivity(trends);
   const comparison = trends?.comparison;
-  const filterParams = {
+  const filterParams = useMemo(() => ({
     tenant_id: debouncedTenantID,
     runtime_id: debouncedRuntimeID,
     source_id: debouncedSourceID,
     severity,
     framework: debouncedFramework,
-  };
-  const riskInboxPath = (params: Record<string, string | number | undefined>) => grcPath("/risk-inbox", { ...filterParams, ...params });
-  const bucketDrilldownPath = (date: string, kind: "opened" | "closed") => {
+  }), [debouncedFramework, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, severity]);
+  const riskInboxPath = useCallback((params: Record<string, string | number | undefined>) => grcPath("/risk-inbox", { ...filterParams, ...params }), [filterParams]);
+  const bucketDrilldownPath = useCallback((date: string, kind: "opened" | "closed") => {
     const before = trendBucketEndDate(date, bucket);
     return kind === "opened"
       ? riskInboxPath({ status: "all", opened_after: date, opened_before: before })
       : riskInboxPath({ status: "all", closed_after: date, closed_before: before });
-  };
-  const clearFilters = () => {
+  }, [bucket, riskInboxPath]);
+  const setBucketTransition = useCallback((nextBucket: IntervalValue) => {
+    startTransition(() => setBucket(nextBucket));
+  }, []);
+  const setDaysTransition = useCallback((nextDays: number) => {
+    startTransition(() => setDays(nextDays));
+  }, []);
+  const clearFilters = useCallback(() => {
     setTenantID("");
     setRuntimeID("");
     setSourceID("");
     setSeverity("");
     setFramework("");
-  };
-  const filterChips = [
+  }, [setFramework, setRuntimeID, setSeverity, setSourceID, setTenantID]);
+  const filterChips = useMemo(() => [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Runtime", value: runtimeID, onClear: () => setRuntimeID("") },
     { label: "Source", value: sourceID, onClear: () => setSourceID("") },
     { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Severity", value: severity, onClear: () => setSeverity("") },
-  ];
-  const exportCSV = () => {
+  ], [framework, runtimeID, setFramework, setRuntimeID, setSeverity, setSourceID, setTenantID, severity, sourceID, tenantID]);
+  const exportCSV = useCallback(() => {
     if (trends) downloadTrendsCSV(trends, grcExportFilename("trends"));
-  };
-  const exportPNG = async () => {
+  }, [trends]);
+  const exportPNG = useCallback(async () => {
     await downloadTrendPNG(chartRef.current, grcExportFilename("trends").replace(/\.csv$/, ".png"));
-  };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -129,14 +152,14 @@ export default function TrendsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
               {INTERVALS.map((option) => (
-                <button key={option.value} type="button" onClick={() => setBucket(option.value)} className={toggleClass(bucket === option.value)}>
+                <button key={option.value} type="button" onClick={() => setBucketTransition(option.value)} className={toggleClass(bucket === option.value)}>
                   {option.label}
                 </button>
               ))}
             </div>
             <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
               {WINDOWS.map((option) => (
-                <button key={option.value} type="button" onClick={() => setDays(option.value)} className={toggleClass(days === option.value)}>
+                <button key={option.value} type="button" onClick={() => setDaysTransition(option.value)} className={toggleClass(days === option.value)}>
                   {option.label}
                 </button>
               ))}
@@ -144,13 +167,13 @@ export default function TrendsPage() {
             <button
               type="button"
               onClick={() => void trendsQuery.reload()}
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600"
+              className={actionButtonClass}
             >
               Refresh
             </button>
             <Link
               href={grcPath("/trends/dashboards", { tenant_id: tenantID, runtime_id: runtimeID, source_id: sourceID, severity, framework })}
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600"
+              className={actionButtonClass}
             >
               Custom dashboards
             </Link>
@@ -158,7 +181,7 @@ export default function TrendsPage() {
               type="button"
               disabled={!trends}
               onClick={exportCSV}
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className={actionButtonClass}
             >
               Export CSV
             </button>
@@ -166,7 +189,7 @@ export default function TrendsPage() {
               type="button"
               disabled={!showChart}
               onClick={() => void exportPNG()}
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className={actionButtonClass}
             >
               Export PNG
             </button>
@@ -204,6 +227,54 @@ export default function TrendsPage() {
         <MetricCard label="SLA Misses" value={summary.closedSLABreached} detail={comparison ? deltaLabel(comparison.closed_sla_breached_delta) : "closed after due date"} intent={summary.closedSLABreached > 0 ? "danger" : "success"} state={metricState} />
       </div>
 
+      {!trendsQuery.loading && !trendsQuery.error && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+          <Panel title="Trend Signals">
+            <div className="divide-y divide-slate-100">
+              {signals.map((signal) => (
+                <div key={signal.id} className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <div>
+                    <div className="text-[13px] font-semibold text-slate-900">{signal.label}</div>
+                    <div className="mt-0.5 text-[12px] text-slate-500">{signal.detail}</div>
+                  </div>
+                  <div className={`text-left text-xl font-semibold sm:text-right ${signalValueClass(signal.intent)}`}>{signal.value}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Critical and High Flow">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-[13px]">
+                <caption className="sr-only">Critical and high severity finding flow</caption>
+                <thead className="text-[11px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th scope="col" className="px-3 py-2">Severity</th>
+                    <th scope="col" className="px-3 py-2 text-right">Opened</th>
+                    <th scope="col" className="px-3 py-2 text-right">Closed</th>
+                    <th scope="col" className="px-3 py-2 text-right">Net</th>
+                    <th scope="col" className="px-3 py-2 text-right">Closure</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {severityFlow.map((row) => (
+                    <tr key={row.severity} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        <Link href={grcPath("/trends", { tenant_id: tenantID, runtime_id: runtimeID, source_id: sourceID, framework, severity: row.severity })} className="hover:text-indigo-700">{row.label}</Link>
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{row.opened}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{row.closed}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${row.net > 0 ? "text-amber-700" : row.net < 0 ? "text-emerald-700" : "text-slate-700"}`}>{row.net > 0 ? "+" : ""}{row.net}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{formatTrendPercent(row.closureRate)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+      )}
+
       {trendsQuery.loading && <LoadingBlock label="Loading trends..." />}
       {trendsQuery.error && <ErrorBlock error={trendsQuery.error} onRetry={() => void trendsQuery.reload()} recoveryDetail="Trends will appear when the API is reachable." />}
 
@@ -236,7 +307,7 @@ export default function TrendsPage() {
                   <tr><th scope="col" className="px-3 py-2">Age</th><th scope="col" className="px-3 py-2 text-right">Open</th><th scope="col" className="px-3 py-2 text-right">Action</th></tr>
                 </thead>
                 <tbody>
-                  {(trends?.aging_buckets ?? []).map((bucket) => (
+                  {agingBuckets.map((bucket) => (
                     <tr key={bucket.id} className="border-t border-slate-100">
                       <td className="px-3 py-2 font-medium text-slate-900">{bucket.label}</td>
                       <td className="px-3 py-2 text-right text-slate-700">{bucket.count}</td>
@@ -245,7 +316,7 @@ export default function TrendsPage() {
                       </td>
                     </tr>
                   ))}
-                  {(trends?.aging_buckets ?? []).length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-slate-500">No open findings.</td></tr>}
+                  {agingBuckets.length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-slate-500">No open findings.</td></tr>}
                 </tbody>
               </table>
             </div>
