@@ -229,6 +229,368 @@ export type GRCReportMetadata = {
   redaction: GRCReportRedaction;
 };
 
+export type GRCAuditProgram = {
+  id: string;
+  name?: string;
+  profile_id?: string;
+  status: string;
+  readiness_score: number;
+  framework_count: number;
+  control_count: number;
+  evidence_request_count: number;
+  evidence_packet_count: number;
+  collection_source_count?: number;
+  evidence_item_count?: number;
+  resource_subject_count?: number;
+  lineage_count?: number;
+  claim_record_count?: number;
+  evaluation_run_count?: number;
+  graph_path_count?: number;
+  open_review_count: number;
+};
+
+export type GRCFrameworkPosture = {
+  id: string;
+  name: string;
+  version?: string;
+  lifecycle?: string;
+  status: string;
+  control_count: number;
+  passing_controls: number;
+  needs_attention_controls: number;
+  missing_evidence_count: number;
+  stale_evidence_count: number;
+  evidence_score: number;
+};
+
+export type GRCControlTestResult = {
+  id: string;
+  rule_id: string;
+  control_id: string;
+  status: string;
+  result: string;
+  evidence_quality?: string;
+  finding_ids?: string[];
+  evidence_ids?: string[];
+  last_observed_at?: string;
+};
+
+export type GRCControlPosture = {
+  id: string;
+  framework_id?: string;
+  framework_name?: string;
+  title?: string;
+  owner_domain?: string;
+  framework_version?: string;
+  framework_lifecycle?: string;
+  family_id?: string;
+  family_name?: string;
+  status: string;
+  evidence_quality?: string;
+  evidence_score: number;
+  audit_summary?: string;
+  open_findings: number;
+  critical_findings: number;
+  high_findings: number;
+  evidence_items: number;
+  missing_evidence_items: number;
+  stale_evidence_items: number;
+  mapped_rules?: string[];
+  reasons?: string[];
+  tags?: string[];
+  test_results?: GRCControlTestResult[];
+  evidence_request_ids?: string[];
+  evidence_packet_ids?: string[];
+  finding_ids?: string[];
+  exception_ids?: string[];
+};
+
+export type GRCEvidenceRequest = {
+  id: string;
+  control_id: string;
+  framework_id?: string;
+  title?: string;
+  description?: string;
+  type?: string;
+  required: boolean;
+  status: string;
+  quality: string;
+  freshness_sla?: string;
+  assessment_methods?: string[];
+  accepted_from?: string[];
+  evidence_packet_ids?: string[];
+  review_status: string;
+  owner_domain?: string;
+  due_at?: string;
+  control_test_ids?: string[];
+};
+
+export type GRCEvidenceCitations = {
+  evidence_ids?: string[];
+  rule_ids?: string[];
+  event_ids?: string[];
+  claim_ids?: string[];
+  graph_root_urns?: string[];
+  run_ids?: string[];
+};
+
+export type GRCEvidenceFreshness = {
+  status: string;
+  sla?: string;
+  reason?: string;
+  observed_at?: string;
+  expires_at?: string;
+};
+
+export type GRCEvidenceReview = {
+  id: string;
+  subject_id: string;
+  status: string;
+  reason?: string;
+  actor?: string;
+  updated_at?: string;
+};
+
+export type GRCPackagedEvidencePacket = {
+  id: string;
+  request_id?: string;
+  control_id?: string;
+  framework_id?: string;
+  evidence_type?: string;
+  status: string;
+  quality?: string;
+  reason?: string;
+  source?: string;
+  observed_at?: string;
+  expires_at?: string;
+  manual?: boolean;
+  citations: GRCEvidenceCitations;
+  freshness: GRCEvidenceFreshness;
+  review?: GRCEvidenceReview;
+  export_artifact: { format: string; path?: string };
+};
+
+export type GRCEvidenceActivity = {
+  id: string;
+  subject_id: string;
+  type: string;
+  message?: string;
+  created_at: string;
+};
+
+export type GRCEvidenceExport = {
+  id: string;
+  formats: string[];
+  redaction: string;
+  path?: string;
+};
+
+export type GRCAssessmentScope = {
+  id: string;
+  report_type?: string;
+  profile_id?: string;
+  profile_name?: string;
+  generated_at: string;
+  source_ids?: string[];
+  runtime_ids?: string[];
+  control_count: number;
+  finding_count: number;
+  evidence_count: number;
+  runtime_count: number;
+  exclusion_count: number;
+  collection_policy: string;
+  policy_applied_before_read: boolean;
+  filtered_before_graph_projection: boolean;
+  redaction_mode?: string;
+};
+
+export type GRCCollectionSource = {
+  id: string;
+  runtime_id: string;
+  source_id?: string;
+  tenant_id?: string;
+  status: string;
+  last_synced_at?: string;
+  finding_count: number;
+  evidence_item_count: number;
+  control_count: number;
+};
+
+export type GRCEvidenceItemRecord = {
+  id: string;
+  runtime_id?: string;
+  source_id?: string;
+  finding_id?: string;
+  rule_id?: string;
+  run_id?: string;
+  run_ids?: string[];
+  claim_ids?: string[];
+  event_ids?: string[];
+  graph_root_urns?: string[];
+  graph_path_urns?: string[];
+  created_at?: string;
+  last_observed_at?: string;
+  observation_count?: number;
+  control_ids?: string[];
+  evidence_request_ids?: string[];
+  evidence_packet_ids?: string[];
+};
+
+export type GRCFindingWorkflow = {
+  id: string;
+  title?: string;
+  severity?: string;
+  status?: string;
+  owner?: string;
+  sla_status?: string;
+  runtime_id?: string;
+  source_id?: string;
+  rule_id?: string;
+  policy_id?: string;
+  policy_name?: string;
+  check_id?: string;
+  check_name?: string;
+  risk_score?: number;
+  risk_reasons?: string[];
+  due_at?: string;
+  status_reason?: string;
+  control_ids?: string[];
+  evidence_ids?: string[];
+  evidence_packet_ids?: string[];
+  last_observed_at?: string;
+  review_status: string;
+};
+
+export type GRCResourceSubject = {
+  id: string;
+  urn: string;
+  kind?: string;
+  control_ids?: string[];
+  finding_ids?: string[];
+  evidence_ids?: string[];
+  evidence_packet_ids?: string[];
+  last_observed_at?: string;
+};
+
+export type GRCEvidenceLineage = {
+  id: string;
+  evidence_id: string;
+  finding_id?: string;
+  runtime_id?: string;
+  source_id?: string;
+  rule_id?: string;
+  run_ids?: string[];
+  claim_ids?: string[];
+  event_ids?: string[];
+  graph_root_urns?: string[];
+  evidence_request_ids?: string[];
+  evidence_packet_ids?: string[];
+  control_ids?: string[];
+};
+
+export type GRCClaimRecord = {
+  id: string;
+  evidence_ids?: string[];
+  finding_ids?: string[];
+  control_ids?: string[];
+  evidence_packet_ids?: string[];
+};
+
+export type GRCEvaluationRun = {
+  id: string;
+  runtime_id?: string;
+  source_id?: string;
+  rule_ids?: string[];
+  evidence_ids?: string[];
+  finding_ids?: string[];
+  control_ids?: string[];
+  evidence_packet_ids?: string[];
+};
+
+export type GRCGraphEvidenceRecord = {
+  id: string;
+  evidence_id?: string;
+  finding_id?: string;
+  label?: string;
+  attributes?: Record<string, string>;
+  graph_path_ids?: string[];
+};
+
+export type GRCGraphPathRecord = {
+  id: string;
+  evidence_id?: string;
+  finding_id?: string;
+  from_urn?: string;
+  from_type?: string;
+  relation?: string;
+  to_urn?: string;
+  to_type?: string;
+  observed_at?: string;
+  attributes?: Record<string, string>;
+};
+
+export type GRCExceptionAcceptance = {
+  id: string;
+  control_id: string;
+  framework_id?: string;
+  type: string;
+  status: string;
+};
+
+export type GRCEvidenceExportArtifact = {
+  id: string;
+  snapshot_id: string;
+  format: string;
+  redaction: string;
+  path?: string;
+  content_hash: string;
+  included: boolean;
+};
+
+export type GRCAuditSnapshot = {
+  id: string;
+  hash: string;
+  generated_at: string;
+  control_count: number;
+  evidence_request_count: number;
+  evidence_packet_count: number;
+  collection_source_count?: number;
+  evidence_item_count?: number;
+  resource_subject_count?: number;
+  lineage_count?: number;
+  claim_record_count?: number;
+  evaluation_run_count?: number;
+  graph_path_count?: number;
+  open_review_count: number;
+};
+
+export type GRCEvidencePacketsResponse = {
+  version: string;
+  generated_at: string;
+  program: GRCAuditProgram;
+  frameworks: GRCFrameworkPosture[];
+  controls: GRCControlPosture[];
+  evidence_requests: GRCEvidenceRequest[];
+  evidence_packets: GRCPackagedEvidencePacket[];
+  evidence_reviews: GRCEvidenceReview[];
+  activity: GRCEvidenceActivity[];
+  assessment_scope?: GRCAssessmentScope;
+  collection_sources?: GRCCollectionSource[];
+  evidence_items?: GRCEvidenceItemRecord[];
+  finding_workflow?: GRCFindingWorkflow[];
+  resource_subjects?: GRCResourceSubject[];
+  evidence_lineage?: GRCEvidenceLineage[];
+  claim_records?: GRCClaimRecord[];
+  evaluation_runs?: GRCEvaluationRun[];
+  graph_evidence_rows?: GRCGraphEvidenceRecord[];
+  graph_path_records?: GRCGraphPathRecord[];
+  exceptions_acceptances?: GRCExceptionAcceptance[];
+  export_artifacts?: GRCEvidenceExportArtifact[];
+  export: GRCEvidenceExport;
+  snapshot: GRCAuditSnapshot;
+  metadata: GRCReportMetadata;
+};
+
 export type GRCControlCoverageSummary = {
   selected_controls: number;
   mapped_controls: number;
