@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-import CerebroAgentPanel from "@/components/agent/CerebroAgentPanel";
+import CerebroAgentPanelShell from "@/components/agent/CerebroAgentPanelShell";
 import { CerebroAgentProvider } from "@/components/agent/CerebroAgentProvider";
-import CommandPalette from "@/components/CommandPalette";
+import CommandPaletteShell from "@/components/CommandPaletteShell";
 import { ApiKeyProvider, CommandPaletteProvider, CurrentUserProvider, SidebarProvider, ThemeProvider } from "@/components/providers";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -47,8 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[var(--app-bg)] px-8 py-6 max-md:px-4">{children}</main>
                       </div>
                     </div>
-                    <CommandPalette />
-                    <CerebroAgentPanel />
+                    <CommandPaletteShell />
+                    <CerebroAgentPanelShell />
                   </SidebarProvider>
                 </CommandPaletteProvider>
               </CerebroAgentProvider>
