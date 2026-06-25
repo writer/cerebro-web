@@ -39,6 +39,10 @@ const neo4jCredential = "unused-local";
 const apiBase = `http://127.0.0.1:${apiPort}`;
 const webBase = `http://127.0.0.1:${webPort}`;
 const proxyCacheProbeOptions = { cache: "default" };
+const webImpactURL = (rootURN, params = {}) => {
+  const query = new URLSearchParams({ root_urn: rootURN, ...params });
+  return `${webBase}/api/cerebro/grc/entities/_/impact?${query.toString()}`;
+};
 const adminURN = `urn:cerebro:${tenantID}:identity:admin`;
 const appURN = `urn:cerebro:${tenantID}:application:okta-admin-console`;
 const repoURN = `urn:cerebro:${tenantID}:repository:public-sensitive`;
@@ -354,7 +358,7 @@ async function validateProxyCache() {
   expect(secondDashboard.json.summary.evidence_items === 3, "proxy dashboard cached payload mismatch");
   expect(secondDashboard.durationMs < perfCachedMs, `dashboard cached request took ${secondDashboard.durationMs}ms`);
 
-  const impactUrl = `${webBase}/api/cerebro/grc/entities/${encodeURIComponent(adminURN)}/impact?tenant_id=${tenantID}&limit=10&cache_probe=${Date.now()}`;
+  const impactUrl = webImpactURL(adminURN, { tenant_id: tenantID, limit: "10", cache_probe: String(Date.now()) });
   const firstImpact = await requestJSON(impactUrl, proxyCacheProbeOptions);
   expect(firstImpact.status === 200, `proxy impact first status ${firstImpact.status}`);
   expect(firstImpact.headers.get("x-cerebro-cache") === "miss", `proxy impact first cache ${firstImpact.headers.get("x-cerebro-cache")}`);
@@ -451,10 +455,10 @@ async function validateFailureModes() {
   const invalidLimit = await request(`${webBase}/api/cerebro/grc/dashboard?tenant_id=${tenantID}&limit=1000`);
   expect(invalidLimit.status === 400, `proxy invalid limit status ${invalidLimit.status}`);
 
-  const missingImpact = await request(`${webBase}/api/cerebro/grc/entities/${encodeURIComponent(`urn:cerebro:${tenantID}:missing:node`)}/impact?tenant_id=${tenantID}&limit=10`);
+  const missingImpact = await request(webImpactURL(`urn:cerebro:${tenantID}:missing:node`, { tenant_id: tenantID, limit: "10" }));
   expect(missingImpact.status === 404, `proxy missing impact status ${missingImpact.status}`);
 
-  const staleImpactUrl = `${webBase}/api/cerebro/grc/entities/${encodeURIComponent(adminURN)}/impact?tenant_id=${tenantID}&limit=10&cache_probe=graph-stale-${Date.now()}`;
+  const staleImpactUrl = webImpactURL(adminURN, { tenant_id: tenantID, limit: "10", cache_probe: `graph-stale-${Date.now()}` });
   const warmImpact = await requestJSON(staleImpactUrl, proxyCacheProbeOptions);
   expect(warmImpact.status === 200, `warm impact status ${warmImpact.status}`);
   expect(warmImpact.headers.get("x-cerebro-cache") === "miss", `warm impact cache ${warmImpact.headers.get("x-cerebro-cache")}`);

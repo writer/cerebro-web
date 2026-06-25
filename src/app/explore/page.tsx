@@ -7,7 +7,7 @@ import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { useApiKey } from "@/components/providers";
 import { GRCEntityImpact, GRCFinding, shortEntity } from "@/lib/grc";
-import { fetchCachedGRC, grcPath, grcResponseErrorMessage, grcTimeoutMessage, GRC_QUERY_TIMEOUT_MS, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { fetchCachedGRC, grcEntityImpactPath, grcPath, grcResponseErrorMessage, grcTimeoutMessage, GRC_QUERY_TIMEOUT_MS, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import {
   ExploreGraphState,
   emptyExploreState,
@@ -31,7 +31,7 @@ const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
 
 const impactPath = (urn: string, tenantID: string) =>
-  grcPath(`/grc/entities/${encodeURIComponent(urn)}/impact`, { tenant_id: tenantID, limit: NEIGHBORS_PER_EXPAND });
+  grcEntityImpactPath(urn, { tenant_id: tenantID, limit: NEIGHBORS_PER_EXPAND });
 
 const isLikelyEntityURN = (value: string) => /^urn:[^\s:]+:.+/.test(value.trim());
 

@@ -8,7 +8,7 @@ import FindingTable from "@/components/grc/FindingTable";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
 import { averageRiskScore, GRCEntityImpact, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { grcEntityImpactPath, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
 import { metricValueForState, runtimeStateForError } from "@/lib/runtime-state";
 
@@ -31,7 +31,7 @@ export default function ImpactPage() {
   const fallbackRoot = fallbackFindings.data?.findings?.find((f) => f.entity)?.entity ?? "";
   const selectedRoot = debouncedRootURN || fallbackRoot;
   const path = useMemo(
-    () => selectedRoot ? grcPath(`/grc/entities/${encodeURIComponent(selectedRoot)}/impact`, { tenant_id: debouncedTenantID, limit: debouncedLimit }) : null,
+    () => selectedRoot ? grcEntityImpactPath(selectedRoot, { tenant_id: debouncedTenantID, limit: debouncedLimit }) : null,
     [debouncedLimit, debouncedTenantID, selectedRoot],
   );
   const { data, error, loading, reload } = useGRCQuery<GRCEntityImpact>(path);
