@@ -25,36 +25,47 @@ const coverageRecord = (overrides: Partial<GRCCoverageRecord>): GRCCoverageRecor
 describe("GRC product areas", () => {
   it("groups broad product categories around backend coverage dimensions", () => {
     expect(grcProductAreas.map((area) => area.id)).toEqual([
-      "control_assurance",
-      "evidence_documents",
-      "third_party_risk",
-      "vulnerability_remediation",
-      "audit_activity",
-      "inventory_integrations",
-      "risk_resilience",
-      "customer_assurance",
+      "compliance",
+      "customer_trust",
+      "risk",
+      "vendors",
+      "privacy",
+      "assets",
+      "personnel",
+      "integrations",
+    ]);
+    expect(grcProductAreas.find((area) => area.id === "compliance")?.workflows.map((workflow) => workflow.label)).toEqual([
+      "Frameworks",
+      "Controls",
+      "Documents",
+      "Audits",
+      "Issues",
     ]);
   });
 
   it("matches coverage by dimension, family, evidence type, or control domain", () => {
-    const thirdPartyRisk = grcProductAreas.find((area) => area.id === "third_party_risk");
-    expect(thirdPartyRisk).toBeTruthy();
-    expect(productAreaMatchesCoverage(thirdPartyRisk!, coverageRecord({ dimension_id: "discovered_vendors" }))).toBe(true);
-    expect(productAreaMatchesCoverage(thirdPartyRisk!, coverageRecord({ dimension_id: "other", family: "vendor_risk_attribute" }))).toBe(true);
-    expect(productAreaMatchesCoverage(thirdPartyRisk!, coverageRecord({ dimension_id: "", evidence_types: ["third_party_risk"] }))).toBe(true);
-    expect(productAreaMatchesCoverage(thirdPartyRisk!, coverageRecord({ control_domains: ["vendor_risk"], dimension_id: "" }))).toBe(true);
-    expect(productAreaMatchesCoverage(thirdPartyRisk!, coverageRecord({ dimension_id: "new_vendor_dimension", evidence_types: ["third_party_risk"] }))).toBe(true);
-    expect(productAreaMatchesCoverage(thirdPartyRisk!, coverageRecord({ dimension_id: "vulnerability_remediations" }))).toBe(false);
+    const vendors = grcProductAreas.find((area) => area.id === "vendors");
+    expect(vendors).toBeTruthy();
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "discovered_vendors" }))).toBe(true);
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "other", family: "vendor_risk_attribute" }))).toBe(true);
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "", evidence_types: ["third_party_risk"] }))).toBe(true);
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ control_domains: ["vendor_risk"], dimension_id: "" }))).toBe(true);
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "new_vendor_dimension", evidence_types: ["third_party_risk"] }))).toBe(true);
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "vulnerability_remediations" }))).toBe(false);
   });
 
   it("keeps known dimension gaps scoped to their owning product areas", () => {
-    const customerAssurance = grcProductAreas.find((area) => area.id === "customer_assurance");
-    expect(customerAssurance).toBeTruthy();
-    expect(productAreaMatchesCoverage(customerAssurance!, coverageRecord({
+    const customerTrust = grcProductAreas.find((area) => area.id === "customer_trust");
+    expect(customerTrust).toBeTruthy();
+    expect(productAreaMatchesCoverage(customerTrust!, coverageRecord({
       control_domains: ["vendor_risk"],
       dimension_id: "vendor_risk_attributes",
       evidence_types: ["third_party_risk"],
     }))).toBe(false);
+    expect(productAreaMatchesCoverage(customerTrust!, coverageRecord({
+      dimension_id: "security_questionnaires",
+      family: "security_questionnaire",
+    }))).toBe(true);
   });
 
   it("marks areas with matching blind spots as needing attention", () => {
@@ -65,13 +76,13 @@ describe("GRC product areas", () => {
       ],
       summary,
     });
-    const thirdPartyRisk = views.find((area) => area.id === "third_party_risk");
-    const vulnerabilityRemediation = views.find((area) => area.id === "vulnerability_remediation");
-    const controlAssurance = views.find((area) => area.id === "control_assurance");
-    expect(thirdPartyRisk?.status).toBe("attention");
-    expect(thirdPartyRisk?.blindSpots).toHaveLength(1);
-    expect(vulnerabilityRemediation?.status).toBe("attention");
-    expect(controlAssurance?.status).toBe("mapped");
+    const vendors = views.find((area) => area.id === "vendors");
+    const assets = views.find((area) => area.id === "assets");
+    const compliance = views.find((area) => area.id === "compliance");
+    expect(vendors?.status).toBe("attention");
+    expect(vendors?.blindSpots).toHaveLength(1);
+    expect(assets?.status).toBe("attention");
+    expect(compliance?.status).toBe("mapped");
   });
 
   it("uses quiet state until coverage context exists", () => {

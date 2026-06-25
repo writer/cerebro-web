@@ -169,6 +169,16 @@ function ProductAreaMap({ areas }: { areas: GRCProductAreaView[] }) {
             </div>
             <div className="mt-3 text-[12px] font-medium text-slate-700">{area.detail}</div>
             <div className="mt-2 flex flex-wrap gap-1.5">
+              {area.workflows.slice(0, 4).map((workflow) => (
+                <span key={workflow.href} className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                  {workflow.label}
+                </span>
+              ))}
+              {area.workflows.length > 4 && (
+                <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-600">+{area.workflows.length - 4}</span>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {area.sourceFamilies.slice(0, 4).map((family) => (
                 <span key={family} className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
                   {family}
