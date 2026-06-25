@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cachedResponseHeaders,
   fetchCerebro,
+  isCacheableCerebroPath,
   responseHeadersFor,
   shouldBypassCerebroProxyCache,
   withCerebroCacheBypassHeader,
@@ -67,6 +68,11 @@ describe("cerebro proxy cache headers", () => {
       "x-cerebro-web-trace-id": "web-trace-123",
       "x-request-id": "req-123",
     });
+  });
+
+  it("caches program readiness so audit readiness can stale-serve through transient backend failures", () => {
+    expect(isCacheableCerebroPath("/grc/program-readiness")).toBe(true);
+    expect(isCacheableCerebroPath("grc/program-readiness")).toBe(true);
   });
 
   it("propagates trace headers upstream without logging auth or query strings", async () => {

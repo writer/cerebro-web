@@ -1115,6 +1115,9 @@ export type GRCDashboard = {
   controls: GRCControl[];
   evidence: GRCEvidence[];
   connectors: GRCConnector[];
+  source_summaries?: GRCSourceRuntimeHealthSummary[];
+  coverage_blind_spots?: GRCCoverageRecord[];
+  coverage_summaries?: GRCCoverageSummary[];
   generated_at: string;
 };
 

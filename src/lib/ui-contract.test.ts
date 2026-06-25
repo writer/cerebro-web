@@ -109,4 +109,14 @@ describe("product UI contract", () => {
     expect(reportsSource).toContain("AppliedFilterChips");
     expect(reportsSource).not.toContain("applyScope");
   });
+
+  it("keeps overview audit readiness fallbacks dashboard-backed instead of sample-labeled", () => {
+    const overviewSource = readProjectFile("src/app/page.tsx");
+
+    expect(overviewSource).toContain("data?.coverage_blind_spots");
+    expect(overviewSource).toContain("data?.coverage_summaries");
+    expect(overviewSource).toContain("dashboard-backed");
+    expect(overviewSource).not.toContain("sampled dashboard values");
+    expect(overviewSource).not.toContain("sampled total");
+  });
 });
