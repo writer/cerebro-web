@@ -1,4 +1,5 @@
-import type { ConnectorScopeOption } from "@/lib/connectors";
+import { connectorCoverageControlRefLabel } from "@/lib/connectors";
+import type { ConnectorCoverageControlRef, ConnectorScopeOption } from "@/lib/connectors";
 import type { GRCControl, GRCControlRef, GRCFinding, GRCFramework, GRCInventoryAsset, GRCInventoryTest } from "@/lib/grc";
 
 export type SupportedGRCFramework = {
@@ -447,6 +448,17 @@ const frameworkNameMatches = (candidate: string | undefined, segment: GRCFramewo
   );
 };
 
+const coverageControlRefMatches = (refs: ConnectorCoverageControlRef[] | undefined, query: string) => {
+  if (!refs?.length) {
+    return false;
+  }
+  return refs.some((ref) => controlMatchesFrameworkQuery({
+    framework_id: ref.framework_id,
+    framework_name: ref.framework_name || ref.framework_id || "",
+    control_id: ref.control_id,
+  }, query));
+};
+
 type FrameworkControlCandidate = GRCControl | GRCControlRef | GRCInventoryTest;
 
 const hasFrameworkQuery = (query: string) => normalizeFrameworkText(query).length > 0;
@@ -481,6 +493,9 @@ export const findingMatchesFrameworkSegment = (finding: GRCFinding, query: strin
   if ((finding.controls ?? []).some((control) => controlMatchesFrameworkQuery(control, query))) {
     return true;
   }
+  if ((finding.source_coverage_refs ?? []).some((coverage) => coverageControlRefMatches(coverage.matched_control_refs, query))) {
+    return true;
+  }
   return textContainsAny([
     finding.policy_id,
     finding.policy_name,
@@ -490,6 +505,23 @@ export const findingMatchesFrameworkSegment = (finding: GRCFinding, query: strin
     finding.entity,
     finding.resource_urns,
     finding.risk_reasons,
+    finding.evidence_type,
+    finding.assessment_methods,
+    finding.auditor_guidance,
+    finding.risk_statement,
+    finding.remediation_intent,
+    Object.keys(finding.attributes ?? {}),
+    Object.values(finding.attributes ?? {}),
+    (finding.source_coverage_refs ?? []).flatMap((coverage) => [
+      coverage.source_id,
+      coverage.dimension_id,
+      coverage.dimension_type,
+      coverage.support_level,
+      coverage.families,
+      coverage.evidence_types,
+      coverage.control_domains,
+      coverage.matched_control_refs?.map(connectorCoverageControlRefLabel),
+    ]),
     finding.title,
     finding.summary,
   ], segment ? segment.alertTerms : [query]);
@@ -529,6 +561,9 @@ export const connectorScopeOptionMatchesFrameworkSegment = (
   if (segment && sourceID && segment.sourceIDs.includes(normalizeFrameworkText(sourceID))) {
     return true;
   }
+  if (coverageControlRefMatches(option.control_refs, query)) {
+    return true;
+  }
   return textContainsAny([
     option.id,
     option.label,
@@ -537,5 +572,8 @@ export const connectorScopeOptionMatchesFrameworkSegment = (
     option.families,
     option.notes,
     option.known_unsupported_fields,
+    option.evidence_types,
+    option.control_domains,
+    option.control_refs?.map(connectorCoverageControlRefLabel),
   ], segment ? [...segment.connectorFamilies, ...segment.assetTerms, ...segment.sourceIDs] : [query]);
 };

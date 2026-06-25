@@ -72,6 +72,35 @@ export type ConnectorReadinessStage =
   | "runtime_required"
   | "runtime_unknown";
 
+export type ConnectorCoverageControlRef = {
+  framework_id?: string;
+  framework_name?: string;
+  control_id: string;
+};
+
+export type ConnectorCoverageDimension = {
+  id?: string;
+  dimension_id?: string;
+  type?: string;
+  dimension_type?: string;
+  title?: string;
+  label?: string;
+  families?: string[];
+  support?: string;
+  support_level?: string;
+  state?: string;
+  high_value?: boolean;
+  blind_spot?: boolean;
+  warning?: string;
+  known_unsupported_fields?: string[];
+  notes?: string[];
+  evidence_types?: string[];
+  control_domains?: string[];
+  control_refs?: ConnectorCoverageControlRef[];
+  matched_control_refs?: ConnectorCoverageControlRef[];
+  supported_runtime_families?: string[];
+};
+
 export type ConnectorIntegrationDepth = {
   level?: string;
   score?: number;
@@ -93,7 +122,7 @@ export type ConnectorCatalogResourceFamily = {
   event_kind?: string;
   schema_ref?: string;
   projection_template?: string;
-  coverage?: string[];
+  coverage?: Array<string | ConnectorCoverageDimension>;
   high_value?: boolean;
 };
 
@@ -277,6 +306,9 @@ export type ConnectorScopeOption = {
   high_value?: boolean;
   known_unsupported_fields?: string[];
   notes?: string[];
+  evidence_types?: string[];
+  control_domains?: string[];
+  control_refs?: ConnectorCoverageControlRef[];
 };
 
 export type ConnectorCredentialStoreID =
@@ -649,10 +681,7 @@ export type ConnectorDefinitionResourceFamily = {
   projection?: {
     template?: string;
   };
-  coverage?: Array<{
-    type?: string;
-    support?: string;
-  }>;
+  coverage?: ConnectorCoverageDimension[];
   event_kind?: string;
   default_enabled?: boolean;
 };
@@ -681,7 +710,15 @@ export type ConnectorDefinitionTransport = {
 export type ConnectorDefinitionScopeOption = {
   id?: string;
   label?: string;
+  type?: string;
   families?: string[];
+  support?: string;
+  high_value?: boolean;
+  known_unsupported_fields?: string[];
+  notes?: string[];
+  evidence_types?: string[];
+  control_domains?: string[];
+  control_refs?: ConnectorCoverageControlRef[];
   default_enabled?: boolean;
   permission_note?: string;
   needs_user_review?: boolean;
@@ -1707,11 +1744,64 @@ export const connectorSearchText = (connector: ConnectorCatalogEntry) =>
     connectorRuntimeSurfaceLabel(connector),
     ...(connector.emitted_kinds ?? []),
     ...(connector.catalog_categories ?? []),
-    ...(connector.resource_families ?? []).flatMap((family) => [family.id, family.label, family.path, family.event_kind]),
+    ...(connector.resource_families ?? []).flatMap((family) => [
+      family.id,
+      family.label,
+      family.path,
+      family.event_kind,
+      ...(family.coverage ?? []).flatMap(connectorCoverageSearchValues),
+    ]),
+    ...(connector.scope_options ?? []).flatMap(connectorScopeOptionSearchValues),
   ]
     .filter(Boolean)
     .join("\n")
     .toLowerCase();
+
+export const connectorCoverageControlRefLabel = (ref?: ConnectorCoverageControlRef) => {
+  if (!ref) return "";
+  return [ref.framework_name || ref.framework_id, ref.control_id].filter(Boolean).join(" ");
+};
+
+export const connectorCoverageSearchValues = (coverage: string | ConnectorCoverageDimension): string[] => {
+  if (typeof coverage === "string") return [coverage];
+  return [
+    coverage.id,
+    coverage.dimension_id,
+    coverage.type,
+    coverage.dimension_type,
+    coverage.title,
+    coverage.label,
+    coverage.support,
+    coverage.support_level,
+    coverage.state,
+    coverage.warning,
+    coverage.families,
+    coverage.known_unsupported_fields,
+    coverage.notes,
+    coverage.evidence_types,
+    coverage.control_domains,
+    coverage.supported_runtime_families,
+    coverage.control_refs?.map(connectorCoverageControlRefLabel),
+    coverage.matched_control_refs?.map(connectorCoverageControlRefLabel),
+  ]
+    .flat()
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+};
+
+export const connectorScopeOptionSearchValues = (option: ConnectorScopeOption | ConnectorDefinitionScopeOption): string[] => [
+  option.id,
+  option.label,
+  option.type,
+  option.support,
+  option.families,
+  option.known_unsupported_fields,
+  option.notes,
+  option.evidence_types,
+  option.control_domains,
+  option.control_refs?.map(connectorCoverageControlRefLabel),
+]
+  .flat()
+  .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 
 const knownCredentialStoreID = (value: string): value is ConnectorCredentialStoreID =>
   Object.prototype.hasOwnProperty.call(credentialStoreCatalog, value);

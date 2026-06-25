@@ -5,12 +5,13 @@ import { useParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 import AskAboutLink from "@/components/ask/AskAboutLink";
+import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
 import { useApiKey } from "@/components/providers";
 import GraphViewer from "@/components/grc/GraphViewer";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { pluralize } from "@/lib/format";
-import { displayDate, GRCAuditPacket, GRCEntityImpact, shortEntity } from "@/lib/grc";
+import { displayDate, GRCAuditPacket, GRCEntityImpact, humanize, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 
 type Tab = "overview" | "evidence" | "graph" | "timeline";
@@ -75,6 +76,110 @@ function ResourceURNsPanel({ urns }: { urns?: string[] }) {
             </Link>
           </div>
         ))}
+      </div>
+    </Panel>
+  );
+}
+
+const firstAttribute = (attributes: Record<string, string> | undefined, keys: string[]) => {
+  for (const key of keys) {
+    const value = attributes?.[key]?.trim();
+    if (value) return value;
+  }
+  return "";
+};
+
+const listFromValue = (value?: string | string[]) => {
+  if (Array.isArray(value)) return value.map((item) => item.trim()).filter(Boolean);
+  if (!value) return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  return trimmed
+    .split(/[,;|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+function AuditContextPanel({ finding }: { finding: GRCAuditPacket["finding"] }) {
+  const attributes = finding.attributes;
+  const evidenceType = finding.evidence_type || firstAttribute(attributes, ["policy_evidence_type", "evidence_type"]);
+  const assessmentMethods = [
+    ...listFromValue(finding.assessment_methods),
+    ...listFromValue(firstAttribute(attributes, ["policy_assessment_methods", "assessment_methods"])),
+  ];
+  const auditorGuidance = [
+    ...listFromValue(finding.auditor_guidance),
+    ...listFromValue(firstAttribute(attributes, ["policy_auditor_guidance", "auditor_guidance"])),
+  ];
+  const riskStatement = finding.risk_statement || firstAttribute(attributes, ["policy_risk_statement", "risk_statement"]);
+  const remediationIntent = finding.remediation_intent || firstAttribute(attributes, ["policy_remediation_intent", "remediation_intent"]);
+  const sourceCoverageRefs = finding.source_coverage_refs ?? [];
+  const hasContext = evidenceType || assessmentMethods.length > 0 || auditorGuidance.length > 0 || riskStatement || remediationIntent || sourceCoverageRefs.length > 0;
+
+  if (!hasContext) return null;
+
+  return (
+    <Panel title="Audit Context">
+      <div className="space-y-4">
+        {(evidenceType || assessmentMethods.length > 0) && (
+          <div className="flex flex-wrap gap-2">
+            {evidenceType && <Badge value={humanize(evidenceType)} />}
+            {assessmentMethods.map((method) => (
+              <span key={method} className="rounded-md bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                {humanize(method)}
+              </span>
+            ))}
+          </div>
+        )}
+        {(riskStatement || remediationIntent) && (
+          <div className="grid gap-3 md:grid-cols-2">
+            {riskStatement && (
+              <div className="rounded-md bg-slate-50 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Risk statement</div>
+                <div className="mt-1 text-[12px] leading-5 text-slate-700">{riskStatement}</div>
+              </div>
+            )}
+            {remediationIntent && (
+              <div className="rounded-md bg-slate-50 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Remediation intent</div>
+                <div className="mt-1 text-[12px] leading-5 text-slate-700">{remediationIntent}</div>
+              </div>
+            )}
+          </div>
+        )}
+        {auditorGuidance.length > 0 && (
+          <div className="rounded-md bg-slate-50 p-3">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Auditor guidance</div>
+            <ul className="mt-2 space-y-1">
+              {auditorGuidance.slice(0, 4).map((guidance) => (
+                <li key={guidance} className="text-[12px] leading-5 text-slate-700">{guidance}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {sourceCoverageRefs.length > 0 && (
+          <div>
+            <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">Source coverage</div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {sourceCoverageRefs.map((coverage, index) => (
+                <Link
+                  key={`${coverage.source_id}-${coverage.dimension_id}-${index}`}
+                  href={coverage.source_id ? `/connectors/${encodeURIComponent(coverage.source_id)}?tab=scope` : "/connectors"}
+                  className="rounded-md border border-slate-200 bg-white p-3 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+                >
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[12px] font-semibold text-slate-900">{coverage.dimension_id || coverage.dimension_type || "coverage"}</div>
+                      <div className="mt-0.5 font-mono text-[11px] text-slate-500">{coverage.source_id || "source"} · {coverage.dimension_type || "dimension"}</div>
+                    </div>
+                    {coverage.support_level && <Badge value={coverage.support_level} />}
+                  </div>
+                  <CoverageMetadata item={coverage} compact />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Panel>
   );
@@ -576,6 +681,8 @@ export default function FindingDetailPage() {
                   <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-indigo-600">Recommended Action</div>
                   {data.recommended_action}
                 </div>
+
+                <AuditContextPanel finding={finding} />
 
                 <RiskBreakdown finding={finding} />
 

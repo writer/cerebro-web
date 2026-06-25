@@ -12,7 +12,26 @@ export type GRCSummary = {
 
 export type GRCControlRef = {
   framework_name: string;
+  framework_id?: string;
   control_id: string;
+};
+
+export type GRCCoverageControlRef = {
+  framework_id?: string;
+  framework_name?: string;
+  control_id: string;
+};
+
+export type GRCFindingSourceCoverageRef = {
+  source_id?: string;
+  dimension_id?: string;
+  dimension_type?: string;
+  support_level?: string;
+  high_value?: boolean;
+  families?: string[];
+  evidence_types?: string[];
+  control_domains?: string[];
+  matched_control_refs?: GRCCoverageControlRef[];
 };
 
 export type GRCFindingNote = {
@@ -57,6 +76,13 @@ export type GRCFinding = {
   policy_id?: string;
   policy_name?: string;
   controls?: GRCControlRef[];
+  attributes?: Record<string, string>;
+  evidence_type?: string;
+  assessment_methods?: string[];
+  auditor_guidance?: string | string[];
+  risk_statement?: string;
+  remediation_intent?: string;
+  source_coverage_refs?: GRCFindingSourceCoverageRef[];
   risk_score?: number;
   likelihood_score?: number;
   impact_score?: number;
@@ -734,8 +760,45 @@ export type GRCSourceRuntimeHealthSummary = {
   graph_not_observed?: number;
 };
 
-export type GRCCoverageRecord = Record<string, unknown>;
-export type GRCCoverageSummary = Record<string, unknown>;
+export type GRCSourceCoverageRecord = {
+  source_id: string;
+  tenant_id?: string;
+  dimension_id: string;
+  dimension_type: string;
+  title?: string;
+  state?: string;
+  support_level?: string;
+  runtime_id?: string;
+  family?: string;
+  last_synced_at?: string;
+  owner_domain?: string;
+  authority_domain?: string;
+  high_value?: boolean;
+  blind_spot?: boolean;
+  warning?: string;
+  known_unsupported_fields?: string[];
+  notes?: string[];
+  evidence_types?: string[];
+  control_domains?: string[];
+  control_refs?: GRCCoverageControlRef[];
+  supported_runtime_families?: string[];
+};
+
+export type GRCSourceCoverageSummary = {
+  source_id: string;
+  total: number;
+  healthy: number;
+  partial: number;
+  unsupported: number;
+  unconfigured: number;
+  stale: number;
+  failed: number;
+  unknown: number;
+  blind_spots: number;
+};
+
+export type GRCCoverageRecord = GRCSourceCoverageRecord;
+export type GRCCoverageSummary = GRCSourceCoverageSummary;
 
 export type GRCProgramReadinessSummary = {
   status: string;

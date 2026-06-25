@@ -192,9 +192,32 @@ describe("connector catalog metadata", () => {
       verification_endpoint: "/users",
       catalog_categories: ["identity"],
       resource_families: [
-        { id: "users", label: "Users", path: "/users", event_kind: "auth0.users", high_value: true },
+        {
+          id: "users",
+          label: "Users",
+          path: "/users",
+          event_kind: "auth0.users",
+          high_value: true,
+          coverage: [{
+            id: "auth0.users.identity",
+            type: "app_entitlement",
+            title: "User entitlements",
+            support: "supported",
+            evidence_types: ["identity_configuration"],
+            control_domains: ["identity_and_access"],
+            control_refs: [{ framework_name: "SOC 2", control_id: "CC6.1" }],
+          }],
+        },
         { id: "roles", label: "Roles", path: "/roles", event_kind: "auth0.roles", high_value: true },
       ],
+      scope_options: [{
+        id: "auth0.users.identity",
+        label: "User entitlements",
+        type: "app_entitlement",
+        support: "supported",
+        evidence_types: ["identity_configuration"],
+        control_refs: [{ framework_name: "SOC 2", control_id: "CC6.1" }],
+      }],
     };
 
     expect(connectorCatalogStatusLabel(connector.catalog_status)).toBe("Runtime ready");
@@ -214,6 +237,8 @@ describe("connector catalog metadata", () => {
     expect(connectorSearchText(connector)).toContain("/roles");
     expect(connectorSearchText(connector)).toContain("sourcegen-ready");
     expect(connectorSearchText(connector)).toContain("catalog/identity.yaml");
+    expect(connectorSearchText(connector)).toContain("identity_configuration");
+    expect(connectorSearchText(connector)).toContain("soc 2 cc6.1");
   });
 
   it("treats advertised connection methods as a live runtime surface", () => {
