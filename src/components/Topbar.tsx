@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { API_BASE } from "@/lib/api";
-import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
+import { useApiKey, useCommandPalette, useCurrentUser, usePersonaLens, useTheme } from "@/components/providers";
 import { countLabel } from "@/lib/format";
 import type { GRCDashboard } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
@@ -49,6 +49,7 @@ export default function Topbar() {
   const { apiKey, setApiKey } = useApiKey();
   const { openCommandPalette } = useCommandPalette();
   const { error: userError, loading: userLoading, user } = useCurrentUser();
+  const { activeLens } = usePersonaLens();
   const { theme, toggleTheme } = useTheme();
   const [showKey, setShowKey] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
@@ -126,7 +127,7 @@ export default function Topbar() {
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-4 w-4 text-[var(--primary)]">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.091-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.091L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.091 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.091ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 0 0 2.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
           </svg>
-          <span className="truncate">Ask or search findings, controls, evidence...</span>
+          <span className="truncate">{activeLens.searchPlaceholder}</span>
           <kbd className="ml-auto rounded border border-[color:var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">⌘K</kbd>
         </button>
       </div>

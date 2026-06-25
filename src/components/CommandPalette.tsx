@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
-import { useCommandPalette } from "@/components/providers";
+import { useCommandPalette, usePersonaLens } from "@/components/providers";
 import { findSupportedGRCFramework, frameworkRouteSegment } from "@/lib/grc-frameworks";
 import { LiveSearchCommand, useLiveSearchCommands } from "@/lib/live-search";
 import { NavigationEntry, navigationEntries } from "@/lib/navigation";
+import { routeHrefsForLens, type PersonaLens } from "@/lib/persona-lenses";
 
-type CommandSection = NavigationEntry["section"] | LiveSearchCommand["section"];
+type CommandSection = NavigationEntry["section"] | LiveSearchCommand["section"] | "Focus";
 
 type Command = Omit<NavigationEntry, "section"> & {
   id: string;
@@ -20,6 +21,12 @@ type Command = Omit<NavigationEntry, "section"> & {
 
 const commandText = (command: Command) =>
   [command.label, command.description, command.href, command.section, ...command.keywords].join(" ").toLowerCase();
+
+const commandRankForLens = (lens: PersonaLens, href: string) => {
+  const hrefs = routeHrefsForLens(lens);
+  const index = hrefs.findIndex((route) => href === route || href.startsWith(`${route}/`) || href.startsWith(`${route}?`));
+  return index === -1 ? Number.POSITIVE_INFINITY : index;
+};
 
 const searchCommands = (query: string, askGraph: (question: string) => void): Command[] => {
   const trimmed = query.trim();
@@ -61,6 +68,7 @@ export default function CommandPalette() {
   const router = useRouter();
   const { openAgent } = useCerebroAgent();
   const { closeCommandPalette, isCommandPaletteOpen } = useCommandPalette();
+  const { activeLens } = usePersonaLens();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,11 +80,33 @@ export default function CommandPalette() {
   );
 
   const commands = useMemo<Command[]>(() => {
-    const base = navigationEntries.map((e) => ({ ...e, id: `nav:${e.href}` }));
+    const base = navigationEntries.map((entry) => {
+      const rank = commandRankForLens(activeLens, entry.href);
+      return {
+        ...entry,
+        id: `nav:${entry.href}`,
+        rank,
+        section: Number.isFinite(rank) ? "Focus" as const : entry.section,
+      };
+    });
     const q = query.trim().toLowerCase();
     const filtered = q ? base.filter((c) => commandText(c).includes(q)) : base;
-    return [...liveSearch.commands, ...searchCommands(query, askGraph), ...filtered];
-  }, [askGraph, liveSearch.commands, query]);
+    const generated = searchCommands(query, askGraph).map((command) => {
+      const rank = commandRankForLens(activeLens, command.href);
+      return {
+        ...command,
+        rank,
+        section: Number.isFinite(rank) ? "Focus" as const : command.section,
+      };
+    });
+    const orderedNavigation = filtered
+      .slice()
+      .sort((left, right) => {
+        const rankDiff = (left.rank ?? Number.POSITIVE_INFINITY) - (right.rank ?? Number.POSITIVE_INFINITY);
+        return rankDiff === 0 ? left.label.localeCompare(right.label) : rankDiff;
+      });
+    return [...liveSearch.commands, ...generated, ...orderedNavigation];
+  }, [activeLens, askGraph, liveSearch.commands, query]);
 
   useEffect(() => {
     if (!isCommandPaletteOpen) return;
@@ -122,7 +152,7 @@ export default function CommandPalette() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             onKeyDown={onInputKeyDown}
-            placeholder="Search findings, controls, evidence, connectors..."
+            placeholder={activeLens.searchPlaceholder}
             className="flex-1 border-0 bg-transparent text-[15px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
           />
           <kbd className="rounded border border-[color:var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">ESC</kbd>
