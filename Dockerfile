@@ -44,6 +44,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+RUN test -f server.js \
+  && test -d .next/static/chunks \
+  && find .next/static/chunks -maxdepth 1 -type f -name '*.js' -print -quit | grep -q .
+
 USER nextjs
 
 EXPOSE 3000
