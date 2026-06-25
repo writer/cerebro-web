@@ -11,11 +11,11 @@ describe("smoke-http helpers", () => {
     const html = `
       <script src="/_next/static/chunks/app.js" async></script>
       <script src="/_next/static/chunks/app.js" async></script>
-      <script src="https://example.test/_next/static/chunks/runtime.js?dpl=1"></script>
+      <script src="https://cerebro.example.com/_next/static/chunks/runtime.js?dpl=1"></script>
     `;
     expect(extractNextScriptSrcs(html)).toEqual([
       "/_next/static/chunks/app.js",
-      "https://example.test/_next/static/chunks/runtime.js?dpl=1",
+      "https://cerebro.example.com/_next/static/chunks/runtime.js?dpl=1",
     ]);
   });
 
@@ -27,7 +27,7 @@ describe("smoke-http helpers", () => {
   });
 
   it("resolves relative chunk URLs against a deployment base URL", () => {
-    expect(scriptUrlFor("https://cerebro.example.test/app/", "/_next/static/chunks/a.js"))
-      .toBe("https://cerebro.example.test/_next/static/chunks/a.js");
+    expect(scriptUrlFor("https://cerebro.example.com/app/", "/_next/static/chunks/a.js"))
+      .toBe("https://cerebro.example.com/_next/static/chunks/a.js");
   });
 });

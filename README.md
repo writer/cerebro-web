@@ -119,7 +119,7 @@ Useful focused checks:
 ```bash
 npm run doctor
 npm run smoke:standalone
-npm run smoke:deploy -- https://example-cerebro-web.invalid
+npm run smoke:deploy -- https://cerebro-web.example.com
 npm run sync:check
 ```
 
