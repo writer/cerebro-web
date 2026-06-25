@@ -243,6 +243,9 @@ export type GRCAuditProgram = {
   evidence_item_count?: number;
   resource_subject_count?: number;
   lineage_count?: number;
+  claim_record_count?: number;
+  evaluation_run_count?: number;
+  graph_path_count?: number;
   open_review_count: number;
 };
 
@@ -443,6 +446,14 @@ export type GRCFindingWorkflow = {
   runtime_id?: string;
   source_id?: string;
   rule_id?: string;
+  policy_id?: string;
+  policy_name?: string;
+  check_id?: string;
+  check_name?: string;
+  risk_score?: number;
+  risk_reasons?: string[];
+  due_at?: string;
+  status_reason?: string;
   control_ids?: string[];
   evidence_ids?: string[];
   evidence_packet_ids?: string[];
@@ -477,6 +488,47 @@ export type GRCEvidenceLineage = {
   control_ids?: string[];
 };
 
+export type GRCClaimRecord = {
+  id: string;
+  evidence_ids?: string[];
+  finding_ids?: string[];
+  control_ids?: string[];
+  evidence_packet_ids?: string[];
+};
+
+export type GRCEvaluationRun = {
+  id: string;
+  runtime_id?: string;
+  source_id?: string;
+  rule_ids?: string[];
+  evidence_ids?: string[];
+  finding_ids?: string[];
+  control_ids?: string[];
+  evidence_packet_ids?: string[];
+};
+
+export type GRCGraphEvidenceRecord = {
+  id: string;
+  evidence_id?: string;
+  finding_id?: string;
+  label?: string;
+  attributes?: Record<string, string>;
+  graph_path_ids?: string[];
+};
+
+export type GRCGraphPathRecord = {
+  id: string;
+  evidence_id?: string;
+  finding_id?: string;
+  from_urn?: string;
+  from_type?: string;
+  relation?: string;
+  to_urn?: string;
+  to_type?: string;
+  observed_at?: string;
+  attributes?: Record<string, string>;
+};
+
 export type GRCExceptionAcceptance = {
   id: string;
   control_id: string;
@@ -506,6 +558,9 @@ export type GRCAuditSnapshot = {
   evidence_item_count?: number;
   resource_subject_count?: number;
   lineage_count?: number;
+  claim_record_count?: number;
+  evaluation_run_count?: number;
+  graph_path_count?: number;
   open_review_count: number;
 };
 
@@ -525,6 +580,10 @@ export type GRCEvidencePacketsResponse = {
   finding_workflow?: GRCFindingWorkflow[];
   resource_subjects?: GRCResourceSubject[];
   evidence_lineage?: GRCEvidenceLineage[];
+  claim_records?: GRCClaimRecord[];
+  evaluation_runs?: GRCEvaluationRun[];
+  graph_evidence_rows?: GRCGraphEvidenceRecord[];
+  graph_path_records?: GRCGraphPathRecord[];
   exceptions_acceptances?: GRCExceptionAcceptance[];
   export_artifacts?: GRCEvidenceExportArtifact[];
   export: GRCEvidenceExport;

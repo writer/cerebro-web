@@ -55,7 +55,7 @@ export default function EvidencePage() {
   const isRefreshing = loading && Boolean(data);
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
-  const packagedMetricState: RuntimeState = packagedError ? "unavailable" : packagedLoading && !packagedData ? "loading" : "ready";
+  const packagedMetricState: RuntimeState = packagedError ? runtimeStateForError(packagedError) : packagedLoading && !packagedData ? "loading" : "ready";
   const evidenceView = useMemo(() => {
     const evidence = data?.evidence ?? [];
     const roots = new Set<string>();
@@ -218,8 +218,14 @@ export default function EvidencePage() {
           <MetricCard label="Lineage" value={packagedMetrics.lineage} detail={`${packagedMetrics.linkedLineage} fully linked`} state={packagedMetricState} />
           <MetricCard label="Resources" value={packagedMetrics.resources} detail="graph subjects" state={packagedMetricState} />
         </div>
-        {packagedError && !packagedData && <p className="text-[13px] text-slate-500">Packaged evidence records will appear when this endpoint is available.</p>}
-        {packagedData && !packagedError && (
+        <div className="grid gap-4 md:grid-cols-4">
+          <MetricCard label="Claims" value={packagedMetrics.claims} detail="assertion records" state={packagedMetricState} />
+          <MetricCard label="Runs" value={packagedMetrics.runs} detail="evaluation runs" state={packagedMetricState} />
+          <MetricCard label="Graph Paths" value={packagedMetrics.graphPaths} detail="relationship records" state={packagedMetricState} />
+          <MetricCard label="Exports" value={packagedData?.export_artifacts?.length ?? 0} detail="hashed artifacts" state={packagedMetricState} />
+        </div>
+        {packagedError && <p className="text-[13px] text-slate-500">{packagedData ? "Showing the last loaded packaged evidence records; refresh will update when the endpoint is reachable." : "Packaged evidence records will appear when this endpoint is available."}</p>}
+        {packagedData && (
           <div className="grid gap-4 xl:grid-cols-2">
             <WorklistTable
               title="Evidence requests"
@@ -366,14 +372,16 @@ export default function EvidencePage() {
 
 function StatusPill({ status }: { status?: string }) {
   const normalized = (status ?? "unknown").toLowerCase();
-  const tone =
-    normalized.includes("missing") || normalized.includes("fail") || normalized.includes("blocked")
-      ? "bg-red-50 text-red-700 ring-red-100"
-      : normalized.includes("stale") || normalized.includes("partial") || normalized.includes("manual")
-        ? "bg-amber-50 text-amber-700 ring-amber-100"
-        : normalized.includes("satisfied") || normalized.includes("strong") || normalized.includes("ready") || normalized.includes("passing")
-          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-          : "bg-slate-50 text-slate-600 ring-slate-100";
+  const blocked = new Set(["missing", "fail", "failed", "failing", "blocked", "rejected"]);
+  const attention = new Set(["stale", "partial", "manual", "needs_attention", "needs_review", "warning"]);
+  const ready = new Set(["satisfied", "strong", "ready", "passing", "pass", "accepted", "collected"]);
+  const tone = blocked.has(normalized)
+    ? "bg-red-50 text-red-700 ring-red-100"
+    : attention.has(normalized)
+      ? "bg-amber-50 text-amber-700 ring-amber-100"
+      : ready.has(normalized)
+        ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+        : "bg-slate-50 text-slate-600 ring-slate-100";
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${tone}`}>{status || "unknown"}</span>;
 }
 

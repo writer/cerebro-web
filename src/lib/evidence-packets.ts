@@ -13,6 +13,9 @@ export type EvidencePacketMetrics = {
   evidenceItems: number;
   resources: number;
   lineage: number;
+  claims: number;
+  runs: number;
+  graphPaths: number;
   collectedSources: number;
   linkedLineage: number;
 };
@@ -30,11 +33,14 @@ export const evidencePacketMetrics = (response?: GRCEvidencePacketsResponse | nu
     openReviews: response?.program?.open_review_count ?? 0,
     missingRequests: requests.filter((request) => request.status === "missing").length,
     staleRequests: requests.filter((request) => request.status === "stale").length,
-    readyPackets: packets.filter((packet) => packet.review?.status === "ready").length,
+    readyPackets: packets.filter((packet) => ["ready", "satisfied", "passing"].includes((packet.status ?? "").toLowerCase())).length,
     sources: sources.length,
     evidenceItems: response?.evidence_items?.length ?? 0,
     resources: response?.resource_subjects?.length ?? 0,
     lineage: lineage.length,
+    claims: response?.claim_records?.length ?? 0,
+    runs: response?.evaluation_runs?.length ?? 0,
+    graphPaths: response?.graph_path_records?.length ?? 0,
     collectedSources: sources.filter((source) => source.status === "collected").length,
     linkedLineage: lineage.filter((item) => (item.evidence_packet_ids?.length ?? 0) > 0 && (item.control_ids?.length ?? 0) > 0).length,
   };

@@ -15,12 +15,15 @@ describe("evidencePacketMetrics", () => {
         { id: "request-3", status: "satisfied" },
       ],
       evidence_packets: [
-        { id: "packet-1", review: { status: "ready" } },
-        { id: "packet-2", review: { status: "needs_review" } },
+        { id: "packet-1", status: "satisfied", review: { status: "ready" } },
+        { id: "packet-2", status: "missing", review: { status: "needs_review" } },
       ],
       collection_sources: [{ id: "source-1", status: "collected" }],
       evidence_items: [{ id: "evidence-1" }],
       resource_subjects: [{ id: "resource-1" }],
+      claim_records: [{ id: "claim-1" }],
+      evaluation_runs: [{ id: "run-1" }],
+      graph_path_records: [{ id: "path-1" }],
       evidence_lineage: [
         { id: "lineage-1", control_ids: ["control-1"], evidence_packet_ids: ["packet-1"] },
         { id: "lineage-2", control_ids: [], evidence_packet_ids: ["packet-2"] },
@@ -40,6 +43,9 @@ describe("evidencePacketMetrics", () => {
       evidenceItems: 1,
       resources: 1,
       lineage: 2,
+      claims: 1,
+      runs: 1,
+      graphPaths: 1,
       collectedSources: 1,
       linkedLineage: 1,
     });
