@@ -111,6 +111,26 @@ describe("supported GRC frameworks", () => {
       owner: "identity",
       sla_status: "active",
     }, "SOC 2")).toBe(true);
+
+    expect(findingMatchesFrameworkSegment({
+      id: "finding-4",
+      title: "Coverage metadata only",
+      severity: "MEDIUM",
+      status: "open",
+      source_id: "custom_source",
+      source_coverage_refs: [{
+        source_id: "custom_source",
+        dimension_id: "custom_source.users",
+        dimension_type: "app_entitlement",
+        support_level: "partial",
+        families: ["users"],
+        evidence_types: ["identity_configuration"],
+        control_domains: ["identity_access"],
+      }],
+      evidence_count: 0,
+      owner: "identity",
+      sla_status: "active",
+    }, "identity configuration")).toBe(true);
   });
 
   it("maps framework segmentation onto inventory assets", () => {
