@@ -12,6 +12,7 @@ import { countLabel } from "@/lib/format";
 import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCSourceCoverageRecord, GRCSourceCoverageSummary, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
+import { buildGRCProductAreaViews, hasGRCProductAreaContext, type GRCProductAreaView } from "@/lib/grc-product-areas";
 import { hasTrendActivity } from "@/lib/trends";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
@@ -131,6 +132,64 @@ function CoverageBlindSpotsPanel({
   );
 }
 
+function ProductAreaMap({ areas }: { areas: GRCProductAreaView[] }) {
+  if (!hasGRCProductAreaContext(areas)) return null;
+
+  const sortedAreas = areas.slice().sort((left, right) => {
+    const priority = { attention: 0, mapped: 1, quiet: 2 };
+    const diff = priority[left.status] - priority[right.status];
+    return diff === 0 ? left.title.localeCompare(right.title) : diff;
+  });
+  const statusClass: Record<GRCProductAreaView["status"], string> = {
+    attention: "border-amber-200 bg-amber-50 text-amber-900",
+    mapped: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    quiet: "border-slate-200 bg-slate-50 text-slate-600",
+  };
+
+  return (
+    <Panel
+      title="Product Areas"
+      action={<Link href="/connectors?source_id=grc" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Source coverage</Link>}
+    >
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {sortedAreas.map((area) => (
+          <Link
+            key={area.id}
+            href={area.href}
+            className="rounded-lg border border-slate-200 bg-white p-3 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-slate-900">{area.title}</div>
+                <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-500">{area.description}</div>
+              </div>
+              <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusClass[area.status]}`}>
+                {area.signal}
+              </span>
+            </div>
+            <div className="mt-3 text-[12px] font-medium text-slate-700">{area.detail}</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {area.sourceFamilies.slice(0, 4).map((family) => (
+                <span key={family} className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+                  {family}
+                </span>
+              ))}
+              {area.sourceFamilies.length > 4 && (
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">+{area.sourceFamilies.length - 4}</span>
+              )}
+            </div>
+            {area.blindSpots.length > 0 && (
+              <div className="mt-3 border-t border-amber-100 pt-2 text-[11px] text-amber-800">
+                {area.blindSpots.slice(0, 2).map((record) => record.title || humanize(record.dimension_id)).join(", ")}
+              </div>
+            )}
+          </Link>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
@@ -181,6 +240,7 @@ export default function Home() {
     ? ((summary.connectors - summary.stale_connectors) / summary.connectors) * 100
     : 100;
   const recentEvidence = evidenceQuery.data?.evidence ?? [];
+  const productAreas = buildGRCProductAreaViews({ coverageBlindSpots, summary });
 
   const reload = () => {
     void dashboard.reload();
@@ -292,6 +352,8 @@ export default function Home() {
             <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
             <ProgressCard title="Connector Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
           </div>
+
+          <ProductAreaMap areas={productAreas} />
 
           <CoverageBlindSpotsPanel records={coverageBlindSpots} summaries={coverageSummaries} />
 
