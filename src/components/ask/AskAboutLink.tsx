@@ -1,10 +1,13 @@
 "use client";
 
 import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
+import type { AskAgentContext, AskAgentContextChip } from "@/lib/ask";
 
 type Props = {
   question: string;
   scopeUrn?: string;
+  context?: AskAgentContext;
+  chips?: AskAgentContextChip[];
   variant?: "link" | "button";
   className?: string;
   title?: string;
@@ -20,6 +23,8 @@ const baseButton =
 export default function AskAboutLink({
   question,
   scopeUrn,
+  context,
+  chips,
   variant = "link",
   className,
   title,
@@ -28,6 +33,16 @@ export default function AskAboutLink({
   const { openAgent } = useCerebroAgent();
   const cls =
     className ?? (variant === "button" ? baseButton : baseLink);
+  const askContext = {
+    ...(context ?? {}),
+    scopeUrn: scopeUrn ?? context?.scopeUrn,
+    entityUrn: context?.entityUrn ?? scopeUrn ?? context?.scopeUrn,
+    chips: [
+      ...(context?.chips ?? []),
+      ...(chips ?? []),
+      scopeUrn ? { label: "Scope", value: scopeUrn } : null,
+    ].filter(Boolean) as AskAgentContextChip[],
+  };
   return (
     <button
       type="button"
@@ -37,13 +52,7 @@ export default function AskAboutLink({
         openAgent({
           question,
           scopeUrn,
-          context: scopeUrn
-            ? {
-                scopeUrn,
-                entityUrn: scopeUrn,
-                chips: [{ label: "Scope", value: scopeUrn }],
-              }
-            : undefined,
+          context: Object.keys(askContext).length > 0 ? askContext : undefined,
           autoSubmit: true,
         })
       }
