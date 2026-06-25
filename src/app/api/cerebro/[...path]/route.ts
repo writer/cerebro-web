@@ -17,6 +17,7 @@ import {
   withCerebroCacheBypassHeader,
   writeCerebroProxyCache,
 } from "@/lib/cerebro-proxy";
+import { cerebroFixtureResponseFor } from "@/lib/cerebro-fixtures";
 import { normalizeAskModel } from "@/lib/ask";
 import {
   authorizationErrorResponse,
@@ -57,6 +58,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
+  const fixture = tracedFixtureResponse("GET", path, request, span);
+  if (fixture) {
+    return fixture;
+  }
   const target = buildCerebroUrl(path, url.search);
   const authHeaders = authHeadersFor(request);
   const bypassCache = shouldBypassCerebroProxyCache(request.headers);
@@ -206,7 +211,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
-  const target = buildCerebroUrl(path, url.search);
   let body = requestBody;
   const currentActor = currentUserActor(currentUser);
   const acceptsEventStream = (request.headers.get("accept") ?? "").includes("text/event-stream");
@@ -219,6 +223,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     body = normalizeAskRequestBody(body);
   }
   body = stampCurrentUserOnWriteBody(body, normalizedPath, currentActor);
+  const fixture = tracedFixtureResponse("POST", path, request, span, body);
+  if (fixture) {
+    return fixture;
+  }
+  const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
     "content-type": request.headers.get("content-type") ?? "application/json",
@@ -291,13 +300,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
-  const target = buildCerebroUrl(path, url.search);
   let body = requestBody;
   body = stampCurrentUserOnWriteBody(
     body,
     normalizedPath,
     currentUserActor(currentUser),
   );
+  const fixture = tracedFixtureResponse("PATCH", path, request, span, body);
+  if (fixture) {
+    return fixture;
+  }
+  const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
     "content-type": request.headers.get("content-type") ?? "application/json",
@@ -348,12 +361,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
-  const target = buildCerebroUrl(path, url.search);
   const body = stampCurrentUserOnWriteBody(
     requestBody,
     normalizedPath,
     currentUserActor(currentUser),
   );
+  const fixture = tracedFixtureResponse("PUT", path, request, span, body);
+  if (fixture) {
+    return fixture;
+  }
+  const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
     "content-type": request.headers.get("content-type") ?? "application/json",
@@ -403,6 +420,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
+  const fixture = tracedFixtureResponse("DELETE", path, request, span);
+  if (fixture) {
+    return fixture;
+  }
   const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
@@ -442,6 +463,33 @@ function normalizeAskRequestBody(body: string): string {
   } catch {
     return body;
   }
+}
+
+function tracedFixtureResponse(method: string, path: string, request: NextRequest, span: WebSpan, body?: string) {
+  const url = new URL(request.url);
+  const fixture = cerebroFixtureResponseFor({
+    method,
+    path,
+    searchParams: url.searchParams,
+    body,
+  });
+  if (!fixture) {
+    return null;
+  }
+  span.increment("proxy.fixture.count");
+  span.end(fixture.status >= 500 ? "failed" : "completed", {
+    cache_state: "fixture",
+    fixture_mode: true,
+    "http.response.status_code": fixture.status,
+    ...responseSpanAttributes(fixture.status, fixture.headers, fixture.body),
+  });
+  return new NextResponse(fixture.body, {
+    status: fixture.status,
+    headers: responseHeadersWithTrace({
+      ...fixture.headers,
+      "x-cerebro-cache": "fixture",
+    }, span),
+  });
 }
 
 function proxySpanAttributes(method: string, path: string, request: NextRequest, body?: string) {

@@ -13,11 +13,13 @@ import { grcBrowserRouteContracts } from "./grc-route-contract.mjs";
 const args = new Set(process.argv.slice(2));
 const withBrowser = args.has("--browser") || process.env.CEREBRO_GRC_E2E_BROWSER === "1";
 const keepServices = args.has("--keep") || process.env.CEREBRO_GRC_E2E_KEEP === "1";
+const retainArtifacts = args.has("--artifacts") || process.env.CEREBRO_GRC_E2E_RETAIN_ARTIFACTS === "1";
 const useAgentBrowser = args.has("--agent-browser") || process.env.CEREBRO_GRC_E2E_BROWSER_PROVIDER === "agent-browser";
 const browserProvider = useAgentBrowser ? "agent-browser" : "playwright";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDir, "..");
 const backendRoot = path.resolve(process.env.CEREBRO_REPO ?? path.join(webRoot, "..", "cerebro"));
+const artifactRoot = process.env.CEREBRO_GRC_E2E_ARTIFACT_DIR?.trim();
 const pgPort = Number(process.env.CEREBRO_GRC_E2E_POSTGRES_PORT ?? "15432");
 const neo4jPort = Number(process.env.CEREBRO_GRC_E2E_NEO4J_PORT ?? "17687");
 const apiPort = Number(process.env.CEREBRO_GRC_E2E_API_PORT ?? "18080");
@@ -50,6 +52,7 @@ let backendProcess = null;
 let webProcess = null;
 let browserUsed = false;
 let neo4jStopped = false;
+const startedAt = new Date().toISOString();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const step = (message) => console.log(`\n[grc-e2e] ${message}`);
@@ -60,7 +63,13 @@ const expect = (condition, message) => {
 };
 
 async function main() {
-  workDir = await mkdtemp(path.join(os.tmpdir(), "cerebro-grc-e2e-"));
+  if (artifactRoot) {
+    workDir = path.resolve(artifactRoot);
+    await rm(workDir, { recursive: true, force: true });
+    await mkdir(workDir, { recursive: true });
+  } else {
+    workDir = await mkdtemp(path.join(os.tmpdir(), "cerebro-grc-e2e-"));
+  }
   logDir = path.join(workDir, "logs");
   await mkdir(logDir, { recursive: true });
   process.on("SIGINT", () => void shutdown(130));
@@ -525,11 +534,33 @@ async function cleanup() {
     detachChild(backendProcess);
     console.log(`[grc-e2e] keeping local services; logs: ${logDir}`);
   }
-  if (!failed && !keepServices && workDir) {
+  await writeSummary();
+  if (!failed && !keepServices && !retainArtifacts && workDir) {
     await rm(workDir, { recursive: true, force: true });
   } else if (workDir) {
     console.log(`[grc-e2e] retained work dir: ${workDir}`);
   }
+}
+
+async function writeSummary() {
+  if (!workDir) {
+    return;
+  }
+  const summary = {
+    status: failed ? "failed" : "passed",
+    started_at: startedAt,
+    completed_at: new Date().toISOString(),
+    tenant_id: tenantID,
+    web_base: webBase,
+    api_base: apiBase,
+    backend_root: backendRoot,
+    work_dir: workDir,
+    log_dir: logDir,
+    browser_requested: withBrowser,
+    browser_provider: browserProvider,
+    artifacts_retained: failed || keepServices || retainArtifacts,
+  };
+  await writeFile(path.join(workDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`).catch(() => undefined);
 }
 
 function detachChild(child) {

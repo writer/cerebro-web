@@ -28,6 +28,7 @@ Application changes should land here first and then be promoted to `WriterIntern
 | --- | --- |
 | `NEXT_PUBLIC_CEREBRO_API_BASE` | Browser-visible API base URL. Defaults to `http://localhost:8080`. |
 | `CEREBRO_API_BASE` | Server-side proxy API base URL override. |
+| `CEREBRO_WEB_FIXTURE_MODE` | Set to `1` to serve public placeholder fixtures from `/api/cerebro/*` for backend-free local UI work. |
 | `CEREBRO_API_KEY`, `CEREBRO_API_TOKEN`, `CEREBRO_X_API_KEY`, `CEREBRO_API_KEYS` | Server-side API key configuration. |
 | `CEREBRO_BEARER_TOKEN` | Server-side bearer token configuration. |
 | `CEREBRO_FORWARD_AUTH_HEADERS` | Set to `true` to forward request auth headers instead of server-side credentials. |
@@ -84,10 +85,13 @@ npm run test -- src/lib/observability.test.ts src/lib/cerebro-proxy.test.ts
 
 ```bash
 npm install
-npm run dev
+npm run doctor
+npm run dev:fixtures
 ```
 
 Open `http://localhost:3000`.
+
+`dev:fixtures` runs the full Next.js app against deterministic public placeholder data. It is the fastest path for UI, navigation, proxy, and state work when a Cerebro API is not running locally.
 
 To point the app at a local Cerebro runtime:
 
@@ -95,21 +99,44 @@ To point the app at a local Cerebro runtime:
 npm run dev:local:cerebro
 ```
 
+To run the default Next.js dev server without fixture or local API defaults:
+
+```bash
+npm run dev
+```
+
 ## Validation
 
 ```bash
-npm test
-npm run lint
-npm run build
+npm run verify:fast
+npm run verify:build
 npm run oss:audit
 npm run audit:high
 ```
 
-Optional local end-to-end validation:
+Useful focused checks:
 
 ```bash
-npm run e2e:grc:local
+npm run doctor
+npm run smoke:standalone
+npm run smoke:deploy -- https://cerebro-web.example.com
+npm run sync:check
 ```
+
+`smoke:standalone` builds and starts `.next/standalone/server.js` with fixture mode, then verifies `/api/health`, `/`, and the referenced `/_next/static/*.js` chunks return executable JavaScript MIME types. Use `-- --skip-build` after a fresh `npm run build`.
+
+`smoke:deploy` performs the same HTTP checks against an already deployed base URL. It is intentionally generic; keep environment-specific URLs and credentials outside this public repo.
+
+`sync:check` compares public-safe application paths between `origin/main` and `internal/main` when both refs are available. It skips cleanly when the private mirror remote is not configured.
+
+Optional local end-to-end and image validation:
+
+```bash
+npm run verify:e2e
+npm run verify:docker
+```
+
+Local GRC E2E writes logs, screenshots, and `summary.json` under `/tmp/cerebro-grc-e2e-*` on failure. Pass `-- --artifacts` or set `CEREBRO_GRC_E2E_RETAIN_ARTIFACTS=1` to keep them for successful runs too.
 
 Optional Ask evaluation checks:
 
@@ -117,6 +144,14 @@ Optional Ask evaluation checks:
 npm run eval:ask:local
 npm run eval:ask:adversarial
 ```
+
+## Release Runbook
+
+1. Develop against fixtures first: `npm run doctor` and `npm run dev:fixtures`.
+2. Before opening a PR, run `npm run verify:fast` and `npm run verify:build`.
+3. For proxy, routing, Docker, or runtime-sensitive changes, add `npm run verify:e2e` and `npm run verify:docker`.
+4. After deployment, run `npm run smoke:deploy -- <base-url>` from a context that can reach the target environment.
+5. Promote app changes from `writer/cerebro-web` to the private mirror, then run `npm run sync:check` where the `internal` remote is available.
 
 ## Security
 

@@ -9,7 +9,10 @@ export const ZERO_SHA = "0000000000000000000000000000000000000000";
 const e2eRelevantPatterns = [
   /^src\/.+/,
   /^public\/.+/,
+  /^scripts\/grc-route-contract\.mjs$/,
   /^scripts\/local-grc-e2e\.mjs$/,
+  /^scripts\/prepare-standalone\.mjs$/,
+  /^scripts\/smoke-(?:docker|http|standalone)\.mjs$/,
   /^package(?:-lock)?\.json$/,
   /^next\.config\.ts$/,
   /^tsconfig\.json$/,
@@ -20,6 +23,8 @@ const e2eRelevantPatterns = [
 const dockerRelevantPatterns = [
   /^src\/.+/,
   /^public\/.+/,
+  /^scripts\/prepare-standalone\.mjs$/,
+  /^scripts\/smoke-(?:docker|http)\.mjs$/,
   /^package(?:-lock)?\.json$/,
   /^next\.config\.ts$/,
   /^Dockerfile$/,
