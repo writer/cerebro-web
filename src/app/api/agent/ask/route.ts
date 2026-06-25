@@ -455,9 +455,25 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
   const findingId = payload.context?.findingId;
   const route = payload.context?.route ?? "";
   const scopedUrn = payload.scope_urn ?? payload.context?.scopeUrn ?? payload.context?.resourceUrn ?? payload.context?.entityUrn;
+  const aperioFindingID = contextString(payload.context, "aperio_finding_id");
+  const aperioIncidentID = contextString(payload.context, "aperio_incident_id");
+  const oauthAppID = contextString(payload.context, "oauth_app_id");
+  const oauthGrantID = contextString(payload.context, "oauth_grant_id");
   const hints = [
     findingId
       ? `- For this finding-scoped request, call cerebro.investigation.context first with finding_id="${findingId}" and compact=true unless the user explicitly asks for raw evidence.`
+      : "",
+    aperioFindingID || aperioIncidentID
+      ? `- This request carries Aperio lifecycle context (${[
+          aperioFindingID ? `aperio_finding_id=${aperioFindingID}` : "",
+          aperioIncidentID ? `aperio_incident_id=${aperioIncidentID}` : "",
+        ].filter(Boolean).join(", ")}). Preserve Aperio as the workflow owner when explaining status or next actions.`
+      : "",
+    oauthAppID || oauthGrantID
+      ? `- For OAuth risk questions, prioritize grant, app, user, scope, and resource-family relationships before generic asset search (${[
+          oauthAppID ? `oauth_app_id=${oauthAppID}` : "",
+          oauthGrantID ? `oauth_grant_id=${oauthGrantID}` : "",
+        ].filter(Boolean).join(", ")}).`
       : "",
     route.includes("risk") || route.includes("dashboard") || route.includes("inbox")
       ? "- For risk dashboard or inbox questions without a specific finding, start with cerebro.risk.summary before broad finding search."
@@ -467,6 +483,11 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
       : "",
   ].filter(Boolean);
   return hints.length ? hints.join("\n") : "- Start with the narrowest MCP tool that matches the current page context before broad search.";
+};
+
+const contextString = (context: AskAgentContext | undefined, key: string) => {
+  const value = context?.[key];
+  return typeof value === "string" ? value.trim() : "";
 };
 
 const buildAgentInput = (payload: NormalizedAgentRequest) => {

@@ -641,6 +641,26 @@ export default function FindingDetailPage() {
                 question={`Which entities are affected by ${finding.title} and what should be reviewed first?`}
                 scopeUrn={finding.entity}
                 title="Ask about this finding"
+                context={{
+                  route: `/findings/${encodeURIComponent(finding.id)}`,
+                  routeLabel: "Finding Detail",
+                  title: finding.title,
+                  findingId: finding.id,
+                  rule_id: finding.rule_id,
+                  runtime_id: finding.runtime_id,
+                  source_id: finding.source_id,
+                  severity: finding.severity,
+                  status: finding.status,
+                  aperio_finding_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "finding")?.external_id,
+                  aperio_incident_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "incident")?.external_id,
+                  oauth_app_id: finding.attributes?.oauthAppId ?? finding.attributes?.oauth_app_id,
+                  oauth_grant_id: finding.attributes?.oauthGrantId ?? finding.attributes?.oauth_grant_id,
+                  chips: [
+                    { label: "Finding", value: finding.id },
+                    finding.rule_id ? { label: "Rule", value: finding.rule_id } : null,
+                    finding.source_id ? { label: "Source", value: finding.source_id } : null,
+                  ].filter(Boolean) as { label: string; value: string }[],
+                }}
               >
                 Ask
               </AskAboutLink>
