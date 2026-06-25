@@ -57,16 +57,10 @@ const searchCommands = (query: string, askGraph: (question: string) => void): Co
   ];
 };
 
-const isEditableTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
-};
-
 export default function CommandPalette() {
   const router = useRouter();
   const { openAgent } = useCerebroAgent();
-  const { closeCommandPalette, isCommandPaletteOpen, openCommandPalette } = useCommandPalette();
+  const { closeCommandPalette, isCommandPaletteOpen } = useCommandPalette();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,21 +77,6 @@ export default function CommandPalette() {
     const filtered = q ? base.filter((c) => commandText(c).includes(q)) : base;
     return [...liveSearch.commands, ...searchCommands(query, askGraph), ...filtered];
   }, [askGraph, liveSearch.commands, query]);
-
-  useEffect(() => {
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        openCommandPalette();
-      }
-      if (event.key === "/" && !isEditableTarget(event.target)) {
-        event.preventDefault();
-        openCommandPalette();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [openCommandPalette]);
 
   useEffect(() => {
     if (!isCommandPaletteOpen) return;
