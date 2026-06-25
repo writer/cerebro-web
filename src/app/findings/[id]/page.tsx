@@ -12,7 +12,7 @@ import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBad
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { pluralize } from "@/lib/format";
 import { displayDate, GRCAuditPacket, GRCEntityImpact, humanize, shortEntity } from "@/lib/grc";
-import { grcPath, useGRCQuery } from "@/lib/grc-client";
+import { grcEntityImpactPath, useGRCQuery } from "@/lib/grc-client";
 
 type Tab = "overview" | "evidence" | "graph" | "timeline";
 type FindingActionKey = "assign" | "due" | "note" | "ticket" | "resolve" | "suppress";
@@ -495,7 +495,7 @@ export default function FindingDetailPage() {
 
   const entityURN = data?.finding?.entity;
   const { data: impactData } = useGRCQuery<GRCEntityImpact>(
-    entityURN && tab === "graph" ? grcPath(`/grc/entities/${encodeURIComponent(entityURN)}/impact`, { limit: "50" }) : null,
+    entityURN && tab === "graph" ? grcEntityImpactPath(entityURN, { limit: "50" }) : null,
   );
 
   const finding = data?.finding;
