@@ -147,7 +147,7 @@ describe("GRC product areas", () => {
     });
   });
 
-  it("prefers backend product areas over local fallback derivation", () => {
+  it("merges partial backend product areas over local fallback derivation", () => {
     const views = resolveGRCProductAreaViews({
       coverageBlindSpots: [coverageRecord({ dimension_id: "vendor_risk_attributes" })],
       productAreas: [
@@ -163,9 +163,12 @@ describe("GRC product areas", () => {
       summary,
     });
 
-    expect(views).toHaveLength(1);
-    expect(views[0]?.id).toBe("compliance");
-    expect(views[0]?.status).toBe("quiet");
+    expect(views).toHaveLength(grcProductAreas.length);
+    expect(views.find((area) => area.id === "compliance")?.status).toBe("quiet");
+    expect(views.find((area) => area.id === "vendors")).toMatchObject({
+      blindSpots: [expect.objectContaining({ dimension_id: "vendor_risk_attributes" })],
+      status: "attention",
+    });
   });
 
   it("backfills backend product areas from top-level blind spots during rollout", () => {
@@ -186,7 +189,7 @@ describe("GRC product areas", () => {
       summary,
     });
 
-    expect(views[0]).toMatchObject({
+    expect(views.find((area) => area.id === "vendors")).toMatchObject({
       blindSpots: [expect.objectContaining({ dimension_id: "vendor_risk_attributes" })],
       detail: "1 coverage gap",
       signal: "1 gap",
@@ -214,6 +217,6 @@ describe("GRC product areas", () => {
       summary,
     });
 
-    expect(views[0]?.blindSpots).toHaveLength(1);
+    expect(views.find((area) => area.id === "vendors")?.blindSpots).toHaveLength(1);
   });
 });

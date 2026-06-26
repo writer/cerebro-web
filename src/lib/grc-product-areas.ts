@@ -181,8 +181,11 @@ export function resolveGRCProductAreaViews({
   summary?: GRCSummary | null;
 }) {
   const normalized = normalizeGRCProductAreaViews(productAreas);
-  if (normalized.length > 0) return backfillGRCProductAreaBlindSpots(normalized, coverageBlindSpots);
-  return buildGRCProductAreaViews({ coverageBlindSpots, summary });
+  const fallback = buildGRCProductAreaViews({ coverageBlindSpots, summary });
+  if (normalized.length > 0) {
+    return backfillGRCProductAreaBlindSpots(mergeBackendProductAreas(normalized, fallback), coverageBlindSpots);
+  }
+  return fallback;
 }
 
 export function buildGRCProductAreaViews({
@@ -284,6 +287,15 @@ function backfillGRCProductAreaBlindSpots(areas: GRCProductAreaView[], coverageB
       status,
     };
   });
+}
+
+function mergeBackendProductAreas(backendAreas: GRCProductAreaView[], fallbackAreas: GRCProductAreaView[]) {
+  const backendByID = new Map(backendAreas.map((area) => [area.id, area]));
+  const fallbackIDs = new Set(fallbackAreas.map((area) => area.id));
+  return [
+    ...fallbackAreas.map((area) => backendByID.get(area.id) ?? area),
+    ...backendAreas.filter((area) => !fallbackIDs.has(area.id)),
+  ];
 }
 
 function coverageRecordKey(record: GRCCoverageRecord) {
