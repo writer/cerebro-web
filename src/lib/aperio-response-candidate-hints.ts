@@ -1,4 +1,4 @@
-import { defaultSecurityProducers } from "./security-producers";
+import { securityProducers } from "./security-producers";
 
 const APERIO_PROPOSAL_ACTION_OVERRIDES: Record<string, string> = {
   // Web keeps provider-specific candidate IDs for runtime routing, while Aperio's MCP catalog
@@ -7,7 +7,7 @@ const APERIO_PROPOSAL_ACTION_OVERRIDES: Record<string, string> = {
   REVOKE_GITHUB_OAUTH_APP: "QUARANTINE_APP",
 };
 
-const aperioProducer = defaultSecurityProducers.find((producer) => producer.id === "aperio");
+const aperioProducer = securityProducers.find((producer) => producer.id === "aperio");
 const aperioResponseActionsByID = new Map(
   (aperioProducer?.responseActions ?? []).map((action) => [action.id, action]),
 );
