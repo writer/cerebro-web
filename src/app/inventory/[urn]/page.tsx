@@ -24,6 +24,7 @@ import {
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 import { controlMatchesFrameworkSegment, frameworkOptionLabel, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { inventoryAccountability, inventoryReviewDetail, inventoryReviewLabel, inventoryReviewState } from "@/lib/inventory-review";
+import { inventoryAssetSurface } from "@/lib/inventory-surface";
 
 type Tab = "overview" | "vulnerabilities" | "tests" | "framework" | "reports" | "timeline";
 
@@ -70,10 +71,8 @@ const scopeState = (asset: GRCInventoryAsset) => asset.scope_state || "in_scope"
 
 const scopeCopy = (state: string) => state === "out_of_scope" ? "Scoped out" : "In scope";
 
-const inventorySurface = (asset?: GRCInventoryAsset) => asset?.surface || "asset";
-
 const surfaceLabel = (asset?: GRCInventoryAsset) => {
-  switch (inventorySurface(asset)) {
+  switch (inventoryAssetSurface(asset)) {
     case "component":
       return "Component";
     case "signal":
@@ -87,9 +86,9 @@ const surfaceLabel = (asset?: GRCInventoryAsset) => {
   }
 };
 
-const recordNoun = (asset?: GRCInventoryAsset) => inventorySurface(asset) === "asset" ? "asset" : "record";
+const recordNoun = (asset?: GRCInventoryAsset) => inventoryAssetSurface(asset) === "asset" ? "asset" : "record";
 
-const isReviewableAsset = (asset?: GRCInventoryAsset) => inventorySurface(asset) === "asset";
+const isReviewableAsset = (asset?: GRCInventoryAsset) => inventoryAssetSurface(asset) === "asset";
 
 const reportStatuses = ["submitted", "in_triage", "accepted", "rejected", "resolved"];
 
