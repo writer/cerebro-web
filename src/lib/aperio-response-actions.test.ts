@@ -76,7 +76,7 @@ describe("aperio response action helpers", () => {
     ]);
   });
 
-  it("returns distinct Slack and GitHub OAuth response candidates", () => {
+  it("returns the shared Aperio quarantine proposal action for Slack and GitHub OAuth findings", () => {
     const baseFinding = {
       source_id: "aperio_saas_dr",
       runtime_id: "writer-aperio-saas-dr",
@@ -91,7 +91,7 @@ describe("aperio response action helpers", () => {
       ...baseFinding,
       attributes: { ...baseFinding.attributes, provider: "SLACK" },
     })).toEqual([
-      "REMOVE_SLACK_APP",
+      "QUARANTINE_APP",
       "OPEN_TICKET",
       "NOTIFY_SECOPS",
     ]);
@@ -99,7 +99,7 @@ describe("aperio response action helpers", () => {
       ...baseFinding,
       attributes: { ...baseFinding.attributes, provider: "GITHUB" },
     })).toEqual([
-      "REVOKE_GITHUB_OAUTH_APP",
+      "QUARANTINE_APP",
       "OPEN_TICKET",
       "NOTIFY_SECOPS",
     ]);

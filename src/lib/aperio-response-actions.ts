@@ -51,11 +51,8 @@ export const aperioResponseActionCandidates = (finding: FindingLike): string[] =
     if (tokens.some((token) => token.includes("google") || token.includes("workspace"))) {
       candidates.add("REVOKE_OAUTH_GRANT");
     }
-    if (tokens.some((token) => token.includes("slack"))) {
-      candidates.add("REMOVE_SLACK_APP");
-    }
-    if (tokens.some((token) => token.includes("github"))) {
-      candidates.add("REVOKE_GITHUB_OAUTH_APP");
+    if (tokens.some((token) => token.includes("slack") || token.includes("github"))) {
+      candidates.add("QUARANTINE_APP");
     }
   }
 
