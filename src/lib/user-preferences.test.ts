@@ -63,7 +63,7 @@ describe("user preferences", () => {
     const value = userPreferencesShareValue(preferences);
     expect(userPreferencesFromShareValue(value)).toEqual(preferences);
 
-    const url = userPreferencesShareURL("https://cerebro.example/risk-inbox?severity=high#row", preferences);
+    const url = userPreferencesShareURL("https://cerebro.example.com/risk-inbox?severity=high#row", preferences);
     const shared = sharedUserPreferencesFromURL(url);
     expect(shared?.preferences).toEqual(preferences);
     expect(shared?.cleanedPath).toBe("/");
