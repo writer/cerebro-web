@@ -30,3 +30,12 @@
 - Keep changes scoped to the triggering issue or PR. Avoid drive-by redesigns or dependency changes.
 - Do not expose secrets, secret names, credential material, or sensitive runtime identifiers in logs, UI copy, tests, screenshots, or PR metadata.
 - After code changes, run the relevant validators, usually `npm run lint`, `npm run test`, and `npm run build`.
+
+## Persona Lens UX
+
+- Lead with user work and outcomes, not Cerebro taxonomy. The first viewport should answer "what should this persona care about right now?" before explaining navigation or product modes.
+- Treat personas as enrichment layers over the same graph facts, not as separate data silos. A lens may change copy, default filters, promoted signals, work queues, decision frames, next actions, and Ask Cerebro prompts; it must not imply changed permissions or hidden facts unless an authorization change explicitly ships with it.
+- Each persona lens should have a distinct first question, outcome headline, ordered signals, action-oriented queue, decision criteria, direct next actions, and useful question starters.
+- Use the persona's operating language. Security should see risk, owners, affected assets, evidence, and remediation priority. Audit should see controls, evidence readiness, scope gaps, and report packets. Platform should see source trust, coverage, runtime freshness, and inventory ownership. Leadership should see material risk, trend/readiness, owner follow-up, and review-ready summaries.
+- Avoid screens that mostly describe where the user is inside Cerebro, such as repeated "lens", "overview", or internal feature labels. Navigation should support the work after the page has surfaced findings, priorities, owners, changes, and next steps.
+- When changing persona UI, verify at least Security, Audit, Platform, and Leadership states; confirm promoted signals, page headline, work queue, decision frame, next actions, and Ask Cerebro prompts update together. Include desktop and mobile overflow checks when the first screen changes.
