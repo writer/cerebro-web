@@ -26,6 +26,7 @@ type RiskFilter = "all" | RiskLevel;
 const NODE_LIMIT = 120;
 const EDGE_LABEL_LIMIT = 42;
 const RISK_FILTERS: RiskLevel[] = ["critical", "high", "medium", "low", "unknown"];
+const EMPTY_PINNED_URNS = new Set<string>();
 
 const LIGHT_TYPE_PALETTE: Record<string, { bg: string; fg: string; border: string }> = {
   finding: { bg: "#fef2f2", fg: "#991b1b", border: "#fca5a5" },
@@ -189,6 +190,23 @@ const graphText = (node: GraphNodeModel) =>
     node.entity_type,
     ...Object.entries(node.attributes ?? {}).flatMap(([key, value]) => [key, value]),
   ].join(" ").toLowerCase();
+
+const edgeBucketsByNode = (edges: GraphEdgeModel[]) => {
+  const buckets = new Map<string, GraphEdgeModel[]>();
+  const add = (urn: string, edge: GraphEdgeModel) => {
+    const bucket = buckets.get(urn);
+    if (bucket) {
+      bucket.push(edge);
+      return;
+    }
+    buckets.set(urn, [edge]);
+  };
+  edges.forEach((edge) => {
+    add(edge.from_urn, edge);
+    if (edge.to_urn !== edge.from_urn) add(edge.to_urn, edge);
+  });
+  return buckets;
+};
 
 const cytoscapeColors = () => {
   const root = document.documentElement;
@@ -372,11 +390,7 @@ export default function GraphViewer({
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
 
-  const effectivePinnedURNs = useMemo(() => {
-    const next = new Set(pinnedURNs ? Array.from(pinnedURNs) : []);
-    if (selectedURN) next.add(selectedURN);
-    return next;
-  }, [pinnedURNs, selectedURN]);
+  const effectivePinnedURNs = pinnedURNs ?? EMPTY_PINNED_URNS;
   const model = useMemo(() => normalizeGraph(graph, nodeLimit ?? NODE_LIMIT, effectivePinnedURNs), [effectivePinnedURNs, graph, nodeLimit]);
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -448,11 +462,13 @@ export default function GraphViewer({
     ? selectedURN
     : model.root?.urn ?? view.nodes[0]?.urn ?? null;
   const selectedNode = activeSelectedURN ? model.nodeById.get(activeSelectedURN) : undefined;
+  const allEdgesByNode = useMemo(() => edgeBucketsByNode(model.edges), [model.edges]);
+  const visibleEdgesByNode = useMemo(() => edgeBucketsByNode(view.edges), [view.edges]);
   const selectedAllEdges = selectedNode
-    ? model.edges.filter((edge) => edge.from_urn === selectedNode.urn || edge.to_urn === selectedNode.urn)
+    ? allEdgesByNode.get(selectedNode.urn) ?? []
     : [];
   const selectedVisibleEdges = selectedNode
-    ? view.edges.filter((edge) => edge.from_urn === selectedNode.urn || edge.to_urn === selectedNode.urn)
+    ? visibleEdgesByNode.get(selectedNode.urn) ?? []
     : [];
   const selectedRelationshipRows = selectedVisibleEdges.slice(0, 8);
   const selectedHiddenRelationships = Math.max(0, selectedAllEdges.length - selectedVisibleEdges.length);
@@ -756,7 +772,7 @@ export default function GraphViewer({
             </thead>
             <tbody className="divide-y divide-[color:var(--border)]">
               {view.nodes.map((node) => {
-                const visibleLinks = view.edges.filter((edge) => edge.from_urn === node.urn || edge.to_urn === node.urn).length;
+                const visibleLinks = visibleEdgesByNode.get(node.urn)?.length ?? 0;
                 const nodeExpanded = Boolean(expandedURNs?.has(node.urn));
                 const nodeExpanding = expandingURN === node.urn;
                 return (
