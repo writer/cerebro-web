@@ -167,4 +167,53 @@ describe("GRC product areas", () => {
     expect(views[0]?.id).toBe("compliance");
     expect(views[0]?.status).toBe("quiet");
   });
+
+  it("backfills backend product areas from top-level blind spots during rollout", () => {
+    const views = resolveGRCProductAreaViews({
+      coverageBlindSpots: [coverageRecord({ dimension_id: "vendor_risk_attributes", title: "Vendor risk attributes" })],
+      productAreas: [
+        {
+          id: "vendors",
+          title: "Vendors",
+          description: "Backend area without per-area blind spots.",
+          href: "/risk-inbox?source_id=grc&q=vendor",
+          workflows: [{ label: "Vendor Findings", href: "/risk-inbox?source_id=grc&q=vendor" }],
+          source_families: ["vendor", "vendor_risk_attribute"],
+          coverage_dimensions: ["vendors", "vendor_risk_attributes"],
+          status: "mapped",
+        },
+      ],
+      summary,
+    });
+
+    expect(views[0]).toMatchObject({
+      blindSpots: [expect.objectContaining({ dimension_id: "vendor_risk_attributes" })],
+      detail: "1 coverage gap",
+      signal: "1 gap",
+      status: "attention",
+    });
+  });
+
+  it("does not duplicate backend product area blind spots when backfilling", () => {
+    const blindSpot = coverageRecord({ dimension_id: "vendor_risk_attributes", title: "Vendor risk attributes" });
+    const views = resolveGRCProductAreaViews({
+      coverageBlindSpots: [blindSpot],
+      productAreas: [
+        {
+          id: "vendors",
+          title: "Vendors",
+          description: "Backend area with per-area blind spots.",
+          href: "/risk-inbox?source_id=grc&q=vendor",
+          workflows: [{ label: "Vendor Findings", href: "/risk-inbox?source_id=grc&q=vendor" }],
+          source_families: ["vendor", "vendor_risk_attribute"],
+          coverage_dimensions: ["vendors", "vendor_risk_attributes"],
+          blind_spots: [blindSpot],
+          status: "attention",
+        },
+      ],
+      summary,
+    });
+
+    expect(views[0]?.blindSpots).toHaveLength(1);
+  });
 });
