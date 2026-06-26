@@ -31,6 +31,12 @@
 - Do not expose secrets, secret names, credential material, or sensitive runtime identifiers in logs, UI copy, tests, screenshots, or PR metadata.
 - After code changes, run the relevant validators, usually `npm run lint`, `npm run test`, and `npm run build`.
 
+## API Defaults And Inventory Requests
+
+- Do not rely on omitted backend query parameters when a page needs a narrower view than the public API default. Send the narrowing parameter explicitly.
+- Inventory defaults to the Assets view in the UI. Requests for that default view must send `surface=asset`; omitted `surface` means all records on the backend.
+- Keep inventory request defaults in `src/lib` helpers with unit tests before changing API filter behavior.
+
 ## Information-First UX
 
 - Build Cerebro screens like status and evidence surfaces, not product taxonomy explainers. The first viewport should show what Cerebro knows: risks, controls, evidence, owners, affected assets, sources, reports, and recent changes.

@@ -41,6 +41,7 @@ import {
   type InventoryReviewFilter,
   type InventoryReviewState,
 } from "@/lib/inventory-review";
+import { inventoryAssetSurface, inventoryRequestSurface } from "@/lib/inventory-surface";
 import { useQueryParamState } from "@/lib/query-params";
 import { metricDetailForState, metricValueForState, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -107,9 +108,7 @@ const orgLabel = (asset: GRCInventoryAsset) =>
 
 const reportStatusCopy = (status?: string) => status ? `Report ${humanize(status)}` : "";
 
-const inventorySurface = (asset: GRCInventoryAsset) => asset.surface || "asset";
-
-const isReviewableAsset = (asset: GRCInventoryAsset) => inventorySurface(asset) === "asset";
+const isReviewableAsset = (asset: GRCInventoryAsset) => inventoryAssetSurface(asset) === "asset";
 
 const surfaceFilterLabel = (value: string) =>
   surfaceFilters.find((item) => item.value === value)?.label ?? humanize(value);
@@ -550,7 +549,7 @@ export default function InventoryPage() {
   const debouncedOwnerFilter = useDebouncedValue(ownerFilter.trim());
   const debouncedReviewFilter = useDebouncedValue(reviewFilter.trim());
   const debouncedAccountabilityFilter = useDebouncedValue(accountabilityFilter.trim());
-  const selectedSurface = debouncedSurfaceFilter || "asset";
+  const selectedSurface = inventoryRequestSurface(debouncedSurfaceFilter);
 
   const categoriesQuery = useGRCQuery<GRCInventoryCategoriesResponse>(
     grcPath("/grc/inventory/categories", { tenant_id: debouncedTenantID, source_id: debouncedSourceID, surface: selectedSurface, limit: 200 }),
@@ -779,7 +778,7 @@ export default function InventoryPage() {
     const headers = ["Record", "Surface", "Class", "Review state", "Accountability", "Risk score", "Owner", "Scope", "Source", "Account / region", "URN"];
     const rows = assets.map((asset) => [
       asset.label || shortEntity(asset.urn),
-      surfaceFilterLabel(inventorySurface(asset)),
+      surfaceFilterLabel(inventoryAssetSurface(asset)),
       descriptionLabel(asset),
       inventoryReviewLabel(inventoryReviewState(asset)),
       inventoryAccountability(asset).label,
@@ -968,7 +967,7 @@ export default function InventoryPage() {
                                 <div className="min-w-0">
                                   <Link href={`/inventory/${encodeURIComponent(asset.urn)}`} className="block max-w-[26rem] truncate font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">{asset.label || shortEntity(asset.urn)}</Link>
                                   <div className="truncate font-mono text-[11px] text-[var(--text-muted)]">{shortEntity(inventoryAttr(asset, "resource_id", "id") || asset.urn)}</div>
-                                  <div className="mt-1 text-[11px] text-[var(--text-muted)]">{surfaceFilterLabel(inventorySurface(asset))} / {descriptionLabel(asset)}</div>
+                                  <div className="mt-1 text-[11px] text-[var(--text-muted)]">{surfaceFilterLabel(inventoryAssetSurface(asset))} / {descriptionLabel(asset)}</div>
                                 </div>
                               </div>
                             </td>
