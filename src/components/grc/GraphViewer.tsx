@@ -391,7 +391,13 @@ export default function GraphViewer({
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
 
   const effectivePinnedURNs = pinnedURNs ?? EMPTY_PINNED_URNS;
-  const model = useMemo(() => normalizeGraph(graph, nodeLimit ?? NODE_LIMIT, effectivePinnedURNs), [effectivePinnedURNs, graph, nodeLimit]);
+  const baseModel = useMemo(() => normalizeGraph(graph, nodeLimit ?? NODE_LIMIT, effectivePinnedURNs), [effectivePinnedURNs, graph, nodeLimit]);
+  const model = useMemo(() => {
+    if (!selectedURN || baseModel.nodeById.has(selectedURN)) return baseModel;
+    const selectedPinnedURNs = new Set(effectivePinnedURNs);
+    selectedPinnedURNs.add(selectedURN);
+    return normalizeGraph(graph, nodeLimit ?? NODE_LIMIT, selectedPinnedURNs);
+  }, [baseModel, effectivePinnedURNs, graph, nodeLimit, selectedURN]);
   const normalizedQuery = query.trim().toLowerCase();
 
   const view = useMemo(() => {
