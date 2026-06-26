@@ -8,7 +8,7 @@ describe("route labels", () => {
     expect(routeLabelForPath("/impact")).toBe("Affected assets");
     expect(routeLabelForPath("/controls/builder")).toBe("Control builder");
     expect(routeLabelForPath("/connectors/builder")).toBe("Connector builder");
-    expect(routeLabelForPath("/connectors/source-cdk")).toBe("Runtime activation");
+    expect(routeLabelForPath("/connectors/source-cdk")).toBe("Source activation");
     expect(routeLabelForPath("/developer/audit-log")).toBe("Audit log");
     expect(routeLabelForPath("/developer/security-producers")).toBe("Security producers");
   });
