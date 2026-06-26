@@ -1,0 +1,310 @@
+import { navigationEntries } from "@/lib/routes";
+
+export type InformationAreaID = "risks" | "controls" | "sources" | "reports";
+
+export type InformationAreaRoute = {
+  href: string;
+  label: string;
+  detail: string;
+};
+
+export type InformationSignalKey =
+  | "activeRisk"
+  | "auditReadiness"
+  | "controlFailures"
+  | "coverageGaps"
+  | "evidenceIssues"
+  | "highImpact"
+  | "ownerGaps"
+  | "sourceTrust";
+
+export type InformationAreaSignal = {
+  key: InformationSignalKey;
+  label: string;
+  href: string;
+};
+
+export type InformationAreaAction = {
+  href: string;
+  label: string;
+  detail: string;
+};
+
+export type InformationAreaWorkQueue = {
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionHref: string;
+  empty: string;
+};
+
+export type InformationArea = {
+  id: InformationAreaID;
+  label: string;
+  shortLabel: string;
+  tagline: string;
+  description: string;
+  searchPlaceholder: string;
+  priorities: string[];
+  headline: string;
+  summaryFocus: string[];
+  signals: InformationAreaSignal[];
+  workQueue: InformationAreaWorkQueue;
+  decisionFrame: string[];
+  nextActions: InformationAreaAction[];
+  askPrompts: string[];
+  primaryRoutes: InformationAreaRoute[];
+  secondaryRoutes: InformationAreaRoute[];
+};
+
+export const DEFAULT_INFORMATION_AREA_ID: InformationAreaID = "risks";
+
+export const informationAreas: InformationArea[] = [
+  {
+    id: "risks",
+    label: "Risks",
+    shortLabel: "Risks",
+    tagline: "Risks, owners, evidence, and affected assets.",
+    description: "Open risks, evidence, affected assets, owners, due dates, and source freshness.",
+    searchPlaceholder: "Search risks, owners, evidence, assets...",
+    priorities: ["Critical/high risks", "Affected assets", "Owners and due dates", "Evidence"],
+    headline: "active risks need attention",
+    summaryFocus: ["critical and high risk", "owners and due dates", "evidence"],
+    signals: [
+      { key: "activeRisk", label: "Active risks", href: "/risk-inbox" },
+      { key: "highImpact", label: "Critical/high", href: "/risk-inbox?severity=CRITICAL" },
+      { key: "ownerGaps", label: "No owner", href: "/risk-inbox?owner=unassigned" },
+      { key: "evidenceIssues", label: "Evidence issues", href: "/evidence" },
+      { key: "sourceTrust", label: "Stale sources", href: "/connectors" },
+      { key: "coverageGaps", label: "Coverage gaps", href: "/connectors" },
+    ],
+    workQueue: {
+      title: "Risks",
+      description: "Highest-risk findings by score, owner, due date, evidence, and source freshness.",
+      actionLabel: "View all risks",
+      actionHref: "/risk-inbox",
+      empty: "No open findings.",
+    },
+    decisionFrame: [
+      "Risk score 85+ before broad backlog review.",
+      "Missing owners and overdue due dates before later-dated work.",
+      "Low-evidence items before remediation claims.",
+    ],
+    nextActions: [
+      { href: "/risk-inbox?owner=unassigned", label: "Assign owners", detail: "Close accountability gaps on active risks." },
+      { href: "/impact", label: "Review affected assets", detail: "Trace what a top finding touches." },
+      { href: "/evidence", label: "Collect proof", detail: "Attach or refresh evidence for urgent work." },
+    ],
+    askPrompts: [
+      "Why is the top risk urgent?",
+      "Which critical or high risks have no owner?",
+      "Which risks are overdue?",
+      "Which affected assets are tied to the top risk?",
+    ],
+    primaryRoutes: [
+      { href: "/", label: "Home", detail: "Active risk, owners, evidence, and source attention." },
+      { href: "/risk-inbox", label: "Risks", detail: "Findings by severity, owner, evidence, SLA, and status." },
+      { href: "/impact", label: "Affected assets", detail: "Impacted entities and risk paths." },
+      { href: "/ask", label: "Ask", detail: "Ask investigation questions and review cited answers." },
+      { href: "/inventory", label: "Inventory", detail: "Assets, owners, scope, vulnerabilities, and graph context." },
+    ],
+    secondaryRoutes: [
+      { href: "/trends", label: "Trends", detail: "Opened, closed, aged, and breached finding flow." },
+      { href: "/explore", label: "Graph", detail: "Trace relationships around entities and findings." },
+      { href: "/connectors", label: "Sources", detail: "Source freshness and ingestion health." },
+    ],
+  },
+  {
+    id: "controls",
+    label: "Controls",
+    shortLabel: "Controls",
+    tagline: "Control blockers, evidence freshness, and packet readiness.",
+    description: "Control posture, framework readiness, evidence blockers, coverage gaps, and audit-ready exports.",
+    searchPlaceholder: "Search controls, evidence, frameworks...",
+    priorities: ["Packet readiness", "Evidence gaps", "Failing controls", "Proof lineage"],
+    headline: "evidence gaps block audit readiness",
+    summaryFocus: ["missing or stale evidence", "failing controls", "packet readiness"],
+    signals: [
+      { key: "auditReadiness", label: "Packet readiness", href: "/reports?report_type=control&profile=soc2-security-core" },
+      { key: "evidenceIssues", label: "Evidence gaps", href: "/evidence" },
+      { key: "controlFailures", label: "Failing controls", href: "/controls" },
+      { key: "coverageGaps", label: "Scope gaps", href: "/connectors" },
+      { key: "sourceTrust", label: "Stale proof sources", href: "/connectors" },
+      { key: "activeRisk", label: "Mapped risks", href: "/risk-inbox" },
+    ],
+    workQueue: {
+      title: "Controls",
+      description: "Controls and evidence items that affect export readiness.",
+      actionLabel: "Review controls",
+      actionHref: "/controls",
+      empty: "All in-scope controls are defensible. Export the packet or schedule the next run.",
+    },
+    decisionFrame: [
+      "Missing and stale evidence before report polish.",
+      "Tie every failing control to owners, findings, and proof.",
+      "Close source coverage gaps before generating audit packs.",
+    ],
+    nextActions: [
+      { href: "/evidence", label: "Refresh evidence", detail: "Clear missing and stale proof items." },
+      { href: "/controls", label: "Review failing controls", detail: "See control status and mapped findings." },
+      { href: "/reports?report_type=control&profile=soc2-security-core", label: "Prepare packet", detail: "Export audit-ready evidence and impact proof." },
+      { href: "/reports/schedules", label: "Schedule packet", detail: "Keep recurring review packs fresh." },
+    ],
+    askPrompts: [
+      "Which controls are failing?",
+      "Which evidence is missing or stale?",
+      "What changed since the last audit packet?",
+      "Which controls have no owner?",
+      "What needs to be fixed before export?",
+    ],
+    primaryRoutes: [
+      { href: "/", label: "Home", detail: "Audit readiness, control posture, and proof coverage." },
+      { href: "/controls", label: "Controls", detail: "Control status, mapped findings, and evidence gaps." },
+      { href: "/frameworks", label: "Frameworks", detail: "Framework readiness, maturity, gaps, planning, and exports." },
+      { href: "/evidence", label: "Evidence", detail: "Evidence register linked to findings, rules, and graph roots." },
+      { href: "/reports", label: "Reports", detail: "Audit packs with controls, evidence, and impact proof." },
+    ],
+    secondaryRoutes: [
+      { href: "/trends/dashboards", label: "Dashboards", detail: "Saved compliance and trend widgets." },
+      { href: "/reports/schedules", label: "Report schedules", detail: "Recurring packet runs and recent scheduled outputs." },
+      { href: "/controls/builder", label: "Control Builder", detail: "Custom control packs, coverage preview, and YAML export." },
+      { href: "/connectors", label: "Sources", detail: "Source coverage and freshness for proof." },
+      { href: "/risk-inbox", label: "Risks", detail: "Findings that affect controls and framework posture." },
+    ],
+  },
+  {
+    id: "sources",
+    label: "Sources",
+    shortLabel: "Sources",
+    tagline: "Source health, coverage, and inventory.",
+    description: "Source freshness, coverage gaps, inventory owners, and runtime diagnostics.",
+    searchPlaceholder: "Search sources, runtimes, assets...",
+    priorities: ["Source freshness", "Coverage gaps", "Owner gaps", "High-risk assets"],
+    headline: "source issues need repair",
+    summaryFocus: ["source sync", "coverage", "ownership"],
+    signals: [
+      { key: "sourceTrust", label: "Runtime freshness", href: "/connectors" },
+      { key: "coverageGaps", label: "Coverage blind spots", href: "/connectors" },
+      { key: "ownerGaps", label: "No owner", href: "/inventory?owner=unassigned" },
+      { key: "highImpact", label: "High-risk assets", href: "/inventory?risk=high" },
+      { key: "controlFailures", label: "Control pressure", href: "/controls" },
+      { key: "activeRisk", label: "Runtime risks", href: "/risk-inbox" },
+    ],
+    workQueue: {
+      title: "Sources",
+      description: "Stale sources, coverage gaps, missing owners, and runtime status.",
+      actionLabel: "Review sources",
+      actionHref: "/connectors",
+      empty: "All observed runtimes are fresh, projected, and covered.",
+    },
+    decisionFrame: [
+      "Stale source data before interpreting risk totals.",
+      "Close coverage gaps where controls or high-risk assets depend on them.",
+      "Make ownership visible for assets that security, audit, or agents will chase.",
+    ],
+    nextActions: [
+      { href: "/connectors", label: "Repair stale sources", detail: "Restore sync and watermark freshness." },
+      { href: "/inventory", label: "Confirm owners", detail: "Review high-risk and unassigned assets." },
+      { href: "/explore", label: "Trace relationships", detail: "Expand nearby entities and source coverage." },
+    ],
+    askPrompts: [
+      "Which sources are stale?",
+      "Which source has the most coverage gaps?",
+      "Which assets are missing owners?",
+      "Which runtimes failed sync?",
+      "What should be fixed first?",
+    ],
+    primaryRoutes: [
+      { href: "/", label: "Home", detail: "Connector health, source coverage, and ownership." },
+      { href: "/connectors", label: "Sources", detail: "Source library, credentials, freshness, and ingestion health." },
+      { href: "/inventory", label: "Inventory", detail: "Assets, owners, scope, tests, and graph context." },
+      { href: "/explore", label: "Graph", detail: "Trace relationships around entities and sources." },
+      { href: "/trends", label: "Trends", detail: "Runtime-backed risk and backlog movement." },
+    ],
+    secondaryRoutes: [
+      { href: "/ask", label: "Ask", detail: "Ask runtime and coverage questions." },
+      { href: "/impact", label: "Affected assets", detail: "Entity impact and affected paths." },
+      { href: "/connectors/source-cdk", label: "Runtime activation", detail: "Source collection scope, access, and trust posture." },
+      { href: "/developer", label: "Developer Tools", detail: "API status, OpenAPI resources, and diagnostics." },
+    ],
+  },
+  {
+    id: "reports",
+    label: "Review",
+    shortLabel: "Review",
+    tagline: "Top risks, owners, trends, and reports.",
+    description: "Top risks, control readiness, trend direction, owner follow-up, source freshness, and reports.",
+    searchPlaceholder: "Search status, trends, reports...",
+    priorities: ["Top risks", "Owner follow-up", "Trend direction", "Reports"],
+    headline: "items need follow-up",
+    summaryFocus: ["top risks", "owner follow-up", "review readiness"],
+    signals: [
+      { key: "highImpact", label: "High-risk assets", href: "/impact" },
+      { key: "auditReadiness", label: "Review packet", href: "/reports?report_type=control&profile=soc2-security-core" },
+      { key: "ownerGaps", label: "Owner follow-up", href: "/risk-inbox?owner=unassigned" },
+      { key: "controlFailures", label: "Control pressure", href: "/controls" },
+      { key: "sourceTrust", label: "Stale sources", href: "/connectors" },
+      { key: "activeRisk", label: "Open risks", href: "/risk-inbox" },
+    ],
+    workQueue: {
+      title: "Follow up",
+      description: "High risks, failing controls, stale evidence, and owner gaps that need review.",
+      actionLabel: "Open scorecards",
+      actionHref: "/trends/dashboards",
+      empty: "No high-risk follow-up right now. Keep controls, owners, and sources current.",
+    },
+    decisionFrame: [
+      "Summarize risk in owner, impact, and trend language.",
+      "Separate high-risk items from routine backlog noise.",
+      "Show stale-source uncertainty next to reported totals.",
+    ],
+    nextActions: [
+      { href: "/trends", label: "Read trend direction", detail: "See backlog movement and SLA pressure." },
+      { href: "/reports?report_type=control&profile=soc2-security-core", label: "Open report", detail: "Prepare an exportable summary." },
+      { href: "/risk-inbox", label: "Check owners", detail: "See risks behind the headline." },
+    ],
+    askPrompts: [
+      "Summarize the top risks with owners and due dates.",
+      "What changed since last week?",
+      "Which risks have no owner?",
+      "Which controls or evidence block the report?",
+      "Which sources are stale?",
+    ],
+    primaryRoutes: [
+      { href: "/", label: "Home", detail: "Top risks, controls, reports, and source health." },
+      { href: "/trends", label: "Trends", detail: "Finding flow, backlog movement, and SLA pressure." },
+      { href: "/trends/dashboards", label: "Dashboards", detail: "Saved scorecards and reusable widgets." },
+      { href: "/reports", label: "Reports", detail: "Audit and program packs for review." },
+      { href: "/impact", label: "Affected assets", detail: "High-risk entity impact and affected paths." },
+    ],
+    secondaryRoutes: [
+      { href: "/frameworks", label: "Frameworks", detail: "Framework readiness and planning." },
+      { href: "/risk-inbox", label: "Risks", detail: "Priority findings behind the summary." },
+      { href: "/ask", label: "Ask", detail: "Ask follow-up questions against the graph." },
+    ],
+  },
+];
+
+const informationAreaIDs = new Set<InformationAreaID>(informationAreas.map((area) => area.id));
+const navigationHrefs = new Set(navigationEntries.map((entry) => entry.href));
+
+export const informationAreaByID = Object.fromEntries(
+  informationAreas.map((area) => [area.id, area]),
+) as Record<InformationAreaID, InformationArea>;
+
+export function isInformationAreaID(value: string | null | undefined): value is InformationAreaID {
+  return Boolean(value && informationAreaIDs.has(value as InformationAreaID));
+}
+
+export function routeHrefsForArea(area: InformationArea) {
+  return [...area.primaryRoutes, ...area.secondaryRoutes].map((route) => route.href);
+}
+
+export function routeRankForArea(area: InformationArea, href: string) {
+  const index = routeHrefsForArea(area).indexOf(href);
+  return index === -1 ? Number.POSITIVE_INFINITY : index;
+}
+
+export function routeIsAvailable(href: string) {
+  return navigationHrefs.has(href);
+}

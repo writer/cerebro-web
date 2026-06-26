@@ -235,8 +235,8 @@ export default function ExplorePage() {
     <div className="space-y-6">
       <PageHeader
         contractId="graph-explorer"
-        title="Graph Explorer"
-        description="Free-form graph exploration: start from any entity and expand its neighbors in place to build the picture you need."
+        title="Graph"
+        description="Start from an entity and expand nearby assets, findings, owners, and sources."
         action={
           <div className="flex items-center gap-2">
             {selectedSeed && (

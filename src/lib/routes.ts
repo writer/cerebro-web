@@ -12,7 +12,7 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Home",
     href: "/",
-    description: "Compliance progress, risk, evidence, and connector health.",
+    description: "Risks, controls, evidence, and source health.",
     section: "Operator",
     keywords: ["dashboard", "overview", "metrics", "home"],
   },
@@ -38,11 +38,11 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["custom dashboard", "dashboards", "trends", "widgets", "workspace", "saved views"],
   },
   {
-    label: "Ask Cerebro",
+    label: "Ask",
     href: "/ask",
     description: "Ask questions about risks, owners, evidence, affected assets, and what changed.",
     section: "Operator",
-    keywords: ["ask", "graph", "cypher", "nlq", "query", "search"],
+    keywords: ["ask", "question", "owner", "evidence", "query", "search"],
   },
   {
     label: "Controls",
@@ -61,7 +61,7 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Evidence",
     href: "/evidence",
-    description: "Evidence register linked to findings, rules, runs, and graph roots.",
+    description: "Proof linked to findings, rules, runs, and affected assets.",
     section: "Operator",
     keywords: ["claims", "events", "proof", "audit"],
   },
@@ -75,16 +75,16 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Affected assets",
     href: "/impact",
-    description: "Impacted entities and affected risk paths.",
+    description: "Assets and relationships touched by a finding or entity.",
     section: "Operator",
     keywords: ["graph", "entity", "impact", "affected entities"],
   },
   {
-    label: "Explore",
+    label: "Graph",
     href: "/explore",
-    description: "Free-form graph exploration: expand any entity's neighbors in place.",
+    description: "Trace relationships around an asset, finding, owner, or source.",
     section: "Operator",
-    keywords: ["graph", "explore", "exploration", "expand", "neighbors", "pivot", "free-form", "entity"],
+    keywords: ["graph", "relationships", "expand", "neighbors", "pivot", "entity"],
   },
   {
     label: "Reports",
@@ -94,9 +94,9 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["audit packet", "export", "report", "evidence"],
   },
   {
-    label: "Connectors",
+    label: "Sources",
     href: "/connectors",
-    description: "Connector library, credentials, source runtime freshness, and ingestion health.",
+    description: "Source setup, credentials, freshness, and ingestion health.",
     section: "Operator",
     keywords: ["runtimes", "sources", "connectors", "freshness", "credentials"],
   },
@@ -132,7 +132,7 @@ const commandOnlyNavLinks: NavigationEntry[] = [
     keywords: ["builder", "custom framework", "control pack", "yaml", "audit", ...supportedGRCFrameworkNames],
   },
   {
-    label: "Runtime activation",
+    label: "Source activation",
     href: "/connectors/source-cdk",
     description: "See what a source collects, the access it needs, and whether you can trust it yet for your program.",
     section: "Operator",
@@ -161,8 +161,8 @@ const routeLabels: Record<string, string> = Object.fromEntries(
 );
 
 routeLabels["/"] = "Home";
-routeLabels["/ask"] = "Ask Cerebro";
-routeLabels["/evidence"] = "Evidence register";
+routeLabels["/ask"] = "Ask";
+routeLabels["/evidence"] = "Evidence";
 routeLabels["/findings"] = "Finding detail";
 routeLabels["/connectors/builder"] = "Connector builder";
 routeLabels["/developer/agent-platform"] = "Agent platform";

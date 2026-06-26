@@ -31,11 +31,12 @@
 - Do not expose secrets, secret names, credential material, or sensitive runtime identifiers in logs, UI copy, tests, screenshots, or PR metadata.
 - After code changes, run the relevant validators, usually `npm run lint`, `npm run test`, and `npm run build`.
 
-## Persona Lens UX
+## Information-First UX
 
-- Lead with user work and outcomes, not Cerebro taxonomy. The first viewport should answer "what should this persona care about right now?" before explaining navigation or product modes.
-- Treat personas as enrichment layers over the same graph facts, not as separate data silos. A lens may change copy, default filters, promoted signals, work queues, decision frames, next actions, and Ask Cerebro prompts; it must not imply changed permissions or hidden facts unless an authorization change explicitly ships with it.
-- Each persona lens should have a distinct first question, outcome headline, ordered signals, action-oriented queue, decision criteria, direct next actions, and useful question starters.
-- Use the persona's operating language. Security should see risk, owners, affected assets, evidence, and remediation priority. Audit should see controls, evidence readiness, scope gaps, and report packs. Platform should see source trust, coverage, runtime freshness, and inventory ownership. Leadership should see material risk, trend/readiness, owner follow-up, and review-ready summaries.
-- Avoid screens that mostly describe where the user is inside Cerebro, such as repeated "lens", "overview", or internal feature labels. Navigation should support the work after the page has surfaced findings, priorities, owners, changes, and next steps.
-- When changing persona UI, verify at least Security, Audit, Platform, and Leadership states; confirm promoted signals, page headline, work queue, decision frame, next actions, and Ask Cerebro prompts update together. Include desktop and mobile overflow checks when the first screen changes.
+- Build Cerebro screens like status and evidence surfaces, not product taxonomy explainers. The first viewport should show what Cerebro knows: risks, controls, evidence, owners, affected assets, sources, reports, and recent changes.
+- Do not make users choose or learn a "persona", "lens", "mode", "decision frame", or other internal product construct before they get value. These terms should not appear in end-user UI unless a user-created object explicitly uses that name.
+- Prefer Vanta-style information architecture: concrete counts, pass/fail status, missing evidence, stale sources, owners, due dates, affected assets, and direct drilldowns.
+- Navigation labels should be stable information areas such as Home, Risks, Controls, Evidence, Inventory, Affected assets, Graph, Reports, and Sources. The page content should carry the value before navigation does.
+- Ask surfaces should offer concrete information-retrieval questions, for example "Which risks have no owner?", "Which controls are failing?", "Which evidence is missing or stale?", and "What changed since last week?"
+- Avoid abstract copy such as "material exposure", "executive agenda", "blast radius", "workbench", "focused entry points", and repeated Cerebro-branded explanations. Use the user's nouns and the graph facts instead.
+- When changing the first screen, verify desktop and mobile screenshots for clipped text, overlap, empty-shell loading captures, console overlays, and accidental reintroduction of internal taxonomy language.

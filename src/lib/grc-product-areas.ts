@@ -62,8 +62,8 @@ export const grcProductAreas: GRCProductArea[] = [
     description: "Risk register, risk library, action tracker, resilience objectives, notifications, and POA&M plans.",
     href: "/risk-inbox",
     workflows: [
-      { label: "Risk Inbox", href: "/risk-inbox" },
-      { label: "Impact Map", href: "/impact" },
+      { label: "Risks", href: "/risk-inbox" },
+      { label: "Affected assets", href: "/impact" },
       { label: "Risk Scoring", href: "/developer/risk-scoring" },
       { label: "Trends", href: "/trends" },
     ],
@@ -81,7 +81,7 @@ export const grcProductAreas: GRCProductArea[] = [
       { label: "Vendor Findings", href: "/risk-inbox?source_id=grc&q=vendor" },
       { label: "Contracts", href: "/evidence?source_id=grc&q=contract" },
       { label: "Assessments", href: "/risk-inbox?source_id=grc&q=assessment" },
-      { label: "Connector Scope", href: "/connectors/grc?tab=scope" },
+      { label: "Source scope", href: "/connectors/grc?tab=scope" },
     ],
     sourceFamilies: ["vendor", "discovered_vendor", "vendor_risk_attribute", "contract", "security_review"],
     coverageDimensions: ["vendors", "discovered_vendors", "vendor_risk_attributes", "contracts", "security_reviews"],
@@ -142,7 +142,7 @@ export const grcProductAreas: GRCProductArea[] = [
     description: "Connector health, source scope, collection activity, event logs, and source-CDK onboarding.",
     href: "/connectors",
     workflows: [
-      { label: "Connectors", href: "/connectors" },
+      { label: "Sources", href: "/connectors" },
       { label: "Source CDK", href: "/connectors/source-cdk" },
       { label: "Mission Control", href: "/mission-control" },
       { label: "Audit Log", href: "/developer/audit-log" },

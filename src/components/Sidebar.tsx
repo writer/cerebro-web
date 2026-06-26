@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { useCommandPalette, usePersonaLens, useSidebar } from "@/components/providers";
+import { useCommandPalette, useSidebar } from "@/components/providers";
 import { appVersionLabel } from "@/lib/app-version";
-import { navigationEntries, utilityLinks } from "@/lib/navigation";
-import { personaLenses } from "@/lib/persona-lenses";
+import { operatorNavLinks, utilityLinks } from "@/lib/navigation";
 
 const icons: Record<string, React.ReactNode> = {
   "/": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />,
@@ -28,8 +27,7 @@ const icons: Record<string, React.ReactNode> = {
   "/developer": <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />,
 };
 
-const sidebarNavLinks = navigationEntries;
-const navEntryByHref = new Map(sidebarNavLinks.map((entry) => [entry.href, entry]));
+const sidebarNavLinks = [...operatorNavLinks, ...utilityLinks];
 
 function matchesPathname(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -64,26 +62,11 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function entriesForRoutes(routes: { href: string }[]) {
-  const seen = new Set<string>();
-  return routes.flatMap((route) => {
-    const entry = navEntryByHref.get(route.href);
-    if (!entry || seen.has(entry.href)) return [];
-    seen.add(entry.href);
-    return [entry];
-  });
-}
-
 export default function Sidebar() {
   const pathname = usePathname();
   const { openCommandPalette } = useCommandPalette();
-  const { activeLens, activeLensID, setActiveLensID } = usePersonaLens();
   const { collapsed, toggleSidebar } = useSidebar();
-  const focusLinks = entriesForRoutes(activeLens.primaryRoutes);
-  const supportingLinks = entriesForRoutes(activeLens.secondaryRoutes);
-  const focusHrefs = new Set([...focusLinks, ...supportingLinks].map((link) => link.href));
-  const advancedLinks = utilityLinks.filter((link) => !focusHrefs.has(link.href));
-  const visibleSidebarLinks = [...focusLinks, ...supportingLinks, ...advancedLinks];
+  const visibleSidebarLinks = sidebarNavLinks;
 
   const isActive = (href: string) => isSidebarLinkActive(pathname, href, visibleSidebarLinks);
 
@@ -115,32 +98,12 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="ml-2 max-md:hidden">
             <span className="block text-[15px] font-semibold text-[var(--text-primary)]">Cerebro</span>
-            <span className="block text-[11px] text-[var(--sidebar-muted)]">{activeLens.shortLabel} priorities</span>
           </div>
         )}
       </div>
 
       {!collapsed && (
         <div className="space-y-3 px-3 pb-3 max-md:hidden">
-          <div>
-            <label htmlFor="cerebro-persona-lens" className="mb-1.5 block px-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)]">
-              Prioritize for
-            </label>
-            <select
-              id="cerebro-persona-lens"
-              value={activeLensID}
-              onChange={(event) => setActiveLensID(event.target.value as typeof activeLensID)}
-              className="control-input w-full px-2.5 py-2 text-[13px] font-medium"
-            >
-              {personaLenses.map((lens) => (
-                <option key={lens.id} value={lens.id}>{lens.label}</option>
-              ))}
-            </select>
-            <div className="mt-2 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-              <div className="text-[12px] font-semibold text-[var(--text-primary)]">{activeLens.shortLabel}</div>
-              <div className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{activeLens.tagline}</div>
-            </div>
-          </div>
           <button
             type="button"
             onClick={openCommandPalette}
@@ -156,11 +119,6 @@ export default function Sidebar() {
       )}
 
       <div className={`${collapsed ? "flex" : "hidden max-md:flex"} flex-col items-center gap-2 pb-3`}>
-          {collapsed && (
-            <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[10px] font-semibold text-[var(--text-secondary)]" title={`${activeLens.label} priorities`}>
-              {activeLens.shortLabel.slice(0, 1)}
-            </div>
-          )}
           <button
             type="button"
             onClick={openCommandPalette}
@@ -174,23 +132,12 @@ export default function Sidebar() {
         </div>
 
       <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? "px-1.5" : "px-3 max-md:px-1.5"}`}>
-        {!collapsed && (
-          <div className="px-2 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Work</div>
-        )}
-        {focusLinks.map(renderLink)}
+        {operatorNavLinks.map(renderLink)}
 
-        {supportingLinks.length > 0 && !collapsed && (
-          <div className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">More</div>
-        )}
-        {collapsed && supportingLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
-        {supportingLinks.map(renderLink)}
-
-        {advancedLinks.length > 0 && !collapsed && (
-          <div className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-muted)] max-md:hidden">Advanced</div>
-        )}
-        {collapsed && <div className="my-3 border-t border-[color:var(--border)]" />}
+        {collapsed && utilityLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
+        {!collapsed && utilityLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
         {!collapsed && <div className="my-3 hidden border-t border-[color:var(--border)] max-md:block" />}
-        {advancedLinks.map(renderLink)}
+        {utilityLinks.map(renderLink)}
       </nav>
 
       <div className="flex items-center justify-between border-t border-[color:var(--border)] px-3 py-2.5">

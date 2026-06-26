@@ -180,7 +180,7 @@ describe("supported GRC frameworks", () => {
     }, "SOC 2", "custom_identity")).toBe(true);
   });
 
-  it("falls back to text matching for custom framework lenses", () => {
+  it("falls back to text matching for custom framework filters", () => {
     expect(findingMatchesFrameworkSegment({
       id: "finding-3",
       title: "Repository default branch is unprotected",
@@ -215,7 +215,7 @@ describe("supported GRC frameworks", () => {
       critical_findings: 0,
       high_findings: 0,
       evidence_items: 1,
-    }, "unmapped custom lens")).toBe(false);
+    }, "unmapped custom filter")).toBe(false);
   });
 
   it("matches controls and asset tests through aliases", () => {

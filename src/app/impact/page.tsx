@@ -54,8 +54,8 @@ export default function ImpactPage() {
     <div className="space-y-6">
       <PageHeader
         contractId="impact-map"
-        title="Impact Map"
-        description="Entity impact graph and affected risk paths."
+        title="Affected assets"
+        description="Assets and relationships touched by a finding or entity."
         action={
           <div className="flex items-center gap-2">
             {selectedRoot && (
@@ -88,9 +88,9 @@ export default function ImpactPage() {
         )}
       </div>
 
-      {(fallbackFindings.loading || loading) && <LoadingBlock label="Loading impact map..." />}
-      {showUnavailableState && <ErrorBlock error={loadError || "Unable to load impact map."} onRetry={refreshImpact} recoveryDetail="Impact data will appear when the API is reachable." />}
-      {showHardError && <ErrorBlock error={loadError || "Unable to load impact map."} onRetry={refreshImpact} />}
+      {(fallbackFindings.loading || loading) && <LoadingBlock label="Loading affected assets..." />}
+      {showUnavailableState && <ErrorBlock error={loadError || "Unable to load affected assets."} onRetry={refreshImpact} recoveryDetail="Affected assets will appear when the API is reachable." />}
+      {showHardError && <ErrorBlock error={loadError || "Unable to load affected assets."} onRetry={refreshImpact} />}
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Root Entity" value={metricValueForState({ state: metricState, value: shortEntity(selectedRoot) })} detail={showUnavailableState ? "waiting for API" : "impact anchor"} />
@@ -114,7 +114,7 @@ export default function ImpactPage() {
       {data && (
         <>
           <Panel
-            title="Impact Graph"
+            title="Relationships"
             action={selectedRoot ? <Link href={`/evidence?graph_root_urn=${encodeURIComponent(selectedRoot)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Evidence for root</Link> : undefined}
           >
             <GraphViewer graph={data.graph} />
