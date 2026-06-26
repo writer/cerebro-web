@@ -1,4 +1,4 @@
-import type { GRCCoverageRecord, GRCSummary } from "@/lib/grc";
+import type { GRCCoverageRecord, GRCProductAreaResponse, GRCProductAreaWorkflow, GRCSummary } from "@/lib/grc";
 
 export type GRCProductAreaStatus = "attention" | "mapped" | "quiet";
 
@@ -132,7 +132,7 @@ export const grcProductAreas: GRCProductArea[] = [
       { label: "Training", href: "/evidence?source_id=grc&q=training" },
     ],
     sourceFamilies: ["person", "user", "group", "training_attestation"],
-    coverageDimensions: ["people", "groups", "training_attestations"],
+    coverageDimensions: ["people", "users", "groups", "training_attestations"],
     evidenceTypes: ["source_snapshot", "configuration_state", "access_review", "training_attestation"],
     controlDomains: ["identity_access", "security_operations"],
   },
@@ -154,12 +154,38 @@ export const grcProductAreas: GRCProductArea[] = [
   },
 ];
 
+const catalogByID = new Map(grcProductAreas.map((area) => [area.id, area]));
 const knownCoverageDimensions = new Set(grcProductAreas.flatMap((area) => area.coverageDimensions));
 const knownSourceFamilies = new Set(grcProductAreas.flatMap((area) => area.sourceFamilies));
+const knownStatuses = new Set<GRCProductAreaStatus>(["attention", "mapped", "quiet"]);
 
 export function productAreaStatus(blindSpotCount: number, hasCoverageContext: boolean): GRCProductAreaStatus {
   if (blindSpotCount > 0) return "attention";
   return hasCoverageContext ? "mapped" : "quiet";
+}
+
+export function normalizeGRCProductAreaViews(productAreas?: GRCProductAreaResponse[] | null): GRCProductAreaView[] {
+  if (!productAreas?.length) return [];
+  return productAreas
+    .filter((area) => typeof area.id === "string" && area.id.trim() !== "")
+    .map((area) => normalizeGRCProductAreaView(area));
+}
+
+export function resolveGRCProductAreaViews({
+  coverageBlindSpots,
+  productAreas,
+  summary,
+}: {
+  coverageBlindSpots?: GRCCoverageRecord[] | null;
+  productAreas?: GRCProductAreaResponse[] | null;
+  summary?: GRCSummary | null;
+}) {
+  const normalized = normalizeGRCProductAreaViews(productAreas);
+  const fallback = buildGRCProductAreaViews({ coverageBlindSpots, summary });
+  if (normalized.length > 0) {
+    return backfillGRCProductAreaBlindSpots(mergeBackendProductAreas(normalized, fallback), coverageBlindSpots);
+  }
+  return fallback;
 }
 
 export function buildGRCProductAreaViews({
@@ -189,11 +215,97 @@ export function hasGRCProductAreaContext(areas: GRCProductAreaView[]) {
 }
 
 export function productAreaMatchesCoverage(area: GRCProductArea, record: GRCCoverageRecord) {
-  if (area.coverageDimensions.includes(record.dimension_id)) return true;
-  if (record.family && area.sourceFamilies.includes(record.family)) return true;
-  if (knownCoverageDimensions.has(record.dimension_id) || (record.family && knownSourceFamilies.has(record.family))) return false;
-  return (record.evidence_types ?? []).some((type) => area.evidenceTypes.includes(type))
-    || (record.control_domains ?? []).some((domain) => area.controlDomains.includes(domain));
+  const dimensionID = record.dimension_id.trim();
+  const family = record.family?.trim() ?? "";
+  if (area.coverageDimensions.includes(dimensionID)) return true;
+  if (family && area.sourceFamilies.includes(family)) return true;
+  if (knownCoverageDimensions.has(dimensionID) || (family && knownSourceFamilies.has(family))) return false;
+  return fallbackMatches(area, record);
+}
+
+function normalizeGRCProductAreaView(area: GRCProductAreaResponse): GRCProductAreaView {
+  const fallback = catalogByID.get(area.id);
+  const blindSpots = area.blind_spots ?? [];
+  const base: GRCProductArea = {
+    id: area.id,
+    title: area.title || fallback?.title || area.id,
+    description: area.description || fallback?.description || "",
+    href: area.href || fallback?.href || "/connectors",
+    workflows: normalizeWorkflows(area.workflows, fallback?.workflows ?? []),
+    sourceFamilies: normalizeStrings(area.source_families, fallback?.sourceFamilies ?? []),
+    coverageDimensions: normalizeStrings(area.coverage_dimensions, fallback?.coverageDimensions ?? []),
+    evidenceTypes: normalizeStrings(area.evidence_types, fallback?.evidenceTypes ?? []),
+    controlDomains: normalizeStrings(area.control_domains, fallback?.controlDomains ?? []),
+  };
+  const status = normalizeProductAreaStatus(area.status, blindSpots.length);
+  return {
+    ...base,
+    blindSpots,
+    detail: area.detail || productAreaDetail(base, blindSpots.length),
+    signal: area.signal || productAreaSignal(status, blindSpots.length),
+    status,
+  };
+}
+
+function normalizeProductAreaStatus(status: string | undefined, blindSpotCount: number): GRCProductAreaStatus {
+  return knownStatuses.has(status as GRCProductAreaStatus)
+    ? status as GRCProductAreaStatus
+    : productAreaStatus(blindSpotCount, true);
+}
+
+function normalizeStrings(values: string[] | undefined, fallback: string[]) {
+  const normalized = (values ?? []).filter((value) => typeof value === "string" && value.trim() !== "").map((value) => value.trim());
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function normalizeWorkflows(values: GRCProductAreaWorkflow[] | undefined, fallback: GRCProductArea["workflows"]) {
+  const normalized = (values ?? [])
+    .filter((workflow) => workflow.label?.trim() && workflow.href?.trim())
+    .map((workflow) => ({ label: workflow.label.trim(), href: workflow.href.trim() }));
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function fallbackMatches(area: GRCProductArea, record: GRCCoverageRecord) {
+  return (record.evidence_types ?? []).some((type) => area.evidenceTypes.includes(type.trim()))
+    || (record.control_domains ?? []).some((domain) => area.controlDomains.includes(domain.trim()));
+}
+
+function backfillGRCProductAreaBlindSpots(areas: GRCProductAreaView[], coverageBlindSpots?: GRCCoverageRecord[] | null) {
+  if (!coverageBlindSpots?.length) return areas;
+  return areas.map((area) => {
+    const existing = new Set(area.blindSpots.map(coverageRecordKey));
+    const missing = coverageBlindSpots.filter((record) =>
+      !existing.has(coverageRecordKey(record)) && productAreaMatchesCoverage(area, record));
+    if (missing.length === 0) return area;
+    const blindSpots = [...area.blindSpots, ...missing];
+    const status = productAreaStatus(blindSpots.length, true);
+    return {
+      ...area,
+      blindSpots,
+      detail: productAreaDetail(area, blindSpots.length),
+      signal: productAreaSignal(status, blindSpots.length),
+      status,
+    };
+  });
+}
+
+function mergeBackendProductAreas(backendAreas: GRCProductAreaView[], fallbackAreas: GRCProductAreaView[]) {
+  const backendByID = new Map(backendAreas.map((area) => [area.id, area]));
+  const fallbackIDs = new Set(fallbackAreas.map((area) => area.id));
+  return [
+    ...fallbackAreas.map((area) => backendByID.get(area.id) ?? area),
+    ...backendAreas.filter((area) => !fallbackIDs.has(area.id)),
+  ];
+}
+
+function coverageRecordKey(record: GRCCoverageRecord) {
+  return [
+    record.source_id,
+    record.runtime_id ?? "",
+    record.dimension_id,
+    record.dimension_type,
+    record.family ?? "",
+  ].join("\n");
 }
 
 function productAreaDetail(area: GRCProductArea, blindSpotCount: number) {

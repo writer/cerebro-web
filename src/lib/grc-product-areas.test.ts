@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GRCCoverageRecord, GRCSummary } from "@/lib/grc";
-import { buildGRCProductAreaViews, grcProductAreas, hasGRCProductAreaContext, productAreaMatchesCoverage, productAreaStatus } from "./grc-product-areas";
+import { buildGRCProductAreaViews, grcProductAreas, hasGRCProductAreaContext, normalizeGRCProductAreaViews, productAreaMatchesCoverage, productAreaStatus, resolveGRCProductAreaViews } from "./grc-product-areas";
 
 const summary = {
   connectors: 1,
@@ -48,10 +48,25 @@ describe("GRC product areas", () => {
     expect(vendors).toBeTruthy();
     expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "discovered_vendors" }))).toBe(true);
     expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "other", family: "vendor_risk_attribute" }))).toBe(true);
-    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "", evidence_types: ["third_party_risk"] }))).toBe(true);
-    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ control_domains: ["vendor_risk"], dimension_id: "" }))).toBe(true);
-    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "new_vendor_dimension", evidence_types: ["third_party_risk"] }))).toBe(true);
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "", evidence_types: ["security_review"] }))).toBe(true);
     expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "vulnerability_remediations" }))).toBe(false);
+  });
+
+  it("keeps ambiguous unknown fallback gaps visible during backend transition", () => {
+    const vendors = grcProductAreas.find((area) => area.id === "vendors");
+    const privacy = grcProductAreas.find((area) => area.id === "privacy");
+    expect(vendors).toBeTruthy();
+    expect(privacy).toBeTruthy();
+    expect(productAreaMatchesCoverage(vendors!, coverageRecord({
+      control_domains: ["vendor_risk"],
+      dimension_id: "new_vendor_dimension",
+      evidence_types: ["third_party_risk"],
+    }))).toBe(true);
+    expect(productAreaMatchesCoverage(privacy!, coverageRecord({
+      control_domains: ["vendor_risk"],
+      dimension_id: "new_vendor_dimension",
+      evidence_types: ["third_party_risk"],
+    }))).toBe(true);
   });
 
   it("keeps known dimension gaps scoped to their owning product areas", () => {
@@ -66,6 +81,12 @@ describe("GRC product areas", () => {
       dimension_id: "security_questionnaires",
       family: "security_questionnaire",
     }))).toBe(true);
+  });
+
+  it("maps users dimension gaps to personnel", () => {
+    const personnel = grcProductAreas.find((area) => area.id === "personnel");
+    expect(personnel?.coverageDimensions).toContain("users");
+    expect(productAreaMatchesCoverage(personnel!, coverageRecord({ dimension_id: "users" }))).toBe(true);
   });
 
   it("marks areas with matching blind spots as needing attention", () => {
@@ -94,5 +115,108 @@ describe("GRC product areas", () => {
   it("hides the overview map until coverage context exists", () => {
     expect(hasGRCProductAreaContext(buildGRCProductAreaViews({}))).toBe(false);
     expect(hasGRCProductAreaContext(buildGRCProductAreaViews({ summary }))).toBe(true);
+  });
+
+  it("normalizes backend product area responses into the web view model", () => {
+    const views = normalizeGRCProductAreaViews([
+      {
+        id: "personnel",
+        title: "People and Access",
+        description: "Backend-owned people coverage.",
+        href: "/inventory?q=people",
+        workflows: [{ label: "People", href: "/inventory?q=people" }],
+        source_families: ["person", "user"],
+        coverage_dimensions: ["people", "users"],
+        evidence_types: ["access_review"],
+        control_domains: ["identity_access"],
+        blind_spots: [coverageRecord({ dimension_id: "users", title: "User coverage" })],
+        detail: "1 coverage gap",
+        signal: "1 gap",
+        status: "attention",
+      },
+    ]);
+
+    expect(views).toHaveLength(1);
+    expect(views[0]).toMatchObject({
+      blindSpots: [expect.objectContaining({ dimension_id: "users" })],
+      coverageDimensions: ["people", "users"],
+      signal: "1 gap",
+      sourceFamilies: ["person", "user"],
+      status: "attention",
+      title: "People and Access",
+    });
+  });
+
+  it("merges partial backend product areas over local fallback derivation", () => {
+    const views = resolveGRCProductAreaViews({
+      coverageBlindSpots: [coverageRecord({ dimension_id: "vendor_risk_attributes" })],
+      productAreas: [
+        {
+          id: "compliance",
+          title: "Compliance",
+          description: "Backend status wins.",
+          href: "/frameworks",
+          workflows: [{ label: "Frameworks", href: "/frameworks" }],
+          status: "quiet",
+        },
+      ],
+      summary,
+    });
+
+    expect(views).toHaveLength(grcProductAreas.length);
+    expect(views.find((area) => area.id === "compliance")?.status).toBe("quiet");
+    expect(views.find((area) => area.id === "vendors")).toMatchObject({
+      blindSpots: [expect.objectContaining({ dimension_id: "vendor_risk_attributes" })],
+      status: "attention",
+    });
+  });
+
+  it("backfills backend product areas from top-level blind spots during rollout", () => {
+    const views = resolveGRCProductAreaViews({
+      coverageBlindSpots: [coverageRecord({ dimension_id: "vendor_risk_attributes", title: "Vendor risk attributes" })],
+      productAreas: [
+        {
+          id: "vendors",
+          title: "Vendors",
+          description: "Backend area without per-area blind spots.",
+          href: "/risk-inbox?source_id=grc&q=vendor",
+          workflows: [{ label: "Vendor Findings", href: "/risk-inbox?source_id=grc&q=vendor" }],
+          source_families: ["vendor", "vendor_risk_attribute"],
+          coverage_dimensions: ["vendors", "vendor_risk_attributes"],
+          status: "mapped",
+        },
+      ],
+      summary,
+    });
+
+    expect(views.find((area) => area.id === "vendors")).toMatchObject({
+      blindSpots: [expect.objectContaining({ dimension_id: "vendor_risk_attributes" })],
+      detail: "1 coverage gap",
+      signal: "1 gap",
+      status: "attention",
+    });
+  });
+
+  it("does not duplicate backend product area blind spots when backfilling", () => {
+    const blindSpot = coverageRecord({ dimension_id: "vendor_risk_attributes", title: "Vendor risk attributes" });
+    const views = resolveGRCProductAreaViews({
+      coverageBlindSpots: [blindSpot],
+      productAreas: [
+        {
+          id: "vendors",
+          title: "Vendors",
+          description: "Backend area with per-area blind spots.",
+          href: "/risk-inbox?source_id=grc&q=vendor",
+          workflows: [{ label: "Vendor Findings", href: "/risk-inbox?source_id=grc&q=vendor" }],
+          source_families: ["vendor", "vendor_risk_attribute"],
+          coverage_dimensions: ["vendors", "vendor_risk_attributes"],
+          blind_spots: [blindSpot],
+          status: "attention",
+        },
+      ],
+      summary,
+    });
+
+    expect(views.find((area) => area.id === "vendors")?.blindSpots).toHaveLength(1);
   });
 });

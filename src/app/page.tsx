@@ -12,7 +12,7 @@ import { countLabel } from "@/lib/format";
 import { displayDate, displayDurationSeconds, GRCDashboard, GRCConnector, GRCControl, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCProgramWorkItem, GRCSourceCoverageRecord, GRCSourceCoverageSummary, GRCSummary, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
-import { buildGRCProductAreaViews, hasGRCProductAreaContext, type GRCProductAreaView } from "@/lib/grc-product-areas";
+import { hasGRCProductAreaContext, resolveGRCProductAreaViews, type GRCProductAreaView } from "@/lib/grc-product-areas";
 import { informationAreaByID, type InformationArea, type InformationAreaSignal, type InformationSignalKey } from "@/lib/information-areas";
 import { hasTrendActivity } from "@/lib/trends";
 
@@ -918,7 +918,11 @@ export default function Home() {
     ? ((summary.connectors - summary.stale_connectors) / summary.connectors) * 100
     : 100;
   const recentEvidence = evidenceQuery.data?.evidence ?? [];
-  const productAreas = buildGRCProductAreaViews({ coverageBlindSpots, summary });
+  const productAreas = resolveGRCProductAreaViews({
+    coverageBlindSpots,
+    productAreas: readinessQuery.data?.product_areas ?? data?.product_areas,
+    summary,
+  });
   const criticalOrHighFindings = (summary?.critical_findings ?? 0) + (summary?.high_findings ?? 0);
   const evidenceIssues = missingEvidenceItems + staleEvidenceItems;
   const homeMetrics: InformationSignalMetrics | null = summary ? {
