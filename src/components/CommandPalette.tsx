@@ -4,13 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
-import { useCommandPalette, usePersonaLens } from "@/components/providers";
+import { useCommandPalette } from "@/components/providers";
 import { findSupportedGRCFramework, frameworkRouteSegment } from "@/lib/grc-frameworks";
 import { LiveSearchCommand, useLiveSearchCommands } from "@/lib/live-search";
 import { NavigationEntry, navigationEntries } from "@/lib/navigation";
-import { routeHrefsForLens, type PersonaLens } from "@/lib/persona-lenses";
 
-type CommandSection = NavigationEntry["section"] | LiveSearchCommand["section"] | "Focus";
+type CommandSection = NavigationEntry["section"] | LiveSearchCommand["section"];
 
 type Command = Omit<NavigationEntry, "section"> & {
   id: string;
@@ -22,10 +21,9 @@ type Command = Omit<NavigationEntry, "section"> & {
 const commandText = (command: Command) =>
   [command.label, command.description, command.href, command.section, ...command.keywords].join(" ").toLowerCase();
 
-const commandRankForLens = (lens: PersonaLens, href: string) => {
-  const hrefs = routeHrefsForLens(lens);
-  const index = hrefs.findIndex((route) => href === route || href.startsWith(`${route}/`) || href.startsWith(`${route}?`));
-  return index === -1 ? Number.POSITIVE_INFINITY : index;
+const commandSectionLabel = (section: CommandSection) => {
+  if (section === "Operator") return "Work";
+  return section;
 };
 
 const searchCommands = (query: string, askGraph: (question: string) => void): Command[] => {
@@ -51,7 +49,7 @@ const searchCommands = (query: string, askGraph: (question: string) => void): Co
       : `Filter controls by ${frameworkMatch.name}`
     : `Filter controls by "${trimmed}"`;
   return [
-    { id: "ask-graph", label: `Ask Cerebro: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Ask about risk, ownership, evidence, or affected assets.", section: "Operator", keywords: ["ask", "agent", "graph", "cypher"], onRun: () => askGraph(trimmed) },
+    { id: "ask", label: `Ask: "${trimmed}"`, href: `/ask?q=${encoded}`, description: "Ask about risk, ownership, evidence, or affected assets.", section: "Operator", keywords: ["ask", "question", "owner", "evidence"], onRun: () => askGraph(trimmed) },
     { id: "search-risk-inbox", label: `Search risks for "${trimmed}"`, href: riskInboxHref, description: "Filter findings by title, framework, owner, entity, runtime, source, rule, or status.", section: "Operator", keywords: ["search", "findings", "risk", "framework"] },
     { id: "open-framework", label: frameworkMatch ? `Open ${frameworkMatch.name} framework tracking` : `Open framework catalog for "${trimmed}"`, href: frameworkHref, description: "Open maturity, gaps, planning, controls, findings, and exports.", section: "Operator", keywords: ["framework", "catalog", "maturity", "soc2"] },
     { id: "open-finding", label: `Open finding "${trimmed}"`, href: `/findings/${encoded}`, description: "Jump to a finding detail page by ID.", section: "Operator", keywords: ["finding", "detail"] },
@@ -60,7 +58,7 @@ const searchCommands = (query: string, askGraph: (question: string) => void): Co
     { id: "search-controls", label: controlsLabel, href: controlsHref, description: "Find framework names, control IDs, and mapped findings.", section: "Operator", keywords: ["controls", "framework"] },
     { id: "open-report", label: `Build audit packet for "${trimmed}"`, href: `/reports?finding_id=${encoded}`, description: "Use as a finding ID for an audit packet.", section: "Operator", keywords: ["reports", "audit"] },
     { id: "open-evidence", label: `Find evidence for "${trimmed}"`, href: `/evidence?finding_id=${encoded}`, description: "Use as a finding ID in the evidence register.", section: "Operator", keywords: ["evidence", "proof"] },
-    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?runtime_id=${encoded}`, description: "Use as a source runtime ID.", section: "Operator", keywords: ["connectors", "runtimes"] },
+    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?q=${encoded}`, description: "Search connector sources and runtimes.", section: "Operator", keywords: ["connectors", "runtimes"] },
   ];
 };
 
@@ -68,7 +66,6 @@ export default function CommandPalette() {
   const router = useRouter();
   const { openAgent } = useCerebroAgent();
   const { closeCommandPalette, isCommandPaletteOpen } = useCommandPalette();
-  const { activeLens } = usePersonaLens();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,33 +77,19 @@ export default function CommandPalette() {
   );
 
   const commands = useMemo<Command[]>(() => {
-    const base = navigationEntries.map((entry) => {
-      const rank = commandRankForLens(activeLens, entry.href);
-      return {
-        ...entry,
-        id: `nav:${entry.href}`,
-        rank,
-        section: Number.isFinite(rank) ? "Focus" as const : entry.section,
-      };
-    });
+    const base = navigationEntries.map((entry) => ({
+      ...entry,
+      id: `nav:${entry.href}`,
+      section: entry.section,
+    }));
     const q = query.trim().toLowerCase();
     const filtered = q ? base.filter((c) => commandText(c).includes(q)) : base;
-    const generated = searchCommands(query, askGraph).map((command) => {
-      const rank = commandRankForLens(activeLens, command.href);
-      return {
-        ...command,
-        rank,
-        section: Number.isFinite(rank) ? "Focus" as const : command.section,
-      };
-    });
+    const generated = searchCommands(query, askGraph);
     const orderedNavigation = filtered
       .slice()
-      .sort((left, right) => {
-        const rankDiff = (left.rank ?? Number.POSITIVE_INFINITY) - (right.rank ?? Number.POSITIVE_INFINITY);
-        return rankDiff === 0 ? left.label.localeCompare(right.label) : rankDiff;
-      });
+      .sort((left, right) => left.label.localeCompare(right.label));
     return [...liveSearch.commands, ...generated, ...orderedNavigation];
-  }, [activeLens, askGraph, liveSearch.commands, query]);
+  }, [askGraph, liveSearch.commands, query]);
 
   useEffect(() => {
     if (!isCommandPaletteOpen) return;
@@ -144,15 +127,15 @@ export default function CommandPalette() {
     <div className="fixed inset-0 z-50 bg-stone-950/45 px-4 py-20 backdrop-blur-sm" onClick={dismiss}>
       <div className="surface-raised mx-auto max-w-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-[color:var(--border)] px-4 py-3">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-5 w-5 text-[var(--primary)]">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.091-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.091L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.091 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.091Z" />
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-5 w-5 text-[var(--text-muted)]">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
           </svg>
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             onKeyDown={onInputKeyDown}
-            placeholder={activeLens.searchPlaceholder}
+            placeholder="Search risks, controls, evidence, assets, sources..."
             className="flex-1 border-0 bg-transparent text-[15px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
           />
           <kbd className="rounded border border-[color:var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">ESC</kbd>
@@ -177,7 +160,7 @@ export default function CommandPalette() {
                   <span className="mt-0.5 block text-[12px] text-[var(--text-muted)]">{command.description}</span>
                 </span>
                 <span className="shrink-0 rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                  {command.section}
+                  {commandSectionLabel(command.section)}
                 </span>
               </button>
             ))

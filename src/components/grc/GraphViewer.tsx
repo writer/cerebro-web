@@ -689,7 +689,7 @@ export default function GraphViewer({
                 <ActionLink href={evidenceHref}>Evidence</ActionLink>
                 <ActionLink href={askHref}>Ask</ActionLink>
                 {!onExpandNode && (
-                  <ActionLink href={exploreHref}>Explore</ActionLink>
+                  <ActionLink href={exploreHref}>Graph</ActionLink>
                 )}
               </div>
               {onExpandNode && (

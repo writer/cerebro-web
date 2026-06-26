@@ -704,7 +704,7 @@ export default function ConnectorsPage() {
     all: { title: "All sources", detail: "Every advertised source, connected or not." },
     attention: { title: "Sources needing attention", detail: "Fix failing, stale, or incomplete runtime signals first." },
     available: { title: "Available sources", detail: "Sources that are ready to connect." },
-    backlog: { title: "Connector backlog", detail: "Catalog-only and restricted sources that can be requested or promoted into setup." },
+    backlog: { title: "Source backlog", detail: "Catalog-only and restricted sources that can be requested or promoted into setup." },
     connected: { title: "Connected sources", detail: "Monitor active sources and open their runtime details." },
   };
   const currentView = viewCopy[libraryTab];
@@ -713,7 +713,7 @@ export default function ConnectorsPage() {
     <div className="space-y-6">
       <PageHeader
         contractId="connectors"
-        title="Connectors"
+        title="Sources"
         description="Connect sources, check runtime health, and control what gets collected."
         action={
           <div className="flex flex-wrap gap-2">

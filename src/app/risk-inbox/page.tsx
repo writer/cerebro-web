@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
+import { downloadFindingsCSV } from "@/lib/findings-export";
 import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
 import { GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
@@ -33,6 +34,7 @@ export default function RiskInboxPage() {
   const [ageMinDays, setAgeMinDays] = useQueryParamState("age_min_days");
   const [ageMaxDays, setAgeMaxDays] = useQueryParamState("age_max_days");
   const [slaStatus, setSLAStatus] = useQueryParamState("sla_status");
+  const [owner, setOwner] = useQueryParamState("owner");
   const [query, setQuery] = useQueryParamState("q");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
@@ -60,8 +62,42 @@ export default function RiskInboxPage() {
   const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
   const { apiKey } = useApiKey();
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
+  const runtimeState = runtimeStateForError(error);
+  const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
+  const findings = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const ownerFilter = owner.trim().toLowerCase();
+    return (data?.findings ?? [])
+      .filter((f) => {
+        if (!findingMatchesFrameworkSegment(f, framework)) return false;
+        if (ownerFilter) {
+          const findingOwner = (f.owner || "").trim().toLowerCase();
+          const isUnassigned = !findingOwner || findingOwner === "unassigned";
+          if (ownerFilter === "unassigned") {
+            if (!isUnassigned) return false;
+          } else if (!findingOwner.includes(ownerFilter)) {
+            return false;
+          }
+        }
+        if (!q) return true;
+        return [f.id, f.title, f.summary, f.severity, f.status, f.owner, f.sla_status, f.entity, f.runtime_id, f.source_id, f.rule_id, f.policy_id, f.policy_name, f.risk_score, f.likelihood_score, f.impact_score, f.confidence_score, f.likelihood_level, f.impact_level, ...(f.risk_reasons ?? []), ...(f.resource_urns ?? []), ...(f.controls ?? []).map((c) => `${c.framework_name} ${c.control_id}`)].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+      })
+      .slice()
+      .sort(riskSort);
+  }, [data?.findings, framework, owner, query]);
   const exportFindings = useCallback(async () => {
     setExportState("working");
+    const filename = grcExportFilename("findings");
+    if (owner.trim() || query.trim()) {
+      try {
+        downloadFindingsCSV(findings, filename);
+        setExportState("idle");
+      } catch {
+        setExportState("failed");
+      }
+      return;
+    }
+
     const exportPath = grcPath("/grc/findings/export", {
       tenant_id: debouncedTenantID,
       runtime_id: debouncedRuntimeID,
@@ -77,22 +113,9 @@ export default function RiskInboxPage() {
       age_max_days: ageMaxDays,
       sla_status: slaStatus,
     });
-    const result = await downloadGRCExport(exportPath, apiKey, grcExportFilename("findings"));
+    const result = await downloadGRCExport(exportPath, apiKey, filename);
     setExportState(result.ok ? "idle" : "failed");
-  }, [ageMaxDays, ageMinDays, apiKey, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, framework, openedAfter, openedBefore, severity, slaStatus, status]);
-  const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
-  const findings = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (data?.findings ?? [])
-      .filter((f) => {
-        if (!findingMatchesFrameworkSegment(f, framework)) return false;
-        if (!q) return true;
-        return [f.id, f.title, f.summary, f.severity, f.status, f.owner, f.sla_status, f.entity, f.runtime_id, f.source_id, f.rule_id, f.policy_id, f.policy_name, f.risk_score, f.likelihood_score, f.impact_score, f.confidence_score, f.likelihood_level, f.impact_level, ...(f.risk_reasons ?? []), ...(f.resource_urns ?? []), ...(f.controls ?? []).map((c) => `${c.framework_name} ${c.control_id}`)].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
-      })
-      .slice()
-      .sort(riskSort);
-  }, [data?.findings, framework, query]);
+  }, [ageMaxDays, ageMinDays, apiKey, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, findings, framework, openedAfter, openedBefore, owner, query, severity, slaStatus, status]);
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
@@ -163,6 +186,7 @@ export default function RiskInboxPage() {
     { label: "Age min", value: ageMinDays, onClear: () => setAgeMinDays("") },
     { label: "Age max", value: ageMaxDays, onClear: () => setAgeMaxDays("") },
     { label: "SLA", value: slaStatus, onClear: () => setSLAStatus("") },
+    { label: "Owner", value: owner, onClear: () => setOwner("") },
   ];
   const clearFilters = () => {
     setQuery("");
@@ -179,13 +203,14 @@ export default function RiskInboxPage() {
     setAgeMinDays("");
     setAgeMaxDays("");
     setSLAStatus("");
+    setOwner("");
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         contractId="risk-inbox"
-        title="Risk Inbox"
+        title="Risks"
         description="Triage findings by risk, severity, owner, entity, and SLA."
         action={
           <div className="flex items-center gap-2">
@@ -215,6 +240,7 @@ export default function RiskInboxPage() {
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Runtime<input value={runtimeID} onChange={(e) => setRuntimeID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(e) => setSourceID(e.target.value)} placeholder="All" className={inputClass} /></label>
+          <label className={labelClass}>Owner<input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="All or unassigned" className={inputClass} /></label>
           <label className={labelClass}>
             Framework
             <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="DORA" list="risk-framework-options" className={inputClass} />

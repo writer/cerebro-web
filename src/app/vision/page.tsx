@@ -374,7 +374,7 @@ export default function VisionPage() {
           <div className="sticky bottom-0 -mx-1 bg-gradient-to-t from-[var(--app-bg)] via-[var(--app-bg)] to-transparent pb-2 pt-4">
             <div className="surface-raised flex items-center gap-2 rounded-full px-4 py-2">
               <input
-                placeholder="Ask Cerebro anything..."
+                placeholder="Ask about risks, controls, evidence, sources..."
                 className="min-w-0 flex-1 bg-transparent text-[14.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
               />
               <button type="button" className="primary-button grid h-9 w-9 place-items-center rounded-full">

@@ -228,7 +228,7 @@ function SummaryMetricsWidget({ dashboard, widget }: { dashboard: CustomDashboar
         <MetricCard label="Unassigned" value={summary.unassigned} detail="awaiting owner" intent={summary.unassigned > 0 ? "warning" : "success"} />
         <MetricCard label="Controls Failing" value={summary.controls_failing} intent={summary.controls_failing > 0 ? "warning" : "success"} />
         <MetricCard label="Evidence Items" value={summary.evidence_items} />
-        <MetricCard label="Stale Connectors" value={summary.stale_connectors} detail={`${summary.connectors} total`} intent={summary.stale_connectors > 0 ? "warning" : "success"} />
+        <MetricCard label="Stale Sources" value={summary.stale_connectors} detail={`${summary.connectors} total`} intent={summary.stale_connectors > 0 ? "warning" : "success"} />
       </div>
     </Panel>
   );

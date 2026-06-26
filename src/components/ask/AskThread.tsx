@@ -85,7 +85,7 @@ export default function AskThread({ turns, activeTurnId, onRetry, onStop }: Prop
 
   if (turns.length === 0) {
     return (
-      <EmptyBlock label="Ask a question above. The model drafts Cypher, the validator checks it, the graph runs it, and you get cited results back." />
+      <EmptyBlock label="Ask about a risk, owner, evidence item, source, or affected asset." />
     );
   }
 

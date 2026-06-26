@@ -27,9 +27,12 @@ import {
 import { useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 
 const sampleQuestions = [
-  "How many findings are there per source family, top 10?",
-  "Which github.user URNs are linked to more than one okta.user via identity.email?",
-  "Show the top 10 internet.host entities by incoming edges from aws.* sources.",
+  "Which risks are open?",
+  "Which risks have no owner?",
+  "Which controls are failing?",
+  "Which evidence is missing or stale?",
+  "Which sources are stale?",
+  "What changed since last week?",
 ];
 
 function AskPageInner() {
@@ -94,10 +97,10 @@ function AskPageInner() {
         history,
         context: {
           route: "/ask",
-          routeLabel: "Ask Cerebro",
+          routeLabel: "Ask",
           scopeUrn: input.scopeUrn || undefined,
           chips: [
-            { label: "Screen", value: "Ask Cerebro" },
+            { label: "Screen", value: "Ask" },
             ...(input.scopeUrn ? [{ label: "Scope", value: input.scopeUrn }] : []),
           ],
         },
@@ -244,8 +247,8 @@ function AskPageInner() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ask Cerebro"
-        description="Ask about risky changes, owners, evidence gaps, affected assets, and what to fix first."
+        title="Ask"
+        description="Ask about risks, controls, evidence, owners, sources, reports, or affected assets."
         action={
           turns.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -297,14 +300,14 @@ function AskPageInner() {
 
       {turns.length === 0 && (
         <section className="rounded-lg border border-dashed border-slate-300 bg-white p-4">
-          <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Try one</div>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Common questions</div>
           <div className="mt-3 flex flex-wrap gap-2">
             {sampleQuestions.map((sample) => (
               <button
                 key={sample}
                 type="button"
                 onClick={() =>
-                  void runAsk({ question: sample, model: "claude-sonnet-4-6", tenantId: "", scopeUrn: "" })
+                  void runAsk({ question: sample, model: defaultAskModel, tenantId: "", scopeUrn: "" })
                 }
                 className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[13px] text-slate-700 transition hover:border-indigo-300 hover:text-indigo-700"
               >

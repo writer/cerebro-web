@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 
 import { currentUserActor } from "@/lib/identity";
 import type { CurrentUser, CurrentUserResponse } from "@/lib/identity";
-import { DEFAULT_PERSONA_LENS_ID, isPersonaLensID, personaLensByID, type PersonaLens, type PersonaLensID } from "@/lib/persona-lenses";
 
 type ApiKeyContextValue = {
   apiKey: string;
@@ -20,12 +19,6 @@ type CommandPaletteContextValue = {
 type SidebarContextValue = {
   collapsed: boolean;
   toggleSidebar: () => void;
-};
-
-type PersonaLensContextValue = {
-  activeLens: PersonaLens;
-  activeLensID: PersonaLensID;
-  setActiveLensID: (value: PersonaLensID) => void;
 };
 
 type ThemeMode = "light" | "dark";
@@ -46,13 +39,10 @@ type CurrentUserContextValue = {
 const ApiKeyContext = createContext<ApiKeyContextValue | undefined>(undefined);
 const CommandPaletteContext = createContext<CommandPaletteContextValue | undefined>(undefined);
 const SidebarContext = createContext<SidebarContextValue | undefined>(undefined);
-const PersonaLensContext = createContext<PersonaLensContextValue | undefined>(undefined);
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const CurrentUserContext = createContext<CurrentUserContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "cerebro.apiKey";
-const PERSONA_LENS_STORAGE_KEY = "cerebro.personaLens";
-const PERSONA_LENS_CHANGE_EVENT = "cerebro-persona-lens";
 const THEME_STORAGE_KEY = "cerebro.theme";
 const THEME_CHANGE_EVENT = "cerebro-theme";
 
@@ -72,26 +62,6 @@ const subscribe = (callback: () => void) => {
 const getSnapshot = () => window.localStorage.getItem(STORAGE_KEY) ?? "";
 
 const getServerSnapshot = () => "";
-
-const notifyPersonaLensChange = () => {
-  window.dispatchEvent(new Event(PERSONA_LENS_CHANGE_EVENT));
-};
-
-const subscribePersonaLens = (callback: () => void) => {
-  window.addEventListener("storage", callback);
-  window.addEventListener(PERSONA_LENS_CHANGE_EVENT, callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener(PERSONA_LENS_CHANGE_EVENT, callback);
-  };
-};
-
-const getPersonaLensSnapshot = (): PersonaLensID => {
-  const stored = window.localStorage.getItem(PERSONA_LENS_STORAGE_KEY);
-  return isPersonaLensID(stored) ? stored : DEFAULT_PERSONA_LENS_ID;
-};
-
-const getPersonaLensServerSnapshot = (): PersonaLensID => DEFAULT_PERSONA_LENS_ID;
 
 const notifyThemeChange = () => {
   window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
@@ -169,32 +139,6 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     <SidebarContext.Provider value={contextValue}>
       {children}
     </SidebarContext.Provider>
-  );
-}
-
-export function PersonaLensProvider({ children }: { children: React.ReactNode }) {
-  const activeLensID = useSyncExternalStore(
-    subscribePersonaLens,
-    getPersonaLensSnapshot,
-    getPersonaLensServerSnapshot,
-  );
-
-  const contextValue = useMemo(
-    () => ({
-      activeLens: personaLensByID[activeLensID],
-      activeLensID,
-      setActiveLensID: (value: PersonaLensID) => {
-        window.localStorage.setItem(PERSONA_LENS_STORAGE_KEY, value);
-        notifyPersonaLensChange();
-      },
-    }),
-    [activeLensID],
-  );
-
-  return (
-    <PersonaLensContext.Provider value={contextValue}>
-      {children}
-    </PersonaLensContext.Provider>
   );
 }
 
@@ -278,12 +222,6 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
 export function useSidebar() {
   const context = useContext(SidebarContext);
   if (!context) throw new Error("useSidebar must be used within SidebarProvider");
-  return context;
-}
-
-export function usePersonaLens() {
-  const context = useContext(PersonaLensContext);
-  if (!context) throw new Error("usePersonaLens must be used within PersonaLensProvider");
   return context;
 }
 

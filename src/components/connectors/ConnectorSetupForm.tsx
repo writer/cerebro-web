@@ -1425,7 +1425,7 @@ function ScopePolicyBuilder({
     { id: "high_value", label: "High value", count: rows.filter((row) => row.option.high_value).length },
     ...(frameworkQueryActive ? [{ id: "framework" as const, label: "Framework", count: frameworkRows.length }] : []),
   ];
-  const applyFrameworkLens = () => {
+  const applyFrameworkFilter = () => {
     if (!frameworkQueryActive) return;
     onEnableFamilies(frameworkFamilies);
     onDisableFamilies(outsideFrameworkFamilies);
@@ -1460,14 +1460,14 @@ function ScopePolicyBuilder({
 
         <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--border)] px-4 py-3">
           <label className="min-w-[220px] flex-1">
-            <span className="sr-only">Framework lens</span>
+            <span className="sr-only">Framework filter</span>
             <input
               value={framework}
               onChange={(event) => {
                 setFramework(event.target.value);
                 setFilter(event.target.value.trim() ? "framework" : "all");
               }}
-              placeholder="Framework lens"
+              placeholder="Framework filter"
               list="connector-framework-options"
               className="control-input w-full px-3 py-2 text-[13px]"
             />
@@ -1508,12 +1508,12 @@ function ScopePolicyBuilder({
           {frameworkQueryActive && (
             <button
               type="button"
-              onClick={applyFrameworkLens}
+              onClick={applyFrameworkFilter}
               disabled={frameworkRows.length === 0}
               className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ListChecks className="h-3.5 w-3.5" />
-              Collect lens only
+              Collect framework only
             </button>
           )}
         </div>

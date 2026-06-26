@@ -1,19 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
-import { useApiKey, usePersonaLens } from "@/components/providers";
+import { useApiKey } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/LazyTrendsChart";
 import { countLabel } from "@/lib/format";
-import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCSourceCoverageRecord, GRCSourceCoverageSummary, GRCSummary, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
+import { displayDate, displayDurationSeconds, GRCDashboard, GRCConnector, GRCControl, GRCEvidence, GRCFinding, GRCProgramReadiness, GRCProgramWorkItem, GRCSourceCoverageRecord, GRCSourceCoverageSummary, GRCSummary, GRCTrends, humanize, riskSort, shortEntity } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 import { buildGRCProductAreaViews, hasGRCProductAreaContext, type GRCProductAreaView } from "@/lib/grc-product-areas";
-import { personaLenses, type PersonaLens, type PersonaLensID, type PersonaLensSignal, type PersonaSignalKey } from "@/lib/persona-lenses";
+import { informationAreaByID, type InformationArea, type InformationAreaSignal, type InformationSignalKey } from "@/lib/information-areas";
 import { hasTrendActivity } from "@/lib/trends";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
@@ -84,7 +84,7 @@ function CoverageBlindSpotsPanel({
   return (
     <Panel
       title="Source Coverage Blind Spots"
-      action={<Link href="/connectors" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Review connectors</Link>}
+      action={<Link href="/connectors" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Review sources</Link>}
     >
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="grid gap-2 md:grid-cols-2">
@@ -246,7 +246,7 @@ function RiskSignalCard({
   );
 }
 
-type PersonaSignalMetrics = {
+type InformationSignalMetrics = {
   auditReadinessScore: number;
   controlTotal: number;
   coverageBlindSpotCount: number;
@@ -259,7 +259,7 @@ type PersonaSignalMetrics = {
   summary: GRCSummary;
 };
 
-const signalValue = (key: PersonaSignalKey, metrics: PersonaSignalMetrics) => {
+const signalValue = (key: InformationSignalKey, metrics: InformationSignalMetrics) => {
   switch (key) {
     case "activeRisk":
       return metrics.summary.open_findings;
@@ -280,7 +280,7 @@ const signalValue = (key: PersonaSignalKey, metrics: PersonaSignalMetrics) => {
   }
 };
 
-const signalTone = (key: PersonaSignalKey, metrics: PersonaSignalMetrics): SignalTone => {
+const signalTone = (key: InformationSignalKey, metrics: InformationSignalMetrics): SignalTone => {
   switch (key) {
     case "auditReadiness":
       if (metrics.auditReadinessScore < 70) return "danger";
@@ -303,7 +303,7 @@ const signalTone = (key: PersonaSignalKey, metrics: PersonaSignalMetrics): Signa
   }
 };
 
-const signalDetail = (key: PersonaSignalKey, metrics: PersonaSignalMetrics) => {
+const signalDetail = (key: InformationSignalKey, metrics: InformationSignalMetrics) => {
   switch (key) {
     case "activeRisk":
       return `${metrics.criticalOrHighFindings} critical or high, ${metrics.summary.overdue_findings} overdue`;
@@ -312,223 +312,562 @@ const signalDetail = (key: PersonaSignalKey, metrics: PersonaSignalMetrics) => {
     case "controlFailures":
       return `${metrics.controlTotal} dashboard controls tracked`;
     case "coverageGaps":
-      return "Blind spots weaken proof and triage";
+      return countLabel(metrics.coverageBlindSpotCount, "coverage gap");
     case "evidenceIssues":
       return `${metrics.missingEvidenceItems} missing, ${metrics.staleEvidenceItems} stale`;
     case "highImpact":
-      return "Risk score 85+; inspect affected assets";
+      return "Risk score 85+ across affected assets";
     case "ownerGaps":
-      return "Assign accountability before handoff";
+      return countLabel(metrics.summary.unassigned, "unassigned risk");
     case "sourceTrust":
       return `${metrics.summary.stale_connectors} stale of ${metrics.summary.connectors} sources`;
   }
 };
 
-const headlineValue = (lens: PersonaLens, metrics: PersonaSignalMetrics) => {
-  switch (lens.id) {
-    case "compliance":
-      return metrics.evidenceIssues;
-    case "platform":
-      return metrics.summary.stale_connectors + metrics.coverageBlindSpotCount + metrics.summary.unassigned;
-    case "leadership":
-      return metrics.criticalOrHighFindings;
-    case "security":
-      return metrics.summary.open_findings;
-  }
+const pageSummary = (metrics: InformationSignalMetrics) =>
+  [
+    countLabel(metrics.summary.open_findings, "open risk"),
+    countLabel(metrics.summary.controls_failing, "failing control"),
+    countLabel(metrics.evidenceIssues, "evidence issue"),
+    countLabel(metrics.summary.stale_connectors, "stale source"),
+  ].join(", ") + ".";
+
+const overviewSignals: InformationAreaSignal[] = [
+  { key: "activeRisk", label: "Open risks", href: "/risk-inbox" },
+  { key: "highImpact", label: "High risk", href: "/risk-inbox?severity=CRITICAL" },
+  { key: "ownerGaps", label: "No owner", href: "/risk-inbox?owner=unassigned" },
+  { key: "controlFailures", label: "Failing controls", href: "/controls" },
+  { key: "evidenceIssues", label: "Evidence issues", href: "/evidence" },
+  { key: "sourceTrust", label: "Stale sources", href: "/connectors" },
+];
+
+const withWorkQueue = (area: InformationArea, workQueue: InformationArea["workQueue"]): InformationArea => ({
+  ...area,
+  workQueue,
+});
+
+const overviewRiskArea = withWorkQueue(informationAreaByID.risks, {
+  title: "Risks",
+  description: "Open findings sorted by risk, owner, evidence, and due date.",
+  actionLabel: "View risks",
+  actionHref: "/risk-inbox",
+  empty: "No open findings.",
+});
+
+const overviewControlArea = withWorkQueue(informationAreaByID.controls, {
+  title: "Controls",
+  description: "Failing controls, missing evidence, stale proof, and mapped findings.",
+  actionLabel: "View controls",
+  actionHref: "/controls",
+  empty: "No failing controls.",
+});
+
+const overviewSourceArea = withWorkQueue(informationAreaByID.sources, {
+  title: "Sources",
+  description: "Source freshness, runtime health, coverage gaps, and collection scope.",
+  actionLabel: "View sources",
+  actionHref: "/connectors",
+  empty: "No stale sources or coverage gaps.",
+});
+
+const overviewReportArea = withWorkQueue(informationAreaByID.reports, {
+  title: "Reports",
+  description: "Current risk, readiness, owner gaps, and trend movement for review.",
+  actionLabel: "View reports",
+  actionHref: "/reports",
+  empty: "No report issues.",
+});
+
+type WorkChipTone = "danger" | "warning" | "success" | "neutral";
+
+const workChipClass: Record<WorkChipTone, string> = {
+  danger: "border-red-200 bg-red-50 text-red-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  neutral: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
-const pageSummary = (lens: PersonaLens, metrics: PersonaSignalMetrics) => {
-  switch (lens.id) {
-    case "compliance":
-      return `${metrics.evidenceIssues} evidence issues, ${metrics.summary.controls_failing} failing control, ${metrics.coverageBlindSpotCount} coverage gap${metrics.coverageBlindSpotCount === 1 ? "" : "s"}.`;
-    case "platform":
-      return `${metrics.summary.stale_connectors} stale source${metrics.summary.stale_connectors === 1 ? "" : "s"}, ${metrics.coverageBlindSpotCount} coverage gap${metrics.coverageBlindSpotCount === 1 ? "" : "s"}, ${metrics.summary.unassigned} owner gap${metrics.summary.unassigned === 1 ? "" : "s"}.`;
-    case "leadership":
-      return `${metrics.criticalOrHighFindings} critical or high, ${metrics.summary.unassigned} owner follow-up, ${Math.round(metrics.auditReadinessScore)}% readiness.`;
-    case "security":
-      return `${metrics.summary.unassigned} without an owner, ${metrics.criticalOrHighFindings} critical or high, ${metrics.evidenceIssues} evidence issues.`;
-  }
-};
+function WorkChip({ children, tone = "neutral" }: { children: string | number; tone?: WorkChipTone }) {
+  return (
+    <span className={`inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${workChipClass[tone]}`}>
+      {children}
+    </span>
+  );
+}
 
-const findingContextLabel = (lens: PersonaLens) => {
-  switch (lens.id) {
-    case "compliance":
-      return "Control";
-    case "platform":
-      return "Source";
-    case "leadership":
-      return "Owner";
-    case "security":
-      return "Owner";
-  }
-};
-
-const findingContextValue = (lens: PersonaLens, finding: GRCFinding) => {
-  switch (lens.id) {
-    case "compliance":
-      return finding.controls?.map((control) => `${control.framework_name} ${control.control_id}`).join(", ") || finding.policy_name || "Unmapped";
-    case "platform":
-      return finding.source_id || finding.runtime_id || "Unknown source";
-    case "leadership":
-    case "security":
-      return finding.owner || "Unassigned";
-  }
-};
-
-const findingSubline = (lens: PersonaLens, finding: GRCFinding) => {
-  switch (lens.id) {
-    case "compliance":
-      return `${finding.evidence_count} evidence · ${finding.policy_name || finding.rule_id || "Control impact"}`;
-    case "platform":
-      return `${shortEntity(finding.entity || finding.id)} · ${finding.owner || "Unassigned owner"}`;
-    case "leadership":
-      return `${finding.severity.toLowerCase()} severity · ${finding.evidence_count} evidence`;
-    case "security":
-      return `${shortEntity(finding.entity || finding.id)} · ${finding.evidence_count} evidence`;
-  }
-};
-
-function PersonaWorkBriefing({
-  activeLens,
-  activeLensID,
-  findings,
-  metrics,
-  setActiveLensID,
+function QueueShell({
+  actionHref,
+  actionLabel,
+  children,
+  description,
+  title,
 }: {
-  activeLens: PersonaLens;
-  activeLensID: PersonaLensID;
-  findings: GRCFinding[];
-  metrics: PersonaSignalMetrics;
-  setActiveLensID: (value: PersonaLensID) => void;
+  actionHref: string;
+  actionLabel: string;
+  children: ReactNode;
+  description: string;
+  title: string;
 }) {
-  const topFindings = findings.slice(0, 3);
+  return (
+    <section className="surface-panel p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+          <p className="mt-1 text-[13px] text-[var(--text-muted)]">{description}</p>
+        </div>
+        <Link href={actionHref} className="secondary-button px-3 py-1.5 text-[13px]">{actionLabel}</Link>
+      </div>
+      <div className="mt-4 divide-y divide-[color:var(--border)]">{children}</div>
+    </section>
+  );
+}
+
+const ownerMissing = (finding: GRCFinding) => !finding.owner || finding.owner === "Unassigned";
+
+const riskReasonLabel = (reason: string) => {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("external") || normalized.includes("public")) return "external";
+  if (normalized.includes("privilege")) return "privileged";
+  if (normalized.includes("exploit")) return "exploitable";
+  if (normalized.includes("credential") || normalized.includes("secret")) return "credential";
+  if (normalized.includes("evidence")) return "weak proof";
+  return humanize(reason);
+};
+
+const securityWhyNow = (finding: GRCFinding) => {
+  const chips: { label: string; tone: WorkChipTone }[] = [];
+  if ((finding.risk_score ?? 0) >= 85) chips.push({ label: "risk 85+", tone: "danger" });
+  if ((finding.impact_score ?? 0) >= 80 || finding.impact_level?.toLowerCase() === "high") chips.push({ label: "high impact", tone: "danger" });
+  (finding.risk_reasons ?? []).slice(0, 2).forEach((reason) => chips.push({ label: riskReasonLabel(reason), tone: "warning" }));
+  if (finding.sla_status === "overdue") chips.push({ label: "overdue", tone: "danger" });
+  if (ownerMissing(finding)) chips.push({ label: "no owner", tone: "warning" });
+  if (finding.evidence_count <= 1) chips.push({ label: "limited proof", tone: "warning" });
+  return chips.slice(0, 4);
+};
+
+const confidenceLabel = (finding: GRCFinding) => {
+  if (typeof finding.confidence_score === "number") return `${Math.round(finding.confidence_score)}% confidence`;
+  return finding.evidence_count <= 1 ? "limited evidence" : `${finding.evidence_count} evidence`;
+};
+
+const findingSlaLabel = (finding: GRCFinding) => {
+  if (finding.due_at) return `${humanize(finding.sla_status)} · ${displayDate(finding.due_at)}`;
+  return humanize(finding.sla_status || "no_due_date");
+};
+
+function SecurityWorkQueue({ activeArea, findings }: { activeArea: InformationArea; findings: GRCFinding[] }) {
+  const queue = findings.slice(0, 3);
+  return (
+    <QueueShell {...activeArea.workQueue}>
+      {queue.map((finding) => {
+        const whyNow = securityWhyNow(finding);
+        return (
+          <Link key={finding.id} href={`/findings/${encodeURIComponent(finding.id)}`} className="grid gap-3 py-3 transition hover:text-[var(--primary)] lg:grid-cols-[minmax(0,1fr)_220px_150px_120px]">
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{finding.title}</div>
+              <div className="mt-1 text-[12px] text-[var(--text-muted)]">{shortEntity(finding.entity || finding.id)} · {confidenceLabel(finding)}</div>
+            </div>
+            <div>
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Signals</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {whyNow.length > 0 ? whyNow.map((chip) => <WorkChip key={chip.label} tone={chip.tone}>{chip.label}</WorkChip>) : <WorkChip>needs review</WorkChip>}
+              </div>
+            </div>
+            <div className="text-[12px] text-[var(--text-secondary)]">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Owner / SLA</span>
+              <span className={ownerMissing(finding) ? "font-semibold text-amber-700" : undefined}>{finding.owner || "Unassigned"}</span>
+              <span className="block text-[11px] text-[var(--text-muted)]">{findingSlaLabel(finding)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2 lg:justify-end">
+              <RiskBadge score={finding.risk_score} />
+              <span className="text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">›</span>
+            </div>
+          </Link>
+        );
+      })}
+      {queue.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">{activeArea.workQueue.empty}</div>}
+    </QueueShell>
+  );
+}
+
+const controlKey = (control: GRCControl) => `${control.framework_name}-${control.control_id}`;
+
+const controlOwner = (control: GRCControl) =>
+  control.owner_domain || control.findings?.find((finding) => finding.owner && finding.owner !== "Unassigned")?.owner || "Unassigned";
+
+const earliestDueAt = (findings: GRCFinding[] | undefined) => {
+  const timestamps = (findings ?? [])
+    .map((finding) => finding.due_at ? Date.parse(finding.due_at) : Number.NaN)
+    .filter((value) => Number.isFinite(value));
+  if (timestamps.length === 0) return undefined;
+  return new Date(Math.min(...timestamps)).toISOString();
+};
+
+const controlEvidenceProgress = (control: GRCControl) => {
+  const expected = Math.max(control.evidence_expectations ?? 0, control.evidence_items + (control.missing_evidence_items ?? 0));
+  if (expected <= 0) return `${control.evidence_items} attached`;
+  return `${control.evidence_items}/${expected} attached`;
+};
+
+const controlBlockers = (control: GRCControl) => {
+  const blockers: { label: string; tone: WorkChipTone }[] = [];
+  if (control.status === "failing") blockers.push({ label: "failing", tone: "danger" });
+  if ((control.missing_evidence_items ?? 0) > 0) blockers.push({ label: `${control.missing_evidence_items} missing`, tone: "warning" });
+  if ((control.stale_evidence_items ?? 0) > 0) blockers.push({ label: `${control.stale_evidence_items} stale`, tone: "warning" });
+  if (control.status === "manual_review") blockers.push({ label: "manual review", tone: "warning" });
+  if (blockers.length === 0) blockers.push({ label: "defensible", tone: "success" });
+  return blockers.slice(0, 3);
+};
+
+const controlRecommendation = (control: GRCControl) => {
+  if (control.status === "failing" && control.open_findings > 0) return "Mapped findings open";
+  if ((control.missing_evidence_items ?? 0) > 0) return "Missing evidence";
+  if ((control.stale_evidence_items ?? 0) > 0) return "Stale proof";
+  if (control.status === "manual_review") return "Manual assessment";
+  return "Audit-ready";
+};
+
+const controlWorkQueueRank = (control: GRCControl) => {
+  const statusWeight: Record<string, number> = {
+    failing: 0,
+    missing_evidence: 1,
+    stale_evidence: 2,
+    manual_review: 3,
+    exception: 4,
+    passing: 8,
+  };
+  return [
+    statusWeight[control.status] ?? 5,
+    -(control.critical_findings * 100 + control.open_findings * 10 + (control.missing_evidence_items ?? 0) + (control.stale_evidence_items ?? 0)),
+    Date.parse(earliestDueAt(control.findings) ?? "9999-12-31"),
+  ] as const;
+};
+
+const controlHref = (control: GRCControl) =>
+  `/controls?framework=${encodeURIComponent(control.framework_name)}&control=${encodeURIComponent(control.control_id)}`;
+
+function AuditWorkQueue({
+  activeArea,
+  controls,
+  readinessData,
+}: {
+  activeArea: InformationArea;
+  controls: GRCControl[];
+  readinessData?: GRCProgramReadiness;
+}) {
+  const queue = controls.slice().sort((left, right) => {
+    const leftRank = controlWorkQueueRank(left);
+    const rightRank = controlWorkQueueRank(right);
+    for (let index = 0; index < leftRank.length; index += 1) {
+      const diff = leftRank[index] - rightRank[index];
+      if (diff !== 0) return diff;
+    }
+    return controlKey(left).localeCompare(controlKey(right));
+  }).slice(0, 3);
+  const readinessScore = readinessData?.summary.score;
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-      <div className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {activeLens.signals.map((signal: PersonaLensSignal) => (
-            <RiskSignalCard
-              key={signal.key}
-              href={signal.href}
-              label={signal.label}
-              value={signalValue(signal.key, metrics)}
-              detail={signalDetail(signal.key, metrics)}
-              tone={signalTone(signal.key, metrics)}
-            />
-          ))}
+    <QueueShell {...activeArea.workQueue}>
+      {typeof readinessScore === "number" && (
+        <div className="grid gap-3 py-3 md:grid-cols-[160px_minmax(0,1fr)_160px]">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Packet readiness</div>
+            <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{Math.round(readinessScore)}%</div>
+          </div>
+          <div className="text-[12px] leading-5 text-[var(--text-secondary)]">
+            {readinessData?.summary.readiness_blockers?.length
+              ? `${readinessData.summary.readiness_blockers.length} evidence item${readinessData.summary.readiness_blockers.length === 1 ? "" : "s"} need proof before export.`
+              : "No missing packet proof reported."}
+          </div>
+          <Link href={readinessData?.proof_bundle?.reports_path ?? "/reports"} className="secondary-button inline-flex items-center justify-center px-3 py-2 text-[12px]">
+            Prepare packet
+          </Link>
         </div>
-
-        <section className="surface-panel p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">{activeLens.workQueue.title}</h2>
-              <p className="mt-1 text-[13px] text-[var(--text-muted)]">{activeLens.workQueue.description}</p>
+      )}
+      {queue.map((control) => {
+        const dueAt = earliestDueAt(control.findings);
+        return (
+          <Link key={controlKey(control)} href={controlHref(control)} className="grid gap-3 py-3 transition hover:text-[var(--primary)] lg:grid-cols-[minmax(0,1fr)_190px_150px_130px]">
+            <div className="min-w-0">
+              <div className="font-mono text-[12px] font-semibold text-[var(--text-primary)]">{control.framework_name} {control.control_id}</div>
+              <div className="mt-1 truncate text-[13px] font-medium text-[var(--text-primary)]">{control.title || control.audit_summary || "Control objective"}</div>
+              <div className="mt-1 text-[12px] text-[var(--text-muted)]">{controlRecommendation(control)}</div>
             </div>
-            <Link href={activeLens.workQueue.actionHref} className="secondary-button px-3 py-1.5 text-[13px]">{activeLens.workQueue.actionLabel}</Link>
+            <div>
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {controlBlockers(control).map((chip) => <WorkChip key={chip.label} tone={chip.tone}>{chip.label}</WorkChip>)}
+              </div>
+            </div>
+            <div className="text-[12px] text-[var(--text-secondary)]">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Owner / proof</span>
+              {controlOwner(control)}
+              <span className="block text-[11px] text-[var(--text-muted)]">{controlEvidenceProgress(control)}</span>
+            </div>
+            <div className="text-[12px] text-[var(--text-secondary)]">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Due</span>
+              {dueAt ? displayDate(dueAt) : "No due date"}
+              <span className="block text-[11px] text-[var(--text-muted)]">{countLabel(control.open_findings, "finding")}</span>
+            </div>
+          </Link>
+        );
+      })}
+      {queue.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">{activeArea.workQueue.empty}</div>}
+    </QueueShell>
+  );
+}
+
+type PlatformQueueItem = {
+  action: string;
+  detail: string;
+  href: string;
+  id: string;
+  rank: number;
+  signal: string;
+  title: string;
+  tone: WorkChipTone;
+};
+
+const connectorNeedsAttention = (connector: GRCConnector) =>
+  connector.status !== "healthy" ||
+  connector.freshness !== "fresh" ||
+  (typeof connector.sync_lag_seconds === "number" && connector.sync_lag_seconds > 60 * 60) ||
+  (typeof connector.watermark_lag_seconds === "number" && connector.watermark_lag_seconds > 60 * 60);
+
+const connectorQueueItem = (connector: GRCConnector): PlatformQueueItem => {
+  const source = connector.source_id || shortEntity(connector.runtime_id);
+  const sourceFilter = connector.source_id || connector.runtime_id;
+  const syncLag = displayDurationSeconds(connector.sync_lag_seconds);
+  const dataLag = displayDurationSeconds(connector.watermark_lag_seconds);
+  const status = connector.status === "healthy" && connector.freshness !== "fresh" ? connector.freshness : connector.status;
+  return {
+    action: "Inspect runtime",
+    detail: `Sync ${syncLag === "—" ? "not observed" : `${syncLag} ago`} · data ${dataLag === "—" ? "not observed" : `${dataLag} ago`}`,
+    href: `/connectors?source_id=${encodeURIComponent(sourceFilter)}`,
+    id: `connector:${connector.runtime_id}`,
+    rank: connector.status === "failed" ? 0 : connector.status === "healthy" ? 4 : 2,
+    signal: humanize(status || "needs_review"),
+    title: source,
+    tone: connector.status === "healthy" ? "warning" : "danger",
+  };
+};
+
+const coverageQueueItem = (record: GRCSourceCoverageRecord): PlatformQueueItem => ({
+  action: "Review scope",
+  detail: record.warning || record.notes?.[0] || `${record.dimension_type} coverage is incomplete.`,
+  href: `/connectors/${encodeURIComponent(record.source_id)}?tab=scope`,
+  id: `coverage:${record.source_id}:${record.dimension_id}`,
+  rank: record.high_value ? 1 : 3,
+  signal: record.high_value ? "High-value blind spot" : humanize(record.state || record.support_level || "coverage gap"),
+  title: record.title || humanize(record.dimension_id),
+  tone: record.high_value ? "danger" : "warning",
+});
+
+function PlatformWorkQueue({
+  activeArea,
+  connectors,
+  coverageBlindSpots,
+}: {
+  activeArea: InformationArea;
+  connectors: GRCConnector[];
+  coverageBlindSpots: GRCSourceCoverageRecord[];
+}) {
+  const items = [
+    ...connectors.filter(connectorNeedsAttention).map(connectorQueueItem),
+    ...coverageBlindSpots.map(coverageQueueItem),
+  ].sort((left, right) => left.rank - right.rank || left.title.localeCompare(right.title)).slice(0, 4);
+
+  return (
+    <QueueShell {...activeArea.workQueue}>
+      {items.map((item) => (
+        <Link key={item.id} href={item.href} className="grid gap-3 py-3 transition hover:text-[var(--primary)] md:grid-cols-[minmax(0,1fr)_170px_130px]">
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{item.title}</div>
+            <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">{item.detail}</div>
           </div>
-          <div className="mt-4 divide-y divide-[color:var(--border)]">
-            {topFindings.map((finding) => (
-              <Link key={finding.id} href={`/findings/${encodeURIComponent(finding.id)}`} className="grid gap-3 py-3 transition hover:text-[var(--primary)] md:grid-cols-[minmax(0,1fr)_160px_120px]">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{finding.title}</div>
-                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{findingSubline(activeLens, finding)}</div>
-                </div>
-                <div className="text-[12px] text-[var(--text-secondary)]">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{findingContextLabel(activeLens)}</span>
-                  {findingContextValue(activeLens, finding)}
-                </div>
-                <div className="flex items-center justify-between gap-2 md:justify-end">
-                  <RiskBadge score={finding.risk_score} />
-                  <span className="text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">›</span>
-                </div>
-              </Link>
+          <div>
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</span>
+            <div className="mt-1"><WorkChip tone={item.tone}>{item.signal}</WorkChip></div>
+          </div>
+          <div className="flex items-center justify-between gap-2 md:justify-end">
+            <span className="text-[12px] font-semibold text-[var(--text-primary)]">{item.action}</span>
+            <span className="text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">›</span>
+          </div>
+        </Link>
+      ))}
+      {items.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">{activeArea.workQueue.empty}</div>}
+    </QueueShell>
+  );
+}
+
+type ReviewQueueItem = {
+  action: string;
+  dedupeKey: string;
+  detail: string;
+  href: string;
+  id: string;
+  meta: string;
+  title: string;
+  tone: WorkChipTone;
+  why: string;
+};
+
+const findingKeyFromHref = (href: string) => {
+  const match = href.match(/^\/findings\/([^/?#]+)/);
+  if (!match) return "";
+  try {
+    return `finding:${decodeURIComponent(match[1])}`;
+  } catch {
+    return `finding:${match[1]}`;
+  }
+};
+
+const workItemReviewItem = (item: GRCProgramWorkItem): ReviewQueueItem => {
+  const href = item.href || (item.framework_name && item.control_id ? `/controls?framework=${encodeURIComponent(item.framework_name)}&control=${encodeURIComponent(item.control_id)}` : "/controls");
+  return {
+    action: item.action || "Open item",
+    dedupeKey: findingKeyFromHref(href) || `work:${item.id}`,
+    detail: [item.owner_domain || "Unassigned", item.status ? humanize(item.status) : ""].filter(Boolean).join(" · "),
+    href,
+    id: `work:${item.id}`,
+    meta: item.reasons?.[0] || countLabel(item.open_findings ?? 0, "mapped finding"),
+    title: item.title,
+    tone: item.status === "failing" ? "danger" : "warning",
+    why: item.missing_evidence_items ? `${item.missing_evidence_items} missing evidence` : item.stale_evidence_items ? `${item.stale_evidence_items} stale evidence` : "readiness",
+  };
+};
+
+const findingReviewItem = (finding: GRCFinding): ReviewQueueItem => ({
+  action: "Open risk",
+  dedupeKey: `finding:${finding.id}`,
+  detail: `${finding.owner || "Unassigned"} · ${findingSlaLabel(finding)}`,
+  href: `/findings/${encodeURIComponent(finding.id)}`,
+  id: `finding:${finding.id}`,
+  meta: confidenceLabel(finding),
+  title: finding.title,
+  tone: (finding.risk_score ?? 0) >= 85 ? "danger" : "warning",
+  why: (finding.risk_score ?? 0) >= 85 ? "risk 85+" : humanize(finding.severity),
+});
+
+const dedupeReviewItems = (items: ReviewQueueItem[]) => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.dedupeKey)) return false;
+    seen.add(item.dedupeKey);
+    return true;
+  });
+};
+
+function ReportsWorkQueue({
+  activeArea,
+  findings,
+  metrics,
+  readinessData,
+  trends,
+}: {
+  activeArea: InformationArea;
+  findings: GRCFinding[];
+  metrics: InformationSignalMetrics;
+  readinessData?: GRCProgramReadiness;
+  trends?: GRCTrends;
+}) {
+  const readinessScore = readinessData?.summary.score ?? metrics.auditReadinessScore;
+  const highRiskFindings = findings.filter((finding) => (finding.risk_score ?? 0) >= 70 || finding.severity === "CRITICAL" || finding.severity === "HIGH");
+  const readinessItems = (readinessData?.work_items ?? []).slice(0, 2).map(workItemReviewItem);
+  const reviewItems = dedupeReviewItems([...readinessItems, ...highRiskFindings.map(findingReviewItem)]).slice(0, 4);
+  const trendNet = trends?.summary?.net ?? 0;
+  const trendCopy = trendNet > 0 ? `${trendNet} net new findings` : trendNet < 0 ? `${Math.abs(trendNet)} net fewer findings` : "Backlog flat";
+  const reviewBullets = [
+    `${metrics.criticalOrHighFindings} critical or high risks.`,
+    `${Math.round(readinessScore)}% control readiness; ${metrics.evidenceIssues} evidence issues.`,
+    `${metrics.summary.unassigned} risks without an owner; ${trendCopy.toLowerCase()}.`,
+  ];
+
+  return (
+    <QueueShell {...activeArea.workQueue}>
+      <div className="grid gap-3 py-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</div>
+          <div className="mt-2 space-y-1.5">
+            {reviewBullets.map((bullet) => (
+              <div key={bullet} className="text-[12px] leading-5 text-[var(--text-secondary)]">{bullet}</div>
             ))}
-            {topFindings.length === 0 && (
-              <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">{activeLens.workQueue.empty}</div>
-            )}
           </div>
-        </section>
+        </div>
+        <div className="flex flex-wrap items-start gap-2 lg:justify-end">
+          <Link href={readinessData?.proof_bundle?.reports_path ?? "/reports"} className="secondary-button px-3 py-1.5 text-[12px]">Open report</Link>
+          <Link href="/trends" className="secondary-button px-3 py-1.5 text-[12px]">View trends</Link>
+        </div>
+      </div>
+      {reviewItems.map((item) => (
+        <Link key={item.id} href={item.href} className="grid gap-3 py-3 transition hover:text-[var(--primary)] lg:grid-cols-[minmax(0,1fr)_180px_170px_110px]">
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{item.title}</div>
+            <div className="mt-1 text-[12px] text-[var(--text-muted)]">{item.meta}</div>
+          </div>
+          <div>
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</span>
+            <div className="mt-1"><WorkChip tone={item.tone}>{item.why}</WorkChip></div>
+          </div>
+          <div className="text-[12px] text-[var(--text-secondary)]">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Owner / due date</span>
+            {item.detail}
+          </div>
+          <div className="flex items-center justify-between gap-2 lg:justify-end">
+            <span className="text-[12px] font-semibold text-[var(--text-primary)]">{item.action}</span>
+            <span className="text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">›</span>
+          </div>
+        </Link>
+      ))}
+      {reviewItems.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">{activeArea.workQueue.empty}</div>}
+    </QueueShell>
+  );
+}
+
+function InformationDashboard({
+  connectors,
+  controls,
+  coverageBlindSpots,
+  findings,
+  metrics,
+  readinessData,
+  trends,
+}: {
+  connectors: GRCConnector[];
+  controls: GRCControl[];
+  coverageBlindSpots: GRCSourceCoverageRecord[];
+  findings: GRCFinding[];
+  metrics: InformationSignalMetrics;
+  readinessData?: GRCProgramReadiness;
+  trends?: GRCTrends;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        {overviewSignals.map((signal: InformationAreaSignal) => (
+          <RiskSignalCard
+            key={signal.key}
+            href={signal.href}
+            label={signal.label}
+            value={signalValue(signal.key, metrics)}
+            detail={signalDetail(signal.key, metrics)}
+            tone={signalTone(signal.key, metrics)}
+          />
+        ))}
       </div>
 
-      <aside className="space-y-4">
-        <section className="surface-panel p-5">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Prioritize for</div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {personaLenses.map((lens) => {
-              const active = lens.id === activeLensID;
-              return (
-                <button
-                  key={lens.id}
-                  type="button"
-                  onClick={() => setActiveLensID(lens.id)}
-                  className={`rounded-md border px-3 py-2 text-left text-[12px] font-semibold transition ${
-                    active
-                      ? "border-[color:var(--ring)] bg-[var(--primary-soft)] text-[var(--text-primary)]"
-                      : "border-[color:var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[color:var(--border-strong)]"
-                  }`}
-                  aria-pressed={active}
-                >
-                  {lens.shortLabel}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">
-            This changes what gets promoted first; it does not change permissions or hide underlying graph facts.
-          </p>
-        </section>
-
-        <section className="surface-panel p-5">
-          <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Decision frame</h2>
-          <div className="mt-3 space-y-2">
-            {activeLens.decisionFrame.map((criterion) => (
-              <div key={criterion} className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-                {criterion}
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 border-t border-[color:var(--border)] pt-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Next actions</div>
-            <div className="mt-2 space-y-2">
-              {activeLens.nextActions.map((action) => (
-                <Link key={action.href} href={action.href} className="block rounded-md px-2 py-1.5 text-[12px] transition hover:bg-[var(--surface-hover)]">
-                  <span className="font-semibold text-[var(--text-primary)]">{action.label}</span>
-                  <span className="ml-1 text-[var(--text-muted)]">{action.detail}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="surface-panel p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Ask Cerebro</h2>
-              <p className="mt-1 text-[12px] text-[var(--text-muted)]">Start with the questions operators ask during triage.</p>
-            </div>
-            <Link href="/ask" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Open</Link>
-          </div>
-          <div className="mt-4 space-y-2">
-            {activeLens.askPrompts.map((prompt) => (
-              <Link
-                key={prompt}
-                href={`/ask?q=${encodeURIComponent(prompt)}`}
-                className="block rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
-              >
-                {prompt}
-              </Link>
-            ))}
-          </div>
-        </section>
-      </aside>
+      <div className="grid gap-4">
+        <SecurityWorkQueue activeArea={overviewRiskArea} findings={findings} />
+        <AuditWorkQueue activeArea={overviewControlArea} controls={controls} readinessData={readinessData} />
+        <PlatformWorkQueue activeArea={overviewSourceArea} connectors={connectors} coverageBlindSpots={coverageBlindSpots} />
+        <ReportsWorkQueue activeArea={overviewReportArea} findings={findings} metrics={metrics} readinessData={readinessData} trends={trends} />
+      </div>
     </section>
   );
 }
 
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
-  const { activeLens, activeLensID, setActiveLensID } = usePersonaLens();
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const data = dashboard.data;
   const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
@@ -582,7 +921,7 @@ export default function Home() {
   const productAreas = buildGRCProductAreaViews({ coverageBlindSpots, summary });
   const criticalOrHighFindings = (summary?.critical_findings ?? 0) + (summary?.high_findings ?? 0);
   const evidenceIssues = missingEvidenceItems + staleEvidenceItems;
-  const homeMetrics: PersonaSignalMetrics | null = summary ? {
+  const homeMetrics: InformationSignalMetrics | null = summary ? {
     auditReadinessScore: readiness?.score ?? controlProgress,
     controlTotal,
     coverageBlindSpotCount,
@@ -594,10 +933,10 @@ export default function Home() {
     staleEvidenceItems,
     summary,
   } : null;
-  const pageTitle = homeMetrics ? `${headlineValue(activeLens, homeMetrics)} ${activeLens.headline}` : `${activeLens.shortLabel} briefing`;
+  const pageTitle = "Home";
   const pageDescription = homeMetrics
-    ? `${pageSummary(activeLens, homeMetrics)} Optimized for ${activeLens.summaryFocus.join(", ")}.`
-    : "What is risky, what changed, who owns it, and what to fix first.";
+    ? pageSummary(homeMetrics)
+    : "Risks, controls, evidence, assets, reports, and source health.";
 
   const reload = () => {
     void dashboard.reload();
@@ -631,17 +970,19 @@ export default function Home() {
         }
       />
 
-      {dashboard.loading && <LoadingBlock label="Loading dashboard..." />}
-      {dashboard.error && <ErrorBlock error={dashboard.error} onRetry={() => void dashboard.reload()} recoveryDetail="Overview metrics will appear when the API is reachable." />}
+      {dashboard.loading && <LoadingBlock label="Loading risks, controls, evidence, and sources..." />}
+      {dashboard.error && <ErrorBlock error={dashboard.error} onRetry={() => void dashboard.reload()} recoveryDetail="Risk, evidence, and source health will appear when the API is reachable." />}
 
       {data && summary && homeMetrics && (
         <>
-          <PersonaWorkBriefing
-            activeLens={activeLens}
-            activeLensID={activeLensID}
+          <InformationDashboard
+            connectors={data.connectors ?? []}
+            controls={data.controls ?? []}
+            coverageBlindSpots={coverageBlindSpots}
             findings={priorityFindings}
             metrics={homeMetrics}
-            setActiveLensID={setActiveLensID}
+            readinessData={readinessQuery.data ?? undefined}
+            trends={trendsQuery.data ?? undefined}
           />
 
           {attentionItems.length > 0 && (
@@ -663,7 +1004,7 @@ export default function Home() {
                 </button>
               }
             >
-              Audit readiness is unavailable; showing dashboard-backed control and coverage values.
+              Program readiness is unavailable; showing current risks, controls, evidence, and source health.
             </AttentionBanner>
           )}
 
@@ -709,13 +1050,13 @@ export default function Home() {
             <ProgressCard
               title="Audit Readiness"
               percent={readiness?.score ?? controlProgress}
-              detail={readiness ? humanize(readiness.status) : dashboardBackedReadiness ? "dashboard-backed" : "loading"}
+              detail={readiness ? humanize(readiness.status) : dashboardBackedReadiness ? "using current counts" : "loading"}
               total={countLabel(readiness?.controls ?? controlTotal, "control")}
               href={readinessQuery.data?.proof_bundle?.reports_path ?? "/reports"}
             />
             <ProgressCard title="Control Posture" percent={controlProgress} detail={`${passingControls} passing`} total={`${controlTotal} total`} href="/controls" />
             <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
-            <ProgressCard title="Connector Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
+            <ProgressCard title="Source Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
           </div>
 
           <ProductAreaMap areas={productAreas} />
@@ -737,7 +1078,7 @@ export default function Home() {
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <Panel
-              title="Priority Findings"
+              title="Highest-Risk Findings"
               action={<Link href="/risk-inbox" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">View all</Link>}
             >
               <FindingTable findings={priorityFindings} empty="No open findings." />
@@ -762,12 +1103,12 @@ export default function Home() {
                 </div>
               </Panel>
 
-              <Panel title="Connectors">
+              <Panel title="Source Health">
                 <div className="space-y-2">
                   {(data.connectors ?? []).slice(0, 5).map((c) => (
                     <Link
                       key={c.runtime_id}
-                      href={`/connectors?runtime_id=${encodeURIComponent(c.runtime_id)}`}
+                      href={`/connectors?source_id=${encodeURIComponent(c.source_id || c.runtime_id)}`}
                       className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
                     >
                       <div>

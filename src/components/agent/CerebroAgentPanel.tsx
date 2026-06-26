@@ -5,7 +5,6 @@ import { type KeyboardEvent, useMemo } from "react";
 import {
   Activity,
   ArrowUpRight,
-  Brain,
   Copy,
   Database,
   ExternalLink,
@@ -35,8 +34,8 @@ const statusTone = (turn?: AskTurnState) => {
 
 const statusLabel = (turn?: AskTurnState) => {
   if (!turn) return "Ready";
-  if (turn.status === "streaming") return turn.agentMode === "legacy" ? "Ask stream" : "Graph tools running";
-  if (turn.status === "completed") return turn.agentMode === "legacy" ? "Ask complete" : "Graph tools complete";
+  if (turn.status === "streaming") return "Working";
+  if (turn.status === "completed") return "Complete";
   if (turn.status === "aborted") return "Stopped";
   return "Attention";
 };
@@ -82,7 +81,7 @@ const samplePrompts = (routeLabel?: string, scope?: string, pageState?: string) 
     return [
       {
         label: "Why empty?",
-        prompt: `Explain why the ${routeLabel ?? "current"} screen is empty and what filters or inputs I should check first.`,
+        prompt: `Explain why ${routeLabel ?? "this page"} is empty and what filters or inputs I should check first.`,
         icon: Search,
       },
       {
@@ -99,8 +98,8 @@ const samplePrompts = (routeLabel?: string, scope?: string, pageState?: string) 
   }
   return [
     {
-      label: "Triage this view",
-      prompt: `On the ${routeLabel ?? "current"} screen, identify the highest-risk item I should inspect next and why.`,
+      label: "What needs attention?",
+      prompt: `On ${routeLabel ?? "this page"}, identify the highest-risk item I should inspect next and why.`,
       icon: Search,
     },
     {
@@ -160,16 +159,16 @@ export default function CerebroAgentPanel() {
         type="button"
         onClick={() => openAgent()}
         className={`agent-surface agent-launcher fixed bottom-5 right-5 z-40 hidden items-center gap-3 rounded-lg border border-slate-200 bg-white text-left shadow-[0_18px_45px_rgba(15,23,42,0.15)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_22px_55px_rgba(15,23,42,0.18)] sm:flex ${quietLauncher ? "w-[58px] justify-center px-2.5 py-2.5" : "w-[234px] px-3 py-3"}`}
-        aria-label="Open Ask Cerebro"
-        title={quietLauncher ? `Ask Cerebro about ${pageContext.routeLabel ?? "this screen"}` : undefined}
+        aria-label="Open Ask"
+        title={quietLauncher ? `Ask about ${pageContext.routeLabel ?? "this page"}` : undefined}
       >
         <span className={`grid shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-950 text-white ${quietLauncher ? "h-9 w-9" : "h-10 w-10"}`}>
-          {activeTurn ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+          {activeTurn ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
         </span>
         <span className={quietLauncher ? "sr-only" : "min-w-0 flex-1 max-sm:sr-only"}>
-          <span className="block text-[14px] font-semibold text-slate-950">Ask Cerebro</span>
+          <span className="block text-[14px] font-semibold text-slate-950">Ask</span>
           <span className="mt-0.5 block truncate text-[12px] text-slate-500">
-            {activeTurn ? "Query running" : pageContext.routeLabel ?? "Ask across current data"}
+            {activeTurn ? "Working" : pageContext.routeLabel ?? "Ask about current data"}
           </span>
         </span>
         {!quietLauncher && <ArrowUpRight className="h-4 w-4 text-slate-400 max-sm:hidden" />}
@@ -193,11 +192,11 @@ export default function CerebroAgentPanel() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-950 text-white shadow-sm">
-                <Brain className="h-4.5 w-4.5" />
+                <MessageSquare className="h-4.5 w-4.5" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-[16px] font-semibold text-slate-950">Ask Cerebro</h2>
+                  <h2 className="truncate text-[16px] font-semibold text-slate-950">Ask</h2>
                   <span className={`agent-mono rounded-full border px-2 py-0.5 text-[10px] uppercase ${statusTone(latestTurn)}`}>
                     {statusLabel(latestTurn)}
                   </span>
@@ -212,7 +211,7 @@ export default function CerebroAgentPanel() {
               <Link
                 href="/ask"
                 className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-                title="Open full Ask Cerebro"
+                title="Open full Ask"
               >
                 <Maximize2 className={iconClass} />
               </Link>
@@ -220,7 +219,7 @@ export default function CerebroAgentPanel() {
                 type="button"
                 onClick={() => setOpen(false)}
                 className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-                title="Close Ask Cerebro"
+                title="Close Ask"
               >
                 <X className={iconClass} />
               </button>
@@ -228,7 +227,7 @@ export default function CerebroAgentPanel() {
           </div>
 
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {(pageContext.chips?.length ? pageContext.chips : [{ label: "Screen", value: pageContext.routeLabel ?? "Current view" }]).map((chip) => (
+            {(pageContext.chips?.length ? pageContext.chips : [{ label: "Page", value: pageContext.routeLabel ?? "Current page" }]).map((chip) => (
               <span
                 key={`${chip.label}:${chip.value}`}
                 className="agent-mono inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] text-slate-600"
@@ -246,19 +245,19 @@ export default function CerebroAgentPanel() {
             <div className="space-y-5">
               <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="agent-mono text-[10px] font-semibold uppercase text-indigo-700">
-                  Evidence and graph query
+                  Ask
                 </div>
                 <h3 className="mt-3 text-[27px] font-semibold leading-tight tracking-normal text-slate-950">
-                  Ask about the current view.
+                  Ask about this page.
                 </h3>
                 <p className="mt-3 text-[14px] leading-6 text-slate-600">
-                  Uses this page&apos;s filters, selected entity, and investigation context to answer questions about findings, evidence, affected entities, source runtimes, and proposed remediation.
+                  Use the current filters, selected entity, and page context to check findings, evidence, affected assets, source health, and next steps.
                 </p>
               </section>
 
               <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                  <span className="text-[13px] font-semibold text-slate-900">Suggested commands</span>
+                  <span className="text-[13px] font-semibold text-slate-900">Suggested questions</span>
                   <span className="agent-mono text-[10px] uppercase text-slate-400">{pageContext.routeLabel ?? "Global"}</span>
                 </div>
                 <div className="divide-y divide-slate-100">
@@ -307,7 +306,7 @@ export default function CerebroAgentPanel() {
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={onComposerKeyDown}
               rows={3}
-              placeholder="Ask about this screen, a finding, evidence, ownership, or affected entities..."
+              placeholder="Ask about this page, a finding, evidence, ownership, or affected assets..."
               className="block max-h-36 min-h-20 w-full resize-none rounded-lg border-0 bg-transparent px-3 py-2.5 text-[14px] leading-5 text-slate-900 outline-none placeholder:text-slate-400"
             />
             <div className="flex items-center justify-between border-t border-slate-100 px-2.5 py-2">

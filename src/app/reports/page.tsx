@@ -288,7 +288,7 @@ export default function ReportsPage() {
         <ErrorBlock
           error={error}
           onRetry={reload}
-          recoveryDetail="The rest of the workbench stays available while this packet request recovers."
+          recoveryDetail="Other risks, controls, and evidence remain available while this packet request recovers."
         />
       )}
 

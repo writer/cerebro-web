@@ -185,7 +185,7 @@ export default function FindingTable({
                   title="Ask about this finding"
                   context={{
                     route: "/risk-inbox",
-                    routeLabel: "Risk Inbox",
+                    routeLabel: "Risks",
                     title: finding.title,
                     findingId: finding.id,
                     rule_id: finding.rule_id,

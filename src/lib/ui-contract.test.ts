@@ -115,7 +115,7 @@ describe("product UI contract", () => {
 
     expect(overviewSource).toContain("data?.coverage_blind_spots");
     expect(overviewSource).toContain("data?.coverage_summaries");
-    expect(overviewSource).toContain("dashboard-backed");
+    expect(overviewSource).toContain("dashboardBackedReadiness");
     expect(overviewSource).not.toContain("sampled dashboard values");
     expect(overviewSource).not.toContain("sampled total");
   });

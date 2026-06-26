@@ -809,7 +809,7 @@ export default function InventoryPage() {
         <div className="min-w-0 space-y-6">
           <div className="surface-panel grid gap-0 divide-y divide-[color:var(--border)] overflow-hidden md:grid-cols-5 md:divide-x md:divide-y-0">
             {[
-              { label: "Assets", value: String(assets.length), detail: "current view" },
+              { label: "Assets", value: String(assets.length), detail: "matching filters" },
               { label: "Needs review", value: String(needsReviewCount), detail: `${ownerRequiredCount} owner required` },
               { label: "Baseline", value: String(baselineCount), detail: "no immediate action" },
               { label: "Accountable", value: String(accountableCount), detail: `${ownerGroupCount} owner groups` },

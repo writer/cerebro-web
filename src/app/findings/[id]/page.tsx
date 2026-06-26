@@ -247,7 +247,7 @@ function TimelinePanel({
               {event.type === "finding" && finding.entity && (
                 <>
                   <Link href={`/impact?root_urn=${encodeURIComponent(finding.entity)}`} className={secondaryButtonClass}>Open evidence graph</Link>
-                  <Link href={`/explore?root_urn=${encodeURIComponent(finding.entity)}`} className={secondaryButtonClass}>Explore impact</Link>
+                  <Link href={`/explore?root_urn=${encodeURIComponent(finding.entity)}`} className={secondaryButtonClass}>Open graph</Link>
                 </>
               )}
               {event.type === "evidence" && (
@@ -344,7 +344,7 @@ function FindingWorkflowPanel({
         <Badge value={finding.status} />
       </div>
       <p className="mt-2 text-[12px] leading-5 text-slate-500">
-        Change owner, due date, notes, tickets, and lifecycle state from the GRC workbench.
+        Change owner, due date, notes, tickets, and lifecycle state.
       </p>
 
       {actionError && <div className="mt-3 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-700">{actionError}</div>}
@@ -818,7 +818,7 @@ export default function FindingDetailPage() {
 
           {tab === "graph" && (
             <div className="space-y-6">
-              <Panel title="Finding Impact Graph" action={finding?.entity ? <Link href={`/explore?root_urn=${encodeURIComponent(finding.entity)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Explore graph</Link> : undefined}>
+              <Panel title="Relationships" action={finding?.entity ? <Link href={`/explore?root_urn=${encodeURIComponent(finding.entity)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Open graph</Link> : undefined}>
                 <GraphViewer graph={data.graph} />
               </Panel>
               {impactData?.graph && impactData.graph.root && (
