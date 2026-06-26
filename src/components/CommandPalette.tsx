@@ -58,7 +58,7 @@ const searchCommands = (query: string, askGraph: (question: string) => void): Co
     { id: "search-controls", label: controlsLabel, href: controlsHref, description: "Find framework names, control IDs, and mapped findings.", section: "Operator", keywords: ["controls", "framework"] },
     { id: "open-report", label: `Build audit packet for "${trimmed}"`, href: `/reports?finding_id=${encoded}`, description: "Use as a finding ID for an audit packet.", section: "Operator", keywords: ["reports", "audit"] },
     { id: "open-evidence", label: `Find evidence for "${trimmed}"`, href: `/evidence?finding_id=${encoded}`, description: "Use as a finding ID in the evidence register.", section: "Operator", keywords: ["evidence", "proof"] },
-    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?runtime_id=${encoded}`, description: "Use as a source runtime ID.", section: "Operator", keywords: ["connectors", "runtimes"] },
+    { id: "open-connectors", label: `Filter connectors by "${trimmed}"`, href: `/connectors?q=${encoded}`, description: "Search connector sources and runtimes.", section: "Operator", keywords: ["connectors", "runtimes"] },
   ];
 };
 

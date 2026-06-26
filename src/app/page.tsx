@@ -579,7 +579,7 @@ function AuditWorkQueue({
               ? `${readinessData.summary.readiness_blockers.length} evidence item${readinessData.summary.readiness_blockers.length === 1 ? "" : "s"} need proof before export.`
               : "No missing packet proof reported."}
           </div>
-          <Link href={readinessData?.proof_bundle?.reports_path ?? activeArea.nextActions.find((action) => action.label === "Prepare packet")?.href ?? "/reports"} className="secondary-button inline-flex items-center justify-center px-3 py-2 text-[12px]">
+          <Link href={readinessData?.proof_bundle?.reports_path ?? "/reports"} className="secondary-button inline-flex items-center justify-center px-3 py-2 text-[12px]">
             Prepare packet
           </Link>
         </div>
@@ -636,13 +636,14 @@ const connectorNeedsAttention = (connector: GRCConnector) =>
 
 const connectorQueueItem = (connector: GRCConnector): PlatformQueueItem => {
   const source = connector.source_id || shortEntity(connector.runtime_id);
+  const sourceFilter = connector.source_id || connector.runtime_id;
   const syncLag = displayDurationSeconds(connector.sync_lag_seconds);
   const dataLag = displayDurationSeconds(connector.watermark_lag_seconds);
   const status = connector.status === "healthy" && connector.freshness !== "fresh" ? connector.freshness : connector.status;
   return {
     action: "Inspect runtime",
     detail: `Sync ${syncLag === "—" ? "not observed" : `${syncLag} ago`} · data ${dataLag === "—" ? "not observed" : `${dataLag} ago`}`,
-    href: `/connectors?runtime_id=${encodeURIComponent(connector.runtime_id)}`,
+    href: `/connectors?source_id=${encodeURIComponent(sourceFilter)}`,
     id: `connector:${connector.runtime_id}`,
     rank: connector.status === "failed" ? 0 : connector.status === "healthy" ? 4 : 2,
     signal: humanize(status || "needs_review"),
@@ -701,6 +702,7 @@ function PlatformWorkQueue({
 
 type ReviewQueueItem = {
   action: string;
+  dedupeKey: string;
   detail: string;
   href: string;
   id: string;
@@ -710,19 +712,34 @@ type ReviewQueueItem = {
   why: string;
 };
 
-const workItemReviewItem = (item: GRCProgramWorkItem): ReviewQueueItem => ({
-  action: item.action || "Open item",
-  detail: [item.owner_domain || "Unassigned", item.status ? humanize(item.status) : ""].filter(Boolean).join(" · "),
-  href: item.href || (item.framework_name && item.control_id ? `/controls?framework=${encodeURIComponent(item.framework_name)}&control=${encodeURIComponent(item.control_id)}` : "/controls"),
-  id: `work:${item.id}`,
-  meta: item.reasons?.[0] || countLabel(item.open_findings ?? 0, "mapped finding"),
-  title: item.title,
-  tone: item.status === "failing" ? "danger" : "warning",
-  why: item.missing_evidence_items ? `${item.missing_evidence_items} missing evidence` : item.stale_evidence_items ? `${item.stale_evidence_items} stale evidence` : "readiness",
-});
+const findingKeyFromHref = (href: string) => {
+  const match = href.match(/^\/findings\/([^/?#]+)/);
+  if (!match) return "";
+  try {
+    return `finding:${decodeURIComponent(match[1])}`;
+  } catch {
+    return `finding:${match[1]}`;
+  }
+};
+
+const workItemReviewItem = (item: GRCProgramWorkItem): ReviewQueueItem => {
+  const href = item.href || (item.framework_name && item.control_id ? `/controls?framework=${encodeURIComponent(item.framework_name)}&control=${encodeURIComponent(item.control_id)}` : "/controls");
+  return {
+    action: item.action || "Open item",
+    dedupeKey: findingKeyFromHref(href) || `work:${item.id}`,
+    detail: [item.owner_domain || "Unassigned", item.status ? humanize(item.status) : ""].filter(Boolean).join(" · "),
+    href,
+    id: `work:${item.id}`,
+    meta: item.reasons?.[0] || countLabel(item.open_findings ?? 0, "mapped finding"),
+    title: item.title,
+    tone: item.status === "failing" ? "danger" : "warning",
+    why: item.missing_evidence_items ? `${item.missing_evidence_items} missing evidence` : item.stale_evidence_items ? `${item.stale_evidence_items} stale evidence` : "readiness",
+  };
+};
 
 const findingReviewItem = (finding: GRCFinding): ReviewQueueItem => ({
   action: "Open risk",
+  dedupeKey: `finding:${finding.id}`,
   detail: `${finding.owner || "Unassigned"} · ${findingSlaLabel(finding)}`,
   href: `/findings/${encodeURIComponent(finding.id)}`,
   id: `finding:${finding.id}`,
@@ -731,6 +748,15 @@ const findingReviewItem = (finding: GRCFinding): ReviewQueueItem => ({
   tone: (finding.risk_score ?? 0) >= 85 ? "danger" : "warning",
   why: (finding.risk_score ?? 0) >= 85 ? "risk 85+" : humanize(finding.severity),
 });
+
+const dedupeReviewItems = (items: ReviewQueueItem[]) => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.dedupeKey)) return false;
+    seen.add(item.dedupeKey);
+    return true;
+  });
+};
 
 function ReportsWorkQueue({
   activeArea,
@@ -748,8 +774,7 @@ function ReportsWorkQueue({
   const readinessScore = readinessData?.summary.score ?? metrics.auditReadinessScore;
   const highRiskFindings = findings.filter((finding) => (finding.risk_score ?? 0) >= 70 || finding.severity === "CRITICAL" || finding.severity === "HIGH");
   const readinessItems = (readinessData?.work_items ?? []).slice(0, 2).map(workItemReviewItem);
-  const reviewItems = [...readinessItems, ...highRiskFindings.map(findingReviewItem)]
-    .slice(0, 4);
+  const reviewItems = dedupeReviewItems([...readinessItems, ...highRiskFindings.map(findingReviewItem)]).slice(0, 4);
   const trendNet = trends?.summary?.net ?? 0;
   const trendCopy = trendNet > 0 ? `${trendNet} net new findings` : trendNet < 0 ? `${Math.abs(trendNet)} net fewer findings` : "Backlog flat";
   const reviewBullets = [
@@ -1083,7 +1108,7 @@ export default function Home() {
                   {(data.connectors ?? []).slice(0, 5).map((c) => (
                     <Link
                       key={c.runtime_id}
-                      href={`/connectors?runtime_id=${encodeURIComponent(c.runtime_id)}`}
+                      href={`/connectors?source_id=${encodeURIComponent(c.source_id || c.runtime_id)}`}
                       className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
                     >
                       <div>

@@ -26,23 +26,20 @@ describe("information areas", () => {
     }
   });
 
-  it("enriches each area with signals, actions, and prompts", () => {
+  it("enriches each area with summary signals and work queues", () => {
     for (const area of informationAreas) {
       expect(area.headline, `${area.label} should have a headline`).toBeTruthy();
       expect(area.label, `${area.label} should use a concrete information area`).toMatch(/^(Risks|Controls|Sources|Review)$/);
       expect(area.summaryFocus.length, `${area.label} should explain its summary focus`).toBeGreaterThanOrEqual(3);
       expect(area.signals.length, `${area.label} should expose prioritized signals`).toBe(6);
       expect(new Set(area.signals.map((signal) => signal.key)).size, `${area.label} should not duplicate signals`).toBe(area.signals.length);
-      expect(area.decisionFrame.length, `${area.label} should explain decision criteria`).toBeGreaterThanOrEqual(3);
-      expect(area.nextActions.length, `${area.label} should provide next actions`).toBeGreaterThanOrEqual(3);
-      expect(area.askPrompts.length, `${area.label} should provide question starters`).toBeGreaterThanOrEqual(4);
+      expect(area.workQueue.title, `${area.label} should name its work queue`).toBeTruthy();
+      expect(area.workQueue.actionHref, `${area.label} should link to its primary queue surface`).toBeTruthy();
 
       for (const signal of area.signals) {
         expect(routeIsAvailable(pathOnly(signal.href)), `${area.label} signal ${signal.label} references ${signal.href}`).toBe(true);
       }
-      for (const action of area.nextActions) {
-        expect(routeIsAvailable(pathOnly(action.href)), `${area.label} action ${action.label} references ${action.href}`).toBe(true);
-      }
+      expect(routeIsAvailable(pathOnly(area.workQueue.actionHref)), `${area.label} queue action references ${area.workQueue.actionHref}`).toBe(true);
     }
   });
 
