@@ -54,10 +54,6 @@ export const aperioResponseActionCandidates = (finding: FindingLike): string[] =
     if (tokens.some((token) => token.includes("slack") || token.includes("github"))) {
       candidates.add("QUARANTINE_APP");
     }
-    if (candidates.size === 0) {
-      candidates.add("REVOKE_OAUTH_GRANT");
-      candidates.add("QUARANTINE_APP");
-    }
   }
 
   if (aperioOwned && tokens.some((token) => token.includes("okta"))) {

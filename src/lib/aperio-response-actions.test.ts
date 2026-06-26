@@ -56,4 +56,23 @@ describe("aperio response action helpers", () => {
     expect(aperioResponseOwner(finding)).toBeUndefined();
     expect(aperioResponseActionCandidates(finding)).toEqual([]);
   });
+
+  it("keeps Aperio OAuth response candidates provider-specific", () => {
+    const finding = {
+      source_id: "aperio_saas_dr",
+      runtime_id: "writer-aperio-saas-dr",
+      rule_id: "okta.oauth.risky_user",
+      attributes: {
+        provider: "OKTA",
+        oauth_app_id: "app-123",
+      },
+      external_refs: [{ system: "aperio", kind: "finding", external_id: "fnd-123" }],
+    };
+
+    expect(aperioResponseActionCandidates(finding)).toEqual([
+      "SUSPEND_USER",
+      "OPEN_TICKET",
+      "NOTIFY_SECOPS",
+    ]);
+  });
 });
