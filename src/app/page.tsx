@@ -13,7 +13,7 @@ import { displayDate, displayDurationSeconds, GRCDashboard, GRCEvidence, GRCFind
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 import { buildGRCProductAreaViews, hasGRCProductAreaContext, type GRCProductAreaView } from "@/lib/grc-product-areas";
-import { personaLenses, type PersonaLensID } from "@/lib/persona-lenses";
+import { personaLenses, type PersonaLens, type PersonaLensID, type PersonaLensSignal, type PersonaSignalKey } from "@/lib/persona-lenses";
 import { hasTrendActivity } from "@/lib/trends";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
@@ -221,29 +221,6 @@ const mutedSignalToneClass: Record<SignalTone, string> = {
   neutral: "text-slate-500",
 };
 
-const askPrompts: Record<PersonaLensID, string[]> = {
-  security: [
-    "What should security fix first and why?",
-    "Which open risks have no owner?",
-    "Explain the affected assets for the top finding.",
-  ],
-  compliance: [
-    "Which controls are blocked by missing evidence?",
-    "What changed since the last audit packet?",
-    "Which findings affect SOC 2 readiness?",
-  ],
-  platform: [
-    "Which stale sources are weakening trust?",
-    "Which high-risk assets need an owner?",
-    "What source coverage gaps should we close first?",
-  ],
-  leadership: [
-    "Summarize material risk for this week.",
-    "What is getting better or worse?",
-    "Which owners need follow-up before review?",
-  ],
-};
-
 function RiskSignalCard({
   detail,
   href,
@@ -269,95 +246,197 @@ function RiskSignalCard({
   );
 }
 
-function SecurityWorkBriefing({
-  activeLensID,
-  coverageBlindSpotCount,
-  criticalRiskCount,
-  findings,
-  missingEvidenceItems,
-  setActiveLensID,
-  staleEvidenceItems,
-  summary,
-}: {
-  activeLensID: PersonaLensID;
+type PersonaSignalMetrics = {
+  auditReadinessScore: number;
+  controlTotal: number;
   coverageBlindSpotCount: number;
+  criticalOrHighFindings: number;
   criticalRiskCount: number;
-  findings: GRCFinding[];
+  evidenceIssues: number;
   missingEvidenceItems: number;
-  setActiveLensID: (value: PersonaLensID) => void;
+  passingControls: number;
   staleEvidenceItems: number;
   summary: GRCSummary;
+};
+
+const signalValue = (key: PersonaSignalKey, metrics: PersonaSignalMetrics) => {
+  switch (key) {
+    case "activeRisk":
+      return metrics.summary.open_findings;
+    case "auditReadiness":
+      return `${Math.round(metrics.auditReadinessScore)}%`;
+    case "controlFailures":
+      return metrics.summary.controls_failing;
+    case "coverageGaps":
+      return metrics.coverageBlindSpotCount;
+    case "evidenceIssues":
+      return metrics.evidenceIssues;
+    case "highImpact":
+      return metrics.criticalRiskCount;
+    case "ownerGaps":
+      return metrics.summary.unassigned;
+    case "sourceTrust":
+      return metrics.summary.stale_connectors;
+  }
+};
+
+const signalTone = (key: PersonaSignalKey, metrics: PersonaSignalMetrics): SignalTone => {
+  switch (key) {
+    case "auditReadiness":
+      if (metrics.auditReadinessScore < 70) return "danger";
+      if (metrics.auditReadinessScore < 90) return "warning";
+      return "success";
+    case "activeRisk":
+      return metrics.criticalOrHighFindings > 0 ? "danger" : metrics.summary.open_findings > 0 ? "warning" : "success";
+    case "controlFailures":
+      return metrics.summary.controls_failing > 0 ? "warning" : "success";
+    case "coverageGaps":
+      return metrics.coverageBlindSpotCount > 0 ? "warning" : "success";
+    case "evidenceIssues":
+      return metrics.evidenceIssues > 0 ? "warning" : "success";
+    case "highImpact":
+      return metrics.criticalRiskCount > 0 ? "danger" : "success";
+    case "ownerGaps":
+      return metrics.summary.unassigned > 0 ? "warning" : "success";
+    case "sourceTrust":
+      return metrics.summary.stale_connectors > 0 ? "warning" : "success";
+  }
+};
+
+const signalDetail = (key: PersonaSignalKey, metrics: PersonaSignalMetrics) => {
+  switch (key) {
+    case "activeRisk":
+      return `${metrics.criticalOrHighFindings} critical or high, ${metrics.summary.overdue_findings} overdue`;
+    case "auditReadiness":
+      return `${metrics.passingControls} of ${metrics.controlTotal} controls passing`;
+    case "controlFailures":
+      return `${metrics.controlTotal} dashboard controls tracked`;
+    case "coverageGaps":
+      return "Blind spots weaken proof and triage";
+    case "evidenceIssues":
+      return `${metrics.missingEvidenceItems} missing, ${metrics.staleEvidenceItems} stale`;
+    case "highImpact":
+      return "Risk score 85+; inspect affected assets";
+    case "ownerGaps":
+      return "Assign accountability before handoff";
+    case "sourceTrust":
+      return `${metrics.summary.stale_connectors} stale of ${metrics.summary.connectors} sources`;
+  }
+};
+
+const headlineValue = (lens: PersonaLens, metrics: PersonaSignalMetrics) => {
+  switch (lens.id) {
+    case "compliance":
+      return metrics.evidenceIssues;
+    case "platform":
+      return metrics.summary.stale_connectors + metrics.coverageBlindSpotCount + metrics.summary.unassigned;
+    case "leadership":
+      return metrics.criticalOrHighFindings;
+    case "security":
+      return metrics.summary.open_findings;
+  }
+};
+
+const pageSummary = (lens: PersonaLens, metrics: PersonaSignalMetrics) => {
+  switch (lens.id) {
+    case "compliance":
+      return `${metrics.evidenceIssues} evidence issues, ${metrics.summary.controls_failing} failing control, ${metrics.coverageBlindSpotCount} coverage gap${metrics.coverageBlindSpotCount === 1 ? "" : "s"}.`;
+    case "platform":
+      return `${metrics.summary.stale_connectors} stale source${metrics.summary.stale_connectors === 1 ? "" : "s"}, ${metrics.coverageBlindSpotCount} coverage gap${metrics.coverageBlindSpotCount === 1 ? "" : "s"}, ${metrics.summary.unassigned} owner gap${metrics.summary.unassigned === 1 ? "" : "s"}.`;
+    case "leadership":
+      return `${metrics.criticalOrHighFindings} critical or high, ${metrics.summary.unassigned} owner follow-up, ${Math.round(metrics.auditReadinessScore)}% readiness.`;
+    case "security":
+      return `${metrics.summary.unassigned} without an owner, ${metrics.criticalOrHighFindings} critical or high, ${metrics.evidenceIssues} evidence issues.`;
+  }
+};
+
+const findingContextLabel = (lens: PersonaLens) => {
+  switch (lens.id) {
+    case "compliance":
+      return "Control";
+    case "platform":
+      return "Source";
+    case "leadership":
+      return "Owner";
+    case "security":
+      return "Owner";
+  }
+};
+
+const findingContextValue = (lens: PersonaLens, finding: GRCFinding) => {
+  switch (lens.id) {
+    case "compliance":
+      return finding.controls?.map((control) => `${control.framework_name} ${control.control_id}`).join(", ") || finding.policy_name || "Unmapped";
+    case "platform":
+      return finding.source_id || finding.runtime_id || "Unknown source";
+    case "leadership":
+    case "security":
+      return finding.owner || "Unassigned";
+  }
+};
+
+const findingSubline = (lens: PersonaLens, finding: GRCFinding) => {
+  switch (lens.id) {
+    case "compliance":
+      return `${finding.evidence_count} evidence · ${finding.policy_name || finding.rule_id || "Control impact"}`;
+    case "platform":
+      return `${shortEntity(finding.entity || finding.id)} · ${finding.owner || "Unassigned owner"}`;
+    case "leadership":
+      return `${finding.severity.toLowerCase()} severity · ${finding.evidence_count} evidence`;
+    case "security":
+      return `${shortEntity(finding.entity || finding.id)} · ${finding.evidence_count} evidence`;
+  }
+};
+
+function PersonaWorkBriefing({
+  activeLens,
+  activeLensID,
+  findings,
+  metrics,
+  setActiveLensID,
+}: {
+  activeLens: PersonaLens;
+  activeLensID: PersonaLensID;
+  findings: GRCFinding[];
+  metrics: PersonaSignalMetrics;
+  setActiveLensID: (value: PersonaLensID) => void;
 }) {
-  const evidenceIssues = missingEvidenceItems + staleEvidenceItems;
   const topFindings = findings.slice(0, 3);
-  const prompts = askPrompts[activeLensID];
 
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
       <div className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <RiskSignalCard
-            href="/risk-inbox?severity=critical"
-            label="Critical risks"
-            value={summary.critical_findings}
-            detail={`${summary.high_findings} high severity need triage`}
-            tone={summary.critical_findings > 0 ? "danger" : "success"}
-          />
-          <RiskSignalCard
-            href="/risk-inbox?owner=unassigned"
-            label="Missing owners"
-            value={summary.unassigned}
-            detail="Assign accountability before work stalls"
-            tone={summary.unassigned > 0 ? "warning" : "success"}
-          />
-          <RiskSignalCard
-            href="/evidence"
-            label="Evidence not ready"
-            value={evidenceIssues}
-            detail={`${missingEvidenceItems} missing, ${staleEvidenceItems} stale`}
-            tone={evidenceIssues > 0 ? "warning" : "success"}
-          />
-          <RiskSignalCard
-            href="/impact"
-            label="High-impact paths"
-            value={criticalRiskCount}
-            detail="Risk score 85+; inspect affected assets"
-            tone={criticalRiskCount > 0 ? "danger" : "success"}
-          />
-          <RiskSignalCard
-            href="/connectors"
-            label="Stale sources"
-            value={summary.stale_connectors}
-            detail={`${summary.connectors} connected sources monitored`}
-            tone={summary.stale_connectors > 0 ? "warning" : "success"}
-          />
-          <RiskSignalCard
-            href="/connectors"
-            label="Coverage gaps"
-            value={coverageBlindSpotCount}
-            detail="Close blind spots before audit review"
-            tone={coverageBlindSpotCount > 0 ? "warning" : "success"}
-          />
+          {activeLens.signals.map((signal: PersonaLensSignal) => (
+            <RiskSignalCard
+              key={signal.key}
+              href={signal.href}
+              label={signal.label}
+              value={signalValue(signal.key, metrics)}
+              detail={signalDetail(signal.key, metrics)}
+              tone={signalTone(signal.key, metrics)}
+            />
+          ))}
         </div>
 
         <section className="surface-panel p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Fix first</h2>
-              <p className="mt-1 text-[13px] text-[var(--text-muted)]">Highest-risk open findings with owner, evidence, and due-date context.</p>
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">{activeLens.workQueue.title}</h2>
+              <p className="mt-1 text-[13px] text-[var(--text-muted)]">{activeLens.workQueue.description}</p>
             </div>
-            <Link href="/risk-inbox" className="secondary-button px-3 py-1.5 text-[13px]">View all risks</Link>
+            <Link href={activeLens.workQueue.actionHref} className="secondary-button px-3 py-1.5 text-[13px]">{activeLens.workQueue.actionLabel}</Link>
           </div>
           <div className="mt-4 divide-y divide-[color:var(--border)]">
             {topFindings.map((finding) => (
               <Link key={finding.id} href={`/findings/${encodeURIComponent(finding.id)}`} className="grid gap-3 py-3 transition hover:text-[var(--primary)] md:grid-cols-[minmax(0,1fr)_160px_120px]">
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{finding.title}</div>
-                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{shortEntity(finding.entity || finding.id)} · {finding.evidence_count} evidence</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{findingSubline(activeLens, finding)}</div>
                 </div>
                 <div className="text-[12px] text-[var(--text-secondary)]">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Owner</span>
-                  {finding.owner || "Unassigned"}
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{findingContextLabel(activeLens)}</span>
+                  {findingContextValue(activeLens, finding)}
                 </div>
                 <div className="flex items-center justify-between gap-2 md:justify-end">
                   <RiskBadge score={finding.risk_score} />
@@ -366,7 +445,7 @@ function SecurityWorkBriefing({
               </Link>
             ))}
             {topFindings.length === 0 && (
-              <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No open findings need triage right now.</div>
+              <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">{activeLens.workQueue.empty}</div>
             )}
           </div>
         </section>
@@ -401,6 +480,28 @@ function SecurityWorkBriefing({
         </section>
 
         <section className="surface-panel p-5">
+          <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Decision frame</h2>
+          <div className="mt-3 space-y-2">
+            {activeLens.decisionFrame.map((criterion) => (
+              <div key={criterion} className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+                {criterion}
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 border-t border-[color:var(--border)] pt-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Next actions</div>
+            <div className="mt-2 space-y-2">
+              {activeLens.nextActions.map((action) => (
+                <Link key={action.href} href={action.href} className="block rounded-md px-2 py-1.5 text-[12px] transition hover:bg-[var(--surface-hover)]">
+                  <span className="font-semibold text-[var(--text-primary)]">{action.label}</span>
+                  <span className="ml-1 text-[var(--text-muted)]">{action.detail}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="surface-panel p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Ask Cerebro</h2>
@@ -409,7 +510,7 @@ function SecurityWorkBriefing({
             <Link href="/ask" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Open</Link>
           </div>
           <div className="mt-4 space-y-2">
-            {prompts.map((prompt) => (
+            {activeLens.askPrompts.map((prompt) => (
               <Link
                 key={prompt}
                 href={`/ask?q=${encodeURIComponent(prompt)}`}
@@ -427,7 +528,7 @@ function SecurityWorkBriefing({
 
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
-  const { activeLensID, setActiveLensID } = usePersonaLens();
+  const { activeLens, activeLensID, setActiveLensID } = usePersonaLens();
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const data = dashboard.data;
   const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
@@ -480,8 +581,22 @@ export default function Home() {
   const recentEvidence = evidenceQuery.data?.evidence ?? [];
   const productAreas = buildGRCProductAreaViews({ coverageBlindSpots, summary });
   const criticalOrHighFindings = (summary?.critical_findings ?? 0) + (summary?.high_findings ?? 0);
-  const pageDescription = summary
-    ? `${summary.unassigned} without an owner, ${criticalOrHighFindings} critical or high, ${missingEvidenceItems + staleEvidenceItems} evidence issues.`
+  const evidenceIssues = missingEvidenceItems + staleEvidenceItems;
+  const homeMetrics: PersonaSignalMetrics | null = summary ? {
+    auditReadinessScore: readiness?.score ?? controlProgress,
+    controlTotal,
+    coverageBlindSpotCount,
+    criticalOrHighFindings,
+    criticalRiskCount: priorityMetrics.criticalRisk,
+    evidenceIssues,
+    missingEvidenceItems,
+    passingControls,
+    staleEvidenceItems,
+    summary,
+  } : null;
+  const pageTitle = homeMetrics ? `${headlineValue(activeLens, homeMetrics)} ${activeLens.headline}` : `${activeLens.shortLabel} briefing`;
+  const pageDescription = homeMetrics
+    ? `${pageSummary(activeLens, homeMetrics)} Optimized for ${activeLens.summaryFocus.join(", ")}.`
     : "What is risky, what changed, who owns it, and what to fix first.";
 
   const reload = () => {
@@ -495,7 +610,7 @@ export default function Home() {
     <div className="space-y-6">
       <PageHeader
         contractId="overview"
-        title={summary ? `${summary.open_findings} active risks need attention` : "Security briefing"}
+        title={pageTitle}
         description={pageDescription}
         action={
           <div className="flex items-center gap-2">
@@ -519,17 +634,14 @@ export default function Home() {
       {dashboard.loading && <LoadingBlock label="Loading dashboard..." />}
       {dashboard.error && <ErrorBlock error={dashboard.error} onRetry={() => void dashboard.reload()} recoveryDetail="Overview metrics will appear when the API is reachable." />}
 
-      {data && summary && (
+      {data && summary && homeMetrics && (
         <>
-          <SecurityWorkBriefing
+          <PersonaWorkBriefing
+            activeLens={activeLens}
             activeLensID={activeLensID}
-            coverageBlindSpotCount={coverageBlindSpotCount}
-            criticalRiskCount={priorityMetrics.criticalRisk}
             findings={priorityFindings}
-            missingEvidenceItems={missingEvidenceItems}
+            metrics={homeMetrics}
             setActiveLensID={setActiveLensID}
-            staleEvidenceItems={staleEvidenceItems}
-            summary={summary}
           />
 
           {attentionItems.length > 0 && (
