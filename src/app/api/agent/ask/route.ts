@@ -495,10 +495,24 @@ const aperioResponseCandidateHint = (candidates: string[]) => {
   if (candidates.length === 0) return "Aperio response proposal";
   return candidates.map((candidate) => {
     switch (candidate) {
+      case "REVOKE_OAUTH_GRANT":
+        return "REVOKE_OAUTH_GRANT (call aperio.propose_cerebro_response with action=REVOKE_OAUTH_GRANT and provider=GOOGLE_WORKSPACE)";
       case "REMOVE_SLACK_APP":
         return "REMOVE_SLACK_APP (call aperio.propose_cerebro_response with action=QUARANTINE_APP and provider=SLACK)";
       case "REVOKE_GITHUB_OAUTH_APP":
         return "REVOKE_GITHUB_OAUTH_APP (call aperio.propose_cerebro_response with action=QUARANTINE_APP and provider=GITHUB)";
+      case "SUSPEND_USER":
+        return "SUSPEND_USER (call aperio.propose_cerebro_response with action=SUSPEND_USER and provider=OKTA)";
+      case "REVOKE_SESSION":
+        return "REVOKE_SESSION (call aperio.propose_cerebro_response with action=REVOKE_SESSION and provider=MICROSOFT_365)";
+      case "REMOVE_EXTERNAL_SHARE":
+        return "REMOVE_EXTERNAL_SHARE (call aperio.propose_cerebro_response with action=REMOVE_EXTERNAL_SHARE and provider=ATLASSIAN)";
+      case "REMOVE_ADMIN_ROLE":
+        return "REMOVE_ADMIN_ROLE (call aperio.propose_cerebro_response with action=REMOVE_ADMIN_ROLE and provider=SALESFORCE)";
+      case "OPEN_TICKET":
+        return "OPEN_TICKET (call aperio.propose_cerebro_response with action=OPEN_TICKET)";
+      case "NOTIFY_SECOPS":
+        return "NOTIFY_SECOPS (call aperio.propose_cerebro_response with action=NOTIFY_SECOPS)";
       default:
         return candidate;
     }
