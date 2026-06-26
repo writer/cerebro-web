@@ -951,10 +951,12 @@ export type GRCGraph = {
 export type GRCInventoryCategory = {
   id: string;
   label: string;
+  surface?: GRCInventorySurface;
   entity_types: string[];
   count: number;
 };
 
+export type GRCInventorySurface = "asset" | "component" | "signal" | "alias" | "raw_record" | "all" | string;
 export type GRCInventoryReviewState = "baseline" | "needs_review" | "reported_issue" | "out_of_scope" | string;
 export type GRCInventoryAccountabilityState = "not_required" | "known" | "candidate" | "required_missing" | "disputed" | string;
 
@@ -987,6 +989,7 @@ export type GRCInventoryAccountability = {
 export type GRCInventoryAsset = {
   urn: string;
   entity_type: string;
+  surface?: GRCInventorySurface;
   label: string;
   source_id?: string;
   runtime_id?: string;
@@ -1053,6 +1056,7 @@ export type GRCInventorySummary = {
   public_assets: number;
   scoped_coverage_pct: number;
   assigned_coverage_pct: number;
+  surface_counts?: Record<string, number>;
 };
 
 export type GRCInventoryCategoriesResponse = {

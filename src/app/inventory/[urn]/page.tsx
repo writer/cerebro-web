@@ -70,6 +70,27 @@ const scopeState = (asset: GRCInventoryAsset) => asset.scope_state || "in_scope"
 
 const scopeCopy = (state: string) => state === "out_of_scope" ? "Scoped out" : "In scope";
 
+const inventorySurface = (asset?: GRCInventoryAsset) => asset?.surface || "asset";
+
+const surfaceLabel = (asset?: GRCInventoryAsset) => {
+  switch (inventorySurface(asset)) {
+    case "component":
+      return "Component";
+    case "signal":
+      return "Signal";
+    case "alias":
+      return "Alias";
+    case "raw_record":
+      return "Raw record";
+    default:
+      return "Asset";
+  }
+};
+
+const recordNoun = (asset?: GRCInventoryAsset) => inventorySurface(asset) === "asset" ? "asset" : "record";
+
+const isReviewableAsset = (asset?: GRCInventoryAsset) => inventorySurface(asset) === "asset";
+
 const reportStatuses = ["submitted", "in_triage", "accepted", "rejected", "resolved"];
 
 function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab: (tab: Tab) => void }) {
@@ -78,6 +99,7 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
   const publicState = attr(data.asset, "public", "publicly_accessible", "internet_exposed") === "true";
   const actions = data.actions ?? [];
   const reportCount = data.asset_reports?.length ?? 0;
+  const noun = recordNoun(data.asset);
   const summary = [
     publicState ? "is publicly accessible" : "is not publicly accessible",
     criticalHigh === 0 ? "has no critical or high vulnerabilities" : `has ${criticalHigh} critical or high vulnerabilities`,
@@ -94,7 +116,7 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">Summary</h2>
               <RiskBadge score={data.asset.risk_score} level={data.asset.risk_level} />
             </div>
-            <p className="mt-6 text-[15px] leading-6 text-[var(--text-secondary)]">This asset {summary}.</p>
+            <p className="mt-6 text-[15px] leading-6 text-[var(--text-secondary)]">This {noun} {summary}.</p>
             {data.asset.risk_reasons && data.asset.risk_reasons.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {data.asset.risk_reasons.slice(0, 8).map((reason) => <span key={reason} className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">{humanize(reason)}</span>)}
@@ -102,7 +124,9 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
             )}
             <div className="mt-6 text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Recommendation</div>
             <p className="mt-2 text-[14px] leading-6 text-[var(--text-secondary)]">
-              Review accountability, framework coverage, failing tests, vulnerability posture, and adjacent graph relationships before changing scope or remediation priority.
+              {isReviewableAsset(data.asset)
+                ? "Review accountability, framework coverage, failing tests, vulnerability posture, and adjacent graph relationships before changing scope or remediation priority."
+                : "Review graph relationships and source attributes before changing the related asset review state."}
             </p>
           </div>
           <div className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] px-5 py-3 text-[12px] font-medium text-[var(--text-secondary)]">
@@ -160,11 +184,12 @@ function OverviewPane({ data, setTab }: { data: GRCInventoryAssetDetail; setTab:
         <h2 className="mb-3 text-[16px] font-semibold text-[var(--text-primary)]">Details</h2>
         <div className="mb-4 grid gap-3">
           <MetricCard label="Review" value={inventoryReviewLabel(inventoryReviewState(data.asset))} detail={inventoryReviewDetail(data.asset) || "current review state"} intent={inventoryReviewState(data.asset) === "needs_review" || inventoryReviewState(data.asset) === "reported_issue" ? "warning" : "neutral"} />
-          <MetricCard label="Accountability" value={inventoryAccountability(data.asset).label} detail={inventoryAccountability(data.asset).principal || "derived from inventory evidence"} intent={inventoryAccountability(data.asset).state === "required_missing" ? "warning" : "neutral"} />
+          <MetricCard label="Accountability" value={inventoryAccountability(data.asset).label} detail={inventoryAccountability(data.asset).principal || (isReviewableAsset(data.asset) ? "derived from inventory evidence" : "owner review not required")} intent={inventoryAccountability(data.asset).state === "required_missing" ? "warning" : "neutral"} />
           <MetricCard label="Risk score" value={data.asset.risk_score ?? 0} detail={humanize(data.asset.risk_level)} intent={(data.asset.risk_score ?? 0) >= 70 ? "danger" : "neutral"} />
           <MetricCard label="Scope" value={scopeState(data.asset) === "out_of_scope" ? "Scoped out" : "In"} detail={data.asset.scope_reason || "active inventory state"} intent={scopeState(data.asset) === "out_of_scope" ? "warning" : "success"} />
         </div>
         <dl className="divide-y divide-[color:var(--border)]">
+          <DetailRow label="Surface" value={surfaceLabel(data.asset)} />
           <DetailRow label="Last updated" value={displayDate(attr(data.asset, "updated_at", "last_seen_at", "last_synced_at"))} />
           <DetailRow label="First seen" value={displayDate(attr(data.asset, "created_at", "first_seen_at"))} />
           <DetailRow label="Account" value={attr(data.asset, "account_id", "project_id", "org", "owner_login")} />
@@ -398,7 +423,7 @@ export default function InventoryAssetPage() {
         source_id: asset.source_id,
         runtime_id: asset.runtime_id,
         scope_state: nextState,
-        reason: nextState === "out_of_scope" ? "Scoped out from asset review" : "Scoped into asset review",
+        reason: nextState === "out_of_scope" ? "Scoped out from inventory review" : "Scoped into inventory review",
       }),
     });
     setScopeSaving(false);
@@ -459,25 +484,25 @@ export default function InventoryAssetPage() {
     <div className="space-y-6">
       <PageHeader
         title={asset?.label || shortEntity(urn)}
-        description={`${humanize(asset?.entity_type)}${urn ? ` • ${urn}` : ""}`}
+        description={`${surfaceLabel(asset)} / ${humanize(asset?.entity_type)}${urn ? ` • ${urn}` : ""}`}
         action={
           <div className="flex items-center gap-2">
             {externalURL && <a href={externalURL} target="_blank" rel="noreferrer" className="secondary-button px-3 py-1.5 text-[13px]">Open source</a>}
             {asset && <button type="button" onClick={() => { setReportOpen(true); setReportError(null); }} className="secondary-button px-3 py-1.5 text-[13px]">Report issue</button>}
-            {asset && <button type="button" onClick={() => void updateScope()} disabled={scopeSaving} className="secondary-button px-3 py-1.5 text-[13px] disabled:opacity-50">{scopeSaving ? "Saving" : scopeState(asset) === "out_of_scope" ? "Scope in" : "Scope out"}</button>}
+            {asset && isReviewableAsset(asset) && <button type="button" onClick={() => void updateScope()} disabled={scopeSaving} className="secondary-button px-3 py-1.5 text-[13px] disabled:opacity-50">{scopeSaving ? "Saving" : scopeState(asset) === "out_of_scope" ? "Scope in" : "Scope out"}</button>}
             <button type="button" onClick={() => void reload()} className="primary-button px-3 py-1.5 text-[13px]">Refresh</button>
           </div>
         }
       />
 
-      {loading && <LoadingBlock label="Loading asset..." />}
-      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Asset details will appear when the API is reachable." />}
+      {loading && <LoadingBlock label="Loading record..." />}
+      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Record details will appear when the API is reachable." />}
       {scopeError && <ErrorBlock error={scopeError} onRetry={() => void reload()} recoveryDetail="Scope updates can resume when the API is reachable." />}
 
       {data && (
         <>
           <div className="mb-2 flex flex-wrap items-center gap-4 text-[12px] text-[var(--text-muted)]">
-            <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 font-medium text-[var(--text-secondary)]">{attr(asset, "owner", "owner_email") || "Unassigned"}</span>
+            <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 font-medium text-[var(--text-secondary)]">{inventoryAccountability(data.asset).principal || (isReviewableAsset(data.asset) ? attr(data.asset, "owner", "owner_email") || "Unassigned" : "Owner not required")}</span>
             <span>Last refreshed: {displayDate(attr(asset, "updated_at", "last_seen_at", "last_synced_at"))}</span>
             <span>{scopeCopy(scopeState(data.asset))}</span>
           </div>
