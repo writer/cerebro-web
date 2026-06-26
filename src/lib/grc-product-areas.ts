@@ -217,7 +217,7 @@ export function productAreaMatchesCoverage(area: GRCProductArea, record: GRCCove
   if (area.coverageDimensions.includes(dimensionID)) return true;
   if (family && area.sourceFamilies.includes(family)) return true;
   if (knownCoverageDimensions.has(dimensionID) || (family && knownSourceFamilies.has(family))) return false;
-  return fallbackOwner(record) === area.id;
+  return fallbackMatches(area, record);
 }
 
 function normalizeGRCProductAreaView(area: GRCProductAreaResponse): GRCProductAreaView {
@@ -260,16 +260,6 @@ function normalizeWorkflows(values: GRCProductAreaWorkflow[] | undefined, fallba
     .filter((workflow) => workflow.label?.trim() && workflow.href?.trim())
     .map((workflow) => ({ label: workflow.label.trim(), href: workflow.href.trim() }));
   return normalized.length > 0 ? normalized : fallback;
-}
-
-function fallbackOwner(record: GRCCoverageRecord) {
-  let owner = "";
-  for (const area of grcProductAreas) {
-    if (!fallbackMatches(area, record)) continue;
-    if (owner) return "";
-    owner = area.id;
-  }
-  return owner;
 }
 
 function fallbackMatches(area: GRCProductArea, record: GRCCoverageRecord) {

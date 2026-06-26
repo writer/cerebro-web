@@ -52,14 +52,21 @@ describe("GRC product areas", () => {
     expect(productAreaMatchesCoverage(vendors!, coverageRecord({ dimension_id: "vulnerability_remediations" }))).toBe(false);
   });
 
-  it("does not assign unknown fallback gaps when multiple product areas match", () => {
+  it("keeps ambiguous unknown fallback gaps visible during backend transition", () => {
     const vendors = grcProductAreas.find((area) => area.id === "vendors");
+    const privacy = grcProductAreas.find((area) => area.id === "privacy");
     expect(vendors).toBeTruthy();
+    expect(privacy).toBeTruthy();
     expect(productAreaMatchesCoverage(vendors!, coverageRecord({
       control_domains: ["vendor_risk"],
       dimension_id: "new_vendor_dimension",
       evidence_types: ["third_party_risk"],
-    }))).toBe(false);
+    }))).toBe(true);
+    expect(productAreaMatchesCoverage(privacy!, coverageRecord({
+      control_domains: ["vendor_risk"],
+      dimension_id: "new_vendor_dimension",
+      evidence_types: ["third_party_risk"],
+    }))).toBe(true);
   });
 
   it("keeps known dimension gaps scoped to their owning product areas", () => {
