@@ -459,6 +459,8 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
   const aperioIncidentID = contextString(payload.context, "aperio_incident_id");
   const oauthAppID = contextString(payload.context, "oauth_app_id");
   const oauthGrantID = contextString(payload.context, "oauth_grant_id");
+  const aperioResponseOwner = contextString(payload.context, "aperio_response_owner");
+  const responseActionCandidates = contextStringList(payload.context, "response_action_candidates");
   const hints = [
     findingId
       ? `- For this finding-scoped request, call cerebro.investigation.context first with finding_id="${findingId}" and compact=true unless the user explicitly asks for raw evidence.`
@@ -475,6 +477,9 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
           oauthGrantID ? `oauth_grant_id=${oauthGrantID}` : "",
         ].filter(Boolean).join(", ")}).`
       : "",
+    aperioResponseOwner === "aperio" || responseActionCandidates.length > 0
+      ? `- For response or remediation requests with Aperio/OAuth context, do not claim direct execution. Treat these as proposal workflows: use or cite aperio.propose_cerebro_response when available, preserve dry-run and human approval, include target identifiers, and avoid POSTing external_aperio_workflow actions to /platform/runtime-response/actions. Candidate actions: ${responseActionCandidates.join(", ") || "Aperio response proposal"}.`
+      : "",
     route.includes("risk") || route.includes("dashboard") || route.includes("inbox")
       ? "- For risk dashboard or inbox questions without a specific finding, start with cerebro.risk.summary before broad finding search."
       : "",
@@ -488,6 +493,17 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
 const contextString = (context: AskAgentContext | undefined, key: string) => {
   const value = context?.[key];
   return typeof value === "string" ? value.trim() : "";
+};
+
+const contextStringList = (context: AskAgentContext | undefined, key: string) => {
+  const value = context?.[key];
+  if (Array.isArray(value)) {
+    return value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(/[,;|]/).map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
 };
 
 const buildAgentInput = (payload: NormalizedAgentRequest) => {

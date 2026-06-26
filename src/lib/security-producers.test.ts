@@ -22,6 +22,18 @@ describe("parseSecurityProducers", () => {
             mcpTools: ["cerebro.assets.search"],
             resourceTemplates: ["cerebro://asset/{asset_urn}"],
             contextKeys: ["asset_urn"],
+            responseActions: [
+              {
+                id: "BLOCK_IP",
+                label: "Block IP",
+                providers: ["AWS"],
+                targetTypes: ["ip"],
+                requiredContextKeys: ["ip_address"],
+                mode: "external_workflow",
+                dryRun: false,
+                requiresApproval: true,
+              },
+            ],
           },
           { id: "", label: "Ignored" },
         ]),
@@ -37,6 +49,18 @@ describe("parseSecurityProducers", () => {
         mcpTools: ["cerebro.assets.search"],
         resourceTemplates: ["cerebro://asset/{asset_urn}"],
         contextKeys: ["asset_urn"],
+        responseActions: [
+          {
+            id: "BLOCK_IP",
+            label: "Block IP",
+            providers: ["AWS"],
+            targetTypes: ["ip"],
+            requiredContextKeys: ["ip_address"],
+            mode: "external_workflow",
+            dryRun: false,
+            requiresApproval: true,
+          },
+        ],
       },
     ]);
   });
@@ -50,6 +74,19 @@ describe("parseSecurityProducers", () => {
     });
     expect(defaultSecurityProducers[0].mcpTools).toContain("aperio.get_cerebro_finding_context");
     expect(defaultSecurityProducers[0].contextKeys).toContain("oauth_grant_id");
+    expect(defaultSecurityProducers[0].contextKeys).toContain("response_action_candidates");
+    expect(defaultSecurityProducers[0].responseActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "REVOKE_OAUTH_GRANT",
+          externalOwner: "aperio",
+          mcpTool: "aperio.propose_cerebro_response",
+          runtimeAction: "google_workspace.revoke_oauth_grant",
+          dryRun: true,
+          requiresApproval: true,
+        }),
+      ]),
+    );
   });
 
   it("lets deployment config override a built-in producer by id", () => {
@@ -63,6 +100,7 @@ describe("parseSecurityProducers", () => {
         mcpTools: [],
         resourceTemplates: [],
         contextKeys: [],
+        responseActions: [],
       },
     ]);
     expect(merged).toHaveLength(defaultSecurityProducers.length);

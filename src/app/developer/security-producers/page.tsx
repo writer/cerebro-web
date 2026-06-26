@@ -84,6 +84,33 @@ export default function SecurityProducersPage() {
                     </span>
                   ))}
                 </div>
+                {producer.responseActions.length > 0 && (
+                  <>
+                    <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Response Actions</div>
+                    <div className="mt-1 divide-y divide-slate-200">
+                      {producer.responseActions.map((action) => (
+                        <div key={`${action.id}-${action.runtimeAction ?? action.mcpTool ?? action.mode}`} className="py-2 text-[11px] text-slate-700">
+                          <div className="flex flex-wrap items-center justify-between gap-1">
+                            <span className="font-semibold text-slate-900">{action.label}</span>
+                            <span className="font-mono text-slate-500">{action.id}</span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {[...action.providers, action.mode, action.dryRun ? "dry-run" : "", action.requiresApproval ? "approval" : ""].filter(Boolean).map((chip) => (
+                              <span key={chip} className="rounded bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-100">
+                                {chip}
+                              </span>
+                            ))}
+                          </div>
+                          {(action.mcpTool || action.runtimeAction) && (
+                            <div className="mt-1 truncate font-mono text-[10px] text-slate-500">
+                              {action.mcpTool ?? "runtime"} {action.runtimeAction ? `-> ${action.runtimeAction}` : ""}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
                 {(producer.resourceTemplates.length > 0 || producer.contextKeys.length > 0) && (
                   <div className="mt-3 grid gap-2 text-[12px] text-slate-600">
                     {producer.resourceTemplates.length > 0 && (

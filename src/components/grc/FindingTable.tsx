@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import AskAboutLink from "@/components/ask/AskAboutLink";
 import { Badge, RiskBadge, SeverityDot } from "@/components/grc/Primitives";
+import { aperioResponseActionCandidates, aperioResponseOwner } from "@/lib/aperio-response-actions";
 import { displayDate, GRCFinding, shortEntity } from "@/lib/grc";
 
 type SortKey = "risk_score" | "severity" | "last_observed_at" | "title";
@@ -196,6 +197,8 @@ export default function FindingTable({
                     aperio_incident_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "incident")?.external_id,
                     oauth_app_id: finding.attributes?.oauthAppId ?? finding.attributes?.oauth_app_id,
                     oauth_grant_id: finding.attributes?.oauthGrantId ?? finding.attributes?.oauth_grant_id,
+                    aperio_response_owner: aperioResponseOwner(finding),
+                    response_action_candidates: aperioResponseActionCandidates(finding),
                     chips: [
                       { label: "Finding", value: finding.id },
                       finding.rule_id ? { label: "Rule", value: finding.rule_id } : null,

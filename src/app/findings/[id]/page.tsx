@@ -10,6 +10,7 @@ import { useApiKey } from "@/components/providers";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
+import { aperioResponseActionCandidates, aperioResponseOwner } from "@/lib/aperio-response-actions";
 import { pluralize } from "@/lib/format";
 import { displayDate, GRCAuditPacket, GRCEntityImpact, humanize, shortEntity } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
@@ -655,6 +656,8 @@ export default function FindingDetailPage() {
                   aperio_incident_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "incident")?.external_id,
                   oauth_app_id: finding.attributes?.oauthAppId ?? finding.attributes?.oauth_app_id,
                   oauth_grant_id: finding.attributes?.oauthGrantId ?? finding.attributes?.oauth_grant_id,
+                  aperio_response_owner: aperioResponseOwner(finding),
+                  response_action_candidates: aperioResponseActionCandidates(finding),
                   chips: [
                     { label: "Finding", value: finding.id },
                     finding.rule_id ? { label: "Rule", value: finding.rule_id } : null,
