@@ -4,18 +4,22 @@ import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
+import { fetchCerebro } from "@/lib/cerebro-client";
 import { countLabel } from "@/lib/format";
+import { filterRiskInboxFindings } from "@/lib/findings-filter";
 import { downloadFindingsCSV } from "@/lib/findings-export";
 import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
-import { GRCFinding, riskSort } from "@/lib/grc";
+import { GRCFinding } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useApiKey } from "@/components/providers";
-import { findingMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
+const RISK_INBOX_LIST_LIMIT = 200;
+const RISK_INBOX_FILTERED_EXPORT_LIMIT = 500;
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const selectClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
@@ -40,57 +44,50 @@ export default function RiskInboxPage() {
   const debouncedRuntimeID = useDebouncedValue(runtimeID.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
+  const findingRequestParams = useMemo(() => ({
+    tenant_id: debouncedTenantID,
+    runtime_id: debouncedRuntimeID,
+    source_id: debouncedSourceID,
+    severity,
+    status,
+    framework,
+    opened_after: openedAfter,
+    opened_before: openedBefore,
+    closed_after: closedAfter,
+    closed_before: closedBefore,
+    age_min_days: ageMinDays,
+    age_max_days: ageMaxDays,
+    sla_status: slaStatus,
+  }), [ageMaxDays, ageMinDays, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, framework, openedAfter, openedBefore, severity, slaStatus, status]);
   const path = useMemo(
-    () => grcPath("/grc/findings", {
-      tenant_id: debouncedTenantID,
-      runtime_id: debouncedRuntimeID,
-      source_id: debouncedSourceID,
-      severity,
-      status,
-      framework,
-      opened_after: openedAfter,
-      opened_before: openedBefore,
-      closed_after: closedAfter,
-      closed_before: closedBefore,
-      age_min_days: ageMinDays,
-      age_max_days: ageMaxDays,
-      sla_status: slaStatus,
-      limit: 200,
-    }),
-    [ageMaxDays, ageMinDays, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, framework, openedAfter, openedBefore, severity, slaStatus, status],
+    () => grcPath("/grc/findings", { ...findingRequestParams, limit: RISK_INBOX_LIST_LIMIT }),
+    [findingRequestParams],
   );
   const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
   const { apiKey } = useApiKey();
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
-  const findings = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const ownerFilter = owner.trim().toLowerCase();
-    return (data?.findings ?? [])
-      .filter((f) => {
-        if (!findingMatchesFrameworkSegment(f, framework)) return false;
-        if (ownerFilter) {
-          const findingOwner = (f.owner || "").trim().toLowerCase();
-          const isUnassigned = !findingOwner || findingOwner === "unassigned";
-          if (ownerFilter === "unassigned") {
-            if (!isUnassigned) return false;
-          } else if (!findingOwner.includes(ownerFilter)) {
-            return false;
-          }
-        }
-        if (!q) return true;
-        return [f.id, f.title, f.summary, f.severity, f.status, f.owner, f.sla_status, f.entity, f.runtime_id, f.source_id, f.rule_id, f.policy_id, f.policy_name, f.risk_score, f.likelihood_score, f.impact_score, f.confidence_score, f.likelihood_level, f.impact_level, ...(f.risk_reasons ?? []), ...(f.resource_urns ?? []), ...(f.controls ?? []).map((c) => `${c.framework_name} ${c.control_id}`)].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
-      })
-      .slice()
-      .sort(riskSort);
-  }, [data?.findings, framework, owner, query]);
+  const findings = useMemo(
+    () => filterRiskInboxFindings(data?.findings ?? [], { framework, owner, query }),
+    [data?.findings, framework, owner, query],
+  );
+  const usesClientFilteredExport = Boolean(owner.trim() || query.trim());
   const exportFindings = useCallback(async () => {
     setExportState("working");
     const filename = grcExportFilename("findings");
-    if (owner.trim() || query.trim()) {
+    if (usesClientFilteredExport) {
       try {
-        downloadFindingsCSV(findings, filename);
+        const response = await fetchCerebro<FindingsResponse>(
+          grcPath("/grc/findings", { ...findingRequestParams, limit: RISK_INBOX_FILTERED_EXPORT_LIMIT }),
+          apiKey,
+        );
+        if (!response.ok) {
+          setExportState("failed");
+          return;
+        }
+        const exportFindings = Array.isArray(response.data.findings) ? response.data.findings : [];
+        downloadFindingsCSV(filterRiskInboxFindings(exportFindings, { framework, owner, query }), filename);
         setExportState("idle");
       } catch {
         setExportState("failed");
@@ -98,24 +95,10 @@ export default function RiskInboxPage() {
       return;
     }
 
-    const exportPath = grcPath("/grc/findings/export", {
-      tenant_id: debouncedTenantID,
-      runtime_id: debouncedRuntimeID,
-      source_id: debouncedSourceID,
-      severity,
-      status,
-      framework,
-      opened_after: openedAfter,
-      opened_before: openedBefore,
-      closed_after: closedAfter,
-      closed_before: closedBefore,
-      age_min_days: ageMinDays,
-      age_max_days: ageMaxDays,
-      sla_status: slaStatus,
-    });
+    const exportPath = grcPath("/grc/findings/export", findingRequestParams);
     const result = await downloadGRCExport(exportPath, apiKey, filename);
     setExportState(result.ok ? "idle" : "failed");
-  }, [ageMaxDays, ageMinDays, apiKey, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, findings, framework, openedAfter, openedBefore, owner, query, severity, slaStatus, status]);
+  }, [apiKey, findingRequestParams, framework, owner, query, usesClientFilteredExport]);
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
@@ -214,8 +197,8 @@ export default function RiskInboxPage() {
         description="Triage findings by risk, severity, owner, entity, and SLA."
         action={
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void exportFindings()} disabled={exportState === "working"} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-              {exportState === "working" ? "Exporting..." : exportState === "failed" ? "Export failed" : "Export CSV"}
+            <button type="button" onClick={() => void exportFindings()} disabled={exportState === "working"} title={usesClientFilteredExport ? `Exports up to ${RISK_INBOX_FILTERED_EXPORT_LIMIT} rows matching the owner/search filters.` : undefined} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+              {exportState === "working" ? "Exporting..." : exportState === "failed" ? "Export failed" : usesClientFilteredExport ? "Export filtered CSV" : "Export CSV"}
             </button>
             <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
               Refresh
