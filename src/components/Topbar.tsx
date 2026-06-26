@@ -140,15 +140,6 @@ export default function Topbar() {
       },
     });
   };
-  const toggleEvidenceAutoLoad = () => {
-    savePreferenceChange({
-      ...preferences,
-      homepage: {
-        ...preferences.homepage,
-        evidenceAutoLoad: !preferences.homepage.evidenceAutoLoad,
-      },
-    });
-  };
   const copyShareLink = async () => {
     if (typeof window === "undefined") return;
     const shareURL = userPreferencesShareURL(window.location.href, preferences);
@@ -487,16 +478,6 @@ export default function Topbar() {
                   );
                 })}
               </div>
-              <label className="mt-3 flex items-center justify-between gap-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-                <span className="text-[12px] font-medium text-[var(--text-secondary)]">Load evidence on home</span>
-                <input
-                  type="checkbox"
-                  checked={preferences.homepage.evidenceAutoLoad}
-                  onChange={toggleEvidenceAutoLoad}
-                  disabled={preferencesSaving}
-                  className="h-3.5 w-3.5 accent-[var(--primary)]"
-                />
-              </label>
               {preferencesError && (
                 <div className="mt-2 text-[12px] text-rose-600 dark:text-rose-300">{preferencesError}</div>
               )}

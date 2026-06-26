@@ -64,14 +64,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return fixture;
   }
   const target = buildCerebroUrl(path, url.search);
+  const baseAuthHeaders = authHeadersFor(request);
   const authHeaders = {
-    ...authHeadersFor(request),
+    ...baseAuthHeaders,
     ...currentUserPreferenceHeaders(currentUser),
   };
   const bypassCache = shouldBypassCerebroProxyCache(request.headers);
   const cacheablePath = isCacheableCerebroPath(path);
   const upstreamHeaders = headersWithTrace(bypassCache ? withCerebroCacheBypassHeader(authHeaders) : authHeaders, span);
-  const cacheKey = !bypassCache && cacheablePath ? cerebroProxyCacheKey(target, authHeaders) : null;
+  const cacheKey = !bypassCache && cacheablePath ? cerebroProxyCacheKey(target, baseAuthHeaders) : null;
   span.annotate({
     proxy_cache_bypass: bypassCache,
     proxy_cache_configured: Boolean(cacheKey),

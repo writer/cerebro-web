@@ -800,6 +800,27 @@ export type GRCSourceCoverageSummary = {
 export type GRCCoverageRecord = GRCSourceCoverageRecord;
 export type GRCCoverageSummary = GRCSourceCoverageSummary;
 
+export type GRCProductAreaWorkflow = {
+  label: string;
+  href: string;
+};
+
+export type GRCProductAreaResponse = {
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  workflows: GRCProductAreaWorkflow[];
+  source_families?: string[];
+  coverage_dimensions?: string[];
+  evidence_types?: string[];
+  control_domains?: string[];
+  blind_spots?: GRCCoverageRecord[];
+  detail?: string;
+  signal?: string;
+  status?: string;
+};
+
 export type GRCProgramReadinessSummary = {
   status: string;
   score: number;
@@ -902,6 +923,7 @@ export type GRCProgramReadiness = {
   source_summaries?: GRCSourceRuntimeHealthSummary[];
   coverage_blind_spots?: GRCCoverageRecord[];
   coverage_summaries?: GRCCoverageSummary[];
+  product_areas?: GRCProductAreaResponse[];
   metadata: GRCReportMetadata;
   generated_at: string;
 };
@@ -929,10 +951,12 @@ export type GRCGraph = {
 export type GRCInventoryCategory = {
   id: string;
   label: string;
+  surface?: GRCInventorySurface;
   entity_types: string[];
   count: number;
 };
 
+export type GRCInventorySurface = "asset" | "component" | "signal" | "alias" | "raw_record" | "all" | string;
 export type GRCInventoryReviewState = "baseline" | "needs_review" | "reported_issue" | "out_of_scope" | string;
 export type GRCInventoryAccountabilityState = "not_required" | "known" | "candidate" | "required_missing" | "disputed" | string;
 
@@ -965,6 +989,7 @@ export type GRCInventoryAccountability = {
 export type GRCInventoryAsset = {
   urn: string;
   entity_type: string;
+  surface?: GRCInventorySurface;
   label: string;
   source_id?: string;
   runtime_id?: string;
@@ -1031,6 +1056,7 @@ export type GRCInventorySummary = {
   public_assets: number;
   scoped_coverage_pct: number;
   assigned_coverage_pct: number;
+  surface_counts?: Record<string, number>;
 };
 
 export type GRCInventoryCategoriesResponse = {
@@ -1118,6 +1144,7 @@ export type GRCDashboard = {
   source_summaries?: GRCSourceRuntimeHealthSummary[];
   coverage_blind_spots?: GRCCoverageRecord[];
   coverage_summaries?: GRCCoverageSummary[];
+  product_areas?: GRCProductAreaResponse[];
   generated_at: string;
 };
 

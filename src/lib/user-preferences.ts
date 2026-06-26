@@ -1,29 +1,15 @@
 export const HOME_SECTION_IDS = [
-  "signals",
-  "workQueues",
-  "summaryMetrics",
-  "readiness",
-  "productAreas",
-  "coverage",
-  "trends",
-  "findings",
-  "controlsSources",
-  "evidence",
+  "reviewNow",
+  "programHealth",
+  "destinations",
 ] as const;
 
 export type HomeSectionID = typeof HOME_SECTION_IDS[number];
 
 export const HOME_SECTION_LABELS: Record<HomeSectionID, string> = {
-  signals: "Top metrics",
-  workQueues: "Work queues",
-  summaryMetrics: "Summary metrics",
-  readiness: "Readiness",
-  productAreas: "Product areas",
-  coverage: "Coverage gaps",
-  trends: "Trends",
-  findings: "Findings table",
-  controlsSources: "Controls and sources",
-  evidence: "Recent evidence",
+  reviewNow: "Review queue",
+  programHealth: "Program health",
+  destinations: "Key pages",
 };
 
 export type DisplayDensity = "comfortable" | "compact";
@@ -40,7 +26,7 @@ export type UserPreferences = {
   };
 };
 
-export const USER_PREFERENCES_SHARE_PARAM = "home";
+export const USER_PREFERENCES_SHARE_PARAM = "cerebro_home";
 
 export const defaultHomeSections = HOME_SECTION_IDS.reduce(
   (sections, sectionID) => ({ ...sections, [sectionID]: true }),

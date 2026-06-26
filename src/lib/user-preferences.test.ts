@@ -22,8 +22,8 @@ describe("user preferences", () => {
       homepage: {
         evidenceAutoLoad: true,
         sections: {
-          signals: false,
-          evidence: false,
+          reviewNow: false,
+          destinations: false,
         },
       },
       display: {
@@ -33,9 +33,9 @@ describe("user preferences", () => {
     });
 
     expect(preferences.homepage.evidenceAutoLoad).toBe(true);
-    expect(preferences.homepage.sections.signals).toBe(false);
-    expect(preferences.homepage.sections.evidence).toBe(false);
-    expect(preferences.homepage.sections.workQueues).toBe(true);
+    expect(preferences.homepage.sections.reviewNow).toBe(false);
+    expect(preferences.homepage.sections.destinations).toBe(false);
+    expect(preferences.homepage.sections.programHealth).toBe(true);
     expect(preferences.display).toEqual({ density: "compact", theme: "dark" });
   });
 
@@ -52,7 +52,7 @@ describe("user preferences", () => {
       homepage: {
         evidenceAutoLoad: true,
         sections: {
-          findings: false,
+          destinations: false,
         },
       },
       display: {
@@ -64,9 +64,12 @@ describe("user preferences", () => {
     expect(userPreferencesFromShareValue(value)).toEqual(preferences);
 
     const url = userPreferencesShareURL("https://cerebro.example.com/risk-inbox?severity=high#row", preferences);
+    expect(url).toContain("cerebro_home=");
+    expect(url).not.toContain("?home=");
     const shared = sharedUserPreferencesFromURL(url);
     expect(shared?.preferences).toEqual(preferences);
     expect(shared?.cleanedPath).toBe("/");
+    expect(sharedUserPreferencesFromURL("https://cerebro.example.com/?home=%7B%7D")).toBeNull();
     expect(userPreferencesFromShareValue(encodeURIComponent(JSON.stringify("bad")))).toBeNull();
   });
 });

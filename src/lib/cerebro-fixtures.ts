@@ -1,3 +1,5 @@
+import { grcProductAreas, productAreaStatus, type GRCProductArea } from "@/lib/grc-product-areas";
+
 type FixtureResponse = {
   body: string;
   headers: Record<string, string>;
@@ -17,6 +19,8 @@ const adminURN = `urn:cerebro:${tenantID}:identity:platform-admin`;
 const apiURN = `urn:cerebro:${tenantID}:service:payments-api`;
 const repoURN = `urn:cerebro:${tenantID}:repository:public-demo`;
 const bucketURN = `urn:cerebro:${tenantID}:storage:audit-bucket`;
+const installedAppURN = `urn:cerebro:${tenantID}:sentinelone_installed_app:agent-1:browser`;
+const emailAliasURN = `urn:cerebro:${tenantID}:identifier:email:platform-admin@example.com`;
 
 const truthy = (value: string | undefined) =>
   ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
@@ -319,6 +323,7 @@ const assets = [
   {
     urn: adminURN,
     entity_type: "identity_user",
+    surface: "asset",
     label: "platform-admin",
     source_id: "okta",
     runtime_id: "demo-okta-runtime",
@@ -333,6 +338,7 @@ const assets = [
   {
     urn: apiURN,
     entity_type: "service",
+    surface: "asset",
     label: "payments-api",
     source_id: "aws",
     runtime_id: "demo-aws-runtime",
@@ -347,6 +353,7 @@ const assets = [
   {
     urn: repoURN,
     entity_type: "repository",
+    surface: "asset",
     label: "public-demo",
     source_id: "github",
     runtime_id: "demo-github-runtime",
@@ -364,6 +371,7 @@ const assets = [
   {
     urn: bucketURN,
     entity_type: "storage_bucket",
+    surface: "asset",
     label: "audit-bucket",
     source_id: "aws",
     runtime_id: "demo-aws-runtime",
@@ -375,6 +383,35 @@ const assets = [
     review_disposition: { state: "out_of_scope", label: "Scoped out", detail: "Documented as support-only in fixture mode." },
     accountability: { state: "candidate", label: "Owner candidate", candidates: [{ principal: "platform@example.com", confidence: "medium", source: "demo-fixture" }] },
     attributes: { owner: "Platform", provider: "AWS", region: "us-east-1", account_id: "demo-account", resource_type: "Storage bucket" },
+  },
+  {
+    urn: installedAppURN,
+    entity_type: "sentinelone.installed_application",
+    surface: "component",
+    label: "Chrome 126",
+    source_id: "sentinelone",
+    runtime_id: "demo-sentinelone-runtime",
+    risk_score: 12,
+    risk_level: "low",
+    risk_reasons: ["Endpoint software"],
+    scope_state: "in_scope",
+    review_disposition: { state: "baseline", label: "Baseline", detail: "Linked to related assets. Owner review is not required." },
+    accountability: { state: "not_required", label: "Owner not required", reasons: [{ code: "supporting_record", label: "Supporting record" }] },
+    attributes: { provider: "SentinelOne", resource_type: "Installed application", version: "126.0.0", agent_id: "agent-1" },
+  },
+  {
+    urn: emailAliasURN,
+    entity_type: "identifier.email",
+    surface: "alias",
+    label: "platform-admin@example.com",
+    source_id: "okta",
+    runtime_id: "demo-okta-runtime",
+    risk_score: 0,
+    risk_level: "unknown",
+    scope_state: "in_scope",
+    review_disposition: { state: "baseline", label: "Baseline", detail: "Linked to related assets. Owner review is not required." },
+    accountability: { state: "not_required", label: "Owner not required", reasons: [{ code: "supporting_record", label: "Supporting record" }] },
+    attributes: { provider: "Okta", resource_type: "Email identifier", value: "platform-admin@example.com" },
   },
 ];
 
@@ -393,6 +430,61 @@ const assetReports = [
   },
 ];
 
+const coverageBlindSpots = [
+  {
+    source_id: "github",
+    dimension_id: "repo.secrets",
+    dimension_type: "code_scanning",
+    title: "Secret scanning needs reviewer confirmation",
+    state: "warning",
+    support_level: "partial",
+    high_value: true,
+    blind_spot: true,
+    evidence_types: ["security_review"],
+    control_domains: ["vulnerability_management"],
+    control_refs: [{ framework_name: "SOC 2", framework_id: "soc2", control_id: "CC7.2" }],
+  },
+];
+
+const coverageSummaries = [
+  { source_id: "okta", total: 3, healthy: 3, stale: 0, missing: 0, blind_spots: 0 },
+  { source_id: "github", total: 4, healthy: 2, stale: 1, missing: 1, blind_spots: 1 },
+  { source_id: "aws", total: 5, healthy: 4, stale: 1, missing: 0, blind_spots: 0 },
+];
+
+const productAreaBlindSpots = (area: GRCProductArea) => area.id === "assets" ? coverageBlindSpots : [];
+
+const productAreaDetail = (area: GRCProductArea, blindSpotCount: number) => {
+  if (blindSpotCount > 0) return `${blindSpotCount} coverage gap${blindSpotCount === 1 ? "" : "s"}`;
+  return `${area.workflows.length} workflows | ${area.coverageDimensions.length} dimensions | ${area.sourceFamilies.length} families`;
+};
+
+const productAreaSignal = (status: ReturnType<typeof productAreaStatus>, blindSpotCount: number) => {
+  if (status === "attention") return `${blindSpotCount} gap${blindSpotCount === 1 ? "" : "s"}`;
+  if (status === "mapped") return "mapped";
+  return "awaiting coverage";
+};
+
+const productAreas = grcProductAreas.map((area) => {
+  const blindSpots = productAreaBlindSpots(area);
+  const status = productAreaStatus(blindSpots.length, true);
+  return {
+    id: area.id,
+    title: area.title,
+    description: area.description,
+    href: area.href,
+    workflows: area.workflows,
+    source_families: area.sourceFamilies,
+    coverage_dimensions: area.coverageDimensions,
+    evidence_types: area.evidenceTypes,
+    control_domains: area.controlDomains,
+    blind_spots: blindSpots,
+    detail: productAreaDetail(area, blindSpots.length),
+    signal: productAreaSignal(status, blindSpots.length),
+    status,
+  };
+});
+
 const dashboardFixture = () => ({
   summary: {
     open_findings: 3,
@@ -410,24 +502,9 @@ const dashboardFixture = () => ({
   evidence,
   connectors,
   source_summaries: sourceSummaries,
-  coverage_blind_spots: [
-    {
-      source_id: "github",
-      dimension_id: "repo.secrets",
-      dimension_type: "code_scanning",
-      title: "Secret scanning needs reviewer confirmation",
-      state: "warning",
-      support_level: "partial",
-      high_value: true,
-      blind_spot: true,
-      control_refs: [{ framework_name: "SOC 2", framework_id: "soc2", control_id: "CC7.2" }],
-    },
-  ],
-  coverage_summaries: [
-    { source_id: "okta", total: 3, healthy: 3, stale: 0, missing: 0, blind_spots: 0 },
-    { source_id: "github", total: 4, healthy: 2, stale: 1, missing: 1, blind_spots: 1 },
-    { source_id: "aws", total: 5, healthy: 4, stale: 1, missing: 0, blind_spots: 0 },
-  ],
+  coverage_blind_spots: coverageBlindSpots,
+  coverage_summaries: coverageSummaries,
+  product_areas: productAreas,
   generated_at: generatedAt,
 });
 
@@ -499,22 +576,45 @@ const trendsFixture = () => ({
   generated_at: generatedAt,
 });
 
-const inventorySummary = () => ({
-  total_assets: assets.length,
-  in_scope_assets: assets.filter((asset) => asset.scope_state !== "out_of_scope").length,
-  out_of_scope_assets: assets.filter((asset) => asset.scope_state === "out_of_scope").length,
-  high_risk_assets: assets.filter((asset) => (asset.risk_score ?? 0) >= 70).length,
-  unassigned_assets: assets.filter((asset) => asset.accountability?.state === "required_missing").length,
-  baseline_assets: assets.filter((asset) => asset.review_disposition?.state === "baseline").length,
-  needs_review_assets: assets.filter((asset) => asset.review_disposition?.state === "needs_review").length,
-  owner_required_assets: assets.filter((asset) => asset.accountability?.state === "required_missing").length,
-  accountable_assets: assets.filter((asset) => asset.accountability?.state === "known").length,
-  reported_issue_assets: assets.filter((asset) => asset.review_disposition?.state === "reported_issue").length,
+const assetSurface = (asset: (typeof assets)[number]) => asset.surface ?? "asset";
+
+const inventoryCategoryID = (entityType: string) => entityType.replace(/\./g, "-");
+
+const inventoryCategoryLabel = (entityType: string) =>
+  `${entityType.replace(/[._-]/g, " ").split(" ").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")}s`;
+
+const inventorySummary = (items = assets) => ({
+  total_assets: items.length,
+  in_scope_assets: items.filter((asset) => asset.scope_state !== "out_of_scope").length,
+  out_of_scope_assets: items.filter((asset) => asset.scope_state === "out_of_scope").length,
+  high_risk_assets: items.filter((asset) => (asset.risk_score ?? 0) >= 70).length,
+  unassigned_assets: items.filter((asset) => assetSurface(asset) === "asset" && asset.accountability?.state === "required_missing").length,
+  baseline_assets: items.filter((asset) => asset.review_disposition?.state === "baseline").length,
+  needs_review_assets: items.filter((asset) => asset.review_disposition?.state === "needs_review").length,
+  owner_required_assets: items.filter((asset) => asset.accountability?.state === "required_missing").length,
+  accountable_assets: items.filter((asset) => asset.accountability?.state === "known").length,
+  reported_issue_assets: items.filter((asset) => asset.review_disposition?.state === "reported_issue").length,
   org_groups: 3,
-  public_assets: assets.filter((asset) => asset.attributes?.public === "true").length,
-  scoped_coverage_pct: 75,
-  assigned_coverage_pct: 50,
+  public_assets: items.filter((asset) => asset.attributes?.public === "true").length,
+  scoped_coverage_pct: items.length ? Math.round((items.filter((asset) => asset.scope_state !== "out_of_scope").length / items.length) * 100) : 0,
+  assigned_coverage_pct: items.length ? Math.round(((items.length - items.filter((asset) => assetSurface(asset) === "asset" && asset.accountability?.state === "required_missing").length) / items.length) * 100) : 0,
+  surface_counts: items.reduce<Record<string, number>>((counts, asset) => {
+    const surface = assetSurface(asset);
+    counts[surface] = (counts[surface] ?? 0) + 1;
+    return counts;
+  }, {}),
 });
+
+const inventoryCategories = (items: typeof assets) => {
+  const categories = new Map<string, { id: string; label: string; surface?: string; entity_types: string[]; count: number }>();
+  for (const asset of items) {
+    const id = inventoryCategoryID(asset.entity_type);
+    const category = categories.get(id) ?? { id, label: inventoryCategoryLabel(asset.entity_type), surface: assetSurface(asset), entity_types: [asset.entity_type], count: 0 };
+    category.count += 1;
+    categories.set(id, category);
+  }
+  return [...categories.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+};
 
 const filterFindings = (params?: URLSearchParams) => {
   const severity = params?.get("severity")?.trim().toUpperCase();
@@ -540,11 +640,13 @@ const filterFindings = (params?: URLSearchParams) => {
 const filterAssets = (params?: URLSearchParams) => {
   const sourceID = params?.get("source_id")?.trim().toLowerCase();
   const categoryID = params?.get("category_id")?.trim().toLowerCase();
+  const surface = params?.get("surface")?.trim().toLowerCase() || "asset";
   const query = params?.get("q")?.trim().toLowerCase();
   const scopeState = params?.get("scope_state")?.trim().toLowerCase();
   return limitList(assets.filter((asset) => {
     if (sourceID && asset.source_id?.toLowerCase() !== sourceID) return false;
-    if (categoryID && asset.entity_type.toLowerCase() !== categoryID) return false;
+    if (categoryID && asset.entity_type.toLowerCase() !== categoryID && inventoryCategoryID(asset.entity_type).toLowerCase() !== categoryID) return false;
+    if (surface && surface !== "all" && assetSurface(asset).toLowerCase() !== surface) return false;
     if (scopeState && asset.scope_state?.toLowerCase() !== scopeState) return false;
     if (query && ![asset.label, asset.urn, asset.entity_type, asset.source_id, asset.attributes?.owner].some((value) => contains(value, query))) return false;
     return true;
@@ -731,8 +833,9 @@ const programReadinessFixture = () => ({
   },
   connectors,
   source_summaries: sourceSummaries,
-  coverage_blind_spots: dashboardFixture().coverage_blind_spots,
-  coverage_summaries: dashboardFixture().coverage_summaries,
+  coverage_blind_spots: coverageBlindSpots,
+  coverage_summaries: coverageSummaries,
+  product_areas: productAreas,
   metadata: { generated_by: "cerebro-web-fixture", tenant_id: tenantID, generated_at: generatedAt },
   generated_at: generatedAt,
 });
@@ -1148,18 +1251,14 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "grc/inventory/categories") {
     return jsonFixture({
-      categories: [
-        { id: "identity_user", label: "Identity users", entity_types: ["identity_user"], count: 1 },
-        { id: "service", label: "Services", entity_types: ["service"], count: 1 },
-        { id: "repository", label: "Repositories", entity_types: ["repository"], count: 1 },
-        { id: "storage_bucket", label: "Storage buckets", entity_types: ["storage_bucket"], count: 1 },
-      ],
+      categories: inventoryCategories(filterAssets(searchParams)),
       generated_at: generatedAt,
     });
   }
 
   if (normalizedPath === "grc/inventory/assets") {
-    return jsonFixture({ assets: filterAssets(searchParams), summary: inventorySummary(), generated_at: generatedAt });
+    const filteredAssets = filterAssets(searchParams);
+    return jsonFixture({ assets: filteredAssets, summary: inventorySummary(filteredAssets), generated_at: generatedAt });
   }
 
   if (normalizedPath === "grc/inventory/assets/detail") {
@@ -1177,7 +1276,7 @@ export const cerebroFixtureResponseFor = ({
         status: connector.status,
       })),
       resources: filterAssets(searchParams),
-      summary: inventorySummary(),
+      summary: inventorySummary(filterAssets(searchParams)),
       generated_at: generatedAt,
     });
   }
