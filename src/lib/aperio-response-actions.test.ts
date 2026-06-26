@@ -75,4 +75,33 @@ describe("aperio response action helpers", () => {
       "NOTIFY_SECOPS",
     ]);
   });
+
+  it("returns distinct Slack and GitHub OAuth response candidates", () => {
+    const baseFinding = {
+      source_id: "aperio_saas_dr",
+      runtime_id: "writer-aperio-saas-dr",
+      rule_id: "oauth.risky_app",
+      attributes: {
+        oauth_app_id: "app-123",
+      },
+      external_refs: [{ system: "aperio", kind: "finding", external_id: "fnd-123" }],
+    };
+
+    expect(aperioResponseActionCandidates({
+      ...baseFinding,
+      attributes: { ...baseFinding.attributes, provider: "SLACK" },
+    })).toEqual([
+      "REMOVE_SLACK_APP",
+      "OPEN_TICKET",
+      "NOTIFY_SECOPS",
+    ]);
+    expect(aperioResponseActionCandidates({
+      ...baseFinding,
+      attributes: { ...baseFinding.attributes, provider: "GITHUB" },
+    })).toEqual([
+      "REVOKE_GITHUB_OAUTH_APP",
+      "OPEN_TICKET",
+      "NOTIFY_SECOPS",
+    ]);
+  });
 });
