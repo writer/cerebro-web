@@ -85,6 +85,13 @@ describe("parseSecurityProducers", () => {
           dryRun: true,
           requiresApproval: true,
         }),
+        expect.objectContaining({
+          id: "NOTIFY_SECOPS",
+          externalOwner: "aperio",
+          mcpTool: "aperio.propose_cerebro_response",
+          dryRun: false,
+          requiresApproval: false,
+        }),
       ]),
     );
   });

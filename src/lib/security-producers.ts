@@ -226,6 +226,18 @@ export const defaultSecurityProducers: SecurityProducer[] = [
         dryRun: false,
         requiresApproval: false,
       },
+      {
+        id: "NOTIFY_SECOPS",
+        label: "Notify SecOps",
+        providers: ["ALL"],
+        targetTypes: ["incident", "finding"],
+        requiredContextKeys: ["incident_id", "finding_id"],
+        mode: "aperio_workflow",
+        mcpTool: "aperio.propose_cerebro_response",
+        externalOwner: "aperio",
+        dryRun: false,
+        requiresApproval: false,
+      },
     ],
   },
 ];
