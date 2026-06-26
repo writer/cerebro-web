@@ -578,6 +578,10 @@ const trendsFixture = () => ({
 
 const assetSurface = (asset: (typeof assets)[number]) => asset.surface ?? "asset";
 
+const ownerTrackableAssetCount = (items: typeof assets) => items.filter((asset) => assetSurface(asset) === "asset").length;
+
+const unassignedAssetCount = (items: typeof assets) => items.filter((asset) => assetSurface(asset) === "asset" && asset.accountability?.state === "required_missing").length;
+
 const inventoryCategoryID = (entityType: string) => entityType.replace(/\./g, "-");
 
 const inventoryCategoryLabel = (entityType: string) =>
@@ -588,7 +592,7 @@ const inventorySummary = (items = assets) => ({
   in_scope_assets: items.filter((asset) => asset.scope_state !== "out_of_scope").length,
   out_of_scope_assets: items.filter((asset) => asset.scope_state === "out_of_scope").length,
   high_risk_assets: items.filter((asset) => (asset.risk_score ?? 0) >= 70).length,
-  unassigned_assets: items.filter((asset) => assetSurface(asset) === "asset" && asset.accountability?.state === "required_missing").length,
+  unassigned_assets: unassignedAssetCount(items),
   baseline_assets: items.filter((asset) => asset.review_disposition?.state === "baseline").length,
   needs_review_assets: items.filter((asset) => asset.review_disposition?.state === "needs_review").length,
   owner_required_assets: items.filter((asset) => asset.accountability?.state === "required_missing").length,
@@ -597,7 +601,7 @@ const inventorySummary = (items = assets) => ({
   org_groups: 3,
   public_assets: items.filter((asset) => asset.attributes?.public === "true").length,
   scoped_coverage_pct: items.length ? Math.round((items.filter((asset) => asset.scope_state !== "out_of_scope").length / items.length) * 100) : 0,
-  assigned_coverage_pct: items.length ? Math.round(((items.length - items.filter((asset) => assetSurface(asset) === "asset" && asset.accountability?.state === "required_missing").length) / items.length) * 100) : 0,
+  assigned_coverage_pct: ownerTrackableAssetCount(items) ? Math.round(((ownerTrackableAssetCount(items) - unassignedAssetCount(items)) / ownerTrackableAssetCount(items)) * 100) : 0,
   surface_counts: items.reduce<Record<string, number>>((counts, asset) => {
     const surface = assetSurface(asset);
     counts[surface] = (counts[surface] ?? 0) + 1;
@@ -640,7 +644,7 @@ const filterFindings = (params?: URLSearchParams) => {
 const filterAssets = (params?: URLSearchParams) => {
   const sourceID = params?.get("source_id")?.trim().toLowerCase();
   const categoryID = params?.get("category_id")?.trim().toLowerCase();
-  const surface = params?.get("surface")?.trim().toLowerCase() || "asset";
+  const surface = params?.get("surface")?.trim().toLowerCase() || "all";
   const query = params?.get("q")?.trim().toLowerCase();
   const scopeState = params?.get("scope_state")?.trim().toLowerCase();
   return limitList(assets.filter((asset) => {

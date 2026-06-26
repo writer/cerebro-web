@@ -550,15 +550,16 @@ export default function InventoryPage() {
   const debouncedOwnerFilter = useDebouncedValue(ownerFilter.trim());
   const debouncedReviewFilter = useDebouncedValue(reviewFilter.trim());
   const debouncedAccountabilityFilter = useDebouncedValue(accountabilityFilter.trim());
+  const selectedSurface = debouncedSurfaceFilter || "asset";
 
   const categoriesQuery = useGRCQuery<GRCInventoryCategoriesResponse>(
-    grcPath("/grc/inventory/categories", { tenant_id: debouncedTenantID, source_id: debouncedSourceID, surface: debouncedSurfaceFilter, limit: 200 }),
+    grcPath("/grc/inventory/categories", { tenant_id: debouncedTenantID, source_id: debouncedSourceID, surface: selectedSurface, limit: 200 }),
   );
   const assetsQuery = useGRCQuery<GRCInventoryAssetsResponse>(
     grcPath("/grc/inventory/assets", {
       tenant_id: debouncedTenantID,
       source_id: debouncedSourceID,
-      surface: debouncedSurfaceFilter,
+      surface: selectedSurface,
       category_id: debouncedCategoryID,
       q: debouncedQuery,
       scope_state: debouncedScopeFilter,
@@ -568,10 +569,9 @@ export default function InventoryPage() {
     }),
   );
   const scopeQuery = useGRCQuery<GRCResourceScopeResponse>(
-    scopeOpen ? grcPath("/grc/inventory/resource-scope", { tenant_id: debouncedTenantID, source_id: debouncedSourceID || "github", surface: debouncedSurfaceFilter, category_id: debouncedCategoryID, q: debouncedQuery, limit: 200 }) : null,
+    scopeOpen ? grcPath("/grc/inventory/resource-scope", { tenant_id: debouncedTenantID, source_id: debouncedSourceID || "github", surface: selectedSurface, category_id: debouncedCategoryID, q: debouncedQuery, limit: 200 }) : null,
   );
 
-  const selectedSurface = debouncedSurfaceFilter || "asset";
   const surfaceIsAssets = selectedSurface === "asset";
   const recordNoun = surfaceIsAssets ? "assets" : "records";
   const recordNounTitle = surfaceIsAssets ? "Assets" : "Records";
