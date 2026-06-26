@@ -39,6 +39,16 @@ describe("cerebro fixture proxy responses", () => {
     const payload = parseFixture(response!);
     expect(payload.summary).toMatchObject({ open_findings: 3, critical_findings: 1 });
     expect(payload.findings).toHaveLength(3);
+    expect(payload.product_areas).toMatchObject([
+      { id: "compliance", status: "mapped" },
+      { id: "customer_trust", status: "mapped" },
+      { id: "risk", status: "mapped" },
+      { id: "vendors", status: "mapped" },
+      { id: "privacy", status: "mapped" },
+      { id: "assets", status: "attention" },
+      { id: "personnel", coverage_dimensions: expect.arrayContaining(["users"]) },
+      { id: "integrations", status: "mapped" },
+    ]);
   });
 
   it("filters fixture findings by severity", () => {
