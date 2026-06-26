@@ -5,6 +5,7 @@ export type AuthorizationPermission =
   | "cerebro:read"
   | "cerebro:write"
   | "identity:read"
+  | "preferences:write"
   | "findings:write"
   | "grc:inventory:write"
   | "dashboards:write"
@@ -24,6 +25,7 @@ const permissionOrder: AuthorizationPermission[] = [
   "identity:read",
   "agent:ask",
   "cerebro:read",
+  "preferences:write",
   "cerebro:write",
   "findings:write",
   "grc:inventory:write",
@@ -42,7 +44,7 @@ const permissionOrder: AuthorizationPermission[] = [
 ];
 
 const allPermissions = permissionOrder;
-const viewerPermissions: AuthorizationPermission[] = ["identity:read", "agent:ask", "cerebro:read"];
+const viewerPermissions: AuthorizationPermission[] = ["identity:read", "agent:ask", "cerebro:read", "preferences:write"];
 const findingManagerPermissions: AuthorizationPermission[] = [
   ...viewerPermissions,
   "findings:write",
@@ -137,6 +139,7 @@ const explicitCerebroRoles = new Set([
 
 const scopePermissionBundles: Record<string, AuthorizationPermission[]> = {
   "cerebro.cosmo.security.read": viewerPermissions,
+  "cerebro.user_preferences.write": ["preferences:write"],
   "cerebro.finding_candidates.promote": ["findings:write"],
   "cerebro.findings.write": ["findings:write"],
   "cerebro.grc.inventory.write": ["grc:inventory:write"],
@@ -226,6 +229,7 @@ export const permissionForCerebroProxyRequest = (
   }
 
   if (normalizedMethod === "PUT") {
+    if (normalizedPath === "user/preferences") return "preferences:write";
     if (normalizedPath.startsWith("connector-definitions/")) return "connector-definitions:write";
     if (normalizedPath.startsWith("source-runtimes/")) return "source-runtimes:write";
     if (matchesFindingLifecyclePath(normalizedPath)) return "findings:write";

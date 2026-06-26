@@ -27,6 +27,7 @@ import {
 import { permissionForCerebroProxyRequest } from "@/lib/rbac";
 import {
   currentUserActor,
+  currentUserActorLabel,
   resolveCurrentUserFromHeadersWithFallback,
   type CurrentUser,
 } from "@/lib/identity";
@@ -63,11 +64,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return fixture;
   }
   const target = buildCerebroUrl(path, url.search);
-  const authHeaders = authHeadersFor(request);
+  const baseAuthHeaders = authHeadersFor(request);
+  const authHeaders = {
+    ...baseAuthHeaders,
+    ...currentUserPreferenceHeaders(currentUser),
+  };
   const bypassCache = shouldBypassCerebroProxyCache(request.headers);
   const cacheablePath = isCacheableCerebroPath(path);
   const upstreamHeaders = headersWithTrace(bypassCache ? withCerebroCacheBypassHeader(authHeaders) : authHeaders, span);
-  const cacheKey = !bypassCache && cacheablePath ? cerebroProxyCacheKey(target, authHeaders) : null;
+  const cacheKey = !bypassCache && cacheablePath ? cerebroProxyCacheKey(target, baseAuthHeaders) : null;
   span.annotate({
     proxy_cache_bypass: bypassCache,
     proxy_cache_configured: Boolean(cacheKey),
@@ -230,6 +235,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
+    ...currentUserPreferenceHeaders(currentUser),
     "content-type": request.headers.get("content-type") ?? "application/json",
     accept: isAskStreamRequest ? "text/event-stream" : "application/json, text/plain;q=0.9, */*;q=0.8",
     ...(isAskStreamRequest ? { "x-cerebro-web-surface": "ask" } : {}),
@@ -313,6 +319,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
+    ...currentUserPreferenceHeaders(currentUser),
     "content-type": request.headers.get("content-type") ?? "application/json",
     accept: "application/json, text/plain;q=0.9, */*;q=0.8",
   };
@@ -373,6 +380,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
+    ...currentUserPreferenceHeaders(currentUser),
     "content-type": request.headers.get("content-type") ?? "application/json",
     accept: "application/json, text/plain;q=0.9, */*;q=0.8",
   };
@@ -427,6 +435,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const target = buildCerebroUrl(path, url.search);
   const headers = {
     ...authHeadersFor(request),
+    ...currentUserPreferenceHeaders(currentUser),
     accept: "application/json, text/plain;q=0.9, */*;q=0.8",
   };
 
@@ -535,6 +544,24 @@ function tracedAuthorizationError(decision: AuthorizationDecision, span: WebSpan
     "http.response.status_code": response.status,
   });
   return response;
+}
+
+function currentUserPreferenceHeaders(user: CurrentUser | null | undefined): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const actor = cleanPreferenceHeaderValue(currentUserActor(user));
+  const label = cleanPreferenceHeaderValue(currentUserActorLabel(user));
+  const email = cleanPreferenceHeaderValue(user?.email);
+  const subject = cleanPreferenceHeaderValue(user?.subject);
+
+  if (actor) headers["X-Cerebro-User-ID"] = actor;
+  if (label) headers["X-Cerebro-User-Name"] = label;
+  if (email) headers["X-Cerebro-User-Email"] = email;
+  if (subject) headers["X-Cerebro-User-Subject"] = subject;
+  return headers;
+}
+
+function cleanPreferenceHeaderValue(value: string | undefined) {
+  return (value ?? "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 256);
 }
 
 function proxyPathFamily(path: string) {

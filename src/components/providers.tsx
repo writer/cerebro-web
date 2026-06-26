@@ -1,9 +1,17 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { fetchCerebro } from "@/lib/cerebro-client";
 import { currentUserActor } from "@/lib/identity";
 import type { CurrentUser, CurrentUserResponse } from "@/lib/identity";
+import {
+  defaultUserPreferences,
+  normalizeUserPreferences,
+  sharedUserPreferencesFromURL,
+  userPreferencesRequestBody,
+  type UserPreferences,
+} from "@/lib/user-preferences";
 
 type ApiKeyContextValue = {
   apiKey: string;
@@ -36,11 +44,33 @@ type CurrentUserContextValue = {
   user: CurrentUser | null;
 };
 
+type UserPreferencesContextValue = {
+  error: string | null;
+  loading: boolean;
+  persisted: boolean;
+  preferences: UserPreferences;
+  reloadPreferences: () => Promise<void>;
+  savePreferences: (value: UserPreferences) => Promise<void>;
+  saving: boolean;
+  setPreferences: (value: UserPreferences) => void;
+  updatedAt: string | null;
+};
+
+type UserPreferencesResponse = {
+  created_at?: string;
+  persisted?: boolean;
+  preferences?: unknown;
+  tenant_id?: string;
+  updated_at?: string;
+  user_id?: string;
+};
+
 const ApiKeyContext = createContext<ApiKeyContextValue | undefined>(undefined);
 const CommandPaletteContext = createContext<CommandPaletteContextValue | undefined>(undefined);
 const SidebarContext = createContext<SidebarContextValue | undefined>(undefined);
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const CurrentUserContext = createContext<CurrentUserContextValue | undefined>(undefined);
+const UserPreferencesContext = createContext<UserPreferencesContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "cerebro.apiKey";
 const THEME_STORAGE_KEY = "cerebro.theme";
@@ -143,7 +173,10 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeServerSnapshot);
+  const localTheme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeServerSnapshot);
+  const userPreferences = useContext(UserPreferencesContext);
+  const persistedTheme = userPreferences?.persisted ? userPreferences.preferences.display.theme : undefined;
+  const theme = persistedTheme ?? localTheme;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -151,19 +184,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.dataset.theme = theme;
   }, [theme]);
 
+  const persistTheme = useCallback((value: ThemeMode) => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, value);
+    notifyThemeChange();
+    if (userPreferences) {
+      void userPreferences.savePreferences({
+        ...userPreferences.preferences,
+        display: {
+          ...userPreferences.preferences.display,
+          theme: value,
+        },
+      }).catch(() => undefined);
+    }
+  }, [userPreferences]);
+
   const contextValue = useMemo(
     () => ({
       theme,
-      setTheme: (value: ThemeMode) => {
-        window.localStorage.setItem(THEME_STORAGE_KEY, value);
-        notifyThemeChange();
-      },
-      toggleTheme: () => {
-        window.localStorage.setItem(THEME_STORAGE_KEY, theme === "dark" ? "light" : "dark");
-        notifyThemeChange();
-      },
+      setTheme: persistTheme,
+      toggleTheme: () => persistTheme(theme === "dark" ? "light" : "dark"),
     }),
-    [theme],
+    [persistTheme, theme],
   );
 
   return (
@@ -219,6 +260,168 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
   );
 }
 
+export function UserPreferencesProvider({ children }: { children: React.ReactNode }) {
+  const { apiKey } = useApiKey();
+  const { actor, loading: userLoading } = useCurrentUser();
+  const [preferences, setPreferencesState] = useState<UserPreferences>(defaultUserPreferences);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [persisted, setPersisted] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.density = preferences.display.density;
+  }, [preferences.display.density]);
+
+  const setPreferences = useCallback((value: UserPreferences) => {
+    setPreferencesState(normalizeUserPreferences(value));
+  }, []);
+
+  const loadPreferences = useCallback(async () => {
+    if (userLoading) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetchCerebro<UserPreferencesResponse>("/user/preferences", apiKey);
+      if (!response.ok) {
+        throw new Error(`Preferences unavailable (${response.status})`);
+      }
+      const body = response.data ?? {};
+      setPreferencesState(normalizeUserPreferences(body.preferences));
+      setPersisted(Boolean(body.persisted));
+      setUpdatedAt(body.updated_at ?? body.created_at ?? null);
+    } catch (nextError) {
+      setPreferencesState(defaultUserPreferences);
+      setPersisted(false);
+      setUpdatedAt(null);
+      setError(nextError instanceof Error ? nextError.message : "Preferences unavailable");
+    } finally {
+      setLoading(false);
+    }
+  }, [apiKey, userLoading]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (userLoading) {
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      const sharedPreferences = typeof window === "undefined" ? null : sharedUserPreferencesFromURL(window.location.href);
+      if (sharedPreferences) {
+        window.history.replaceState(null, "", sharedPreferences.cleanedPath);
+        setPreferencesState(sharedPreferences.preferences);
+        setPersisted(false);
+        setUpdatedAt(null);
+        setSaving(true);
+        try {
+          const response = await fetchCerebro<UserPreferencesResponse>("/user/preferences", apiKey, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: userPreferencesRequestBody(sharedPreferences.preferences),
+          });
+          if (!response.ok) {
+            throw new Error(`Preferences save failed (${response.status})`);
+          }
+          const body = response.data ?? {};
+          if (!mounted) return;
+          setPreferencesState(normalizeUserPreferences(body.preferences ?? sharedPreferences.preferences));
+          setPersisted(Boolean(body.persisted ?? true));
+          setUpdatedAt(body.updated_at ?? body.created_at ?? new Date().toISOString());
+        } catch (nextError) {
+          if (!mounted) return;
+          setError(nextError instanceof Error ? nextError.message : "Preferences save failed");
+        } finally {
+          if (mounted) {
+            setSaving(false);
+            setLoading(false);
+          }
+        }
+        return;
+      }
+      try {
+        const response = await fetchCerebro<UserPreferencesResponse>("/user/preferences", apiKey);
+        if (!response.ok) {
+          throw new Error(`Preferences unavailable (${response.status})`);
+        }
+        const body = response.data ?? {};
+        if (!mounted) return;
+        setPreferencesState(normalizeUserPreferences(body.preferences));
+        setPersisted(Boolean(body.persisted));
+        setUpdatedAt(body.updated_at ?? body.created_at ?? null);
+      } catch (nextError) {
+        if (!mounted) return;
+        setPreferencesState(defaultUserPreferences);
+        setPersisted(false);
+        setUpdatedAt(null);
+        setError(nextError instanceof Error ? nextError.message : "Preferences unavailable");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => { mounted = false; };
+  }, [actor, apiKey, userLoading]);
+
+  const savePreferences = useCallback(async (value: UserPreferences) => {
+    const nextPreferences = normalizeUserPreferences(value);
+    const previousPreferences = preferences;
+    const previousPersisted = persisted;
+    const previousUpdatedAt = updatedAt;
+    setPreferencesState(nextPreferences);
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetchCerebro<UserPreferencesResponse>("/user/preferences", apiKey, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: userPreferencesRequestBody(nextPreferences),
+      });
+      if (!response.ok) {
+        throw new Error(`Preferences save failed (${response.status})`);
+      }
+      const body = response.data ?? {};
+      setPreferencesState(normalizeUserPreferences(body.preferences ?? nextPreferences));
+      setPersisted(Boolean(body.persisted ?? true));
+      setUpdatedAt(body.updated_at ?? body.created_at ?? new Date().toISOString());
+    } catch (nextError) {
+      setPreferencesState(previousPreferences);
+      setPersisted(previousPersisted);
+      setUpdatedAt(previousUpdatedAt);
+      setError(nextError instanceof Error ? nextError.message : "Preferences save failed");
+      throw nextError;
+    } finally {
+      setSaving(false);
+    }
+  }, [apiKey, persisted, preferences, updatedAt]);
+
+  const contextValue = useMemo<UserPreferencesContextValue>(
+    () => ({
+      error,
+      loading,
+      persisted,
+      preferences,
+      reloadPreferences: loadPreferences,
+      savePreferences,
+      saving,
+      setPreferences,
+      updatedAt,
+    }),
+    [error, loadPreferences, loading, persisted, preferences, savePreferences, saving, setPreferences, updatedAt],
+  );
+
+  return (
+    <UserPreferencesContext.Provider value={contextValue}>
+      {children}
+    </UserPreferencesContext.Provider>
+  );
+}
+
 export function useSidebar() {
   const context = useContext(SidebarContext);
   if (!context) throw new Error("useSidebar must be used within SidebarProvider");
@@ -253,6 +456,14 @@ export function useCurrentUser() {
   const context = useContext(CurrentUserContext);
   if (!context) {
     throw new Error("useCurrentUser must be used within CurrentUserProvider");
+  }
+  return context;
+}
+
+export function useUserPreferences() {
+  const context = useContext(UserPreferencesContext);
+  if (!context) {
+    throw new Error("useUserPreferences must be used within UserPreferencesProvider");
   }
   return context;
 }

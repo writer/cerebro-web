@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, type ReactNode } from "react";
 
-import { useApiKey } from "@/components/providers";
+import { useApiKey, useUserPreferences } from "@/components/providers";
 import { AttentionBanner, ErrorBlock, LoadingBlock, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import {
@@ -455,6 +455,9 @@ function DestinationCard({
 }
 
 export default function Home() {
+  const { preferences } = useUserPreferences();
+  const visibleSections = preferences.homepage.sections;
+  const compactHome = preferences.display.density === "compact";
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const data = dashboard.data;
   const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
@@ -531,7 +534,7 @@ export default function Home() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className={compactHome ? "space-y-4" : "space-y-5"}>
       <PageHeader
         contractId="overview"
         title="Home"
@@ -560,15 +563,19 @@ export default function Home() {
 
       {data && summary && homeMetrics && (
         <>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <ReviewNowPanel items={queueItems} />
-            <ProgramHealthPanel
-              coverageSourceCount={coverageSourceCount}
-              dashboardBackedReadiness={dashboardBackedReadiness}
-              metrics={homeMetrics}
-              readinessLabel={readinessLabel}
-            />
-          </div>
+          {(visibleSections.reviewNow || visibleSections.programHealth) && (
+            <div className={`grid gap-4 ${visibleSections.reviewNow && visibleSections.programHealth ? "xl:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
+              {visibleSections.reviewNow && <ReviewNowPanel items={queueItems} />}
+              {visibleSections.programHealth && (
+                <ProgramHealthPanel
+                  coverageSourceCount={coverageSourceCount}
+                  dashboardBackedReadiness={dashboardBackedReadiness}
+                  metrics={homeMetrics}
+                  readinessLabel={readinessLabel}
+                />
+              )}
+            </div>
+          )}
 
           {readinessQuery.error && (
             <AttentionBanner
@@ -586,32 +593,34 @@ export default function Home() {
             </AttentionBanner>
           )}
 
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Go deeper">
-            <DestinationCard
-              href="/risk-inbox"
-              label="Risks"
-              value={<RiskBadge score={priorityMetrics.averageRisk} />}
-              detail={`${summary.open_findings} open, ${summary.overdue_findings} overdue`}
-            />
-            <DestinationCard
-              href="/controls"
-              label="Controls"
-              value={summary.controls_failing}
-              detail={`${passingControls} passing across ${controlTotal} tracked controls`}
-            />
-            <DestinationCard
-              href="/reports"
-              label="Reports"
-              value={`${Math.round(homeMetrics.auditReadinessScore)}%`}
-              detail={reportPacketDetail}
-            />
-            <DestinationCard
-              href="/connectors"
-              label="Sources"
-              value={summary.stale_connectors + coverageBlindSpotCount}
-              detail={`${countLabel(summary.stale_connectors, "stale source")}, ${countLabel(coverageBlindSpotCount, "coverage gap")}`}
-            />
-          </section>
+          {visibleSections.destinations && (
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Key pages">
+              <DestinationCard
+                href="/risk-inbox"
+                label="Risks"
+                value={<RiskBadge score={priorityMetrics.averageRisk} />}
+                detail={`${summary.open_findings} open, ${summary.overdue_findings} overdue`}
+              />
+              <DestinationCard
+                href="/controls"
+                label="Controls"
+                value={summary.controls_failing}
+                detail={`${passingControls} passing across ${controlTotal} tracked controls`}
+              />
+              <DestinationCard
+                href="/reports"
+                label="Reports"
+                value={`${Math.round(homeMetrics.auditReadinessScore)}%`}
+                detail={reportPacketDetail}
+              />
+              <DestinationCard
+                href="/connectors"
+                label="Sources"
+                value={summary.stale_connectors + coverageBlindSpotCount}
+                detail={`${countLabel(summary.stale_connectors, "stale source")}, ${countLabel(coverageBlindSpotCount, "coverage gap")}`}
+              />
+            </section>
+          )}
         </>
       )}
     </div>
