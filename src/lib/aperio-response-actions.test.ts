@@ -40,4 +40,20 @@ describe("aperio response action helpers", () => {
     expect(aperioResponseOwner(finding)).toBeUndefined();
     expect(aperioResponseActionCandidates(finding)).toEqual([]);
   });
+
+  it("does not assign non-Aperio OAuth findings to Aperio response workflows", () => {
+    const finding = {
+      source_id: "custom-oauth-scanner",
+      rule_id: "oauth.risky_scope",
+      attributes: {
+        provider: "GOOGLE_WORKSPACE",
+        oauth_app_id: "app-123",
+        oauth_grant_id: "grant-123",
+      },
+    };
+
+    expect(isAperioOwnedFinding(finding)).toBe(false);
+    expect(aperioResponseOwner(finding)).toBeUndefined();
+    expect(aperioResponseActionCandidates(finding)).toEqual([]);
+  });
 });

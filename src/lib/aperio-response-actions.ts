@@ -43,7 +43,7 @@ export const aperioResponseActionCandidates = (finding: FindingLike): string[] =
       tokens.some((token) => token.includes("oauth")),
   );
 
-  if (!aperioOwned && !hasOAuthContext) {
+  if (!aperioOwned) {
     return [];
   }
 
