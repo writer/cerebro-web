@@ -75,6 +75,8 @@ describe("parseSecurityProducers", () => {
     expect(defaultSecurityProducers[0].mcpTools).toContain("aperio.get_cerebro_finding_context");
     expect(defaultSecurityProducers[0].contextKeys).toContain("oauth_grant_id");
     expect(defaultSecurityProducers[0].contextKeys).toContain("response_action_candidates");
+    const actionIds = defaultSecurityProducers[0].responseActions.map((action) => action.id);
+    expect(new Set(actionIds).size).toBe(actionIds.length);
     expect(defaultSecurityProducers[0].responseActions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -82,6 +84,14 @@ describe("parseSecurityProducers", () => {
           externalOwner: "aperio",
           mcpTool: "aperio.propose_cerebro_response",
           runtimeAction: "google_workspace.revoke_oauth_grant",
+          dryRun: true,
+          requiresApproval: true,
+        }),
+        expect.objectContaining({
+          id: "QUARANTINE_APP",
+          providers: ["SLACK", "GITHUB"],
+          mcpTool: "aperio.propose_cerebro_response",
+          externalOwner: "aperio",
           dryRun: true,
           requiresApproval: true,
         }),
