@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import FindingTable from "@/components/grc/FindingTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
+import { downloadFindingsCSV } from "@/lib/findings-export";
 import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
 import { GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
@@ -61,26 +62,6 @@ export default function RiskInboxPage() {
   const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
   const { apiKey } = useApiKey();
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
-  const exportFindings = useCallback(async () => {
-    setExportState("working");
-    const exportPath = grcPath("/grc/findings/export", {
-      tenant_id: debouncedTenantID,
-      runtime_id: debouncedRuntimeID,
-      source_id: debouncedSourceID,
-      severity,
-      status,
-      framework,
-      opened_after: openedAfter,
-      opened_before: openedBefore,
-      closed_after: closedAfter,
-      closed_before: closedBefore,
-      age_min_days: ageMinDays,
-      age_max_days: ageMaxDays,
-      sla_status: slaStatus,
-    });
-    const result = await downloadGRCExport(exportPath, apiKey, grcExportFilename("findings"));
-    setExportState(result.ok ? "idle" : "failed");
-  }, [ageMaxDays, ageMinDays, apiKey, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, framework, openedAfter, openedBefore, severity, slaStatus, status]);
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
   const findings = useMemo(() => {
@@ -104,6 +85,37 @@ export default function RiskInboxPage() {
       .slice()
       .sort(riskSort);
   }, [data?.findings, framework, owner, query]);
+  const exportFindings = useCallback(async () => {
+    setExportState("working");
+    const filename = grcExportFilename("findings");
+    if (owner.trim() || query.trim()) {
+      try {
+        downloadFindingsCSV(findings, filename);
+        setExportState("idle");
+      } catch {
+        setExportState("failed");
+      }
+      return;
+    }
+
+    const exportPath = grcPath("/grc/findings/export", {
+      tenant_id: debouncedTenantID,
+      runtime_id: debouncedRuntimeID,
+      source_id: debouncedSourceID,
+      severity,
+      status,
+      framework,
+      opened_after: openedAfter,
+      opened_before: openedBefore,
+      closed_after: closedAfter,
+      closed_before: closedBefore,
+      age_min_days: ageMinDays,
+      age_max_days: ageMaxDays,
+      sla_status: slaStatus,
+    });
+    const result = await downloadGRCExport(exportPath, apiKey, filename);
+    setExportState(result.ok ? "idle" : "failed");
+  }, [ageMaxDays, ageMinDays, apiKey, closedAfter, closedBefore, debouncedRuntimeID, debouncedSourceID, debouncedTenantID, findings, framework, openedAfter, openedBefore, owner, query, severity, slaStatus, status]);
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
