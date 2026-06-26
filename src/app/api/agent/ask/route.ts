@@ -461,6 +461,7 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
   const oauthGrantID = contextString(payload.context, "oauth_grant_id");
   const aperioResponseOwner = contextString(payload.context, "aperio_response_owner");
   const responseActionCandidates = contextStringList(payload.context, "response_action_candidates");
+  const responseActionCandidateHint = aperioResponseCandidateHint(responseActionCandidates);
   const hints = [
     findingId
       ? `- For this finding-scoped request, call cerebro.investigation.context first with finding_id="${findingId}" and compact=true unless the user explicitly asks for raw evidence.`
@@ -478,7 +479,7 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
         ].filter(Boolean).join(", ")}).`
       : "",
     aperioResponseOwner === "aperio" || responseActionCandidates.length > 0
-      ? `- For response or remediation requests with Aperio/OAuth context, do not claim direct execution. Treat these as proposal workflows: use or cite aperio.propose_cerebro_response when available, preserve dry-run and human approval, include target identifiers, and avoid POSTing external_aperio_workflow actions to /platform/runtime-response/actions. Candidate actions: ${responseActionCandidates.join(", ") || "Aperio response proposal"}.`
+      ? `- For response or remediation requests with Aperio/OAuth context, do not claim direct execution. Treat these as proposal workflows: use or cite aperio.propose_cerebro_response when available, preserve dry-run and human approval, include target identifiers, and avoid POSTing external_aperio_workflow actions to /platform/runtime-response/actions. Candidate actions: ${responseActionCandidateHint}.`
       : "",
     route.includes("risk") || route.includes("dashboard") || route.includes("inbox")
       ? "- For risk dashboard or inbox questions without a specific finding, start with cerebro.risk.summary before broad finding search."
@@ -488,6 +489,20 @@ const buildFastToolGuidance = (payload: NormalizedAgentRequest) => {
       : "",
   ].filter(Boolean);
   return hints.length ? hints.join("\n") : "- Start with the narrowest MCP tool that matches the current page context before broad search.";
+};
+
+const aperioResponseCandidateHint = (candidates: string[]) => {
+  if (candidates.length === 0) return "Aperio response proposal";
+  return candidates.map((candidate) => {
+    switch (candidate) {
+      case "REMOVE_SLACK_APP":
+        return "REMOVE_SLACK_APP (call aperio.propose_cerebro_response with action=QUARANTINE_APP and provider=SLACK)";
+      case "REVOKE_GITHUB_OAUTH_APP":
+        return "REVOKE_GITHUB_OAUTH_APP (call aperio.propose_cerebro_response with action=QUARANTINE_APP and provider=GITHUB)";
+      default:
+        return candidate;
+    }
+  }).join(", ");
 };
 
 const contextString = (context: AskAgentContext | undefined, key: string) => {
