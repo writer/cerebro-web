@@ -25,6 +25,7 @@ describe("RBAC permissions", () => {
       "identity:read",
       "agent:ask",
       "cerebro:read",
+      "preferences:write",
       "connector-credentials:read",
       "connector-credentials:write",
       "connector-definitions:write",
@@ -39,6 +40,7 @@ describe("RBAC permissions", () => {
   it("expands backend scopes into web permissions", () => {
     expect(effectiveAuthorizationPermissionsForUser(user([], [
       "cerebro.cosmo.security.read",
+      "cerebro.user_preferences.write",
       "cerebro.dashboards.write",
       "cerebro.runtime_response.write",
       "cerebro.source_runtimes.write",
@@ -46,6 +48,7 @@ describe("RBAC permissions", () => {
       "identity:read",
       "agent:ask",
       "cerebro:read",
+      "preferences:write",
       "dashboards:write",
       "runtime-response:write",
       "source-runtimes:write",
@@ -56,6 +59,7 @@ describe("RBAC permissions", () => {
 describe("Cerebro proxy route permissions", () => {
   it("keeps read and ask routes read-scoped", () => {
     expect(permissionForCerebroProxyRequest("GET", "findings/finding-1")).toBe("cerebro:read");
+    expect(permissionForCerebroProxyRequest("GET", "user/preferences")).toBe("cerebro:read");
     expect(permissionForCerebroProxyRequest("POST", "grc/ask")).toBe("agent:ask");
     expect(permissionForCerebroProxyRequest("POST", "grc/control-packs/aws")).toBe("cerebro:read");
   });
@@ -83,5 +87,6 @@ describe("Cerebro proxy route permissions", () => {
     expect(permissionForCerebroProxyRequest("DELETE", "grc/dashboards/dashboard-1")).toBe("dashboards:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/dashboards/dashboard-1/clone")).toBe("dashboards:write");
     expect(permissionForCerebroProxyRequest("POST", "platform/runtime-response/actions")).toBe("runtime-response:write");
+    expect(permissionForCerebroProxyRequest("PUT", "user/preferences")).toBe("preferences:write");
   });
 });

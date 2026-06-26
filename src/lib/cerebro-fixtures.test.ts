@@ -64,6 +64,13 @@ describe("cerebro fixture proxy responses", () => {
     expect(payload.asset).toMatchObject({ urn, label: "public-demo" });
   });
 
+  it("returns empty report runs in fixture mode", () => {
+    withFixtureMode();
+    const response = cerebroFixtureResponseFor({ method: "GET", path: "report-runs" });
+    expect(response?.status).toBe(200);
+    expect(parseFixture(response!)).toMatchObject({ runs: [] });
+  });
+
   it("acknowledges write fixtures without a live backend", () => {
     withFixtureMode();
     const response = cerebroFixtureResponseFor({
@@ -74,5 +81,24 @@ describe("cerebro fixture proxy responses", () => {
     const payload = parseFixture(response!);
     expect(response?.status).toBe(200);
     expect(payload.scope).toMatchObject({ scope_state: "out_of_scope" });
+  });
+
+  it("returns and saves user preference fixtures", () => {
+    withFixtureMode();
+    const initial = cerebroFixtureResponseFor({ method: "GET", path: "user/preferences" });
+    expect(parseFixture(initial!)).toMatchObject({ persisted: false, preferences: {} });
+
+    const saved = cerebroFixtureResponseFor({
+      method: "PUT",
+      path: "user/preferences",
+      body: JSON.stringify({ preferences: { display: { density: "compact", theme: "dark" } } }),
+    });
+    const payload = parseFixture(saved!);
+    expect(saved?.status).toBe(200);
+    expect(payload).toMatchObject({
+      persisted: true,
+      user_id: "local-developer",
+      preferences: { display: { density: "compact", theme: "dark" } },
+    });
   });
 });

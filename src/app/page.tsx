@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
-import { useApiKey } from "@/components/providers";
+import { useApiKey, useUserPreferences } from "@/components/providers";
 import FindingTable from "@/components/grc/FindingTable";
 import { AttentionBanner, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/LazyTrendsChart";
@@ -15,6 +15,7 @@ import { prefetchTopFindings } from "@/lib/grc-prefetch";
 import { buildGRCProductAreaViews, hasGRCProductAreaContext, type GRCProductAreaView } from "@/lib/grc-product-areas";
 import { informationAreaByID, type InformationArea, type InformationAreaSignal, type InformationSignalKey } from "@/lib/information-areas";
 import { hasTrendActivity } from "@/lib/trends";
+import type { HomeSectionID } from "@/lib/user-preferences";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
 const HOME_DASHBOARD_FINDING_LIMIT = DASHBOARD_FINDING_LIMIT;
@@ -832,6 +833,7 @@ function InformationDashboard({
   metrics,
   readinessData,
   trends,
+  visibleSections,
 }: {
   connectors: GRCConnector[];
   controls: GRCControl[];
@@ -840,38 +842,51 @@ function InformationDashboard({
   metrics: InformationSignalMetrics;
   readinessData?: GRCProgramReadiness;
   trends?: GRCTrends;
+  visibleSections: Record<HomeSectionID, boolean>;
 }) {
+  const showSignals = visibleSections.signals;
+  const showWorkQueues = visibleSections.workQueues;
+  if (!showSignals && !showWorkQueues) return null;
+
   return (
     <section className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        {overviewSignals.map((signal: InformationAreaSignal) => (
-          <RiskSignalCard
-            key={signal.key}
-            href={signal.href}
-            label={signal.label}
-            value={signalValue(signal.key, metrics)}
-            detail={signalDetail(signal.key, metrics)}
-            tone={signalTone(signal.key, metrics)}
-          />
-        ))}
-      </div>
+      {showSignals && (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          {overviewSignals.map((signal: InformationAreaSignal) => (
+            <RiskSignalCard
+              key={signal.key}
+              href={signal.href}
+              label={signal.label}
+              value={signalValue(signal.key, metrics)}
+              detail={signalDetail(signal.key, metrics)}
+              tone={signalTone(signal.key, metrics)}
+            />
+          ))}
+        </div>
+      )}
 
-      <div className="grid gap-4">
-        <SecurityWorkQueue activeArea={overviewRiskArea} findings={findings} />
-        <AuditWorkQueue activeArea={overviewControlArea} controls={controls} readinessData={readinessData} />
-        <PlatformWorkQueue activeArea={overviewSourceArea} connectors={connectors} coverageBlindSpots={coverageBlindSpots} />
-        <ReportsWorkQueue activeArea={overviewReportArea} findings={findings} metrics={metrics} readinessData={readinessData} trends={trends} />
-      </div>
+      {showWorkQueues && (
+        <div className="grid gap-4">
+          <SecurityWorkQueue activeArea={overviewRiskArea} findings={findings} />
+          <AuditWorkQueue activeArea={overviewControlArea} controls={controls} readinessData={readinessData} />
+          <PlatformWorkQueue activeArea={overviewSourceArea} connectors={connectors} coverageBlindSpots={coverageBlindSpots} />
+          <ReportsWorkQueue activeArea={overviewReportArea} findings={findings} metrics={metrics} readinessData={readinessData} trends={trends} />
+        </div>
+      )}
     </section>
   );
 }
 
 export default function Home() {
   const [showEvidence, setShowEvidence] = useState(false);
+  const { preferences } = useUserPreferences();
+  const visibleSections = preferences.homepage.sections;
+  const compactHome = preferences.display.density === "compact";
+  const shouldLoadEvidence = visibleSections.evidence && (showEvidence || preferences.homepage.evidenceAutoLoad);
   const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const data = dashboard.data;
   const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
-  const evidenceQuery = useGRCQuery<EvidenceResponse>(showEvidence ? grcPath("/grc/evidence", { limit: 8 }) : null);
+  const evidenceQuery = useGRCQuery<EvidenceResponse>(shouldLoadEvidence ? grcPath("/grc/evidence", { limit: 8 }) : null);
   const trendsQuery = useGRCQuery<GRCTrends>(grcPath("/grc/trends", { interval: "week", days: 90 }));
   const readiness = readinessQuery.data?.summary;
   const priorityFindings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
@@ -942,11 +957,11 @@ export default function Home() {
     void dashboard.reload();
     void readinessQuery.reload();
     void trendsQuery.reload();
-    if (showEvidence) void evidenceQuery.reload();
+    if (shouldLoadEvidence) void evidenceQuery.reload();
   };
 
   return (
-    <div className="space-y-6">
+    <div className={compactHome ? "space-y-4" : "space-y-6"}>
       <PageHeader
         contractId="overview"
         title={pageTitle}
@@ -983,6 +998,7 @@ export default function Home() {
             metrics={homeMetrics}
             readinessData={readinessQuery.data ?? undefined}
             trends={trendsQuery.data ?? undefined}
+            visibleSections={visibleSections}
           />
 
           {attentionItems.length > 0 && (
@@ -1008,158 +1024,172 @@ export default function Home() {
             </AttentionBanner>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-slate-200 border-l-[3px] border-l-red-500 bg-white p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Open Findings</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-900">{summary.open_findings}</div>
-                  <div className="mt-1 text-[12px] text-slate-500">
-                    {summary.critical_findings} critical &middot; {summary.high_findings} high
+          {visibleSections.summaryMetrics && (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 border-l-[3px] border-l-red-500 bg-white p-4 dark:border-[color:var(--border)] dark:bg-[var(--surface)]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-[var(--text-muted)]">Open Findings</div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-900 dark:text-[var(--text-primary)]">{summary.open_findings}</div>
+                    <div className="mt-1 text-[12px] text-slate-500 dark:text-[var(--text-muted)]">
+                      {summary.critical_findings} critical &middot; {summary.high_findings} high
+                    </div>
                   </div>
+                  <SeverityDonut
+                    critical={summary.critical_findings}
+                    high={summary.high_findings}
+                    medium={summary.open_findings - summary.critical_findings - summary.high_findings}
+                    low={0}
+                  />
                 </div>
-                <SeverityDonut
-                  critical={summary.critical_findings}
-                  high={summary.high_findings}
-                  medium={summary.open_findings - summary.critical_findings - summary.high_findings}
-                  low={0}
-                />
               </div>
+              <MetricCard
+                label="Avg Risk Score"
+                value={<RiskBadge score={priorityMetrics.averageRisk} />}
+                detail={countLabel(priorityMetrics.criticalRisk, "critical-risk finding")}
+                intent={priorityMetrics.criticalRisk > 0 ? "danger" : "neutral"}
+              />
+              <MetricCard
+                label="Overdue SLA"
+                value={summary.overdue_findings}
+                detail={`${summary.unassigned} unassigned`}
+                intent={summary.overdue_findings > 0 ? "danger" : "success"}
+              />
+              <MetricCard
+                label="Failing Controls"
+                value={summary.controls_failing}
+                detail={`${controlTotal} dashboard controls`}
+                intent={summary.controls_failing > 0 ? "warning" : "success"}
+              />
             </div>
-            <MetricCard
-              label="Avg Risk Score"
-              value={<RiskBadge score={priorityMetrics.averageRisk} />}
-              detail={countLabel(priorityMetrics.criticalRisk, "critical-risk finding")}
-              intent={priorityMetrics.criticalRisk > 0 ? "danger" : "neutral"}
-            />
-            <MetricCard
-              label="Overdue SLA"
-              value={summary.overdue_findings}
-              detail={`${summary.unassigned} unassigned`}
-              intent={summary.overdue_findings > 0 ? "danger" : "success"}
-            />
-            <MetricCard
-              label="Failing Controls"
-              value={summary.controls_failing}
-              detail={`${controlTotal} dashboard controls`}
-              intent={summary.controls_failing > 0 ? "warning" : "success"}
-            />
-          </div>
+          )}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <ProgressCard
-              title="Audit Readiness"
-              percent={readiness?.score ?? controlProgress}
-              detail={readiness ? humanize(readiness.status) : dashboardBackedReadiness ? "using current counts" : "loading"}
-              total={countLabel(readiness?.controls ?? controlTotal, "control")}
-              href={readinessQuery.data?.proof_bundle?.reports_path ?? "/reports"}
-            />
-            <ProgressCard title="Control Posture" percent={controlProgress} detail={`${passingControls} passing`} total={`${controlTotal} total`} href="/controls" />
-            <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
-            <ProgressCard title="Source Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
-          </div>
+          {visibleSections.readiness && (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <ProgressCard
+                title="Audit Readiness"
+                percent={readiness?.score ?? controlProgress}
+                detail={readiness ? humanize(readiness.status) : dashboardBackedReadiness ? "using current counts" : "loading"}
+                total={countLabel(readiness?.controls ?? controlTotal, "control")}
+                href={readinessQuery.data?.proof_bundle?.reports_path ?? "/reports"}
+              />
+              <ProgressCard title="Control Posture" percent={controlProgress} detail={`${passingControls} passing`} total={`${controlTotal} total`} href="/controls" />
+              <ProgressCard title="Evidence Readiness" percent={evidenceProgress} detail={countLabel(summary.evidence_items, "item")} total={countLabel(summary.open_findings, "risk")} href="/evidence" />
+              <ProgressCard title="Source Health" percent={connectorProgress} detail={`${summary.connectors - summary.stale_connectors} healthy`} total={`${summary.connectors} total`} href="/connectors" />
+            </div>
+          )}
 
-          <ProductAreaMap areas={productAreas} />
+          {visibleSections.productAreas && <ProductAreaMap areas={productAreas} />}
 
-          <CoverageBlindSpotsPanel records={coverageBlindSpots} summaries={coverageSummaries} />
+          {visibleSections.coverage && <CoverageBlindSpotsPanel records={coverageBlindSpots} summaries={coverageSummaries} />}
 
-          <Panel
-            title="Finding Trends"
-            action={<Link href="/trends" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">View trends</Link>}
-          >
-            {hasTrendActivity(trendsQuery.data) ? (
-              <TrendsChart points={trendsQuery.data?.points ?? []} height={220} />
-            ) : (
-              <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
-                Finding trends will appear as history accrues.
-              </div>
-            )}
-          </Panel>
-
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          {visibleSections.trends && (
             <Panel
-              title="Highest-Risk Findings"
-              action={<Link href="/risk-inbox" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">View all</Link>}
+              title="Finding Trends"
+              action={<Link href="/trends" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">View trends</Link>}
             >
-              <FindingTable findings={priorityFindings} empty="No open findings." />
+              {hasTrendActivity(trendsQuery.data) ? (
+                <TrendsChart points={trendsQuery.data?.points ?? []} height={220} />
+              ) : (
+                <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
+                  Finding trends will appear as history accrues.
+                </div>
+              )}
             </Panel>
+          )}
 
-            <div className="space-y-6">
-              <Panel title="Control Hotspots">
-                <div className="space-y-2">
-                  {(data.controls ?? []).slice(0, 6).map((control) => (
-                    <Link
-                      key={`${control.framework_name}-${control.control_id}`}
-                      href={`/controls?framework=${encodeURIComponent(control.framework_name)}&control=${encodeURIComponent(control.control_id)}`}
-                      className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
-                    >
-                      <div>
-                        <div className="text-[13px] font-medium text-slate-900">{control.framework_name} {control.control_id}</div>
-                        <div className="text-[12px] text-slate-500">{countLabel(control.open_findings, "finding")} &middot; {control.evidence_items} evidence</div>
-                      </div>
-                      <Badge value={control.status} />
-                    </Link>
-                  ))}
-                </div>
-              </Panel>
+          {(visibleSections.findings || visibleSections.controlsSources) && (
+            <div className={`grid gap-6 ${visibleSections.findings && visibleSections.controlsSources ? "xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]" : ""}`}>
+              {visibleSections.findings && (
+                <Panel
+                  title="Highest-Risk Findings"
+                  action={<Link href="/risk-inbox" className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">View all</Link>}
+                >
+                  <FindingTable findings={priorityFindings} empty="No open findings." />
+                </Panel>
+              )}
 
-              <Panel title="Source Health">
-                <div className="space-y-2">
-                  {(data.connectors ?? []).slice(0, 5).map((c) => (
-                    <Link
-                      key={c.runtime_id}
-                      href={`/connectors?source_id=${encodeURIComponent(c.source_id || c.runtime_id)}`}
-                      className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
-                    >
-                      <div>
-                        <div className="text-[13px] font-medium text-slate-900">{c.source_id || shortEntity(c.runtime_id)}</div>
-                        <div className="text-[12px] text-slate-500">
-                          {connectorLagLabel("sync", c.sync_lag_seconds)} · {connectorLagLabel("data", c.watermark_lag_seconds)}
-                        </div>
-                      </div>
-                      <Badge value={c.status} />
-                    </Link>
-                  ))}
+              {visibleSections.controlsSources && (
+                <div className="space-y-6">
+                  <Panel title="Control Hotspots">
+                    <div className="space-y-2">
+                      {(data.controls ?? []).slice(0, 6).map((control) => (
+                        <Link
+                          key={`${control.framework_name}-${control.control_id}`}
+                          href={`/controls?framework=${encodeURIComponent(control.framework_name)}&control=${encodeURIComponent(control.control_id)}`}
+                          className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
+                        >
+                          <div>
+                            <div className="text-[13px] font-medium text-slate-900">{control.framework_name} {control.control_id}</div>
+                            <div className="text-[12px] text-slate-500">{countLabel(control.open_findings, "finding")} &middot; {control.evidence_items} evidence</div>
+                          </div>
+                          <Badge value={control.status} />
+                        </Link>
+                      ))}
+                    </div>
+                  </Panel>
+
+                  <Panel title="Source Health">
+                    <div className="space-y-2">
+                      {(data.connectors ?? []).slice(0, 5).map((c) => (
+                        <Link
+                          key={c.runtime_id}
+                          href={`/connectors?source_id=${encodeURIComponent(c.source_id || c.runtime_id)}`}
+                          className="flex items-center justify-between rounded-md px-3 py-2.5 transition hover:bg-slate-50"
+                        >
+                          <div>
+                            <div className="text-[13px] font-medium text-slate-900">{c.source_id || shortEntity(c.runtime_id)}</div>
+                            <div className="text-[12px] text-slate-500">
+                              {connectorLagLabel("sync", c.sync_lag_seconds)} · {connectorLagLabel("data", c.watermark_lag_seconds)}
+                            </div>
+                          </div>
+                          <Badge value={c.status} />
+                        </Link>
+                      ))}
+                    </div>
+                  </Panel>
                 </div>
-              </Panel>
+              )}
             </div>
-          </div>
+          )}
 
-          <Panel
-            title="Recent Evidence"
-            action={
-              !showEvidence ? (
-                <button type="button" onClick={() => setShowEvidence(true)} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
-                  Load
-                </button>
-              ) : undefined
-            }
-          >
-            {!showEvidence && (
-              <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-6 text-[13px] text-slate-500">
-                Evidence loads on demand.
-              </div>
-            )}
-            {showEvidence && evidenceQuery.loading && <LoadingBlock label="Loading evidence..." />}
-            {showEvidence && evidenceQuery.error && <ErrorBlock error={evidenceQuery.error} onRetry={() => void evidenceQuery.reload()} recoveryDetail="Recent evidence will appear when the API is reachable." />}
-            {showEvidence && !evidenceQuery.loading && !evidenceQuery.error && (
-              <div className="grid gap-3 md:grid-cols-2">
-                {recentEvidence.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={`/evidence?finding_id=${encodeURIComponent(item.finding_id ?? "")}`}
-                    className="rounded-md border border-slate-100 p-3 transition hover:border-slate-200 hover:bg-slate-50"
-                  >
-                    <div className="text-[13px] font-medium text-slate-900">{item.finding_title || item.id}</div>
-                    <div className="mt-1 text-[12px] text-slate-500">{displayDate(item.created_at)} &middot; {item.event_ids?.length ?? 0} events</div>
-                  </Link>
-                ))}
-                {recentEvidence.length === 0 && (
-                  <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-6 text-center text-[13px] text-slate-500">No recent evidence.</div>
-                )}
-              </div>
-            )}
-          </Panel>
+          {visibleSections.evidence && (
+            <Panel
+              title="Recent Evidence"
+              action={
+                !shouldLoadEvidence ? (
+                  <button type="button" onClick={() => setShowEvidence(true)} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
+                    Load
+                  </button>
+                ) : undefined
+              }
+            >
+              {!shouldLoadEvidence && (
+                <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-6 text-[13px] text-slate-500">
+                  Evidence loads on demand.
+                </div>
+              )}
+              {shouldLoadEvidence && evidenceQuery.loading && <LoadingBlock label="Loading evidence..." />}
+              {shouldLoadEvidence && evidenceQuery.error && <ErrorBlock error={evidenceQuery.error} onRetry={() => void evidenceQuery.reload()} recoveryDetail="Recent evidence will appear when the API is reachable." />}
+              {shouldLoadEvidence && !evidenceQuery.loading && !evidenceQuery.error && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {recentEvidence.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={`/evidence?finding_id=${encodeURIComponent(item.finding_id ?? "")}`}
+                      className="rounded-md border border-slate-100 p-3 transition hover:border-slate-200 hover:bg-slate-50"
+                    >
+                      <div className="text-[13px] font-medium text-slate-900">{item.finding_title || item.id}</div>
+                      <div className="mt-1 text-[12px] text-slate-500">{displayDate(item.created_at)} &middot; {item.event_ids?.length ?? 0} events</div>
+                    </Link>
+                  ))}
+                  {recentEvidence.length === 0 && (
+                    <div className="col-span-full rounded-lg border border-dashed border-slate-300 p-6 text-center text-[13px] text-slate-500">No recent evidence.</div>
+                  )}
+                </div>
+              )}
+            </Panel>
+          )}
         </>
       )}
     </div>

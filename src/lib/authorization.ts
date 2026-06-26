@@ -33,6 +33,7 @@ const permissionEnvPrefix: Record<AuthorizationPermission, string> = {
   "cerebro:read": "CEREBRO_AUTHZ_READ",
   "cerebro:write": "CEREBRO_AUTHZ_WRITE",
   "identity:read": "CEREBRO_AUTHZ_IDENTITY",
+  "preferences:write": "CEREBRO_AUTHZ_PREFERENCES_WRITE",
   "findings:write": "CEREBRO_AUTHZ_FINDINGS_WRITE",
   "grc:inventory:write": "CEREBRO_AUTHZ_GRC_INVENTORY_WRITE",
   "dashboards:write": "CEREBRO_AUTHZ_DASHBOARDS_WRITE",

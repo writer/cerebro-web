@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Check, Settings2, Share2 } from "lucide-react";
 
 import { API_BASE } from "@/lib/api";
-import { useApiKey, useCommandPalette, useCurrentUser, useTheme } from "@/components/providers";
+import { useApiKey, useCommandPalette, useCurrentUser, useTheme, useUserPreferences } from "@/components/providers";
 import { countLabel } from "@/lib/format";
 import type { GRCDashboard } from "@/lib/grc";
 import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
@@ -13,6 +14,7 @@ import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 import { buildNotifications, notificationSignatures, reportRunNotifications, unreadNotifications, type NotificationIntent } from "@/lib/notifications";
 import { authorizationRoleLabelsForUser, effectiveAuthorizationPermissionsForUser } from "@/lib/rbac";
 import type { ReportRunListResponse } from "@/lib/report-schedules";
+import { HOME_SECTION_IDS, HOME_SECTION_LABELS, userPreferencesShareURL, type DisplayDensity, type ThemePreference, type UserPreferences } from "@/lib/user-preferences";
 
 type ConsoleConfig = {
   apiBase: string;
@@ -45,16 +47,29 @@ const persistReadSignatures = (signatures: string[]) => {
 const intentDotClass = (intent: NotificationIntent) =>
   intent === "danger" ? "bg-rose-500" : intent === "info" ? "bg-sky-500" : "bg-amber-500";
 
+type ShareStatus = "idle" | "ready" | "copied" | "failed";
+
 export default function Topbar() {
   const { apiKey, setApiKey } = useApiKey();
   const { openCommandPalette } = useCommandPalette();
   const { error: userError, loading: userLoading, user } = useCurrentUser();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme } = useTheme();
+  const {
+    error: preferencesError,
+    loading: preferencesLoading,
+    persisted: preferencesPersisted,
+    preferences,
+    savePreferences,
+    saving: preferencesSaving,
+    updatedAt: preferencesUpdatedAt,
+  } = useUserPreferences();
   const [showKey, setShowKey] = useState(false);
   const [showConnection, setShowConnection] = useState(false);
   const [showIdentity, setShowIdentity] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [config, setConfig] = useState<ConsoleConfig | null>(null);
+  const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
+  const [shareURL, setShareURL] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -88,6 +103,80 @@ export default function Topbar() {
     { label: "Asset report create", path: "grc/inventory/asset-reports" },
     { label: "Asset report triage", path: "grc/inventory/asset-reports/{id}/triage" },
   ];
+  const preferenceStatus = preferencesSaving
+    ? "Saving..."
+    : preferencesError
+      ? "Save failed"
+      : preferencesPersisted
+        ? "Saved"
+        : preferencesLoading
+          ? "Loading..."
+          : "Defaults";
+  const preferenceStatusTitle = preferencesUpdatedAt ? `Last saved ${preferencesUpdatedAt}` : preferenceStatus;
+  const savePreferenceChange = (nextPreferences: UserPreferences) => {
+    void savePreferences(nextPreferences).catch(() => undefined);
+  };
+  const setDensityPreference = (density: DisplayDensity) => {
+    savePreferenceChange({
+      ...preferences,
+      display: {
+        ...preferences.display,
+        density,
+      },
+    });
+  };
+  const setThemePreference = (nextTheme: ThemePreference) => {
+    setTheme(nextTheme);
+  };
+  const toggleHomeSection = (sectionID: (typeof HOME_SECTION_IDS)[number]) => {
+    savePreferenceChange({
+      ...preferences,
+      homepage: {
+        ...preferences.homepage,
+        sections: {
+          ...preferences.homepage.sections,
+          [sectionID]: !preferences.homepage.sections[sectionID],
+        },
+      },
+    });
+  };
+  const toggleEvidenceAutoLoad = () => {
+    savePreferenceChange({
+      ...preferences,
+      homepage: {
+        ...preferences.homepage,
+        evidenceAutoLoad: !preferences.homepage.evidenceAutoLoad,
+      },
+    });
+  };
+  const copyShareLink = async () => {
+    if (typeof window === "undefined") return;
+    const shareURL = userPreferencesShareURL(window.location.href, preferences);
+    setShareURL(shareURL);
+    try {
+      await copyTextToClipboard(shareURL);
+      setShareStatus("copied");
+    } catch {
+      setShareStatus("ready");
+    }
+  };
+  const copyCurrentShareLink = async () => {
+    const value = shareURL || (typeof window !== "undefined" ? userPreferencesShareURL(window.location.href, preferences) : "");
+    if (!value) return;
+    setShareURL(value);
+    try {
+      await copyTextToClipboard(value);
+      setShareStatus("copied");
+    } catch {
+      setShareStatus("failed");
+    }
+  };
+
+  useEffect(() => {
+    if (shareStatus !== "copied" && shareStatus !== "failed") return;
+    const timeout = window.setTimeout(() => setShareStatus(shareURL ? "ready" : "idle"), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [shareStatus, shareURL]);
 
   const notificationsQuery = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: DASHBOARD_FINDING_LIMIT }));
   const reportRunsQuery = useGRCQuery<ReportRunListResponse>(grcPath("/report-runs", { limit: 5 }));
@@ -200,8 +289,9 @@ export default function Topbar() {
             setShowIdentity(false);
             setShowNotifications(false);
           }}
-          className="secondary-button px-3 py-1.5 text-[13px] max-md:hidden"
+          className="secondary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] max-md:hidden"
         >
+          <Settings2 className="h-3.5 w-3.5" />
           Settings
         </button>
       </div>
@@ -339,68 +429,207 @@ export default function Topbar() {
       )}
 
       {showConnection && (
-        <div className="surface-raised absolute right-6 top-16 z-50 mt-1 w-[420px] p-4">
-          <div className="space-y-3">
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">API Endpoint</div>
-              <div className="mt-1 break-all font-mono text-[13px] text-[var(--text-secondary)]">{config?.apiBase ?? API_BASE}</div>
-            </div>
-            <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+        <div className="surface-raised absolute right-6 top-16 z-50 mt-1 max-h-[calc(100vh-5rem)] w-[480px] overflow-y-auto p-4 max-md:right-3 max-md:w-[calc(100vw-1.5rem)]">
+          <div className="space-y-5">
+            <section>
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Runtime Posture</div>
-                  <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{authLabel} · {identity.label}</div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Home</div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[11px] font-medium ${
+                      shareStatus === "failed" || preferencesError
+                        ? "text-rose-600 dark:text-rose-300"
+                        : shareStatus === "copied"
+                          ? "text-emerald-600 dark:text-emerald-300"
+                          : "text-[var(--text-muted)]"
+                    }`}
+                    title={preferenceStatusTitle}
+                  >
+                    {shareStatus === "copied"
+                      ? "Copied"
+                      : shareStatus === "failed"
+                        ? "Copy failed"
+                        : shareStatus === "ready"
+                          ? "Link ready"
+                          : preferenceStatus}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void copyShareLink()}
+                    className="secondary-button inline-flex items-center gap-1.5 px-2 py-1 text-[12px]"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share
+                  </button>
                 </div>
-                <span className={`h-2.5 w-2.5 rounded-full ${runtimeWarning ? "bg-amber-500" : "bg-emerald-500"}`} />
               </div>
-              <div className="mt-2 grid gap-1.5 text-[12px] text-[var(--text-muted)]">
-                <div className="flex justify-between gap-3">
-                  <span>Actor ID</span>
-                  <span className="break-all text-right font-mono text-[var(--text-secondary)]">{identity.actor || "Not resolved"}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span>Actor label</span>
-                  <span className="break-all text-right font-mono text-[var(--text-secondary)]">{user?.actorLabel ?? "—"}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span>Identity source</span>
-                  <span className="text-right text-[var(--text-secondary)]">{identity.sourceLabel}</span>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <span>Confidence</span>
-                  <span className="text-right text-[var(--text-secondary)]">{user ? currentUserConfidenceLabel(user.confidence) : "—"}</span>
-                </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {HOME_SECTION_IDS.map((sectionID) => {
+                  const checked = preferences.homepage.sections[sectionID];
+                  return (
+                    <label
+                      key={sectionID}
+                      className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-[12px] font-medium transition ${
+                        checked
+                          ? "border-[color:var(--border-strong)] bg-[var(--surface-raised)] text-[var(--text-primary)]"
+                          : "border-[color:var(--border)] bg-[var(--surface-muted)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleHomeSection(sectionID)}
+                        disabled={preferencesSaving}
+                        className="h-3.5 w-3.5 accent-[var(--primary)]"
+                      />
+                      <span>{HOME_SECTION_LABELS[sectionID]}</span>
+                    </label>
+                  );
+                })}
               </div>
-            </div>
-            <div>
-              <label className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-                API Key
-                <div className="mt-1 flex gap-2">
+              <label className="mt-3 flex items-center justify-between gap-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                <span className="text-[12px] font-medium text-[var(--text-secondary)]">Load evidence on home</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.homepage.evidenceAutoLoad}
+                  onChange={toggleEvidenceAutoLoad}
+                  disabled={preferencesSaving}
+                  className="h-3.5 w-3.5 accent-[var(--primary)]"
+                />
+              </label>
+              {preferencesError && (
+                <div className="mt-2 text-[12px] text-rose-600 dark:text-rose-300">{preferencesError}</div>
+              )}
+              {shareURL && (
+                <div className="mt-3 flex gap-2">
                   <input
-                    type={showKey ? "text" : "password"}
-                    value={canUseClientKey ? apiKey : ""}
-                    onChange={(event) => setApiKey(event.target.value)}
-                    placeholder={!canUseClientKey ? "Using server auth" : "Enter API key"}
-                    disabled={!canUseClientKey}
-                    className="control-input flex-1 px-3 py-1.5 font-mono text-[13px] normal-case tracking-normal disabled:opacity-50"
+                    aria-label="Share link"
+                    readOnly
+                    value={shareURL}
+                    onFocus={(event) => event.target.select()}
+                    className="control-input min-w-0 flex-1 px-3 py-1.5 text-[12px]"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowKey((prev) => !prev)}
-                    className="secondary-button px-2.5 py-1.5 text-[13px]"
+                    onClick={() => void copyCurrentShareLink()}
+                    className="secondary-button px-2.5 py-1.5 text-[12px]"
                   >
-                    {showKey ? "Hide" : "Show"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setApiKey("")}
-                    disabled={!canUseClientKey || !apiKey}
-                    className="secondary-button px-2.5 py-1.5 text-[13px] disabled:opacity-50"
-                  >
-                    Clear
+                    Copy
                   </button>
                 </div>
-              </label>
+              )}
+            </section>
+
+            <section>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Display</div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-1">
+                  {(["comfortable", "compact"] as const).map((density) => {
+                    const active = preferences.display.density === density;
+                    return (
+                      <button
+                        key={density}
+                        type="button"
+                        onClick={() => setDensityPreference(density)}
+                        disabled={preferencesSaving}
+                        className={`flex w-full items-center justify-between rounded px-2.5 py-1.5 text-[12px] font-medium capitalize transition ${
+                          active
+                            ? "bg-[var(--surface-raised)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {density}
+                        {active && <Check className="h-3.5 w-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-1">
+                  {(["light", "dark"] as const).map((mode) => {
+                    const active = theme === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setThemePreference(mode)}
+                        disabled={preferencesSaving}
+                        className={`flex w-full items-center justify-between rounded px-2.5 py-1.5 text-[12px] font-medium capitalize transition ${
+                          active
+                            ? "bg-[var(--surface-raised)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {mode}
+                        {active && <Check className="h-3.5 w-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            <div className="border-t border-[color:var(--border)] pt-4">
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">API Endpoint</div>
+                <div className="mt-1 break-all font-mono text-[13px] text-[var(--text-secondary)]">{config?.apiBase ?? API_BASE}</div>
+              </div>
+              <div className="mt-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Runtime Posture</div>
+                    <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{authLabel} · {identity.label}</div>
+                  </div>
+                  <span className={`h-2.5 w-2.5 rounded-full ${runtimeWarning ? "bg-amber-500" : "bg-emerald-500"}`} />
+                </div>
+                <div className="mt-2 grid gap-1.5 text-[12px] text-[var(--text-muted)]">
+                  <div className="flex justify-between gap-3">
+                    <span>Actor ID</span>
+                    <span className="break-all text-right font-mono text-[var(--text-secondary)]">{identity.actor || "Not resolved"}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Actor label</span>
+                    <span className="break-all text-right font-mono text-[var(--text-secondary)]">{user?.actorLabel ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Identity source</span>
+                    <span className="text-right text-[var(--text-secondary)]">{identity.sourceLabel}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>Confidence</span>
+                    <span className="text-right text-[var(--text-secondary)]">{user ? currentUserConfidenceLabel(user.confidence) : "—"}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                  API Key
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      type={showKey ? "text" : "password"}
+                      value={canUseClientKey ? apiKey : ""}
+                      onChange={(event) => setApiKey(event.target.value)}
+                      placeholder={!canUseClientKey ? "Using server auth" : "Enter API key"}
+                      disabled={!canUseClientKey}
+                      className="control-input flex-1 px-3 py-1.5 font-mono text-[13px] normal-case tracking-normal disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey((prev) => !prev)}
+                      className="secondary-button px-2.5 py-1.5 text-[13px]"
+                    >
+                      {showKey ? "Hide" : "Show"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setApiKey("")}
+                      disabled={!canUseClientKey || !apiKey}
+                      className="secondary-button px-2.5 py-1.5 text-[13px] disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -408,3 +637,22 @@ export default function Topbar() {
     </header>
   );
 }
+
+const copyTextToClipboard = async (value: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!copied) {
+    throw new Error("Copy failed");
+  }
+};

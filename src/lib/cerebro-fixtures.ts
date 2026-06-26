@@ -933,6 +933,18 @@ const writeFixture = (path: string, body?: string) => {
     });
   }
 
+  if (path === "user/preferences") {
+    return jsonFixture({
+      tenant_id: tenantID,
+      user_id: "local-developer",
+      preferences: parsed.preferences && typeof parsed.preferences === "object" ? parsed.preferences : {},
+      persisted: true,
+      created_at: generatedAt,
+      updated_at: generatedAt,
+      generated_at: generatedAt,
+    });
+  }
+
   if (path === "grc/inventory/accountability") {
     return jsonFixture({
       scope: {
@@ -1067,6 +1079,16 @@ export const cerebroFixtureResponseFor = ({
     return jsonFixture({ status: "ready", components: [{ name: "fixture", status: "ready" }], generated_at: generatedAt });
   }
 
+  if (normalizedPath === "user/preferences") {
+    return jsonFixture({
+      tenant_id: tenantID,
+      user_id: "local-developer",
+      preferences: {},
+      persisted: false,
+      generated_at: generatedAt,
+    });
+  }
+
   if (normalizedPath === "grc/dashboard") {
     return jsonFixture(dashboardFixture());
   }
@@ -1077,6 +1099,10 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "grc/trends") {
     return jsonFixture(trendsFixture());
+  }
+
+  if (normalizedPath === "report-runs") {
+    return jsonFixture({ runs: [], generated_at: generatedAt });
   }
 
   if (normalizedPath === "grc/findings") {

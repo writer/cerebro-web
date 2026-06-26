@@ -94,6 +94,18 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+:root[data-density="compact"] .surface-panel {
+  border-radius: 0.5rem;
+}
+
+:root[data-density="compact"] .data-table th {
+  padding: 0.5rem 0.75rem;
+}
+
+:root[data-density="compact"] .data-table td {
+  padding: 0.55rem 0.75rem;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--primary) 18%, transparent);
 }
