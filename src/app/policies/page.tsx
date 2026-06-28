@@ -591,7 +591,6 @@ export default function PoliciesPage() {
       else if (valueField === "control_ids") body.control_ids = splitActionValues(value);
       else if (valueField === "evidence_urns") body.evidence_urns = splitActionValues(value);
       else if (selectedAction.action === "governance_gap.link_policy" && valueField === "policy_id") body.attributes = { ...(body.attributes ?? {}), target_policy_id: value };
-      else if (valueField === "policy_id") body.policy_id = value;
       else if (valueField) body.attributes = { ...(body.attributes ?? {}), [valueField]: value };
     }
     try {
