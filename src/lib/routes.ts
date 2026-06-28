@@ -52,6 +52,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["soc2", "iso", "framework", "control", "audit", "builder", "custom", ...supportedGRCFrameworkNames],
   },
   {
+    label: "Policies",
+    href: "/policies",
+    description: "Policy versions, approvals, attestations, exceptions, reminders, and mappings.",
+    section: "Operator",
+    keywords: ["policy", "policies", "templates", "approvals", "attestations", "exceptions", "reminders", "review", "owner", ...supportedGRCFrameworkNames],
+  },
+  {
     label: "Frameworks",
     href: "/frameworks",
     description: "Framework directory, SOC 2 tracking, maturity, gaps, planning, and exports.",

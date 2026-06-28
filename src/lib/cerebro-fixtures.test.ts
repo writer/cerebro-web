@@ -62,6 +62,20 @@ describe("cerebro fixture proxy responses", () => {
     expect(payload.findings).toMatchObject([{ id: "demo-finding-high" }]);
   });
 
+  it("returns policy lifecycle records in fixture mode", () => {
+    withFixtureMode();
+    const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle" });
+    const payload = parseFixture(response!);
+    expect(response?.status).toBe(200);
+    expect(payload.summary).toMatchObject({ policies: 4, pending_approvals: 2 });
+    expect(payload.templates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "tpl-access-control" }),
+    ]));
+    expect(payload.work_queue).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "Approve version" }),
+    ]));
+  });
+
   it("returns asset detail fixtures for encoded URNs", () => {
     withFixtureMode();
     const urn = "urn:cerebro:demo-tenant:repository:public-demo";
