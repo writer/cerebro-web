@@ -864,7 +864,7 @@ const policyLifecycleFixture = () => ({
           effective_at: "2026-02-01",
           change_summary: "Expanded privileged access review scope.",
           diff_summary: "Added break-glass account review, service account inventory, and quarterly owner certification.",
-          diff_url: "https://example.com/policies/access-control/compare/2.0...2.1",
+          diff_url: "https://cerebro.example.com/policies/access-control/compare/2.0...2.1",
           controls: [
             { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" },
           ],

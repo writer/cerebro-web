@@ -102,7 +102,7 @@ export const informationAreas: InformationArea[] = [
     signals: [
       { key: "auditReadiness", label: "Packet readiness", href: "/reports?report_type=control&profile=soc2-security-core" },
       { key: "evidenceIssues", label: "Evidence gaps", href: "/evidence" },
-      { key: "controlFailures", label: "Policy and control work", href: "/policies" },
+      { key: "controlFailures", label: "Failing controls", href: "/controls" },
       { key: "coverageGaps", label: "Scope gaps", href: "/connectors" },
       { key: "sourceTrust", label: "Stale proof sources", href: "/connectors" },
       { key: "activeRisk", label: "Mapped risks", href: "/risk-inbox" },
@@ -110,8 +110,8 @@ export const informationAreas: InformationArea[] = [
     workQueue: {
       title: "Controls",
       description: "Policy approvals, controls, and evidence items that affect export readiness.",
-      actionLabel: "Review policies",
-      actionHref: "/policies",
+      actionLabel: "Review controls",
+      actionHref: "/controls",
       empty: "All in-scope controls are defensible. Export the packet or schedule the next run.",
     },
     primaryRoutes: [

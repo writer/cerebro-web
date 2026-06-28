@@ -645,7 +645,7 @@ function AttestationRow({ attestation, generatedAt }: { attestation: GRCPolicyAc
       </div>
       <div className="text-right">
         <Badge value={attestation.status || "pending"} tone={statusIntent(attestation.status)} />
-        <div className={`mt-1 ${dueClassName(attestation.due_at, generatedAt)}`}>{displayPolicyDate(attestation.accepted_at || attestation.due_at)}</div>
+        <div className={`mt-1 ${dueClassName(attestation.accepted_at || attestation.due_at, generatedAt)}`}>{displayPolicyDate(attestation.accepted_at || attestation.due_at)}</div>
       </div>
     </div>
   );
