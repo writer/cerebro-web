@@ -1918,6 +1918,63 @@ export type GRCPolicyTemplate = {
   attributes?: Record<string, string>;
 };
 
+export type GRCPolicyDocumentRef = {
+  id?: string;
+  urn: string;
+  title: string;
+  reference?: string;
+};
+
+export type GRCPolicyRiskRef = {
+  id?: string;
+  urn: string;
+  title: string;
+  status?: string;
+};
+
+export type GRCPolicyDocument = {
+  id: string;
+  urn: string;
+  title: string;
+  document_type?: string;
+  document_class?: string;
+  status?: string;
+  owner?: string;
+  version?: string;
+  review_cadence?: string;
+  next_review_due_at?: string;
+  approved_at?: string;
+  effective_at?: string;
+  source_url?: string;
+  policies?: GRCPolicyDocumentRef[];
+  risks?: GRCPolicyRiskRef[];
+  controls?: GRCPolicyControlRef[];
+  evidence?: GRCPolicyEvidenceRef[];
+  attributes?: Record<string, string>;
+};
+
+export type GRCPolicyRiskRegisterItem = {
+  id: string;
+  urn: string;
+  title: string;
+  status?: string;
+  owner?: string;
+  category?: string;
+  inherent_risk?: string;
+  residual_risk?: string;
+  likelihood?: string;
+  impact?: string;
+  treatment?: string;
+  review_due_at?: string;
+  treatment_due_at?: string;
+  source_document_id?: string;
+  source_document_title?: string;
+  policies?: GRCPolicyDocumentRef[];
+  controls?: GRCPolicyControlRef[];
+  evidence?: GRCPolicyEvidenceRef[];
+  attributes?: Record<string, string>;
+};
+
 export type GRCPolicyVersion = {
   id: string;
   urn: string;
@@ -2029,6 +2086,20 @@ export type GRCPolicyLifecycleWork = {
   action: string;
 };
 
+export type GRCPolicyDocumentWork = {
+  id: string;
+  document_id?: string;
+  document?: string;
+  record_urn: string;
+  type: string;
+  status?: string;
+  owner?: string;
+  due_at?: string;
+  action: string;
+  policy_id?: string;
+  risk_id?: string;
+};
+
 export type GRCPolicyLifecyclePolicy = {
   id: string;
   urn: string;
@@ -2062,11 +2133,17 @@ export type GRCPolicyLifecycleSummary = {
   policies: number;
   templates: number;
   lifecycle_events?: number;
+  policy_documents: number;
+  risk_register_items: number;
   draft_versions: number;
+  draft_documents: number;
   pending_approvals: number;
   overdue_reviews: number;
+  documents_due_for_review: number;
   open_exceptions: number;
   expiring_exceptions: number;
+  open_risks: number;
+  high_risks: number;
   attestation_coverage_pct: number;
   overdue_attestations: number;
   next_reminders?: number;
@@ -2078,7 +2155,10 @@ export type GRCPolicyLifecycleResponse = {
   summary: GRCPolicyLifecycleSummary;
   templates: GRCPolicyTemplate[];
   policies: GRCPolicyLifecyclePolicy[];
+  documents: GRCPolicyDocument[];
+  risk_register: GRCPolicyRiskRegisterItem[];
   work_queue: GRCPolicyLifecycleWork[];
+  document_work_queue: GRCPolicyDocumentWork[];
   reminders: GRCPolicyReminder[];
   events?: GRCPolicyLifecycleEvent[];
   available_actions?: GRCPolicyLifecycleActionDefinition[];

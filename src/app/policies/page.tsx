@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Bell, CheckCircle2, Download, FileText, GitCompare, History, ListChecks, RefreshCw, Search, Send, ShieldCheck, Users, X, XCircle } from "lucide-react";
+import { ArrowRight, Bell, CheckCircle2, ClipboardList, Download, FileCheck2, FileText, GitCompare, History, ListChecks, RefreshCw, Search, Send, ShieldCheck, Users, X, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
@@ -17,12 +17,15 @@ import type {
   GRCPolicyLifecycleEvent,
   GRCPolicyApproval,
   GRCPolicyControlRef,
+  GRCPolicyDocument,
+  GRCPolicyDocumentWork,
   GRCPolicyException,
   GRCPolicyLifecycleMapping,
   GRCPolicyLifecyclePolicy,
   GRCPolicyLifecycleResponse,
   GRCPolicyLifecycleWork,
   GRCPolicyReminderPlan,
+  GRCPolicyRiskRegisterItem,
   GRCPolicyReminder,
   GRCPolicyReview,
   GRCPolicyTemplate,
@@ -86,6 +89,37 @@ const policySearchText = (policy: GRCPolicyLifecyclePolicy) => [
   policy.latest_version,
   policy.approval_status,
   ...(policy.controls ?? []).flatMap((control) => [control.framework, control.control_id, control.title]),
+].filter(Boolean).join("\n").toLowerCase();
+
+const documentSearchText = (document: GRCPolicyDocument) => [
+  document.id,
+  document.title,
+  document.document_type,
+  document.document_class,
+  document.status,
+  document.owner,
+  document.version,
+  document.review_cadence,
+  ...(document.policies ?? []).flatMap((policy) => [policy.id, policy.title]),
+  ...(document.risks ?? []).flatMap((risk) => [risk.id, risk.title, risk.status]),
+  ...(document.controls ?? []).flatMap((control) => [control.framework, control.control_id, control.title]),
+].filter(Boolean).join("\n").toLowerCase();
+
+const riskSearchText = (risk: GRCPolicyRiskRegisterItem) => [
+  risk.id,
+  risk.title,
+  risk.status,
+  risk.owner,
+  risk.category,
+  risk.inherent_risk,
+  risk.residual_risk,
+  risk.likelihood,
+  risk.impact,
+  risk.treatment,
+  risk.source_document_id,
+  risk.source_document_title,
+  ...(risk.policies ?? []).flatMap((policy) => [policy.id, policy.title]),
+  ...(risk.controls ?? []).flatMap((control) => [control.framework, control.control_id, control.title]),
 ].filter(Boolean).join("\n").toLowerCase();
 
 const dateValue = (value?: string) => {
@@ -230,6 +264,11 @@ const reminderPlanActionForItem = (item: GRCPolicyReminderPlan): GRCPolicyLifecy
   };
 };
 
+const riskIntent = (risk?: string): "severity" | "status" => {
+  const value = normalized(risk);
+  return ["critical", "high", "very_high", "very high", "severe"].includes(value) ? "severity" : "status";
+};
+
 const selectedPolicyFallback = (
   policies: GRCPolicyLifecyclePolicy[],
   filteredPolicies: GRCPolicyLifecyclePolicy[],
@@ -268,6 +307,8 @@ export default function PoliciesPage() {
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
   const policies = useMemo(() => data?.policies ?? [], [data?.policies]);
+  const documents = useMemo(() => data?.documents ?? [], [data?.documents]);
+  const riskRegister = useMemo(() => data?.risk_register ?? [], [data?.risk_register]);
   const filteredPolicies = useMemo(() => {
     const ownerFilter = normalized(debouncedOwner);
     const textFilter = normalized(debouncedQuery);
@@ -278,15 +319,47 @@ export default function PoliciesPage() {
       return true;
     });
   }, [debouncedOwner, debouncedQuery, policies, state]);
+  const filteredDocuments = useMemo(() => {
+    const ownerFilter = normalized(debouncedOwner);
+    const textFilter = normalized(debouncedQuery);
+    return documents.filter((document) => {
+      if (ownerFilter && !normalized(document.owner).includes(ownerFilter)) return false;
+      if (textFilter && !documentSearchText(document).includes(textFilter)) return false;
+      return true;
+    });
+  }, [debouncedOwner, debouncedQuery, documents]);
+  const filteredRiskRegister = useMemo(() => {
+    const ownerFilter = normalized(debouncedOwner);
+    const textFilter = normalized(debouncedQuery);
+    return riskRegister.filter((risk) => {
+      if (ownerFilter && !normalized(risk.owner).includes(ownerFilter)) return false;
+      if (textFilter && !riskSearchText(risk).includes(textFilter)) return false;
+      return true;
+    });
+  }, [debouncedOwner, debouncedQuery, riskRegister]);
   const visiblePolicyIDs = useMemo(() => new Set(filteredPolicies.map((policy) => policy.id)), [filteredPolicies]);
   const visibleWorkQueue = useMemo(
     () => (data?.work_queue ?? []).filter((item) => !item.policy_id || visiblePolicyIDs.has(item.policy_id)),
     [data?.work_queue, visiblePolicyIDs],
   );
+  const visibleDocumentIDs = useMemo(() => new Set(filteredDocuments.map((document) => document.id)), [filteredDocuments]);
+  const visibleRiskIDs = useMemo(() => new Set(filteredRiskRegister.map((risk) => risk.id)), [filteredRiskRegister]);
+  const visibleDocumentWorkQueue = useMemo(
+    () => (data?.document_work_queue ?? []).filter((item) =>
+      (!item.policy_id || visiblePolicyIDs.has(item.policy_id)) &&
+      (!item.document_id || visibleDocumentIDs.has(item.document_id)) &&
+      (!item.risk_id || visibleRiskIDs.has(item.risk_id)),
+    ),
+    [data?.document_work_queue, visibleDocumentIDs, visiblePolicyIDs, visibleRiskIDs],
+  );
   const selectedPolicy = selectedPolicyFallback(policies, filteredPolicies, selectedPolicyID);
   const ownerOptions = useMemo(
-    () => Array.from(new Set(policies.flatMap((policy) => [policy.owner, policy.reviewer]).filter(Boolean))).sort(),
-    [policies],
+    () => Array.from(new Set([
+      ...policies.flatMap((policy) => [policy.owner, policy.reviewer]),
+      ...documents.map((document) => document.owner),
+      ...riskRegister.map((risk) => risk.owner),
+    ].filter((value): value is string => Boolean(value)))).sort(),
+    [documents, policies, riskRegister],
   );
   const filterState = useGRCFilterState([
     { key: "tenant_id", label: "Tenant", value: tenantID, setValue: setTenantID },
@@ -363,6 +436,15 @@ export default function PoliciesPage() {
     { key: "due_at", label: "Due", render: (_value, item) => <span className={dueClassName(item.due_at, generatedAt)}>{displayPolicyDate(item.due_at)}</span> },
   ], [generatedAt]);
 
+  const documentWorkColumns = useMemo<TableColumn<GRCPolicyDocumentWork>[]>(() => [
+    { key: "action", label: "Action", render: (_value, item) => <span className="font-medium text-slate-900">{item.action}</span> },
+    { key: "document", label: "Document", render: (_value, item) => <span className="text-slate-700">{item.document || item.document_id || item.risk_id || "-"}</span> },
+    { key: "type", label: "Record", render: (_value, item) => <Badge value={item.type} /> },
+    { key: "status", label: "State", render: (_value, item) => <Badge value={item.status || "pending"} tone={statusIntent(item.status)} /> },
+    { key: "owner", label: "Owner", render: (_value, item) => <span className="text-slate-600">{item.owner || "Unassigned"}</span> },
+    { key: "due_at", label: "Due", render: (_value, item) => <span className={dueClassName(item.due_at, generatedAt)}>{displayPolicyDate(item.due_at)}</span> },
+  ], [generatedAt]);
+
   const policyColumns = useMemo<TableColumn<GRCPolicyLifecyclePolicy>[]>(() => [
     {
       key: "title",
@@ -420,6 +502,46 @@ export default function PoliciesPage() {
       render: (_value, policy) => <span className="text-slate-600">{listLabel((policy.controls ?? []).map(controlLabel))}</span>,
     },
   ], []);
+
+  const documentColumns = useMemo<TableColumn<GRCPolicyDocument>[]>(() => [
+    {
+      key: "title",
+      label: "Document",
+      render: (_value, document) => (
+        <div>
+          <div className="font-medium text-slate-900">{document.title}</div>
+          <div className="mt-0.5 text-[12px] text-slate-500">{document.id}</div>
+        </div>
+      ),
+    },
+    { key: "document_class", label: "Class", render: (_value, document) => <Badge value={document.document_class || document.document_type || "document"} /> },
+    { key: "status", label: "State", render: (_value, document) => <Badge value={document.status || "unknown"} tone={statusIntent(document.status)} /> },
+    { key: "owner", label: "Owner", render: (_value, document) => <span className="text-slate-600">{document.owner || "Unassigned"}</span> },
+    { key: "version", label: "Version", render: (_value, document) => <span className="text-slate-600">{document.version || "-"}</span> },
+    { key: "next_review_due_at", label: "Review", render: (_value, document) => <span className={dueClassName(document.next_review_due_at, generatedAt)}>{displayPolicyDate(document.next_review_due_at)}</span> },
+    { key: "policies", label: "Policies", render: (_value, document) => <span className="text-slate-600">{listLabel((document.policies ?? []).map((policy) => policy.title || policy.id || shortEntity(policy.urn)))}</span> },
+    { key: "controls", label: "Controls", render: (_value, document) => <span className="text-slate-600">{listLabel((document.controls ?? []).map(controlLabel))}</span> },
+  ], [generatedAt]);
+
+  const riskColumns = useMemo<TableColumn<GRCPolicyRiskRegisterItem>[]>(() => [
+    {
+      key: "title",
+      label: "Risk",
+      render: (_value, risk) => (
+        <div>
+          <div className="font-medium text-slate-900">{risk.title}</div>
+          <div className="mt-0.5 text-[12px] text-slate-500">{risk.id}</div>
+        </div>
+      ),
+    },
+    { key: "status", label: "State", render: (_value, risk) => <Badge value={risk.status || "unknown"} /> },
+    { key: "residual_risk", label: "Residual", render: (_value, risk) => <Badge value={risk.residual_risk || risk.inherent_risk || "unknown"} tone={riskIntent(risk.residual_risk || risk.inherent_risk)} /> },
+    { key: "owner", label: "Owner", render: (_value, risk) => <span className="text-slate-600">{risk.owner || "Unassigned"}</span> },
+    { key: "category", label: "Category", render: (_value, risk) => <span className="text-slate-600">{risk.category || "-"}</span> },
+    { key: "treatment", label: "Treatment", render: (_value, risk) => <span className="text-slate-600">{risk.treatment || "-"}</span> },
+    { key: "review_due_at", label: "Review", render: (_value, risk) => <span className={dueClassName(risk.review_due_at, generatedAt)}>{displayPolicyDate(risk.review_due_at)}</span> },
+    { key: "source_document_title", label: "Document", render: (_value, risk) => <span className="text-slate-600">{risk.source_document_title || risk.source_document_id || "-"}</span> },
+  ], [generatedAt]);
 
   const templateColumns = useMemo<TableColumn<GRCPolicyTemplate>[]>(() => [
     { key: "title", label: "Template", render: (_value, item) => <span className="font-medium text-slate-900">{item.title}</span> },
@@ -517,7 +639,7 @@ export default function PoliciesPage() {
       <PageHeader
         contractId="policies"
         title="Policies"
-        description="Versions, approvals, attestations, exceptions, reminders, and mappings."
+        description="Policy documents, risk-register records, versions, approvals, attestations, exceptions, reminders, and control mappings."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => void exportPolicies()} disabled={exporting} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-200 hover:text-indigo-700 disabled:opacity-60">
@@ -552,15 +674,17 @@ export default function PoliciesPage() {
             Search
             <span className="relative mt-1 block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Policy, owner, control" className={`${inputClass} mt-0 pl-8`} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Policy, document, risk, control" className={`${inputClass} mt-0 pl-8`} />
             </span>
           </label>
         </div>
         <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard label="Policies" value={summary?.policies ?? 0} detail={`${summary?.templates ?? 0} templates`} state={metricState} />
+        <MetricCard label="Documents" value={summary?.policy_documents ?? 0} detail={`${summary?.documents_due_for_review ?? 0} due for review`} intent={(summary?.documents_due_for_review ?? 0) > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Risks" value={summary?.risk_register_items ?? 0} detail={`${summary?.high_risks ?? 0} high`} intent={(summary?.high_risks ?? 0) > 0 ? "danger" : "success"} state={metricState} />
         <MetricCard label="Pending Approvals" value={summary?.pending_approvals ?? 0} detail={`${summary?.draft_versions ?? 0} drafts`} intent={(summary?.pending_approvals ?? 0) > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Attestations" value={`${summary?.attestation_coverage_pct ?? 0}%`} detail={`${summary?.overdue_attestations ?? 0} overdue`} intent={(summary?.overdue_attestations ?? 0) > 0 ? "danger" : "success"} state={metricState} />
         <MetricCard label="Exceptions" value={summary?.open_exceptions ?? 0} detail={`${summary?.expiring_exceptions ?? 0} expiring`} intent={(summary?.expiring_exceptions ?? 0) > 0 ? "warning" : "success"} state={metricState} />
@@ -625,6 +749,20 @@ export default function PoliciesPage() {
             }}
           />
 
+          <WorklistTable
+            title="Document work queue"
+            description={isRefreshing ? "Refreshing document records..." : "Draft documents, stale reviews, and open risk treatments ordered by due date."}
+            rows={visibleDocumentWorkQueue}
+            columns={documentWorkColumns}
+            emptyMessage="No document work matches the current filters."
+            searchPlaceholder="Search document work"
+            filterKeys={["action", "document", "type", "status", "owner", "due_at", "risk_id", "policy_id"]}
+            pageSize={8}
+            getRowKey={(item) => item.id}
+            refreshing={isRefreshing}
+            action={<ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+          />
+
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
             <WorklistTable
               title="Policy register"
@@ -657,6 +795,34 @@ export default function PoliciesPage() {
               generatedAt={generatedAt}
               onAction={openAction}
               savingActionID={actionSaving ? selectedAction?.id : undefined}
+            />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <WorklistTable
+              title="Document register"
+              description="Policy documents with owner, class, state, review date, policies, and mapped controls."
+              rows={filteredDocuments}
+              columns={documentColumns}
+              emptyMessage="No policy documents match the current filters."
+              searchPlaceholder="Search documents"
+              filterKeys={["id", "title", "document_type", "document_class", "status", "owner", "version", "policies", "risks", "controls"]}
+              pageSize={8}
+              getRowKey={(document) => document.id || document.urn}
+              getRowHref={(document) => document.source_url}
+              action={<FileCheck2 className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+            />
+            <WorklistTable
+              title="Risk register"
+              description="Risk scenarios with owner, residual risk, treatment, review date, and source document."
+              rows={filteredRiskRegister}
+              columns={riskColumns}
+              emptyMessage="No risk register records match the current filters."
+              searchPlaceholder="Search risks"
+              filterKeys={["id", "title", "status", "owner", "category", "residual_risk", "inherent_risk", "treatment", "source_document_title", "controls"]}
+              pageSize={8}
+              getRowKey={(risk) => risk.id || risk.urn}
+              action={<ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
           </div>
 
