@@ -42,6 +42,7 @@ describe("RBAC permissions", () => {
       "cerebro.cosmo.security.read",
       "cerebro.user_preferences.write",
       "cerebro.dashboards.write",
+      "cerebro.grc.policy_lifecycle.write",
       "cerebro.runtime_response.write",
       "cerebro.source_runtimes.write",
     ]))).toEqual([
@@ -49,6 +50,7 @@ describe("RBAC permissions", () => {
       "agent:ask",
       "cerebro:read",
       "preferences:write",
+      "grc:policies:write",
       "dashboards:write",
       "runtime-response:write",
       "source-runtimes:write",
@@ -82,6 +84,7 @@ describe("Cerebro proxy route permissions", () => {
     expect(permissionForCerebroProxyRequest("PUT", "findings/finding-1/assign")).toBe("findings:write");
     expect(permissionForCerebroProxyRequest("POST", "reports/aws-soc2/runs")).toBe("reports:run");
     expect(permissionForCerebroProxyRequest("PATCH", "grc/inventory/asset-reports/report-1/triage")).toBe("grc:inventory:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/policy-lifecycle/actions")).toBe("grc:policies:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/dashboards")).toBe("dashboards:write");
     expect(permissionForCerebroProxyRequest("PATCH", "grc/dashboards/dashboard-1")).toBe("dashboards:write");
     expect(permissionForCerebroProxyRequest("DELETE", "grc/dashboards/dashboard-1")).toBe("dashboards:write");

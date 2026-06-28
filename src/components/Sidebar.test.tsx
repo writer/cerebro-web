@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { isSidebarLinkActive } from "./Sidebar";
+import { operatorNavLinks, utilityLinks } from "@/lib/navigation";
+
+import { hasSidebarIcon, isSidebarLinkActive } from "./Sidebar";
 
 const links = [
   { href: "/trends" },
@@ -21,5 +23,13 @@ describe("isSidebarLinkActive", () => {
   it("prefers the child route for deeper child paths", () => {
     expect(isSidebarLinkActive("/trends/dashboards/example", "/trends", links)).toBe(false);
     expect(isSidebarLinkActive("/trends/dashboards/example", "/trends/dashboards", links)).toBe(true);
+  });
+
+  it("has icons for visible sidebar routes", () => {
+    const missingIcons = [...operatorNavLinks, ...utilityLinks]
+      .filter((link) => !hasSidebarIcon(link.href))
+      .map((link) => link.href);
+
+    expect(missingIcons).toEqual([]);
   });
 });

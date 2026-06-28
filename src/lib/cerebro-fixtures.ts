@@ -21,6 +21,8 @@ const repoURN = `urn:cerebro:${tenantID}:repository:public-demo`;
 const bucketURN = `urn:cerebro:${tenantID}:storage:audit-bucket`;
 const installedAppURN = `urn:cerebro:${tenantID}:sentinelone_installed_app:agent-1:browser`;
 const emailAliasURN = `urn:cerebro:${tenantID}:identifier:email:platform-admin@example.com`;
+const coreSsoVendorURN = `urn:cerebro:${tenantID}:vendor:core-sso`;
+const paymentsProcessorVendorURN = `urn:cerebro:${tenantID}:vendor:payments-processor`;
 
 const truthy = (value: string | undefined) =>
   ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
@@ -415,6 +417,200 @@ const assets = [
   },
 ];
 
+const vendors = [
+  {
+    urn: coreSsoVendorURN,
+    vendor_id: "core-sso",
+    name: "Core SSO",
+    source_id: "grc",
+    runtime_id: "demo-grc-runtime",
+    provider: "GRC fixture",
+    status: "active",
+    category: "identity",
+    website_url: "https://vendors.example.com/core-sso",
+    services_provided: "Identity provider and single sign-on",
+    source_status: "active",
+    lifecycle_state: "restricted",
+    lifecycle_reason: "Security review is overdue.",
+    owner: "Security",
+    security_owner_user_id: "security@example.com",
+    owner_state: "assigned",
+    review_state: "overdue",
+    review_due_at: "2026-01-10T12:00:00.000Z",
+    last_review_completed_at: "2025-10-15T12:00:00.000Z",
+    risk_level: "high",
+    risk_score: 86,
+    risk_score_level: "high",
+    risk_score_source: "fixture",
+    risk_tier: "tier_1",
+    review_cadence_days: 90,
+    data_sensitivity: "confidential",
+    access_level: "privileged",
+    criticality: "high",
+    subprocessor: "yes",
+    geography: "US",
+    system_dependency: "production_identity",
+    risk_drivers: ["Privileged access", "Confidential data"],
+    dpa_status: "current",
+    baa_status: "not_applicable",
+    soc2_status: "current",
+    iso27001_status: "missing",
+    security_review_status: "overdue",
+    privacy_review_status: "current",
+    document_status: "needs_review",
+    assessment_state: "in_progress",
+    assessment_progress: 65,
+    open_assessments: 1,
+    completed_assessments: 2,
+    assessment_types: ["security_review", "privacy_review"],
+    questionnaire_state: "in_progress",
+    questionnaire_progress: 70,
+    last_assessment_at: "2025-10-15T12:00:00.000Z",
+    next_assessment_at: "2026-01-20T12:00:00.000Z",
+    evidence_freshness_state: "stale",
+    evidence_freshness: [
+      { id: "core-sso-soc2", label: "SOC 2 report", source: "grc", status: "stale", observed_at: "2025-09-01T12:00:00.000Z", expires_at: "2026-01-01T12:00:00.000Z", age_days: 136, stale_after_days: 90 },
+    ],
+    monitoring_state: "alert",
+    monitoring_signals: [
+      { id: "core-sso-rating", label: "External rating changed", severity: "high", source: "security-rating", observed_at: "2026-01-14T12:00:00.000Z" },
+    ],
+    external_rating: "B",
+    external_rating_updated_at: "2026-01-14T12:00:00.000Z",
+    last_material_change_at: "2026-01-14T12:00:00.000Z",
+    spend_amount: "24000",
+    spend_currency: "USD",
+    contract_value: "96000",
+    contract_currency: "USD",
+    renewal_notice_at: "2026-02-01T12:00:00.000Z",
+    renewal_state: "notice_due",
+    primary_contact: "vendor@example.com",
+    business_unit: "Security",
+    cost_center: "SEC-100",
+    exposure_level: "high",
+    exposure_reasons: ["Privileged workforce access", "Sensitive user profile data"],
+    packet_state: "needs_work",
+    packet_ready_items: ["DPA", "SOC 2"],
+    packet_missing_items: ["ISO 27001 certificate"],
+    remediation_state: "overdue",
+    remediation_due_at: "2026-01-12T12:00:00.000Z",
+    open_remediation_items: 2,
+    overdue_remediation_items: 1,
+    offboarding_state: "not_due",
+    data_deletion_state: "not_due",
+    contract_start_at: "2025-01-01T12:00:00.000Z",
+    contract_renewal_at: "2026-03-01T12:00:00.000Z",
+    contract_count: 1,
+    security_review_count: 1,
+    questionnaire_count: 1,
+    assurance_document_count: 2,
+    open_findings: 2,
+    critical_findings: 0,
+    high_findings: 2,
+    evidence_items: 4,
+    risk_queue_rank: 1,
+    queue_reasons: ["review_overdue", "stale_evidence"],
+    next_actions: [
+      { id: "core-sso-review", label: "Update review", reason: "Security review is overdue.", action_type: "review", target_state: "current", priority: 90 },
+    ],
+    close_actions: [
+      { id: "core-sso-close-review", label: "Review completed", closes_when: "security_review_current" },
+    ],
+    attributes: { source_system: "fixture" },
+  },
+  {
+    urn: paymentsProcessorVendorURN,
+    vendor_id: "payments-processor",
+    name: "Payments Processor",
+    source_id: "grc",
+    runtime_id: "demo-grc-runtime",
+    provider: "GRC fixture",
+    status: "active",
+    category: "payments",
+    website_url: "https://vendors.example.com/payments-processor",
+    services_provided: "Payment processing",
+    source_status: "active",
+    lifecycle_state: "approved",
+    lifecycle_reason: "Current review and contract.",
+    business_owner_user_id: "finance@example.com",
+    owner_state: "missing",
+    review_state: "current",
+    last_review_completed_at: "2026-01-05T12:00:00.000Z",
+    risk_level: "medium",
+    risk_score: 54,
+    risk_score_level: "medium",
+    risk_score_source: "fixture",
+    risk_tier: "tier_2",
+    review_cadence_days: 180,
+    data_sensitivity: "restricted",
+    access_level: "limited",
+    criticality: "medium",
+    subprocessor: "no",
+    geography: "US",
+    system_dependency: "payments",
+    risk_drivers: ["Cardholder data"],
+    dpa_status: "current",
+    baa_status: "not_applicable",
+    soc2_status: "current",
+    iso27001_status: "current",
+    security_review_status: "current",
+    privacy_review_status: "current",
+    document_status: "current",
+    assessment_state: "current",
+    assessment_progress: 100,
+    open_assessments: 0,
+    completed_assessments: 1,
+    assessment_types: ["security_review"],
+    questionnaire_state: "complete",
+    questionnaire_progress: 100,
+    last_assessment_at: "2026-01-05T12:00:00.000Z",
+    evidence_freshness_state: "current",
+    monitoring_state: "quiet",
+    monitoring_signals: [],
+    renewal_state: "current",
+    contract_renewal_at: "2026-09-01T12:00:00.000Z",
+    exposure_level: "medium",
+    exposure_reasons: ["Payment data"],
+    packet_state: "ready",
+    packet_ready_items: ["DPA", "SOC 2", "Security review"],
+    packet_missing_items: [],
+    remediation_state: "current",
+    open_remediation_items: 0,
+    overdue_remediation_items: 0,
+    offboarding_state: "not_due",
+    data_deletion_state: "not_due",
+    contract_count: 1,
+    security_review_count: 1,
+    questionnaire_count: 1,
+    assurance_document_count: 1,
+    open_findings: 0,
+    critical_findings: 0,
+    high_findings: 0,
+    evidence_items: 3,
+    queue_reasons: [],
+    next_actions: [],
+    close_actions: [],
+    attributes: { source_system: "fixture" },
+  },
+];
+
+const vendorDiscoveries = [
+  {
+    urn: `urn:cerebro:${tenantID}:vendor-discovery:collaboration-suite`,
+    discovery_id: "collaboration-suite",
+    name: "Collaboration Suite",
+    normalized_name: "collaboration suite",
+    source_id: "grc",
+    runtime_id: "demo-grc-runtime",
+    provider: "GRC fixture",
+    source_status: "discovered",
+    decision_state: "discovered",
+    category: "collaboration",
+    website_url: "https://vendors.example.com/collaboration-suite",
+    attributes: { source_system: "fixture" },
+  },
+];
+
 const assetReports = [
   {
     id: "demo-report-1",
@@ -657,6 +853,79 @@ const filterAssets = (params?: URLSearchParams) => {
   }), params);
 };
 
+const filterVendors = (params?: URLSearchParams) => {
+  const sourceID = params?.get("source_id")?.trim().toLowerCase();
+  const query = params?.get("q")?.trim().toLowerCase();
+  const riskLevel = params?.get("risk_level")?.trim().toLowerCase();
+  const reviewState = params?.get("review_state")?.trim().toLowerCase();
+  const ownerState = params?.get("owner_state")?.trim().toLowerCase();
+  const lifecycleState = params?.get("lifecycle_state")?.trim().toLowerCase();
+  const queue = params?.get("queue")?.trim().toLowerCase();
+  return limitList(vendors.filter((vendor) => {
+    if (sourceID && vendor.source_id?.toLowerCase() !== sourceID) return false;
+    if (riskLevel && vendor.risk_level.toLowerCase() !== riskLevel && vendor.risk_score_level?.toLowerCase() !== riskLevel) return false;
+    if (reviewState && vendor.review_state.toLowerCase() !== reviewState) return false;
+    if (ownerState && vendor.owner_state.toLowerCase() !== ownerState) return false;
+    if (lifecycleState && vendor.lifecycle_state?.toLowerCase() !== lifecycleState) return false;
+    if (queue === "true" && (vendor.queue_reasons?.length ?? 0) === 0) return false;
+    if (queue === "false" && (vendor.queue_reasons?.length ?? 0) > 0) return false;
+    if (query && ![
+      vendor.name,
+      vendor.owner,
+      vendor.security_owner_user_id,
+      vendor.business_owner_user_id,
+      vendor.services_provided,
+      vendor.category,
+      vendor.provider,
+    ].some((value) => contains(value, query))) return false;
+    return true;
+  }), params);
+};
+
+const vendorSummary = (items: typeof vendors) => ({
+  total_vendors: items.length,
+  active_vendors: items.filter((vendor) => vendor.status === "active").length,
+  high_risk_vendors: items.filter((vendor) => ["critical", "high"].includes(vendor.risk_level)).length,
+  owner_missing_vendors: items.filter((vendor) => vendor.owner_state === "missing").length,
+  review_overdue_vendors: items.filter((vendor) => vendor.review_state === "overdue").length,
+  review_due_soon_vendors: items.filter((vendor) => vendor.review_state === "due_soon").length,
+  review_not_scheduled: items.filter((vendor) => vendor.review_state === "not_scheduled").length,
+  risk_queue_vendors: items.filter((vendor) => (vendor.queue_reasons?.length ?? 0) > 0).length,
+  stale_evidence_vendors: items.filter((vendor) => ["stale", "expired"].includes(vendor.evidence_freshness_state ?? "")).length,
+  restricted_vendors: items.filter((vendor) => ["restricted", "conditionally_approved"].includes(vendor.lifecycle_state ?? "")).length,
+  critical_tier_vendors: items.filter((vendor) => vendor.risk_tier === "tier_1").length,
+  assessment_due_vendors: items.filter((vendor) => ["overdue", "due_soon", "in_progress"].includes(vendor.assessment_state ?? "")).length,
+  monitoring_alert_vendors: items.filter((vendor) => ["alert", "critical"].includes(vendor.monitoring_state ?? "")).length,
+  renewal_due_vendors: items.filter((vendor) => ["notice_due", "due_soon", "overdue"].includes(vendor.renewal_state ?? "")).length,
+  packet_blocked_vendors: items.filter((vendor) => ["blocked", "needs_work"].includes(vendor.packet_state ?? "")).length,
+  high_exposure_vendors: items.filter((vendor) => ["critical", "high"].includes(vendor.exposure_level ?? "")).length,
+  remediation_due_vendors: items.filter((vendor) => ["overdue", "due_soon"].includes(vendor.remediation_state ?? "")).length,
+  offboarding_due_vendors: items.filter((vendor) => ["overdue", "due_soon"].includes(vendor.offboarding_state ?? "")).length,
+  open_findings: items.reduce((sum, vendor) => sum + (vendor.open_findings ?? 0), 0),
+  critical_findings: items.reduce((sum, vendor) => sum + (vendor.critical_findings ?? 0), 0),
+  high_findings: items.reduce((sum, vendor) => sum + (vendor.high_findings ?? 0), 0),
+  evidence_items: items.reduce((sum, vendor) => sum + (vendor.evidence_items ?? 0), 0),
+});
+
+const filterVendorDiscoveries = (params?: URLSearchParams) => {
+  const sourceID = params?.get("source_id")?.trim().toLowerCase();
+  const query = params?.get("q")?.trim().toLowerCase();
+  return limitList(vendorDiscoveries.filter((discovery) => {
+    if (sourceID && discovery.source_id?.toLowerCase() !== sourceID) return false;
+    if (query && ![discovery.name, discovery.normalized_name, discovery.discovery_id, discovery.category, discovery.provider].some((value) => contains(value, query))) return false;
+    return true;
+  }), params);
+};
+
+const vendorDiscoverySummary = (items: typeof vendorDiscoveries) => ({
+  total_discoveries: items.length,
+  discovered: items.filter((discovery) => discovery.decision_state === "discovered").length,
+  approved: items.filter((discovery) => discovery.decision_state === "approved").length,
+  rejected: items.filter((discovery) => discovery.decision_state === "rejected").length,
+  ignored: items.filter((discovery) => discovery.decision_state === "ignored").length,
+  linked: items.filter((discovery) => discovery.decision_state === "linked").length,
+});
+
 const entityImpactFixture = (rawURN: string) => {
   const entityURN = safeDecode(rawURN);
   const relatedFindings = findings.filter((finding) =>
@@ -770,6 +1039,7 @@ const policyLifecycleFixture = () => ({
   summary: {
     policies: 4,
     templates: 4,
+    lifecycle_events: 7,
     draft_versions: 2,
     pending_approvals: 2,
     overdue_reviews: 1,
@@ -777,6 +1047,7 @@ const policyLifecycleFixture = () => ({
     expiring_exceptions: 1,
     attestation_coverage_pct: 82,
     overdue_attestations: 6,
+    next_reminders: 5,
     mapped_controls: 7,
     evidence_items: 9,
   },
@@ -928,6 +1199,27 @@ const policyLifecycleFixture = () => ({
           expires_at: "2026-01-28",
         },
       ],
+      events: [
+        { id: "access-draft-created", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-draft-created`, policy_id: "access-control", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, record_type: "policy.version", event_kind: "grc.policy_version", action: "draft.create", status: "draft", actor: "security@example.com", occurred_at: "2026-01-08T10:00:00.000Z" },
+        { id: "access-approval-requested", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-approval-requested`, policy_id: "access-control", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", event_kind: "grc.policy_approval", action: "approval.request", status: "pending", actor: "grc@example.com", reason: "Ready for legal and security approval.", occurred_at: "2026-01-10T14:00:00.000Z" },
+        { id: "access-waiver-approved", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-waiver-approved`, policy_id: "access-control", policy_version_id: "access-control-2.0", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", event_kind: "grc.policy_exception", action: "exception.approve", status: "active", actor: "security@example.com", reason: "Build host isolation is in progress.", occurred_at: "2026-01-02T12:00:00.000Z" },
+      ],
+      actions: [
+        { id: "access-control-2.1:draft.submit", action: "draft.submit", label: "Submit draft", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, record_type: "policy.version", status: "draft", owner: "Security", due_at: "2026-02-01", reason: "Draft version" },
+        { id: "access-control-approval-2.1:approval.approve", action: "approval.approve", label: "Approve version", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", status: "pending", owner: "legal@example.com", due_at: "2026-01-20", reason: "Pending approval" },
+        { id: "access-control-approval-2.1:approval.reject", action: "approval.reject", label: "Reject version", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", status: "pending", owner: "legal@example.com", due_at: "2026-01-20", reason: "Pending approval" },
+        { id: "access-attest-overdue:attestation.accept", action: "attestation.accept", label: "Record attestation", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.0", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-overdue`, record_type: "policy.acceptance", status: "overdue", owner: "sam@example.com", due_at: "2026-01-11", reason: "Open attestation" },
+        { id: "access-attest-overdue:reminder.escalate", action: "reminder.escalate", label: "Escalate reminder", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.0", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-overdue`, record_type: "policy.acceptance", status: "overdue", owner: "sam@example.com", due_at: "2026-01-11", reason: "Overdue attestation" },
+        { id: "access-device-waiver:exception.renew", action: "exception.renew", label: "Renew exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", status: "active", owner: "Platform", due_at: "2026-01-28", reason: "Expiring exception" },
+        { id: "access-device-waiver:exception.close", action: "exception.close", label: "Close exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", status: "active", owner: "Platform", due_at: "2026-01-28", reason: "Open exception" },
+      ],
+      version_diffs: [
+        { policy_id: "access-control", policy_title: "Access Control Policy", from_version_id: "access-control-2.0", from_version: "2.0", to_version_id: "access-control-2.1", to_version: "2.1", status: "draft", change_summary: "Expanded privileged access review scope.", diff_summary: "Added break-glass account review, service account inventory, and quarterly owner certification.", diff_url: "https://cerebro.example.com/policies/access-control/compare/2.0...2.1", created_at: "2026-01-08T10:00:00.000Z" },
+      ],
+      reminder_plan: [
+        { id: "access-attest-overdue:attestation", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-overdue`, record_type: "policy.acceptance", action: "Attestation escalation", owner: "sam@example.com", recipients: ["All employees"], due_at: "2026-01-11", escalate_at: "2026-01-14", channel: "email", reason: "Overdue attestation" },
+        { id: "access-device-waiver:exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", action: "Exception renewal", owner: "Platform", recipients: ["Security"], due_at: "2026-01-28", escalate_at: "2026-01-31", channel: "email", reason: "Expiring exception" },
+      ],
       assignments: [
         { target_urn: `urn:cerebro:${tenantID}:grc_group:policyops:employees`, target_type: "grc.group", label: "All employees", scope: "attestation" },
       ],
@@ -1065,6 +1357,34 @@ const policyLifecycleFixture = () => ({
     { id: "access-attestation-reminder", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:access-attestation-reminder`, policy_id: "access-control", policy_version_id: "access-control-2.0", title: "Access Control attestation reminder", status: "sent", channel: "email", recipients: ["All employees"], escalated_to: ["Security"], due_at: "2026-01-22", sent_at: "2026-01-15T09:00:00.000Z" },
     { id: "retention-owner-escalation", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:retention-owner-escalation`, policy_id: "data-retention", policy_version_id: "data-retention-3.0", title: "Data owner attestation escalation", status: "sent", channel: "slack", recipients: ["Data owners"], escalated_to: ["Legal"], due_at: "2026-01-14", sent_at: "2026-01-15T10:00:00.000Z" },
     { id: "secure-development-review-reminder", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:secure-development-review-reminder`, policy_id: "secure-development", policy_version_id: "secure-development-1.0", title: "Secure Development review reminder", status: "scheduled", channel: "email", recipients: ["Engineering"], escalated_to: [], due_at: "2026-01-24", sent_at: "" },
+  ],
+  events: [
+    { id: "access-approval-requested", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-approval-requested`, policy_id: "access-control", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", event_kind: "grc.policy_approval", action: "approval.request", status: "pending", actor: "grc@example.com", reason: "Ready for legal and security approval.", occurred_at: "2026-01-10T14:00:00.000Z" },
+    { id: "incident-review-opened", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:incident-review-opened`, policy_id: "incident-response", policy_version_id: "incident-response-1.4", record_urn: `urn:cerebro:${tenantID}:policy_review:policyops:incident-review-2026`, record_type: "policy.review", event_kind: "grc.policy_review", action: "review.open", status: "pending", actor: "compliance@example.com", occurred_at: "2026-01-02T10:00:00.000Z" },
+  ],
+  available_actions: [
+    { id: "draft.create", label: "Create draft", event_kind: "grc.policy_version", record_type: "policy.version", status: "draft", requires_policy_id: true },
+    { id: "draft.submit", label: "Submit draft", event_kind: "grc.policy_approval", record_type: "policy.approval", status: "requested", requires_policy_id: true, requires_version_id: true },
+    { id: "approval.approve", label: "Approve version", event_kind: "grc.policy_approval", record_type: "policy.approval", status: "approved", requires_policy_id: true, requires_version_id: true },
+    { id: "approval.reject", label: "Reject version", event_kind: "grc.policy_approval", record_type: "policy.approval", status: "rejected", requires_policy_id: true, requires_version_id: true },
+    { id: "version.publish", label: "Publish version", event_kind: "grc.policy_version", record_type: "policy.version", status: "approved", requires_policy_id: true, requires_version_id: true },
+    { id: "attestation.assign", label: "Assign attestation", event_kind: "grc.policy_acceptance", record_type: "policy.acceptance", status: "pending", requires_policy_id: true, requires_version_id: true },
+    { id: "attestation.accept", label: "Record attestation", event_kind: "grc.policy_acceptance", record_type: "policy.acceptance", status: "accepted", requires_policy_id: true, requires_version_id: true },
+    { id: "review.complete", label: "Complete review", event_kind: "grc.policy_review", record_type: "policy.review", status: "completed", requires_policy_id: true },
+    { id: "exception.request", label: "Request exception", event_kind: "grc.policy_exception", record_type: "policy.exception", status: "requested", requires_policy_id: true },
+    { id: "exception.renew", label: "Renew exception", event_kind: "grc.policy_exception", record_type: "policy.exception", status: "active", requires_policy_id: true },
+    { id: "exception.close", label: "Close exception", event_kind: "grc.policy_exception", record_type: "policy.exception", status: "closed", requires_policy_id: true },
+    { id: "reminder.send", label: "Send reminder", event_kind: "grc.policy_reminder", record_type: "policy.reminder", status: "sent", requires_policy_id: true },
+    { id: "reminder.escalate", label: "Escalate reminder", event_kind: "grc.policy_reminder", record_type: "policy.reminder", status: "escalated", requires_policy_id: true },
+  ],
+  version_diffs: [
+    { policy_id: "access-control", policy_title: "Access Control Policy", from_version_id: "access-control-2.0", from_version: "2.0", to_version_id: "access-control-2.1", to_version: "2.1", status: "draft", change_summary: "Expanded privileged access review scope.", diff_summary: "Added break-glass account review, service account inventory, and quarterly owner certification.", diff_url: "https://cerebro.example.com/policies/access-control/compare/2.0...2.1", created_at: "2026-01-08T10:00:00.000Z" },
+    { policy_id: "secure-development", policy_title: "Secure Development Policy", from_version_id: "", from_version: "", to_version_id: "secure-development-1.0", to_version: "1.0", status: "changes_requested", change_summary: "Initial policy for code review, dependency scanning, and release gates.", diff_summary: "Reviewer requested clearer ownership for emergency releases.", created_at: "2026-01-06T10:00:00.000Z" },
+  ],
+  reminder_plan: [
+    { id: "incident-review-2026:review", policy_id: "incident-response", policy: "Incident Response Policy", record_urn: `urn:cerebro:${tenantID}:policy_review:policyops:incident-review-2026`, record_type: "policy.review", action: "Review reminder", owner: "Security", recipients: ["Compliance"], due_at: "2026-01-12", escalate_at: "2026-01-15", channel: "email", reason: "Owner review" },
+    { id: "data-retention-overdue:attestation", policy_id: "data-retention", policy: "Data Retention Policy", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:data-retention-overdue`, record_type: "policy.acceptance", action: "Attestation escalation", owner: "data-owner@example.com", recipients: ["Data owners"], due_at: "2026-01-14", escalate_at: "2026-01-17", channel: "email", reason: "Overdue attestation" },
+    { id: "access-device-waiver:exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", action: "Exception renewal", owner: "Platform", recipients: ["Security"], due_at: "2026-01-28", escalate_at: "2026-01-31", channel: "email", reason: "Expiring exception" },
   ],
   mappings: [
     { policy_id: "access-control", policy_title: "Access Control Policy", source_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, source_type: "policy.version", target: { urn: apiURN, entity_type: "service", label: "payments-api" }, controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" }], evidence: [{ urn: "evidencecas://policy/access-control-draft", title: "Draft approval packet", evidence_type: "approval_packet" }] },
@@ -1413,6 +1733,26 @@ const writeFixture = (path: string, body?: string) => {
     });
   }
 
+  const vendorDiscoveryDecisionMatch = /^grc\/vendor-discoveries\/(.+)\/decision$/.exec(path);
+  if (vendorDiscoveryDecisionMatch) {
+    return jsonFixture({
+      decision: {
+        id: "fixture-vendor-discovery-decision",
+        tenant_id: parsed.tenant_id ?? tenantID,
+        discovery_urn: safeDecode(vendorDiscoveryDecisionMatch[1]),
+        source_id: parsed.source_id ?? "grc",
+        decision: parsed.decision ?? "approved",
+        reason: parsed.reason,
+        linked_vendor_urn: parsed.linked_vendor_urn,
+        updated_by: "local-developer",
+        version: 1,
+        created_at: generatedAt,
+        updated_at: generatedAt,
+      },
+      generated_at: generatedAt,
+    });
+  }
+
   if (path === "grc/findings/triage" || /^findings\/[^/]+\/(assign|due|notes|tickets|external-refs|resolve|suppress)$/.test(path)) {
     return jsonFixture({ ok: true, finding: findings[0], generated_at: generatedAt });
   }
@@ -1489,6 +1829,24 @@ export const cerebroFixtureResponseFor = ({
     if (normalizedMethod === "POST" && normalizedPath === "grc/ask") {
       return textFixture("event: done\ndata: {\"answer\":\"Fixture mode is enabled.\",\"trace_id\":\"fixture-trace\"}\n\n", "text/event-stream; charset=utf-8");
     }
+    if (normalizedMethod === "POST" && normalizedPath === "grc/policy-lifecycle/actions") {
+      let action = "policy.lifecycle.action";
+      try {
+        const parsed = body ? JSON.parse(body) as { action?: string; status?: string } : {};
+        action = parsed.action || action;
+      } catch {
+        action = "policy.lifecycle.action";
+      }
+      return jsonFixture({
+        action,
+        status: "accepted",
+        event_id: `fixture-${action.replaceAll(".", "-")}`,
+        event_kind: "grc.policy_lifecycle",
+        schema_ref: "grc/policy/v1",
+        attributes: { action, status: "accepted" },
+        generated_at: generatedAt,
+      });
+    }
     return writeFixture(normalizedPath, body);
   }
 
@@ -1530,12 +1888,52 @@ export const cerebroFixtureResponseFor = ({
     return textFixture("id,title,severity,status\ndemo-finding-critical,Privileged account missing MFA,CRITICAL,open\n", "text/csv; charset=utf-8");
   }
 
+  if (normalizedPath === "grc/vendors") {
+    const filteredVendors = filterVendors(searchParams);
+    return jsonFixture({ vendors: filteredVendors, summary: vendorSummary(filteredVendors), generated_at: generatedAt });
+  }
+
+  const vendorDetailMatch = /^grc\/vendors\/(.+)$/.exec(normalizedPath);
+  if (vendorDetailMatch) {
+    const vendorURN = safeDecode(vendorDetailMatch[1]);
+    const vendor = vendors.find((item) => item.urn === vendorURN);
+    if (!vendor) {
+      return jsonFixture({ error: `No fixture vendor found for ${vendorURN}`, generated_at: generatedAt }, 404);
+    }
+    return jsonFixture({
+      vendor,
+      relationships: {
+        contracts: [{ urn: `${vendor.urn}:contract`, entity_type: "contract", label: `${vendor.name} contract`, source_id: vendor.source_id, runtime_id: vendor.runtime_id, relation: "contract" }],
+        security_reviews: [{ urn: `${vendor.urn}:security-review`, entity_type: "security_review", label: `${vendor.name} security review`, source_id: vendor.source_id, runtime_id: vendor.runtime_id, relation: "review" }],
+        owners: vendor.owner ? [{ urn: `${vendor.urn}:owner`, entity_type: "identity_user", label: vendor.owner, source_id: vendor.source_id, runtime_id: vendor.runtime_id, relation: "owner" }] : [],
+      },
+      findings: findings.slice(0, vendor.open_findings ?? 0),
+      evidence: evidence.slice(0, vendor.evidence_items ?? 0),
+      generated_at: generatedAt,
+    });
+  }
+
+  if (normalizedPath === "grc/vendor-discoveries") {
+    const filteredDiscoveries = filterVendorDiscoveries(searchParams);
+    return jsonFixture({
+      discoveries: filteredDiscoveries,
+      summary: vendorDiscoverySummary(filteredDiscoveries),
+      decisions: [],
+      decision_events: [],
+      generated_at: generatedAt,
+    });
+  }
+
   if (normalizedPath === "grc/controls") {
     return jsonFixture({ controls: limitList(controls, searchParams), generated_at: generatedAt });
   }
 
   if (normalizedPath === "grc/policy-lifecycle") {
     return jsonFixture(policyLifecycleFixture());
+  }
+
+  if (normalizedPath === "grc/policy-lifecycle/export") {
+    return textFixture("record_type,record_id,policy_id,policy_title,status,action\npolicy.version,access-control-2.1,access-control,Access Control Policy,draft,draft.create\npolicy.approval,access-control-approval-2.1,access-control,Access Control Policy,pending,approval.request\n", "text/csv; charset=utf-8");
   }
 
   if (normalizedPath === "grc/evidence") {

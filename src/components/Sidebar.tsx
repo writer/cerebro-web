@@ -18,6 +18,7 @@ const icons: Record<string, React.ReactNode> = {
   "/frameworks": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5M6.75 4.5v15m10.5-15v15" />,
   "/evidence": <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />,
   "/inventory": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25h16.5M3.75 9.75h16.5M3.75 14.25h16.5M3.75 18.75h16.5M7.5 3v18m9-18v18" />,
+  "/vendors": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21V8.25A2.25 2.25 0 0 1 6 6h4.5a2.25 2.25 0 0 1 2.25 2.25V21m-9 0h9m-9 0H2.25m10.5 0h9m-9 0V5.25A2.25 2.25 0 0 1 15 3h3a2.25 2.25 0 0 1 2.25 2.25V21m-12-10.5h1.5m-1.5 3h1.5m4.5-4.5h1.5m-1.5 3h1.5m-1.5 3h1.5" />,
   "/impact": <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />,
   "/explore": <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503-13.498 4.875 2.437c.381.19.622.58.622 1.006v11.21c0 .765-.804 1.262-1.489.92l-4.508-2.254a1.125 1.125 0 0 0-1.006 0l-3.494 1.747a1.125 1.125 0 0 1-1.006 0l-4.875-2.437A1.125 1.125 0 0 1 3 15.37V4.16c0-.765.804-1.262 1.489-.92l4.508 2.254c.317.158.69.158 1.006 0l3.494-1.747a1.125 1.125 0 0 1 1.006 0Z" />,
   "/reports": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />,
@@ -29,6 +30,10 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 const sidebarNavLinks = [...operatorNavLinks, ...utilityLinks];
+
+export function hasSidebarIcon(href: string) {
+  return Boolean(icons[href]);
+}
 
 function matchesPathname(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);

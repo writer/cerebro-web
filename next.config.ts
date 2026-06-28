@@ -59,6 +59,10 @@ const resolveAppVersion = () => {
   return packageJson.version;
 };
 
+const scriptSrc = process.env.NODE_ENV === "development"
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline'";
+
 const nextConfig: NextConfig = {
   output: "standalone",
   env: {
@@ -80,7 +84,7 @@ const nextConfig: NextConfig = {
               "form-action 'self'",
               "frame-ancestors 'none'",
               "img-src 'self' data:",
-              "script-src 'self' 'unsafe-inline'",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "connect-src 'self'",
             ].join("; "),
