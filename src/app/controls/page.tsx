@@ -5,11 +5,12 @@ import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
 import { useApiKey } from "@/components/providers";
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ResultLimitNotice } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
+import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import { controlMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -106,7 +107,7 @@ export default function ControlsPage() {
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const selectedProfileID = profileID.trim() || DEFAULT_CONTROL_PROFILE_ID;
   const { data, error, loading, reload } = useGRCQuery<GRCControlEvidencePacketResponse>(
-    grcPath("/grc/control-packets", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID, limit: 200 }),
+    grcPath("/grc/control-packets", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID, limit: GRC_WORKLIST_LIMIT }),
   );
   const { apiKey } = useApiKey();
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
@@ -321,6 +322,11 @@ export default function ControlsPage() {
 
       {data && !error && (
         <div className="space-y-3">
+          <ResultLimitNotice
+            loaded={data.controls?.length ?? controls.length}
+            limit={GRC_WORKLIST_LIMIT}
+            noun="controls"
+          />
           {visibleControls.map((control) => {
             const key = `${control.framework_name}-${control.control_id}`;
             const autoExpand = controls.length <= 3;

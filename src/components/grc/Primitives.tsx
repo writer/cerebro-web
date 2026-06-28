@@ -3,10 +3,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import type { GRCFinding } from "@/lib/grc";
+import type { GRCFinding, GRCListMeta } from "@/lib/grc";
 
 import { API_BASE } from "@/lib/api";
 import { humanize, riskLevelFromScore } from "@/lib/grc";
+import { grcLoadedRowsCopy } from "@/lib/grc-list";
 import { badgeClassFor, riskBadgeClassFor, severityDotClassFor } from "@/lib/grc-status";
 import {
   metricDetailForState,
@@ -214,6 +215,30 @@ export function AttentionBanner({ children, action }: { children: ReactNode; act
         </svg>
         <span>{children}</span>
       </div>
+      {action}
+    </div>
+  );
+}
+
+export function ResultLimitNotice({
+  action,
+  className = "",
+  limit,
+  loaded,
+  meta,
+  noun = "records",
+}: {
+  action?: ReactNode;
+  className?: string;
+  limit?: number;
+  loaded: number;
+  meta?: GRCListMeta;
+  noun?: string;
+}) {
+  const copy = grcLoadedRowsCopy({ loaded, limit, meta, noun });
+  return (
+    <div data-grc-result-limit className={`flex flex-wrap items-center justify-between gap-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)] ${className}`}>
+      <span>{copy}</span>
       {action}
     </div>
   );

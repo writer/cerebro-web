@@ -10,6 +10,13 @@ export type GRCSummary = {
   stale_connectors: number;
 };
 
+export type GRCListMeta = {
+  limit?: number;
+  returned?: number;
+  total?: number;
+  truncated?: boolean;
+};
+
 export type GRCControlRef = {
   framework_name: string;
   framework_id?: string;
