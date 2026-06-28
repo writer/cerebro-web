@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { FileText, GitBranch, Link2, PackageCheck, RefreshCw, Search, ShieldCheck } from "lucide-react";
 
-import type { TableColumn } from "@/components/grc/DataTable";
-import { WorklistTable } from "@/components/grc/DataTable";
+import DataTable, { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, PageHeader } from "@/components/grc/Primitives";
 import { evidencePacketMetrics, evidencePacketReadinessLabel, evidenceReviewState } from "@/lib/evidence-packets";
 import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
@@ -23,8 +23,15 @@ type EvidenceStat = {
   value: number | string;
 };
 
-const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
-const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
+const inputClass = "mt-1 w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)]";
+const labelClass = "text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]";
+const linkClass = "text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300";
+const primaryTextClass = "text-[var(--text-primary)]";
+const secondaryTextClass = "text-[var(--text-secondary)]";
+const mutedTextClass = "text-[var(--text-muted)]";
+const monoSecondaryClass = "font-mono text-[12px] text-[var(--text-secondary)]";
+const monoMutedClass = "font-mono text-[12px] text-[var(--text-muted)]";
+const countTextClass = "tabular-nums text-[var(--text-secondary)]";
 
 export default function EvidencePage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
@@ -85,89 +92,91 @@ export default function EvidencePage() {
     { key: "graph_root_urn", label: "Graph root", value: graphRoot, setValue: setGraphRoot },
   ]);
   const evidenceColumns = useMemo<TableColumn<GRCEvidence>[]>(() => [
-    { key: "id", label: "Evidence", render: (_value, item) => <span className="font-mono text-[12px] text-slate-600">{item.id}</span> },
+    { key: "id", label: "Evidence", render: (_value, item) => <span className={monoSecondaryClass}>{item.id}</span> },
     {
       key: "finding_id",
       label: "Finding",
       render: (_value, item) => item.finding_id ? (
-        <Link href={`/findings/${encodeURIComponent(item.finding_id)}`} className="font-medium text-slate-900 hover:text-indigo-600">
+        <Link href={`/findings/${encodeURIComponent(item.finding_id)}`} className={`font-medium text-[var(--text-primary)] hover:text-indigo-600 dark:hover:text-indigo-300`}>
           {item.finding_title || item.finding_id}
         </Link>
-      ) : <span className="text-slate-400">&mdash;</span>,
+      ) : <span className={mutedTextClass}>&mdash;</span>,
     },
     {
       key: "run_id",
       label: "Run / Rule",
       render: (_value, item) => (
-        <div className="text-[12px] text-slate-500">
+        <div className={`text-[12px] ${mutedTextClass}`}>
           <div>{shortEntity(item.run_id)}</div>
           <div>{shortEntity(item.rule_id)}</div>
         </div>
       ),
     },
-    { key: "claim_ids", label: "Claims", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.claim_ids?.length ?? 0}</span> },
-    { key: "event_ids", label: "Events", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.event_ids?.length ?? 0}</span> },
+    { key: "claim_ids", label: "Claims", render: (_value, item) => <span className={countTextClass}>{item.claim_ids?.length ?? 0}</span> },
+    { key: "event_ids", label: "Events", render: (_value, item) => <span className={countTextClass}>{item.event_ids?.length ?? 0}</span> },
     {
       key: "graph_root_urns",
       label: "Graph Roots",
       render: (_value, item) => (
         <>
           {(item.graph_root_urns ?? []).slice(0, 2).map((urn) => (
-            <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="mr-2 text-indigo-600 hover:text-indigo-800">{shortEntity(urn)}</Link>
+            <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className={`mr-2 ${linkClass}`}>{shortEntity(urn)}</Link>
           ))}
         </>
       ),
     },
-    { key: "created_at", label: "Created", render: (_value, item) => <span className="text-slate-500">{displayDate(item.created_at)}</span> },
+    { key: "created_at", label: "Created", render: (_value, item) => <span className={mutedTextClass}>{displayDate(item.created_at)}</span> },
   ], []);
   const requestColumns = useMemo<TableColumn<GRCEvidenceRequest>[]>(() => [
-    { key: "title", label: "Request", render: (_value, item) => <span className="font-medium text-slate-900">{item.title || shortEntity(item.id)}</span> },
-    { key: "control_id", label: "Control", render: (_value, item) => <span className="font-mono text-[12px] text-slate-600">{shortEntity(item.control_id)}</span> },
+    { key: "title", label: "Request", render: (_value, item) => <span className={`font-medium ${primaryTextClass}`}>{item.title || shortEntity(item.id)}</span> },
+    { key: "control_id", label: "Control", render: (_value, item) => <span className={monoSecondaryClass}>{shortEntity(item.control_id)}</span> },
     { key: "status", label: "Status", render: (_value, item) => <StatusPill status={item.status} /> },
     { key: "quality", label: "Quality", render: (_value, item) => <StatusPill status={item.quality} /> },
     { key: "review_status", label: "Review", render: (_value, item) => <ReviewPill status={item.review_status} /> },
-    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_packet_ids?.length ?? 0}</span> },
+    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className={countTextClass}>{item.evidence_packet_ids?.length ?? 0}</span> },
   ], []);
   const controlColumns = useMemo<TableColumn<GRCControlPosture>[]>(() => [
-    { key: "title", label: "Control", render: (_value, item) => <span className="font-medium text-slate-900">{item.title || shortEntity(item.id)}</span> },
-    { key: "framework_name", label: "Framework", render: (_value, item) => <span className="text-slate-600">{item.framework_name || "—"}</span> },
+    { key: "title", label: "Control", render: (_value, item) => <span className={`font-medium ${primaryTextClass}`}>{item.title || shortEntity(item.id)}</span> },
+    { key: "framework_name", label: "Framework", render: (_value, item) => <span className={secondaryTextClass}>{item.framework_name || "—"}</span> },
     { key: "status", label: "Status", render: (_value, item) => <StatusPill status={item.status} /> },
-    { key: "evidence_score", label: "Score", render: (_value, item) => <span className="tabular-nums text-slate-700">{item.evidence_score}</span> },
-    { key: "missing_evidence_items", label: "Missing", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.missing_evidence_items}</span> },
-    { key: "stale_evidence_items", label: "Stale", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.stale_evidence_items}</span> },
-    { key: "evidence_request_ids", label: "Requests", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_request_ids?.length ?? 0}</span> },
+    { key: "evidence_score", label: "Score", render: (_value, item) => <span className={countTextClass}>{item.evidence_score}</span> },
+    { key: "missing_evidence_items", label: "Missing", render: (_value, item) => <span className={countTextClass}>{item.missing_evidence_items}</span> },
+    { key: "stale_evidence_items", label: "Stale", render: (_value, item) => <span className={countTextClass}>{item.stale_evidence_items}</span> },
+    { key: "evidence_request_ids", label: "Requests", render: (_value, item) => <span className={countTextClass}>{item.evidence_request_ids?.length ?? 0}</span> },
   ], []);
   const sourceColumns = useMemo<TableColumn<GRCCollectionSource>[]>(() => [
-    { key: "source_id", label: "Source", render: (_value, item) => <span className="font-mono text-[12px] text-slate-700">{item.source_id || shortEntity(item.runtime_id)}</span> },
-    { key: "runtime_id", label: "Runtime", render: (_value, item) => <span className="font-mono text-[12px] text-slate-500">{shortEntity(item.runtime_id)}</span> },
+    { key: "source_id", label: "Source", render: (_value, item) => <span className={monoSecondaryClass}>{item.source_id || shortEntity(item.runtime_id)}</span> },
+    { key: "runtime_id", label: "Runtime", render: (_value, item) => <span className={monoMutedClass}>{shortEntity(item.runtime_id)}</span> },
     { key: "status", label: "Status", render: (_value, item) => <StatusPill status={item.status} /> },
-    { key: "evidence_item_count", label: "Evidence", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_item_count}</span> },
-    { key: "finding_count", label: "Findings", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.finding_count}</span> },
-    { key: "last_synced_at", label: "Synced", render: (_value, item) => <span className="text-slate-500">{displayDate(item.last_synced_at)}</span> },
+    { key: "evidence_item_count", label: "Evidence", render: (_value, item) => <span className={countTextClass}>{item.evidence_item_count}</span> },
+    { key: "finding_count", label: "Findings", render: (_value, item) => <span className={countTextClass}>{item.finding_count}</span> },
+    { key: "last_synced_at", label: "Synced", render: (_value, item) => <span className={mutedTextClass}>{displayDate(item.last_synced_at)}</span> },
   ], []);
   const itemColumns = useMemo<TableColumn<GRCEvidenceItemRecord>[]>(() => [
-    { key: "id", label: "Evidence", render: (_value, item) => <span className="font-mono text-[12px] text-slate-700">{shortEntity(item.id)}</span> },
-    { key: "finding_id", label: "Finding", render: (_value, item) => <span className="font-mono text-[12px] text-slate-500">{shortEntity(item.finding_id)}</span> },
-    { key: "rule_id", label: "Rule", render: (_value, item) => <span className="font-mono text-[12px] text-slate-500">{shortEntity(item.rule_id)}</span> },
-    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_packet_ids?.length ?? 0}</span> },
-    { key: "graph_root_urns", label: "Roots", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.graph_root_urns?.length ?? 0}</span> },
-    { key: "last_observed_at", label: "Observed", render: (_value, item) => <span className="text-slate-500">{displayDate(item.last_observed_at)}</span> },
+    { key: "id", label: "Evidence", render: (_value, item) => <span className={monoSecondaryClass}>{shortEntity(item.id)}</span> },
+    { key: "finding_id", label: "Finding", render: (_value, item) => <span className={monoMutedClass}>{shortEntity(item.finding_id)}</span> },
+    { key: "rule_id", label: "Rule", render: (_value, item) => <span className={monoMutedClass}>{shortEntity(item.rule_id)}</span> },
+    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className={countTextClass}>{item.evidence_packet_ids?.length ?? 0}</span> },
+    { key: "graph_root_urns", label: "Roots", render: (_value, item) => <span className={countTextClass}>{item.graph_root_urns?.length ?? 0}</span> },
+    { key: "last_observed_at", label: "Observed", render: (_value, item) => <span className={mutedTextClass}>{displayDate(item.last_observed_at)}</span> },
   ], []);
   const lineageColumns = useMemo<TableColumn<GRCEvidenceLineage>[]>(() => [
-    { key: "evidence_id", label: "Evidence", render: (_value, item) => <span className="font-mono text-[12px] text-slate-700">{shortEntity(item.evidence_id)}</span> },
-    { key: "control_ids", label: "Controls", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.control_ids?.length ?? 0}</span> },
-    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.evidence_packet_ids?.length ?? 0}</span> },
-    { key: "claim_ids", label: "Claims", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.claim_ids?.length ?? 0}</span> },
-    { key: "event_ids", label: "Events", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.event_ids?.length ?? 0}</span> },
-    { key: "graph_root_urns", label: "Roots", render: (_value, item) => <span className="tabular-nums text-slate-600">{item.graph_root_urns?.length ?? 0}</span> },
+    { key: "evidence_id", label: "Evidence", render: (_value, item) => <span className={monoSecondaryClass}>{shortEntity(item.evidence_id)}</span> },
+    { key: "control_ids", label: "Controls", render: (_value, item) => <span className={countTextClass}>{item.control_ids?.length ?? 0}</span> },
+    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className={countTextClass}>{item.evidence_packet_ids?.length ?? 0}</span> },
+    { key: "claim_ids", label: "Claims", render: (_value, item) => <span className={countTextClass}>{item.claim_ids?.length ?? 0}</span> },
+    { key: "event_ids", label: "Events", render: (_value, item) => <span className={countTextClass}>{item.event_ids?.length ?? 0}</span> },
+    { key: "graph_root_urns", label: "Roots", render: (_value, item) => <span className={countTextClass}>{item.graph_root_urns?.length ?? 0}</span> },
   ], []);
-  const detailRows = selectedEvidence ? [
-    ["Evidence ID", selectedEvidence.id],
-    ["Finding", selectedEvidence.finding_id || "—"],
-    ["Runtime", selectedEvidence.runtime_id || "—"],
-    ["Run", selectedEvidence.run_id || "—"],
-    ["Rule", selectedEvidence.rule_id || "—"],
-    ["Created", displayDate(selectedEvidence.created_at)],
+  const activeEvidence = selectedEvidence ?? evidence[0] ?? null;
+  const activeEvidenceID = activeEvidence?.id ?? null;
+  const detailRows = activeEvidence ? [
+    ["Evidence ID", activeEvidence.id],
+    ["Finding", activeEvidence.finding_id || "—"],
+    ["Runtime", activeEvidence.runtime_id || "—"],
+    ["Run", activeEvidence.run_id || "—"],
+    ["Rule", activeEvidence.rule_id || "—"],
+    ["Created", displayDate(activeEvidence.created_at)],
   ] : [];
   const evidenceStats: EvidenceStat[] = [
     { label: "Evidence items", value: evidence.length, detail: "in scope", state: metricState },
@@ -189,47 +198,83 @@ export default function EvidencePage() {
     { label: "Graph paths", value: packagedMetrics.graphPaths, detail: "relationship records", state: packagedMetricState },
     { label: "Exports", value: packagedData?.export_artifacts?.length ?? 0, detail: "hashed artifacts", state: packagedMetricState },
   ];
+  const activeFilterCount = Object.values(filterState.trimmedValues).filter(Boolean).length;
+  const scopeLabel = activeFilterCount === 0 ? "All evidence" : `${activeFilterCount} active ${activeFilterCount === 1 ? "filter" : "filters"}`;
 
   return (
     <div className="space-y-6">
       <PageHeader
         contractId="evidence"
         title="Evidence"
-        description="Audit evidence linked to findings, rules, runs, and graph roots."
+        description="Evidence linked to findings, rules, runs, claims, events, and graph roots."
         action={
-          <button type="button" onClick={() => void reload()} className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
-            Refresh
+          <button type="button" onClick={() => void reload()} className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-[var(--primary-hover)]">
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            Refresh evidence
           </button>
         }
       />
 
-      <div className="border-y border-[color:var(--border)] py-4">
-        <div className="grid gap-3 md:grid-cols-5">
-          <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Finding<input value={findingID} onChange={(e) => setFindingID(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Run<input value={runID} onChange={(e) => setRunID(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Rule<input value={ruleID} onChange={(e) => setRuleID(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Graph Root<input value={graphRoot} onChange={(e) => setGraphRoot(e.target.value)} placeholder="urn:cerebro:..." className={inputClass} /></label>
+      <section className="overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+        <div className="grid xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-4 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                  Scope
+                </div>
+                <h2 className="mt-2 text-[17px] font-semibold text-[var(--text-primary)]">{scopeLabel}</h2>
+                <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+                  Narrow the register by tenant, finding, run, rule, or graph root.
+                </p>
+              </div>
+              {data?.generated_at && (
+                <div className="text-right text-[12px] text-[var(--text-muted)]">
+                  Loaded <span className="font-medium text-[var(--text-secondary)]">{displayDate(data.generated_at)}</span>
+                </div>
+              )}
+            </div>
+            <div className="grid gap-3 md:grid-cols-5">
+              <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
+              <label className={labelClass}>Finding<input value={findingID} onChange={(e) => setFindingID(e.target.value)} placeholder="All" className={inputClass} /></label>
+              <label className={labelClass}>Run<input value={runID} onChange={(e) => setRunID(e.target.value)} placeholder="All" className={inputClass} /></label>
+              <label className={labelClass}>Rule<input value={ruleID} onChange={(e) => setRuleID(e.target.value)} placeholder="All" className={inputClass} /></label>
+              <label className={labelClass}>Graph Root<input value={graphRoot} onChange={(e) => setGraphRoot(e.target.value)} placeholder="urn:cerebro:..." className={inputClass} /></label>
+            </div>
+            <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
+          </div>
+          <div className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] p-5 xl:border-l xl:border-t-0">
+            <EvidenceScopePanel
+              activeEvidence={activeEvidence}
+              evidenceCount={evidence.length}
+              packageState={packagedMetricState}
+              packagedError={packagedError}
+            />
+          </div>
         </div>
-        <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
-      </div>
+      </section>
 
       <EvidenceMetricStrip blockedLabel="Evidence totals did not load." stats={evidenceStats} pendingLabel="Loading evidence totals..." />
 
       <section className="space-y-4 border-t border-[color:var(--border)] pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-[15px] font-semibold text-slate-900">Packaged evidence workflow</h2>
-            <p className="mt-1 text-[13px] text-slate-500">
-              Program, framework, control, request, packet, review, activity, export, and snapshot records assembled from the same evidence substrate.
+            <div className="flex items-center gap-2">
+              <PackageCheck className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+              <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Package workflow</h2>
+            </div>
+            <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+              Request, packet, review, export, and lineage records assembled from the evidence register.
             </p>
           </div>
-          <button type="button" onClick={() => void reloadPackaged()} className="rounded-md border border-slate-200 px-3 py-1.5 text-[13px] font-medium text-slate-600 transition hover:border-indigo-200 hover:text-indigo-700">
-            Refresh package
+          <button type="button" onClick={() => void reloadPackaged()} className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--border)] px-3 py-1.5 text-[13px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--ring)] hover:text-[var(--primary)]">
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            Refresh workflow
           </button>
         </div>
         <EvidenceWorkflowStats blockedLabel="Package records did not load." stats={workflowStats} pendingLabel="Loading package records..." />
-        {packagedError && <p className="text-[13px] text-slate-500">{packagedData ? "Showing the last loaded packaged evidence records; refresh will update when the endpoint is reachable." : "Packaged evidence records will appear when this endpoint is available."}</p>}
+        {packagedError && <p className="text-[13px] text-[var(--text-muted)]">{packagedData ? "Showing the last loaded packaged evidence records; refresh will update when the endpoint is reachable." : "Packaged evidence records will appear when this endpoint is available."}</p>}
         {packagedData && (
           <div className="grid gap-4 xl:grid-cols-2">
             <WorklistTable
@@ -300,77 +345,146 @@ export default function EvidencePage() {
       {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Evidence will appear when the API is reachable." />}
 
       {data && !error && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <WorklistTable
-            title="Evidence register"
-            description="Search proof items by finding, run, rule, claim, event, or graph root."
-            rows={evidence}
-            columns={evidenceColumns}
-            emptyMessage="No evidence matches this view."
-            searchPlaceholder="Search evidence"
-            filterKeys={["id", "finding_id", "finding_title", "run_id", "rule_id", "claim_ids", "event_ids", "graph_root_urns"]}
-            pageSize={50}
-            getRowKey={(item) => item.id}
-            selectedRowKey={selectedEvidenceID}
-            onRowClick={(item) => setSelectedEvidenceID(item.id)}
-            refreshing={isRefreshing}
-            rowActions={(item) => (
-              <button type="button" onClick={() => setSelectedEvidenceID(item.id)} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
-                Inspect
-              </button>
-            )}
-          />
-
-          <aside className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-[13px] font-semibold text-slate-900">Evidence detail</h2>
-                <p className="mt-1 text-[12px] text-slate-500">Proof links, anchors, and raw identifiers for the selected item.</p>
+        <section className="overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
+          <div className="grid xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                    <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">Evidence register</h2>
+                  </div>
+                  <p className="mt-1 text-[12px] text-[var(--text-muted)]">Search proof items by finding, run, rule, claim, event, or graph root.</p>
+                </div>
+                {isRefreshing && <div className="text-[12px] text-[var(--text-muted)]">Refreshing evidence...</div>}
               </div>
-              {selectedEvidence && (
-                <button type="button" onClick={() => setSelectedEvidenceID(null)} className="text-[12px] font-medium text-slate-500 hover:text-slate-900">
-                  Clear
+              <div className="p-4">
+                <DataTable
+                  rows={evidence}
+                  columns={evidenceColumns}
+                  emptyMessage="No evidence matches this view."
+                  searchPlaceholder="Search evidence"
+                  filterKeys={["id", "finding_id", "finding_title", "run_id", "rule_id", "claim_ids", "event_ids", "graph_root_urns"]}
+                  pageSize={50}
+                  getRowKey={(item) => item.id}
+                  selectedRowKey={activeEvidenceID}
+                  onRowClick={(item) => setSelectedEvidenceID(item.id)}
+                  rowActions={(item) => (
+                    <button type="button" onClick={() => setSelectedEvidenceID(item.id)} className={`text-[12px] font-medium ${linkClass}`}>
+                      Inspect
+                    </button>
+                  )}
+                  tableContainerClassName="overflow-auto"
+                />
+              </div>
+            </div>
+
+            <aside className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] xl:border-l xl:border-t-0">
+              <div className="flex items-start justify-between gap-3 border-b border-[color:var(--border)] p-5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                  <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Evidence detail</h2>
+                </div>
+                <p className="mt-1 text-[12px] text-[var(--text-muted)]">Proof links and graph anchors for the selected item.</p>
+              </div>
+              {selectedEvidenceID && evidence[0] && selectedEvidenceID !== evidence[0].id && (
+                <button type="button" onClick={() => setSelectedEvidenceID(null)} className="text-[12px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                  Show first
                 </button>
               )}
             </div>
-            {selectedEvidence ? (
-              <div className="mt-4 space-y-4">
-                <div className="space-y-2">
+            {activeEvidence ? (
+              <div className="space-y-5 p-5">
+                <div>
+                  <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Selected item</div>
+                  <div className="mt-2 break-words font-mono text-[12px] leading-5 text-[var(--text-primary)]">{activeEvidence.id}</div>
+                  {activeEvidence.finding_id && (
+                    <Link href={`/findings/${encodeURIComponent(activeEvidence.finding_id)}`} className={`mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium ${linkClass}`}>
+                      <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      Open finding
+                    </Link>
+                  )}
+                </div>
+                <div className="space-y-2 border-t border-[color:var(--border)] pt-4">
                   {detailRows.map(([label, value]) => (
-                    <div key={label} className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 last:border-b-0">
-                      <span className="text-[12px] text-slate-500">{label}</span>
-                      <span className="max-w-[65%] break-words text-right font-mono text-[12px] text-slate-700">{value}</span>
+                    <div key={label} className="flex items-start justify-between gap-4">
+                      <span className="text-[12px] text-[var(--text-muted)]">{label}</span>
+                      <span className="max-w-[65%] break-words text-right font-mono text-[12px] text-[var(--text-secondary)]">{value}</span>
                     </div>
                   ))}
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Graph roots</div>
+                <div className="border-t border-[color:var(--border)] pt-4">
+                  <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                    <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
+                    Graph roots
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(selectedEvidence.graph_root_urns ?? []).map((urn) => (
-                      <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="rounded-md bg-indigo-50 px-2 py-1 font-mono text-[11px] text-indigo-700 hover:bg-indigo-100">
+                    {(activeEvidence.graph_root_urns ?? []).map((urn) => (
+                      <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="rounded-md bg-indigo-50 px-2 py-1 font-mono text-[11px] text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25">
                         {shortEntity(urn)}
                       </Link>
                     ))}
-                    {(selectedEvidence.graph_root_urns ?? []).length === 0 && <span className="text-[12px] text-slate-400">No graph roots attached.</span>}
+                    {(activeEvidence.graph_root_urns ?? []).length === 0 && <span className="text-[12px] text-[var(--text-muted)]">No graph roots attached.</span>}
                   </div>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Raw references</div>
+                <div className="border-t border-[color:var(--border)] pt-4">
+                  <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Raw references</div>
                   <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-slate-950 p-3 text-[11px] leading-5 text-slate-100">{JSON.stringify({
-                    claim_ids: selectedEvidence.claim_ids ?? [],
-                    event_ids: selectedEvidence.event_ids ?? [],
-                    graph_root_urns: selectedEvidence.graph_root_urns ?? [],
+                    claim_ids: activeEvidence.claim_ids ?? [],
+                    event_ids: activeEvidence.event_ids ?? [],
+                    graph_root_urns: activeEvidence.graph_root_urns ?? [],
                   }, null, 2)}</pre>
                 </div>
               </div>
             ) : (
-              <div className="mt-6 rounded-lg border border-dashed border-slate-200 p-6 text-center text-[13px] text-slate-500">
-                Select an evidence item to inspect its proof links.
+              <div className="p-6 text-[13px] text-[var(--text-muted)]">
+                Evidence details appear when a row is available.
               </div>
             )}
           </aside>
-        </div>
+          </div>
+        </section>
       )}
+    </div>
+  );
+}
+
+function EvidenceScopePanel({
+  activeEvidence,
+  evidenceCount,
+  packageState,
+  packagedError,
+}: {
+  activeEvidence: GRCEvidence | null;
+  evidenceCount: number;
+  packageState: RuntimeState;
+  packagedError?: string | null;
+}) {
+  const packageText = packageState === "ready" ? "Package records loaded" : packagedError ? "Package records unavailable" : runtimeStateDescription(packageState);
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Current view</div>
+        <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{evidenceCount}</div>
+        <div className="mt-1 text-[13px] text-[var(--text-muted)]">evidence items</div>
+      </div>
+      <div className="space-y-3 border-t border-[color:var(--border)] pt-4">
+        <div className="flex items-start gap-2.5">
+          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+          <div>
+            <div className="text-[12px] font-medium text-[var(--text-primary)]">{activeEvidence ? shortEntity(activeEvidence.id) : "No item selected"}</div>
+            <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">detail pane</div>
+          </div>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <PackageCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+          <div>
+            <div className="text-[12px] font-medium text-[var(--text-primary)]">{packageText}</div>
+            <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">workflow records</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -460,12 +574,12 @@ function StatusPill({ status }: { status?: string }) {
   const attention = new Set(["stale", "partial", "manual", "needs_attention", "needs_review", "warning"]);
   const ready = new Set(["satisfied", "strong", "ready", "passing", "pass", "accepted", "collected"]);
   const tone = blocked.has(normalized)
-    ? "bg-red-50 text-red-700 ring-red-100"
+    ? "bg-red-50 text-red-700 ring-red-100 dark:bg-red-500/10 dark:text-red-200 dark:ring-red-500/25"
     : attention.has(normalized)
-      ? "bg-amber-50 text-amber-700 ring-amber-100"
+      ? "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/25"
       : ready.has(normalized)
-        ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-        : "bg-slate-50 text-slate-600 ring-slate-100";
+        ? "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/25"
+        : "bg-[var(--surface-muted)] text-[var(--text-secondary)] ring-[color:var(--border)]";
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${tone}`}>{status || "unknown"}</span>;
 }
 
@@ -473,11 +587,11 @@ function ReviewPill({ status }: { status?: string }) {
   const state = evidenceReviewState(status);
   const tone =
     state === "blocked"
-      ? "bg-red-50 text-red-700 ring-red-100"
+      ? "bg-red-50 text-red-700 ring-red-100 dark:bg-red-500/10 dark:text-red-200 dark:ring-red-500/25"
       : state === "attention"
-        ? "bg-amber-50 text-amber-700 ring-amber-100"
+        ? "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/25"
         : state === "ready"
-          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-          : "bg-slate-50 text-slate-600 ring-slate-100";
+          ? "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/25"
+          : "bg-[var(--surface-muted)] text-[var(--text-secondary)] ring-[color:var(--border)]";
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${tone}`}>{status || "unknown"}</span>;
 }
