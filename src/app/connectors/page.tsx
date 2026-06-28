@@ -39,7 +39,6 @@ import {
   connectorIsCatalogOnly,
   connectorRuntimeSurfaceLabel,
   connectorSetupAllowed,
-  normalizeCredentialStores,
 } from "@/lib/connectors";
 import {
   buildConnectorCards,
@@ -423,26 +422,6 @@ function AttentionNotice({
   );
 }
 
-function CredentialStorePanel({ library }: { library?: ConnectorLibraryResponse }) {
-  const stores = normalizeCredentialStores(library);
-  const ready = stores.filter((store) => store.available);
-  return (
-    <Panel title="Credential stores" action={<Badge value={ready.length > 0 ? "ready" : "not_configured"} />}>
-      <div className="space-y-2">
-        {stores.map((store) => (
-          <div key={store.id} className="flex items-start justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2.5">
-            <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-[var(--text-primary)]">{store.label}</div>
-              <div className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{store.detail || store.description}</div>
-            </div>
-            <Badge value={store.available ? "ready" : "not_configured"} />
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
-
 function ReadinessMix({
   counts,
   filter,
@@ -742,7 +721,6 @@ export default function ConnectorsPage() {
     const status = compactConnectorStatus(card);
     return status !== "healthy" && status !== "not_configured";
   });
-  const readyStores = normalizeCredentialStores(libraryQuery.data).filter((store) => store.available);
   const libraryLoading = libraryQuery.loading && !libraryQuery.data;
   const runtimeState = runtimeStateForError(libraryQuery.error);
   const metricState: RuntimeState = libraryQuery.error ? runtimeState : libraryLoading ? "loading" : "ready";
@@ -807,7 +785,7 @@ export default function ConnectorsPage() {
         }
       />
 
-      <div className="hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-6">
+      <div className="hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-5">
         <MetricCard label="Available" value={cards.length} detail="library connectors" state={metricState} />
         <MetricCard label="Connected" value={connectedCards.length} detail={`${totalConnections} runtime mappings`} intent="success" state={metricState} />
         <div className="hidden md:block">
@@ -815,9 +793,6 @@ export default function ConnectorsPage() {
         </div>
         <div className="hidden md:block">
           <MetricCard label="Backlog" value={requestableCards.length} detail="requestable catalog sources" intent={requestableCards.length > 0 ? "warning" : "neutral"} state={metricState} />
-        </div>
-        <div className="hidden md:block">
-          <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
         </div>
         <div className="hidden md:block">
           <MetricCard label="Resource Types" value={resourceTypeTotals.sources} detail={`${resourceTypeTotals.resourceTypes} catalog-backed`} intent={resourceTypeTotals.sources > 0 ? "success" : "neutral"} state={metricState} />
@@ -922,7 +897,6 @@ export default function ConnectorsPage() {
         </Panel>
 
         <div className="space-y-5">
-          <CredentialStorePanel library={libraryQuery.data ?? undefined} />
           <CatalogResourceTypesPanel cards={cards} tenantID={debouncedTenantID} />
           <CustomConnectorPanel definitions={customDefinitions} error={definitionsQuery.error} onRetry={() => void definitionsQuery.reload()} tenantID={debouncedTenantID} />
           <ReadinessMix counts={readinessCounts} filter={readinessFilter} onFilter={setReadinessFilter} />

@@ -158,7 +158,7 @@ export const informationAreas: InformationArea[] = [
     },
     primaryRoutes: [
       { href: "/", label: "Home", detail: "Connector health, source coverage, and ownership." },
-      { href: "/connectors", label: "Sources", detail: "Source library, credentials, freshness, and ingestion health." },
+      { href: "/connectors", label: "Sources", detail: "Source library, freshness, scope, and ingestion health." },
       { href: "/inventory", label: "Inventory", detail: "Assets, owners, scope, tests, and graph context." },
       { href: "/explore", label: "Graph", detail: "Trace relationships around entities and sources." },
       { href: "/trends", label: "Trends", detail: "Runtime-backed risk and backlog movement." },
@@ -167,6 +167,7 @@ export const informationAreas: InformationArea[] = [
       { href: "/ask", label: "Ask", detail: "Ask runtime and coverage questions." },
       { href: "/impact", label: "Affected assets", detail: "Entity impact and affected paths." },
       { href: "/connectors/source-cdk", label: "Source activation", detail: "Source collection scope, access, and trust posture." },
+      { href: "/credential-stores", label: "Credential stores", detail: "Store readiness, defaults, and accepted reference formats." },
       { href: "/developer", label: "Developer Tools", detail: "API status, OpenAPI resources, and diagnostics." },
     ],
   },
