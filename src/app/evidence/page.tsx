@@ -5,16 +5,23 @@ import { useMemo, useState } from "react";
 
 import type { TableColumn } from "@/components/grc/DataTable";
 import { WorklistTable } from "@/components/grc/DataTable";
-import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
+import { AppliedFilterChips, ErrorBlock, LoadingBlock, PageHeader } from "@/components/grc/Primitives";
 import { evidencePacketMetrics, evidencePacketReadinessLabel, evidenceReviewState } from "@/lib/evidence-packets";
 import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
 import { displayDate, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
 import { useQueryParamState } from "@/lib/query-params";
-import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
+import { metricDetailForState, metricValueForState, runtimeStateDescription, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
+type EvidenceStat = {
+  detail?: string;
+  intent?: "neutral" | "danger" | "warning" | "success";
+  label: string;
+  state: RuntimeState;
+  value: number | string;
+};
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
@@ -162,6 +169,26 @@ export default function EvidencePage() {
     ["Rule", selectedEvidence.rule_id || "—"],
     ["Created", displayDate(selectedEvidence.created_at)],
   ] : [];
+  const evidenceStats: EvidenceStat[] = [
+    { label: "Evidence items", value: evidence.length, detail: "in scope", state: metricState },
+    { label: "Events", value: events, detail: "linked events", state: metricState },
+    { label: "Claims", value: claims, detail: "claim references", state: metricState },
+    { label: "Graph roots", value: graphRoots, detail: "impact anchors", state: metricState },
+  ];
+  const workflowStats: EvidenceStat[] = [
+    { label: "Program", value: evidencePacketReadinessLabel(packagedData?.program.status), detail: `${packagedData?.program.readiness_score ?? 0}% readiness`, state: packagedMetricState },
+    { label: "Requests", value: packagedMetrics.requests, detail: `${packagedMetrics.missingRequests} missing, ${packagedMetrics.staleRequests} stale`, state: packagedMetricState },
+    { label: "Packets", value: packagedMetrics.packets, detail: `${packagedMetrics.readyPackets} ready`, state: packagedMetricState },
+    { label: "Reviews", value: packagedMetrics.openReviews, detail: "open review records", intent: packagedMetrics.openReviews > 0 ? "warning" : "success", state: packagedMetricState },
+    { label: "Sources", value: packagedMetrics.sources, detail: `${packagedMetrics.collectedSources} collected`, state: packagedMetricState },
+    { label: "Evidence items", value: packagedMetrics.evidenceItems, detail: "raw proof records", state: packagedMetricState },
+    { label: "Lineage", value: packagedMetrics.lineage, detail: `${packagedMetrics.linkedLineage} fully linked`, state: packagedMetricState },
+    { label: "Resources", value: packagedMetrics.resources, detail: "graph subjects", state: packagedMetricState },
+    { label: "Claims", value: packagedMetrics.claims, detail: "assertion records", state: packagedMetricState },
+    { label: "Runs", value: packagedMetrics.runs, detail: "evaluation runs", state: packagedMetricState },
+    { label: "Graph paths", value: packagedMetrics.graphPaths, detail: "relationship records", state: packagedMetricState },
+    { label: "Exports", value: packagedData?.export_artifacts?.length ?? 0, detail: "hashed artifacts", state: packagedMetricState },
+  ];
 
   return (
     <div className="space-y-6">
@@ -176,7 +203,7 @@ export default function EvidencePage() {
         }
       />
 
-      <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
+      <div className="border-y border-[color:var(--border)] py-4">
         <div className="grid gap-3 md:grid-cols-5">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Finding<input value={findingID} onChange={(e) => setFindingID(e.target.value)} placeholder="All" className={inputClass} /></label>
@@ -187,14 +214,9 @@ export default function EvidencePage() {
         <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Evidence Items" value={evidence.length} detail="in scope" state={metricState} />
-        <MetricCard label="Events" value={events} detail="linked events" state={metricState} />
-        <MetricCard label="Claims" value={claims} detail="claim references" state={metricState} />
-        <MetricCard label="Graph Roots" value={graphRoots} detail="impact anchors" state={metricState} />
-      </div>
+      <EvidenceMetricStrip blockedLabel="Evidence totals did not load." stats={evidenceStats} pendingLabel="Loading evidence totals..." />
 
-      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+      <section className="space-y-4 border-t border-[color:var(--border)] pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-[15px] font-semibold text-slate-900">Packaged evidence workflow</h2>
@@ -206,24 +228,7 @@ export default function EvidencePage() {
             Refresh package
           </button>
         </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          <MetricCard label="Program" value={evidencePacketReadinessLabel(packagedData?.program.status)} detail={`${packagedData?.program.readiness_score ?? 0}% readiness`} state={packagedMetricState} />
-          <MetricCard label="Requests" value={packagedMetrics.requests} detail={`${packagedMetrics.missingRequests} missing, ${packagedMetrics.staleRequests} stale`} state={packagedMetricState} />
-          <MetricCard label="Packets" value={packagedMetrics.packets} detail={`${packagedMetrics.readyPackets} ready`} state={packagedMetricState} />
-          <MetricCard label="Reviews" value={packagedMetrics.openReviews} detail="open review records" intent={packagedMetrics.openReviews > 0 ? "warning" : "success"} state={packagedMetricState} />
-        </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          <MetricCard label="Sources" value={packagedMetrics.sources} detail={`${packagedMetrics.collectedSources} collected`} state={packagedMetricState} />
-          <MetricCard label="Evidence Items" value={packagedMetrics.evidenceItems} detail="raw proof records" state={packagedMetricState} />
-          <MetricCard label="Lineage" value={packagedMetrics.lineage} detail={`${packagedMetrics.linkedLineage} fully linked`} state={packagedMetricState} />
-          <MetricCard label="Resources" value={packagedMetrics.resources} detail="graph subjects" state={packagedMetricState} />
-        </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          <MetricCard label="Claims" value={packagedMetrics.claims} detail="assertion records" state={packagedMetricState} />
-          <MetricCard label="Runs" value={packagedMetrics.runs} detail="evaluation runs" state={packagedMetricState} />
-          <MetricCard label="Graph Paths" value={packagedMetrics.graphPaths} detail="relationship records" state={packagedMetricState} />
-          <MetricCard label="Exports" value={packagedData?.export_artifacts?.length ?? 0} detail="hashed artifacts" state={packagedMetricState} />
-        </div>
+        <EvidenceWorkflowStats blockedLabel="Package records did not load." stats={workflowStats} pendingLabel="Loading package records..." />
         {packagedError && <p className="text-[13px] text-slate-500">{packagedData ? "Showing the last loaded packaged evidence records; refresh will update when the endpoint is reachable." : "Packaged evidence records will appear when this endpoint is available."}</p>}
         {packagedData && (
           <div className="grid gap-4 xl:grid-cols-2">
@@ -368,6 +373,85 @@ export default function EvidencePage() {
       )}
     </div>
   );
+}
+
+function EvidenceMetricStrip({ blockedLabel, pendingLabel, stats }: { blockedLabel: string; pendingLabel: string; stats: EvidenceStat[] }) {
+  const blockedState = deferredStatState(stats);
+  if (blockedState) return <EvidenceMetricNotice blockedLabel={blockedLabel} label={pendingLabel} state={blockedState} />;
+
+  return (
+    <dl className="grid gap-y-4 border-y border-[color:var(--border)] py-4 md:grid-cols-4 md:divide-x md:divide-[color:var(--border)]">
+      {stats.map((stat) => (
+        <EvidenceMetricCell key={stat.label} stat={stat} className="md:px-5 first:md:pl-0 last:md:pr-0" />
+      ))}
+    </dl>
+  );
+}
+
+function EvidenceWorkflowStats({ blockedLabel, pendingLabel, stats }: { blockedLabel: string; pendingLabel: string; stats: EvidenceStat[] }) {
+  const blockedState = deferredStatState(stats);
+  if (blockedState) return <EvidenceMetricNotice blockedLabel={blockedLabel} label={pendingLabel} state={blockedState} />;
+
+  return (
+    <dl className="grid gap-x-10 md:grid-cols-2 xl:grid-cols-3">
+      {stats.map((stat) => (
+        <EvidenceMetricCell key={stat.label} stat={stat} className="border-t border-[color:var(--border)] py-3" compact />
+      ))}
+    </dl>
+  );
+}
+
+function EvidenceMetricNotice({ blockedLabel, label, state }: { blockedLabel: string; label: string; state: RuntimeState }) {
+  const loading = state === "loading";
+  const message = loading ? label : state === "error" ? blockedLabel : runtimeStateDescription(state);
+  return (
+    <div className="flex items-center gap-2.5 border-y border-[color:var(--border)] py-4 text-[13px] text-[var(--text-muted)]">
+      {loading && (
+        <svg className="h-4 w-4 animate-spin text-[var(--primary)]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      )}
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function EvidenceMetricCell({
+  className = "",
+  compact = false,
+  stat,
+}: {
+  className?: string;
+  compact?: boolean;
+  stat: EvidenceStat;
+}) {
+  const displayedValue = metricValueForState({ state: stat.state, value: stat.value });
+  const displayedDetail = metricDetailForState({ detail: stat.detail, state: stat.state });
+  const intent = stat.state === "ready" ? stat.intent ?? "neutral" : stat.state === "error" ? "danger" : "neutral";
+  const intentClass = {
+    danger: "text-red-600 dark:text-red-300",
+    neutral: "text-[var(--text-primary)]",
+    success: "text-emerald-600 dark:text-emerald-300",
+    warning: "text-amber-600 dark:text-amber-300",
+  }[intent];
+
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <dt className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">{stat.label}</dt>
+      <dd className={`${compact ? "mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1" : "mt-2"}`}>
+        <span className={`break-words font-semibold ${compact ? "text-[20px]" : "text-2xl"} ${intentClass}`}>{displayedValue}</span>
+        {displayedDetail && <span className={`${compact ? "text-[12px]" : "mt-1.5 block text-[13px]"} text-[var(--text-muted)]`}>{displayedDetail}</span>}
+      </dd>
+    </div>
+  );
+}
+
+function deferredStatState(stats: EvidenceStat[]) {
+  const deferredStates = new Set<RuntimeState>(["error", "loading", "permission-denied", "unavailable"]);
+  const firstState = stats[0]?.state;
+  if (firstState && deferredStates.has(firstState) && stats.every((stat) => stat.state === firstState)) return firstState;
+  return null;
 }
 
 function StatusPill({ status }: { status?: string }) {
