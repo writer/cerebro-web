@@ -373,6 +373,7 @@ export default function PoliciesPage() {
     const ownerFilter = normalized(debouncedOwner);
     const textFilter = normalized(debouncedQuery);
     return governanceGaps.filter((gap) => {
+      // Governance gaps use gap-level owner/search filters; lifecycle state filters target policy records.
       const ownerText = normalized(gap.owner);
       if (ownerFilter && !ownerText.includes(ownerFilter)) return false;
       if (textFilter && !governanceGapSearchText(gap).includes(textFilter)) return false;
