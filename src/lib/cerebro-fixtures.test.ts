@@ -95,7 +95,7 @@ describe("cerebro fixture proxy responses", () => {
       expect.objectContaining({ id: "tpl-access-control" }),
     ]));
     expect(payload.governance_gaps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ subject: "document", subject_id: "secure-development-draft", reason: "Missing owner" }),
+      expect.objectContaining({ subject: "document", subject_id: "retention-standard", reason: "Missing owner" }),
       expect.objectContaining({ subject: "risk", subject_id: "risk-incident-escalation", reason: "No evidence" }),
     ]));
     expect(payload.work_queue).toEqual(expect.arrayContaining([
