@@ -1,5 +1,11 @@
 import { grcProductAreas, productAreaStatus, type GRCProductArea } from "@/lib/grc-product-areas";
-import type { GRCVendor, GRCVendorCreateRequest, GRCVendorDiscovery } from "@/lib/grc";
+import type {
+  GRCVendor,
+  GRCVendorActionRequest,
+  GRCVendorCreateRequest,
+  GRCVendorDiscovery,
+  GRCVendorDiscoverySyncRequest,
+} from "@/lib/grc";
 
 type FixtureResponse = {
   body: string;
@@ -443,7 +449,7 @@ const assets = [
   },
 ];
 
-const vendors: GRCVendor[] = [
+const baseVendors: GRCVendor[] = [
   {
     urn: coreSsoVendorURN,
     vendor_id: "core-sso",
@@ -697,6 +703,38 @@ const baseVendorDiscoveries: GRCVendorDiscovery[] = [
     attributes: { source_system: "github", discovery_kind: "app_installation", repositories: "3" },
   },
   {
+    urn: `urn:cerebro:${tenantID}:vendor-discovery:okta-core-sso`,
+    discovery_id: "okta-core-sso",
+    name: "Core SSO",
+    normalized_name: "core sso",
+    source_id: "okta",
+    source_ids: ["okta"],
+    runtime_id: "demo-okta-runtime",
+    provider: sourceProvider("okta"),
+    source_status: "discovered",
+    decision_state: "discovered",
+    category: "identity",
+    website_url: "https://vendors.example.com/core-sso",
+    confidence_score: 96,
+    discovery_reason: "Okta application metadata matches an existing vendor record.",
+    first_observed_at: "2026-01-14T12:00:00.000Z",
+    last_observed_at: "2026-01-15T11:56:00.000Z",
+    signals: [
+      {
+        id: "okta-core-sso-app",
+        label: "Okta application assignment",
+        source_id: "okta",
+        runtime_id: "demo-okta-runtime",
+        entity_type: "okta.application",
+        entity_urn: `urn:cerebro:${tenantID}:okta_application:core-sso`,
+        confidence_score: 96,
+        observed_at: "2026-01-15T11:56:00.000Z",
+        reason: "Application name and website match the vendor register.",
+      },
+    ],
+    attributes: { source_system: "okta", discovery_kind: "application_access", duplicate_hint: coreSsoVendorURN },
+  },
+  {
     urn: `urn:cerebro:${tenantID}:vendor-discovery:aws-data-warehouse`,
     discovery_id: "aws-data-warehouse",
     name: "Data Warehouse",
@@ -755,15 +793,19 @@ const cloneVendorDiscovery = (discovery: GRCVendorDiscovery): GRCVendorDiscovery
   attributes: discovery.attributes ? { ...discovery.attributes } : undefined,
 });
 
+const cloneVendor = (vendor: GRCVendor): GRCVendor => structuredClone(vendor);
+
 const fixtureCreatedVendors: GRCVendor[] = [];
+let currentVendors: GRCVendor[] = baseVendors.map(cloneVendor);
 let vendorDiscoveries: GRCVendorDiscovery[] = baseVendorDiscoveries.map(cloneVendorDiscovery);
 
 export const resetCerebroFixtureStateForTests = () => {
   fixtureCreatedVendors.length = 0;
+  currentVendors = baseVendors.map(cloneVendor);
   vendorDiscoveries = baseVendorDiscoveries.map(cloneVendorDiscovery);
 };
 
-const allFixtureVendors = () => [...fixtureCreatedVendors, ...vendors];
+const allFixtureVendors = () => [...fixtureCreatedVendors, ...currentVendors];
 
 const assetReports = [
   {
@@ -1116,12 +1158,18 @@ const vendorDiscoverySourceSummaries = (items: GRCVendorDiscovery[]) => {
     provider?: string;
     runtime_id?: string;
     status?: string;
+    freshness?: string;
     total: number;
     discovered: number;
     approved: number;
     rejected: number;
     ignored: number;
     linked: number;
+    failed: number;
+    stale: number;
+    cursor_pending: number;
+    sync_lag_seconds?: number;
+    last_error?: string;
     last_synced_at?: string;
   }>();
   items.forEach((discovery) => {
@@ -1132,12 +1180,18 @@ const vendorDiscoverySourceSummaries = (items: GRCVendorDiscovery[]) => {
         provider: sourceProvider(sourceID),
         runtime_id: connector?.runtime_id,
         status: connector?.status ?? discovery.source_status,
+        freshness: connector?.freshness,
         total: 0,
         discovered: 0,
         approved: 0,
         rejected: 0,
         ignored: 0,
         linked: 0,
+        failed: connector?.status === "error" ? 1 : 0,
+        stale: connector?.freshness === "stale" || connector?.status === "needs_refresh" ? 1 : 0,
+        cursor_pending: connector?.status === "needs_refresh" ? 1 : 0,
+        sync_lag_seconds: connector?.sync_lag_seconds,
+        last_error: connector?.status === "error" ? "Source sync failed." : undefined,
         last_synced_at: connector?.last_synced_at,
       };
       current.total += 1;
@@ -2202,6 +2256,65 @@ const createVendorFixture = (parsed: Record<string, unknown>) => {
   return jsonFixture({ vendor, generated_at: generatedAt }, 201);
 };
 
+const vendorActionFixture = (rawURN: string, parsed: Record<string, unknown>) => {
+  const vendorURN = safeDecode(rawURN);
+  const vendor = allFixtureVendors().find((item) => item.urn === vendorURN);
+  if (!vendor) {
+    return jsonFixture({ error: `No fixture vendor found for ${vendorURN}`, generated_at: generatedAt }, 404);
+  }
+
+  const request = parsed as GRCVendorActionRequest;
+  const action = stringField(request.action);
+  const reason = stringField(request.reason);
+  if (action === "assign_owner") {
+    const owner = stringField(request.owner);
+    if (!owner) {
+      return jsonFixture({ error: "Owner is required.", generated_at: generatedAt }, 400);
+    }
+    vendor.owner = owner;
+    vendor.owner_state = "assigned";
+    vendor.queue_reasons = (vendor.queue_reasons ?? []).filter((item) => item !== "owner_missing");
+    vendor.next_actions = (vendor.next_actions ?? []).filter((item) => item.action_type !== "assign_owner");
+  } else if (action === "change_lifecycle") {
+    const lifecycleState = stringField(request.lifecycle_state);
+    if (!lifecycleState) {
+      return jsonFixture({ error: "Lifecycle state is required.", generated_at: generatedAt }, 400);
+    }
+    vendor.lifecycle_state = lifecycleState;
+    vendor.lifecycle_reason = reason || "Lifecycle changed from vendor review.";
+  } else if (action === "start_review") {
+    vendor.review_state = stringField(request.review_state) || "in_progress";
+    vendor.assessment_state = "in_progress";
+    vendor.assessment_progress = Math.max(vendor.assessment_progress ?? 0, 10);
+    vendor.open_assessments = Math.max(vendor.open_assessments ?? 0, 1);
+    vendor.next_assessment_at = vendor.next_assessment_at ?? "2026-02-15T12:00:00.000Z";
+  } else {
+    return jsonFixture({ error: "Unsupported vendor action.", generated_at: generatedAt }, 400);
+  }
+
+  vendor.last_material_change_at = generatedAt;
+  return jsonFixture({ action, vendor, generated_at: generatedAt });
+};
+
+const vendorDiscoverySyncFixture = (parsed: Record<string, unknown>) => {
+  const request = parsed as GRCVendorDiscoverySyncRequest;
+  const sourceID = stringField(request.source_id);
+  vendorDiscoveries.forEach((discovery) => {
+    if (!sourceID || vendorDiscoverySourceIDs(discovery).includes(sourceID)) {
+      discovery.last_observed_at = generatedAt;
+    }
+  });
+  const scopedDiscoveries = sourceID
+    ? vendorDiscoveries.filter((discovery) => vendorDiscoverySourceIDs(discovery).includes(sourceID))
+    : vendorDiscoveries;
+  return jsonFixture({
+    status: "completed",
+    source_id: sourceID || undefined,
+    source_summaries: vendorDiscoverySourceSummaries(scopedDiscoveries),
+    generated_at: generatedAt,
+  });
+};
+
 const writeFixture = (path: string, body?: string) => {
   let parsed: Record<string, unknown> = {};
   try {
@@ -2212,6 +2325,15 @@ const writeFixture = (path: string, body?: string) => {
 
   if (path === "grc/vendors") {
     return createVendorFixture(parsed);
+  }
+
+  const vendorActionMatch = /^grc\/vendors\/(.+)\/actions$/.exec(path);
+  if (vendorActionMatch) {
+    return vendorActionFixture(vendorActionMatch[1], parsed);
+  }
+
+  if (path === "grc/vendor-discoveries/sync") {
+    return vendorDiscoverySyncFixture(parsed);
   }
 
   if (path === "grc/inventory/resource-scope") {

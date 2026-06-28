@@ -1291,12 +1291,18 @@ export type GRCVendorDiscoverySourceSummary = {
   provider?: string;
   runtime_id?: string;
   status?: string;
+  freshness?: string;
   total: number;
   discovered: number;
   approved?: number;
   rejected?: number;
   ignored?: number;
   linked?: number;
+  failed?: number;
+  stale?: number;
+  cursor_pending?: number;
+  sync_lag_seconds?: number;
+  last_error?: string;
   last_synced_at?: string;
 };
 
@@ -1385,6 +1391,21 @@ export type GRCVendorCreateResponse = {
   generated_at: string;
 };
 
+export type GRCVendorActionRequest = {
+  tenant_id?: string;
+  action: "assign_owner" | "change_lifecycle" | "start_review" | string;
+  owner?: string;
+  lifecycle_state?: string;
+  review_state?: string;
+  reason?: string;
+};
+
+export type GRCVendorActionResponse = {
+  action: string;
+  vendor: GRCVendor;
+  generated_at: string;
+};
+
 export type GRCVendorDetailResponse = {
   vendor: GRCVendor;
   relationships?: GRCVendorRelationships;
@@ -1401,6 +1422,18 @@ export type GRCVendorDiscoveriesResponse = {
   discoveries: GRCVendorDiscovery[];
   decisions?: GRCVendorDiscoveryDecision[];
   decision_events?: GRCVendorDiscoveryDecisionEvent[];
+  generated_at: string;
+};
+
+export type GRCVendorDiscoverySyncRequest = {
+  tenant_id?: string;
+  source_id?: string;
+};
+
+export type GRCVendorDiscoverySyncResponse = {
+  status: string;
+  source_id?: string;
+  source_summaries?: GRCVendorDiscoverySourceSummary[];
   generated_at: string;
 };
 
