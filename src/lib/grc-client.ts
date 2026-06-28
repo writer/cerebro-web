@@ -233,6 +233,35 @@ export function useGRCMutation<T = unknown>() {
   return { mutate, saving, error, setError };
 }
 
+export function useGRCFormMutation<T = unknown>() {
+  const { apiKey } = useApiKey();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutate = useCallback(async (path: string, body: FormData, method = "POST") => {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetchCerebro<T>(path, apiKey, {
+        method,
+        body,
+      });
+      if (!response.ok) {
+        throw new Error(grcResponseErrorMessage(path, response.status, response.data));
+      }
+      return response.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : grcResponseErrorMessage(path, 0, null);
+      setError(message);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }, [apiKey]);
+
+  return { mutate, saving, error, setError };
+}
+
 export function useGRCQuery<T>(path: string | null) {
   const { apiKey } = useApiKey();
   const [data, setData] = useState<T | null>(null);

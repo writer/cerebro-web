@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowRight, Bell, CheckCircle2, ClipboardList, Download, FileCheck2, FileText, GitCompare, History, ListChecks, RefreshCw, Search, Send, ShieldCheck, Users, X, XCircle } from "lucide-react";
+import { ArrowRight, Bell, CheckCircle2, ClipboardList, Download, FileCheck2, FileText, GitCompare, History, ListChecks, RefreshCw, Search, Send, ShieldCheck, Upload, Users, X, XCircle } from "lucide-react";
 import Link from "next/link";
+import type { FormEvent } from "react";
 import { useMemo, useRef, useState } from "react";
 
 import type { TableColumn } from "@/components/grc/DataTable";
@@ -32,9 +33,10 @@ import type {
   GRCPolicyTemplate,
   GRCPolicyVersion,
   GRCPolicyVersionDiff,
+  GRCUploadResponse,
 } from "@/lib/grc";
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
-import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCFormMutation, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -307,14 +309,23 @@ export default function PoliciesPage() {
   const [actionDate, setActionDate] = useState("");
   const [actionIdempotencyKey, setActionIdempotencyKey] = useState("");
   const [lastActionStatus, setLastActionStatus] = useState<string | null>(null);
+  const [policyUploadFile, setPolicyUploadFile] = useState<File | null>(null);
+  const [policyUploadTitle, setPolicyUploadTitle] = useState("");
+  const [policyUploadID, setPolicyUploadID] = useState("");
+  const [policyUploadOwner, setPolicyUploadOwner] = useState("");
+  const [policyUploadReviewDue, setPolicyUploadReviewDue] = useState("");
+  const [lastPolicyUpload, setLastPolicyUpload] = useState<GRCUploadResponse | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const actionIdempotencyCounterRef = useRef(0);
+  const policyUploadInputRef = useRef<HTMLInputElement>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedOwner = useDebouncedValue(owner.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
   const { mutate: recordAction, saving: actionSaving, error: actionError, setError: setActionError } =
     useGRCMutation<GRCPolicyLifecycleActionResponse>();
+  const { mutate: uploadPolicyDocument, saving: policyUploadSaving, error: policyUploadError, setError: setPolicyUploadError } =
+    useGRCFormMutation<GRCUploadResponse>();
   const { data, error, loading, reload } = useGRCQuery<GRCPolicyLifecycleResponse>(
     grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, limit: 300 }),
   );
@@ -433,6 +444,44 @@ export default function PoliciesPage() {
       setLastActionStatus(`${humanize(response.action)} ${humanize(response.status)}`);
       setSelectedAction(null);
       setActionIdempotencyKey("");
+      await reload();
+    } catch {
+      return;
+    }
+  };
+
+  const submitPolicyUpload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!policyUploadFile) {
+      setPolicyUploadError("Select a policy document.");
+      return;
+    }
+    const title = policyUploadTitle.trim() || policyUploadFile.name.replace(/\.[^.]+$/, "");
+    const body = new FormData();
+    body.set("file", policyUploadFile);
+    body.set("title", title);
+    body.set("document_title", title);
+    body.set("document_type", "policy");
+    body.set("document_class", "policy");
+    body.set("status", "uploaded");
+    if (tenantID.trim()) body.set("tenant_id", tenantID.trim());
+    if (policyUploadID.trim()) body.set("policy_id", policyUploadID.trim());
+    if (policyUploadOwner.trim()) body.set("owner_id", policyUploadOwner.trim());
+    if (policyUploadReviewDue.trim()) body.set("next_review_due_at", policyUploadReviewDue.trim());
+    try {
+      const response = await uploadPolicyDocument(
+        grcPath("/grc/policy-lifecycle/uploads", { tenant_id: tenantID.trim() }),
+        body,
+      );
+      setLastPolicyUpload(response);
+      setPolicyUploadFile(null);
+      setPolicyUploadTitle("");
+      setPolicyUploadID("");
+      setPolicyUploadOwner("");
+      setPolicyUploadReviewDue("");
+      if (policyUploadInputRef.current) {
+        policyUploadInputRef.current.value = "";
+      }
       await reload();
     } catch {
       return;
@@ -729,6 +778,63 @@ export default function PoliciesPage() {
         </div>
         <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
       </div>
+
+      <Panel
+        title="Upload policy document"
+        action={<Upload className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+      >
+        <form onSubmit={submitPolicyUpload} className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,0.8fr)_minmax(0,0.75fr)_auto]">
+          <label className={labelClass}>
+            File
+            <input
+              ref={policyUploadInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+              onChange={(event) => {
+                setPolicyUploadFile(event.target.files?.[0] ?? null);
+                setLastPolicyUpload(null);
+                setPolicyUploadError(null);
+              }}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Policy name
+            <input value={policyUploadTitle} onChange={(event) => setPolicyUploadTitle(event.target.value)} placeholder="From file name" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Policy ID
+            <input value={policyUploadID} onChange={(event) => setPolicyUploadID(event.target.value)} placeholder="Generated" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Owner
+            <input value={policyUploadOwner} onChange={(event) => setPolicyUploadOwner(event.target.value)} placeholder="Unassigned" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Review due
+            <input type="date" value={policyUploadReviewDue} onChange={(event) => setPolicyUploadReviewDue(event.target.value)} className={inputClass} />
+          </label>
+          <button
+            type="submit"
+            disabled={policyUploadSaving || !policyUploadFile}
+            className="inline-flex items-center justify-center gap-1.5 self-end rounded-md border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+            {policyUploadSaving ? "Uploading" : "Upload policy"}
+          </button>
+        </form>
+        {policyUploadError && (
+          <div className="mt-3 text-[13px] font-medium text-red-700">
+            {policyUploadError}
+          </div>
+        )}
+        {lastPolicyUpload && (
+          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-800">
+            Uploaded {lastPolicyUpload.file_name}. {countLabel(lastPolicyUpload.events.length, "event")} recorded.{" "}
+            {lastPolicyUpload.chunk_count ? `${countLabel(lastPolicyUpload.chunk_count, "chunk")} parsed.` : humanize(lastPolicyUpload.parse_status || "parsed")}
+          </div>
+        )}
+      </Panel>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
         <MetricCard label="Policies" value={summary?.policies ?? 0} detail={`${summary?.templates ?? 0} templates`} state={metricState} />
