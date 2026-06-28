@@ -1,4 +1,5 @@
 import { grcProductAreas, productAreaStatus, type GRCProductArea } from "@/lib/grc-product-areas";
+import type { GRCVendor, GRCVendorCreateRequest, GRCVendorDiscovery } from "@/lib/grc";
 
 type FixtureResponse = {
   body: string;
@@ -82,6 +83,21 @@ const contains = (value: string | undefined, query: string) =>
 
 const sourceProvider = (sourceID?: string) =>
   sourceID ? vendorDiscoverySourceLabels[sourceID] ?? sourceID : undefined;
+
+const stringField = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+
+const slugField = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+
+const stringAttributes = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key, entry]) => key.trim() && entry !== undefined && entry !== null)
+      .map(([key, entry]) => [key, String(entry)]),
+  );
+};
 
 const findings = [
   {
@@ -427,7 +443,7 @@ const assets = [
   },
 ];
 
-const vendors = [
+const vendors: GRCVendor[] = [
   {
     urn: coreSsoVendorURN,
     vendor_id: "core-sso",
@@ -604,7 +620,7 @@ const vendors = [
   },
 ];
 
-const vendorDiscoveries = [
+const baseVendorDiscoveries: GRCVendorDiscovery[] = [
   {
     urn: `urn:cerebro:${tenantID}:vendor-discovery:okta-design-suite`,
     discovery_id: "okta-design-suite",
@@ -728,6 +744,26 @@ const vendorDiscoveries = [
     attributes: { source_system: "aws", discovery_kind: "marketplace_subscription", linked_reason: "existing_vendor_match" },
   },
 ];
+
+const cloneVendorDiscovery = (discovery: GRCVendorDiscovery): GRCVendorDiscovery => ({
+  ...discovery,
+  source_ids: discovery.source_ids ? [...discovery.source_ids] : undefined,
+  signals: discovery.signals?.map((signal) => ({
+    ...signal,
+    attributes: signal.attributes ? { ...signal.attributes } : undefined,
+  })),
+  attributes: discovery.attributes ? { ...discovery.attributes } : undefined,
+});
+
+const fixtureCreatedVendors: GRCVendor[] = [];
+let vendorDiscoveries: GRCVendorDiscovery[] = baseVendorDiscoveries.map(cloneVendorDiscovery);
+
+export const resetCerebroFixtureStateForTests = () => {
+  fixtureCreatedVendors.length = 0;
+  vendorDiscoveries = baseVendorDiscoveries.map(cloneVendorDiscovery);
+};
+
+const allFixtureVendors = () => [...fixtureCreatedVendors, ...vendors];
 
 const assetReports = [
   {
@@ -979,7 +1015,7 @@ const filterVendors = (params?: URLSearchParams) => {
   const ownerState = params?.get("owner_state")?.trim().toLowerCase();
   const lifecycleState = params?.get("lifecycle_state")?.trim().toLowerCase();
   const queue = params?.get("queue")?.trim().toLowerCase();
-  return limitList(vendors.filter((vendor) => {
+  return limitList(allFixtureVendors().filter((vendor) => {
     if (sourceID && vendor.source_id?.toLowerCase() !== sourceID) return false;
     if (riskLevel && vendor.risk_level.toLowerCase() !== riskLevel && vendor.risk_score_level?.toLowerCase() !== riskLevel) return false;
     if (reviewState && vendor.review_state.toLowerCase() !== reviewState) return false;
@@ -1000,7 +1036,7 @@ const filterVendors = (params?: URLSearchParams) => {
   }), params);
 };
 
-const vendorSummary = (items: typeof vendors) => ({
+const vendorSummary = (items: GRCVendor[]) => ({
   total_vendors: items.length,
   active_vendors: items.filter((vendor) => vendor.status === "active").length,
   high_risk_vendors: items.filter((vendor) => ["critical", "high"].includes(vendor.risk_level)).length,
@@ -1025,14 +1061,14 @@ const vendorSummary = (items: typeof vendors) => ({
   evidence_items: items.reduce((sum, vendor) => sum + (vendor.evidence_items ?? 0), 0),
 });
 
-const vendorDiscoverySourceIDs = (discovery: (typeof vendorDiscoveries)[number]) =>
+const vendorDiscoverySourceIDs = (discovery: GRCVendorDiscovery) =>
   Array.from(new Set([
     discovery.source_id,
     ...(discovery.source_ids ?? []),
     ...(discovery.signals ?? []).map((signal) => signal.source_id),
   ].filter((value): value is string => Boolean(value))));
 
-const vendorDiscoverySearchValues = (discovery: (typeof vendorDiscoveries)[number]) => [
+const vendorDiscoverySearchValues = (discovery: GRCVendorDiscovery) => [
   discovery.name,
   discovery.normalized_name,
   discovery.discovery_id,
@@ -1063,7 +1099,7 @@ const filterVendorDiscoveries = (params?: URLSearchParams) => {
   }), params);
 };
 
-const vendorDiscoverySummary = (items: typeof vendorDiscoveries) => ({
+const vendorDiscoverySummary = (items: GRCVendorDiscovery[]) => ({
   total_discoveries: items.length,
   discovered: items.filter((discovery) => discovery.decision_state === "discovered").length,
   approved: items.filter((discovery) => discovery.decision_state === "approved").length,
@@ -1074,7 +1110,7 @@ const vendorDiscoverySummary = (items: typeof vendorDiscoveries) => ({
   evidence_signals: items.reduce((sum, discovery) => sum + (discovery.signals?.length ?? 0), 0),
 });
 
-const vendorDiscoverySourceSummaries = (items: typeof vendorDiscoveries) => {
+const vendorDiscoverySourceSummaries = (items: GRCVendorDiscovery[]) => {
   const summaries = new Map<string, {
     source_id: string;
     provider?: string;
@@ -2049,12 +2085,133 @@ const inventoryAssetDetailFixture = (params?: URLSearchParams) => {
   };
 };
 
+const uniqueVendorID = (requestedTenantID: string, baseID: string) => {
+  const existingURNs = new Set(allFixtureVendors().map((vendor) => vendor.urn));
+  const fallback = `vendor-${allFixtureVendors().length + 1}`;
+  const root = slugField(baseID) || fallback;
+  let candidate = root;
+  let suffix = 2;
+  while (existingURNs.has(`urn:cerebro:${requestedTenantID}:vendor:${candidate}`)) {
+    candidate = `${root}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+};
+
+const markDiscoveryDecided = (
+  discoveryURN: string,
+  decision: string,
+  reason?: string,
+  linkedVendorURN?: string,
+) => {
+  const discovery = vendorDiscoveries.find((item) => item.urn === discoveryURN);
+  if (!discovery) return;
+  discovery.decision_state = decision;
+  discovery.decision_reason = reason || discovery.decision_reason;
+  discovery.linked_vendor_urn = linkedVendorURN || discovery.linked_vendor_urn;
+  discovery.decision_updated_by = "local-developer";
+  discovery.decision_updated_at = generatedAt;
+};
+
+const createVendorFixture = (parsed: Record<string, unknown>) => {
+  const request = parsed as GRCVendorCreateRequest;
+  const name = stringField(request.name);
+  if (!name) {
+    return jsonFixture({ error: "Vendor name is required.", generated_at: generatedAt }, 400);
+  }
+
+  const requestedTenantID = stringField(request.tenant_id) || tenantID;
+  const sourceID = stringField(request.source_id) || "grc";
+  const vendorID = uniqueVendorID(requestedTenantID, stringField(request.vendor_id) || name);
+  const owner = stringField(request.owner);
+  const securityOwner = stringField(request.security_owner_user_id);
+  const businessOwner = stringField(request.business_owner_user_id);
+  const hasOwner = Boolean(owner || securityOwner || businessOwner);
+  const riskLevel = stringField(request.risk_level) || "unknown";
+  const lifecycleState = stringField(request.lifecycle_state) || "in_review";
+  const reviewState = stringField(request.review_state) || "not_scheduled";
+  const discoveryURN = stringField(request.discovery_urn);
+  const attributes = {
+    source_system: discoveryURN ? sourceID : "manual",
+    ...stringAttributes(request.attributes),
+    ...(discoveryURN ? { discovery_urn: discoveryURN } : {}),
+  };
+  const vendor: GRCVendor = {
+    urn: `urn:cerebro:${requestedTenantID}:vendor:${vendorID}`,
+    vendor_id: vendorID,
+    name,
+    source_id: sourceID,
+    runtime_id: stringField(request.runtime_id) || `demo-${sourceID}-runtime`,
+    provider: stringField(request.provider) || sourceProvider(sourceID) || "GRC",
+    status: stringField(request.status) || "active",
+    category: stringField(request.category) || "uncategorized",
+    website_url: stringField(request.website_url) || undefined,
+    services_provided: stringField(request.services_provided) || undefined,
+    source_status: "active",
+    lifecycle_state: lifecycleState,
+    lifecycle_reason: "Created from vendor review.",
+    owner: owner || undefined,
+    security_owner_user_id: securityOwner || undefined,
+    business_owner_user_id: businessOwner || undefined,
+    owner_state: hasOwner ? "assigned" : "missing",
+    review_state: reviewState,
+    risk_level: riskLevel,
+    risk_score_level: riskLevel,
+    risk_score_source: "manual",
+    assessment_state: reviewState === "not_scheduled" ? "not_started" : reviewState,
+    assessment_progress: 0,
+    open_assessments: 0,
+    completed_assessments: 0,
+    assessment_types: [],
+    questionnaire_state: "not_started",
+    questionnaire_progress: 0,
+    evidence_freshness_state: "not_collected",
+    monitoring_state: "quiet",
+    monitoring_signals: [],
+    renewal_state: "not_tracked",
+    exposure_level: riskLevel === "unknown" ? "unknown" : riskLevel,
+    exposure_reasons: [],
+    packet_state: "not_started",
+    packet_ready_items: [],
+    packet_missing_items: [],
+    remediation_state: "not_due",
+    open_remediation_items: 0,
+    overdue_remediation_items: 0,
+    offboarding_state: "not_due",
+    data_deletion_state: "not_due",
+    contract_count: 0,
+    security_review_count: 0,
+    questionnaire_count: 0,
+    assurance_document_count: 0,
+    open_findings: 0,
+    critical_findings: 0,
+    high_findings: 0,
+    evidence_items: 0,
+    queue_reasons: hasOwner ? [] : ["owner_missing"],
+    next_actions: hasOwner ? [] : [
+      { id: `${vendorID}-owner`, label: "Assign owner", reason: "Vendor has no owner.", action_type: "assign_owner", priority: 50 },
+    ],
+    close_actions: [],
+    attributes,
+  };
+
+  fixtureCreatedVendors.unshift(vendor);
+  if (discoveryURN) {
+    markDiscoveryDecided(discoveryURN, "approved", "Vendor created from discovery.", vendor.urn);
+  }
+  return jsonFixture({ vendor, generated_at: generatedAt }, 201);
+};
+
 const writeFixture = (path: string, body?: string) => {
   let parsed: Record<string, unknown> = {};
   try {
     parsed = body ? JSON.parse(body) as Record<string, unknown> : {};
   } catch {
     parsed = {};
+  }
+
+  if (path === "grc/vendors") {
+    return createVendorFixture(parsed);
   }
 
   if (path === "grc/inventory/resource-scope") {
@@ -2138,15 +2295,20 @@ const writeFixture = (path: string, body?: string) => {
 
   const vendorDiscoveryDecisionMatch = /^grc\/vendor-discoveries\/(.+)\/decision$/.exec(path);
   if (vendorDiscoveryDecisionMatch) {
+    const discoveryURN = safeDecode(vendorDiscoveryDecisionMatch[1]);
+    const decision = stringField(parsed.decision) || "approved";
+    const reason = stringField(parsed.reason);
+    const linkedVendorURN = stringField(parsed.linked_vendor_urn);
+    markDiscoveryDecided(discoveryURN, decision, reason, linkedVendorURN);
     return jsonFixture({
       decision: {
         id: "fixture-vendor-discovery-decision",
         tenant_id: parsed.tenant_id ?? tenantID,
-        discovery_urn: safeDecode(vendorDiscoveryDecisionMatch[1]),
+        discovery_urn: discoveryURN,
         source_id: parsed.source_id ?? "grc",
-        decision: parsed.decision ?? "approved",
-        reason: parsed.reason,
-        linked_vendor_urn: parsed.linked_vendor_urn,
+        decision,
+        reason: reason || undefined,
+        linked_vendor_urn: linkedVendorURN || undefined,
         updated_by: "local-developer",
         version: 1,
         created_at: generatedAt,
@@ -2299,7 +2461,7 @@ export const cerebroFixtureResponseFor = ({
   const vendorDetailMatch = /^grc\/vendors\/(.+)$/.exec(normalizedPath);
   if (vendorDetailMatch) {
     const vendorURN = safeDecode(vendorDetailMatch[1]);
-    const vendor = vendors.find((item) => item.urn === vendorURN);
+    const vendor = allFixtureVendors().find((item) => item.urn === vendorURN);
     if (!vendor) {
       return jsonFixture({ error: `No fixture vendor found for ${vendorURN}`, generated_at: generatedAt }, 404);
     }

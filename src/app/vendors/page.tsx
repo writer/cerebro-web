@@ -10,6 +10,8 @@ import {
   displayDate,
   GRCUploadResponse,
   GRCVendor,
+  GRCVendorCreateRequest,
+  GRCVendorCreateResponse,
   GRCVendorDiscoveriesResponse,
   GRCVendorDiscovery,
   GRCVendorDiscoverySignal,
@@ -75,6 +77,49 @@ type DiscoveryDecisionDraft = {
   reason: string;
   linkedVendorURN: string;
 };
+
+type VendorCreateDraft = {
+  name: string;
+  owner: string;
+  category: string;
+  websiteURL: string;
+  servicesProvided: string;
+  riskLevel: string;
+  lifecycleState: string;
+  reviewState: string;
+};
+
+const defaultVendorCreateDraft = (): VendorCreateDraft => ({
+  name: "",
+  owner: "",
+  category: "",
+  websiteURL: "",
+  servicesProvided: "",
+  riskLevel: "unknown",
+  lifecycleState: "in_review",
+  reviewState: "not_scheduled",
+});
+
+const createRiskOptions = riskFilters.filter((item) => item.value);
+const createLifecycleOptions = lifecycleFilters.filter((item) =>
+  ["active", "approved", "in_review", "conditionally_approved", "restricted"].includes(item.value));
+const createReviewOptions = reviewFilters.filter((item) => item.value);
+
+const compactAttributes = (attributes: Record<string, string | undefined>) =>
+  Object.fromEntries(Object.entries(attributes).filter(([, value]) => Boolean(value))) as Record<string, string>;
+
+const vendorCreateRequest = (draft: VendorCreateDraft, tenantID: string): GRCVendorCreateRequest => ({
+  tenant_id: tenantID.trim() || undefined,
+  name: draft.name.trim(),
+  source_id: "grc",
+  owner: draft.owner.trim() || undefined,
+  category: draft.category.trim() || undefined,
+  website_url: draft.websiteURL.trim() || undefined,
+  services_provided: draft.servicesProvided.trim() || undefined,
+  risk_level: draft.riskLevel,
+  lifecycle_state: draft.lifecycleState,
+  review_state: draft.reviewState,
+});
 
 function VendorRiskBadge({ level }: { level?: string }) {
   const normalized = level?.trim().toLowerCase() || "unknown";
@@ -281,6 +326,123 @@ function DiscoverySourceSummary({
   );
 }
 
+function CreateVendorModal({
+  draft,
+  error,
+  onClose,
+  onSubmit,
+  onUpdateDraft,
+  open,
+  saving,
+}: {
+  draft: VendorCreateDraft;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: (draft: VendorCreateDraft) => Promise<void> | void;
+  onUpdateDraft: (patch: Partial<VendorCreateDraft>) => void;
+  open: boolean;
+  saving: boolean;
+}) {
+  if (!open) return null;
+  const nameMissing = draft.name.trim() === "";
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (nameMissing || saving) return;
+    void Promise.resolve(onSubmit(draft)).catch(() => undefined);
+  };
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/45 px-4 py-10 backdrop-blur-sm">
+      <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="add-vendor-title" className="surface-raised mx-auto w-full max-w-2xl overflow-hidden rounded-lg border border-[color:var(--border)] shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-4">
+          <div>
+            <h2 id="add-vendor-title" className="text-[15px] font-semibold text-[var(--text-primary)]">Add vendor</h2>
+            <p className="mt-1 text-[12px] text-[var(--text-muted)]">Create a vendor record for review and owner tracking.</p>
+          </div>
+          <button type="button" onClick={onClose} className="secondary-button inline-flex h-8 w-8 items-center justify-center p-0" aria-label="Close add vendor">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          {error && <ErrorBlock error={error} recoveryDetail="Vendor was not saved." />}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={`${labelClass} sm:col-span-2`}>
+              Vendor name
+              <input
+                value={draft.name}
+                onChange={(event) => onUpdateDraft({ name: event.target.value })}
+                className={inputClass}
+                required
+                autoFocus
+              />
+            </label>
+            <label className={labelClass}>
+              Owner
+              <input
+                value={draft.owner}
+                onChange={(event) => onUpdateDraft({ owner: event.target.value })}
+                placeholder="Security"
+                className={inputClass}
+              />
+            </label>
+            <label className={labelClass}>
+              Category
+              <input
+                value={draft.category}
+                onChange={(event) => onUpdateDraft({ category: event.target.value })}
+                placeholder="Identity"
+                className={inputClass}
+              />
+            </label>
+            <label className={`${labelClass} sm:col-span-2`}>
+              Website
+              <input
+                value={draft.websiteURL}
+                onChange={(event) => onUpdateDraft({ websiteURL: event.target.value })}
+                placeholder="https://www.example.com/vendor"
+                className={inputClass}
+              />
+            </label>
+            <label className={`${labelClass} sm:col-span-2`}>
+              Services provided
+              <textarea
+                value={draft.servicesProvided}
+                onChange={(event) => onUpdateDraft({ servicesProvided: event.target.value })}
+                rows={3}
+                className={inputClass}
+              />
+            </label>
+            <label className={labelClass}>
+              Risk
+              <select value={draft.riskLevel} onChange={(event) => onUpdateDraft({ riskLevel: event.target.value })} className={inputClass}>
+                {createRiskOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Lifecycle
+              <select value={draft.lifecycleState} onChange={(event) => onUpdateDraft({ lifecycleState: event.target.value })} className={inputClass}>
+                {createLifecycleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Review
+              <select value={draft.reviewState} onChange={(event) => onUpdateDraft({ reviewState: event.target.value })} className={inputClass}>
+                {createReviewOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[color:var(--border)] px-5 py-4">
+          <button type="button" onClick={onClose} className="secondary-button px-3 py-1.5 text-[13px]">Cancel</button>
+          <button type="submit" disabled={nameMissing || saving} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Add vendor
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 const selectLabel = (options: Array<{ value: string; label: string }>, value: string) =>
   options.find((item) => item.value === value)?.label ?? value;
 
@@ -289,16 +451,27 @@ const reviewStates = new Set(["discovered", "pending", "needs_review"]);
 const discoveryNeedsReview = (discovery: GRCVendorDiscovery) =>
   reviewStates.has((discovery.decision_state || "discovered").toLowerCase());
 
+const discoveryHandledLabel = (discovery: GRCVendorDiscovery) => {
+  const state = (discovery.decision_state || "").toLowerCase();
+  if (state === "approved") return "Vendor saved";
+  if (state === "linked") return "Vendor linked";
+  if (state === "ignored") return "Discovery dismissed";
+  if (state === "rejected") return "Discovery rejected";
+  return "Decision recorded";
+};
+
 function HealthStat({
   detail,
   intent = "neutral",
   label,
+  pendingDetail = "Waiting for vendor data",
   state,
   value,
 }: {
   detail: string;
   intent?: "danger" | "neutral" | "success" | "warning";
   label: string;
+  pendingDetail?: string;
   state: RuntimeState;
   value: number;
 }) {
@@ -309,9 +482,10 @@ function HealthStat({
     warning: "border-l-amber-500",
   };
   const displayValue = state === "loading" ? "..." : state === "ready" ? value.toLocaleString() : "Unavailable";
-  const displayDetail = state === "ready" ? detail : "Waiting for vendor data";
+  const displayDetail = state === "ready" ? detail : pendingDetail;
+  const accentIntent = state === "ready" ? intent : "neutral";
   return (
-    <div className={`border-l-[3px] ${accents[intent]} px-4 py-3`}>
+    <div className={`border-l-[3px] ${accents[accentIntent]} px-4 py-3`}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
       <div className="mt-2 text-xl font-semibold text-[var(--text-primary)]">{displayValue}</div>
       <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDetail}</div>
@@ -321,15 +495,17 @@ function HealthStat({
 
 function VendorHealthStrip({
   discoveries,
+  discoveryMetricState,
   discoverySummary,
-  metricState,
   summary,
+  vendorMetricState,
   vendors,
 }: {
   discoveries: GRCVendorDiscovery[];
+  discoveryMetricState: RuntimeState;
   discoverySummary?: GRCVendorDiscoveriesResponse["summary"];
-  metricState: RuntimeState;
   summary?: GRCVendorsResponse["summary"];
+  vendorMetricState: RuntimeState;
   vendors: GRCVendor[];
 }) {
   const vendorCount = summary?.total_vendors ?? vendors.length;
@@ -340,28 +516,39 @@ function VendorHealthStrip({
 
   return (
     <section className="surface-panel grid overflow-hidden sm:grid-cols-2 xl:grid-cols-4">
-      <HealthStat label="Vendors" value={vendorCount} detail={`${activeCount.toLocaleString()} active`} state={metricState} intent="success" />
-      <HealthStat label="Needs review" value={needsReview} detail="discovery candidates" state={metricState} intent={needsReview > 0 ? "warning" : "success"} />
-      <HealthStat label="Missing owner" value={missingOwner} detail="vendors without an owner" state={metricState} intent={missingOwner > 0 ? "warning" : "success"} />
-      <HealthStat label="High risk" value={highRisk} detail="critical or high vendors" state={metricState} intent={highRisk > 0 ? "danger" : "success"} />
+      <HealthStat label="Vendors" value={vendorCount} detail={`${activeCount.toLocaleString()} active`} state={vendorMetricState} intent="success" />
+      <HealthStat label="Needs review" value={needsReview} detail="discovery candidates" state={discoveryMetricState} intent={needsReview > 0 ? "warning" : "success"} pendingDetail="Waiting for discovery data" />
+      <HealthStat label="Missing owner" value={missingOwner} detail="vendors without an owner" state={vendorMetricState} intent={missingOwner > 0 ? "warning" : "success"} />
+      <HealthStat label="High risk" value={highRisk} detail="critical or high vendors" state={vendorMetricState} intent={highRisk > 0 ? "danger" : "success"} />
     </section>
   );
 }
 
 function DiscoveryActionButtons({
+  createSaving,
   discovery,
   draft,
+  onCreateVendor,
   onDecision,
   saving,
 }: {
+  createSaving: boolean;
   discovery: GRCVendorDiscovery;
   draft: DiscoveryDecisionDraft;
+  onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
   onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
   saving: boolean;
 }) {
-  const linkDisabled = saving || draft.linkedVendorURN.trim() === "";
+  if (!discoveryNeedsReview(discovery)) {
+    return <div className="text-[12px] font-semibold text-[var(--text-muted)]">{discoveryHandledLabel(discovery)}</div>;
+  }
+  const busy = saving || createSaving;
+  const linkDisabled = busy || draft.linkedVendorURN.trim() === "";
   const commitDecision = (decision: DiscoveryDecision) => {
     void Promise.resolve(onDecision(discovery, decision)).catch(() => undefined);
+  };
+  const createVendor = () => {
+    void Promise.resolve(onCreateVendor(discovery)).catch(() => undefined);
   };
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -376,8 +563,8 @@ function DiscoveryActionButtons({
       </button>
       <button
         type="button"
-        disabled={saving}
-        onClick={() => commitDecision("approved")}
+        disabled={busy}
+        onClick={createVendor}
         className="primary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] disabled:opacity-50"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -385,7 +572,7 @@ function DiscoveryActionButtons({
       </button>
       <button
         type="button"
-        disabled={saving}
+        disabled={busy}
         onClick={() => commitDecision("ignored")}
         className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] disabled:opacity-50"
       >
@@ -491,15 +678,19 @@ function DiscoveryEmptyState({
 }
 
 function DiscoveryCandidateCard({
+  createSaving,
   decisionSaving,
   discovery,
   draft,
+  onCreateVendor,
   onDecision,
   onUpdateDraft,
 }: {
+  createSaving: boolean;
   decisionSaving: boolean;
   discovery: GRCVendorDiscovery;
   draft: DiscoveryDecisionDraft;
+  onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
   onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
   onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
 }) {
@@ -524,26 +715,30 @@ function DiscoveryCandidateCard({
         <div className="mt-2 text-[12px] text-[var(--text-secondary)]"><DiscoverySignals signals={discovery.signals} /></div>
       </div>
       <div className="mt-4 border-t border-[color:var(--border)] pt-3">
-        <DiscoveryActionButtons discovery={discovery} draft={draft} onDecision={onDecision} saving={decisionSaving} />
+        <DiscoveryActionButtons createSaving={createSaving} discovery={discovery} draft={draft} onCreateVendor={onCreateVendor} onDecision={onDecision} saving={decisionSaving} />
       </div>
     </article>
   );
 }
 
 function DiscoveryQueue({
+  createSaving,
   decisionDrafts,
   decisionSaving,
   discoveries,
   latestSync,
+  onCreateVendor,
   onDecision,
   onRefresh,
   onUpdateDraft,
   sourceCount,
 }: {
+  createSaving: boolean;
   decisionDrafts: Record<string, DiscoveryDecisionDraft>;
   decisionSaving: boolean;
   discoveries: GRCVendorDiscovery[];
   latestSync: string;
+  onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
   onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
   onRefresh: () => void;
   onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
@@ -568,9 +763,11 @@ function DiscoveryQueue({
             {discoveries.map((discovery) => (
               <DiscoveryCandidateCard
                 key={discovery.urn}
+                createSaving={createSaving}
                 decisionSaving={decisionSaving}
                 discovery={discovery}
                 draft={decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" }}
+                onCreateVendor={onCreateVendor}
                 onDecision={onDecision}
                 onUpdateDraft={onUpdateDraft}
               />
@@ -604,7 +801,7 @@ function DiscoveryQueue({
                         <div className="mt-2 text-[12px] text-[var(--text-muted)]">Confidence {confidenceLabel(discovery.confidence_score)}</div>
                         {discovery.decision_updated_by && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.decision_updated_by}</div>}
                         <div className="mt-3">
-                          <DiscoveryActionButtons discovery={discovery} draft={draft} onDecision={onDecision} saving={decisionSaving} />
+                          <DiscoveryActionButtons createSaving={createSaving} discovery={discovery} draft={draft} onCreateVendor={onCreateVendor} onDecision={onDecision} saving={decisionSaving} />
                         </div>
                       </td>
                     </tr>
@@ -773,6 +970,9 @@ export default function VendorsPage() {
   const [vendorUploadWebsite, setVendorUploadWebsite] = useState("");
   const [lastVendorUpload, setLastVendorUpload] = useState<GRCUploadResponse | null>(null);
   const vendorUploadInputRef = useRef<HTMLInputElement>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<VendorCreateDraft>(() => defaultVendorCreateDraft());
+  const [createMessage, setCreateMessage] = useState("");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
@@ -806,6 +1006,12 @@ export default function VendorsPage() {
   const { mutate: mutateDiscoveryDecision, saving: decisionSaving, error: decisionError } = useGRCMutation();
   const { mutate: uploadVendorDocument, saving: vendorUploadSaving, error: vendorUploadError, setError: setVendorUploadError } =
     useGRCFormMutation<GRCUploadResponse>();
+  const {
+    mutate: mutateCreateVendor,
+    saving: createSaving,
+    error: createError,
+    setError: setCreateError,
+  } = useGRCMutation<GRCVendorCreateResponse>();
 
   const vendors = useMemo(() => vendorsQuery.data?.vendors ?? [], [vendorsQuery.data?.vendors]);
   const summary = vendorsQuery.data?.summary;
@@ -814,8 +1020,8 @@ export default function VendorsPage() {
   const discoverySources = useMemo(() => discoveriesQuery.data?.source_summaries ?? [], [discoveriesQuery.data?.source_summaries]);
   const error = vendorsQuery.error;
   const discoveryError = discoveriesQuery.error;
-  const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : vendorsQuery.loading && !vendorsQuery.data ? "loading" : "ready";
+  const vendorMetricState: RuntimeState = error ? runtimeStateForError(error) : vendorsQuery.loading && !vendorsQuery.data ? "loading" : "ready";
+  const discoveryMetricState: RuntimeState = discoveryError ? runtimeStateForError(discoveryError) : discoveriesQuery.loading && !discoveriesQuery.data ? "loading" : "ready";
   const assuranceItems = useMemo(() => vendors.reduce((sum, vendor) => sum + vendor.contract_count + vendor.security_review_count + vendor.questionnaire_count + vendor.assurance_document_count, 0), [vendors]);
   const sourceFilterOptions = useMemo(() => {
     const options = new Map<string, string>();
@@ -831,6 +1037,26 @@ export default function VendorsPage() {
     }
     return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) => left.label.localeCompare(right.label));
   }, [discoveries, discoverySources, sourceID, vendors]);
+  const updateCreateDraft = useCallback((patch: Partial<VendorCreateDraft>) => {
+    setCreateDraft((current) => ({ ...current, ...patch }));
+  }, []);
+  const openCreateVendor = useCallback(() => {
+    setCreateDraft(defaultVendorCreateDraft());
+    setCreateMessage("");
+    setCreateError(null);
+    setCreateOpen(true);
+  }, [setCreateError]);
+  const closeCreateVendor = useCallback(() => {
+    setCreateOpen(false);
+    setCreateError(null);
+  }, [setCreateError]);
+  const submitVendorCreate = useCallback(async (draft: VendorCreateDraft) => {
+    const response = await mutateCreateVendor("/grc/vendors", vendorCreateRequest(draft, tenantID));
+    setCreateOpen(false);
+    setCreateDraft(defaultVendorCreateDraft());
+    setCreateMessage(`${response.vendor.name} saved.`);
+    await Promise.all([vendorsQuery.reload(), discoveriesQuery.reload()]);
+  }, [discoveriesQuery, mutateCreateVendor, tenantID, vendorsQuery]);
   const updateDecisionDraft = useCallback((urn: string, patch: Partial<DiscoveryDecisionDraft>) => {
     setDecisionDrafts((current) => ({
       ...current,
@@ -859,6 +1085,41 @@ export default function VendorsPage() {
     await discoveriesQuery.reload();
     await vendorsQuery.reload();
   }, [decisionDrafts, discoveriesQuery, mutateDiscoveryDecision, tenantID, vendorsQuery]);
+  const createVendorFromDiscovery = useCallback(async (discovery: GRCVendorDiscovery) => {
+    const response = await mutateCreateVendor("/grc/vendors", {
+      tenant_id: tenantID.trim() || undefined,
+      name: discovery.name || shortEntity(discovery.urn),
+      source_id: discovery.source_id || "grc",
+      runtime_id: discovery.runtime_id,
+      provider: discovery.provider,
+      category: discovery.category,
+      website_url: discovery.website_url,
+      services_provided: discovery.discovery_reason,
+      lifecycle_state: "in_review",
+      review_state: "not_scheduled",
+      risk_level: "unknown",
+      discovery_urn: discovery.urn,
+      attributes: compactAttributes({
+        discovery_id: discovery.discovery_id,
+        source_status: discovery.source_status,
+      }),
+    } satisfies GRCVendorCreateRequest);
+    await mutateDiscoveryDecision(`/grc/vendor-discoveries/${encodeURIComponent(discovery.urn)}/decision`, {
+      tenant_id: tenantID.trim(),
+      discovery_urn: discovery.urn,
+      source_id: discovery.source_id,
+      decision: "approved",
+      reason: "Vendor created from discovery.",
+      linked_vendor_urn: response.vendor.urn,
+    });
+    setDecisionDrafts((current) => {
+      const next = { ...current };
+      delete next[discovery.urn];
+      return next;
+    });
+    setCreateMessage(`${response.vendor.name} saved.`);
+    await Promise.all([discoveriesQuery.reload(), vendorsQuery.reload()]);
+  }, [discoveriesQuery, mutateCreateVendor, mutateDiscoveryDecision, tenantID, vendorsQuery]);
 
   const submitVendorUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -926,11 +1187,26 @@ export default function VendorsPage() {
         title="Vendors"
         description="Review vendors, owners, lifecycle state, evidence freshness, source discoveries, and open risk."
         action={
-          <button type="button" onClick={() => { void vendorsQuery.reload(); void discoveriesQuery.reload(); }} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => { void vendorsQuery.reload(); void discoveriesQuery.reload(); }} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              Refresh
+            </button>
+            <button type="button" onClick={openCreateVendor} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Add vendor
+            </button>
+          </div>
         }
+      />
+      <CreateVendorModal
+        draft={createDraft}
+        error={createError}
+        onClose={closeCreateVendor}
+        onSubmit={submitVendorCreate}
+        onUpdateDraft={updateCreateDraft}
+        open={createOpen}
+        saving={createSaving}
       />
 
       {error && (
@@ -953,12 +1229,24 @@ export default function VendorsPage() {
           recoveryDetail="Discovery decisions need GRC inventory write access."
         />
       )}
+      {createError && !createOpen && (
+        <ErrorBlock
+          error={createError}
+          recoveryDetail="Vendor was not saved."
+        />
+      )}
+      {createMessage && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] font-semibold text-emerald-700 dark:text-emerald-200">
+          {createMessage}
+        </div>
+      )}
 
       <VendorHealthStrip
         discoveries={discoveries}
+        discoveryMetricState={discoveryMetricState}
         discoverySummary={discoverySummary}
-        metricState={metricState}
         summary={summary}
+        vendorMetricState={vendorMetricState}
         vendors={vendors}
       />
 
@@ -1110,10 +1398,12 @@ export default function VendorsPage() {
         <LoadingBlock label="Loading vendor discoveries..." />
       ) : (
         <DiscoveryQueue
+          createSaving={createSaving}
           decisionDrafts={decisionDrafts}
           decisionSaving={decisionSaving}
           discoveries={discoveries}
           latestSync={latestSourceSync(discoverySources)}
+          onCreateVendor={createVendorFromDiscovery}
           onDecision={setDiscoveryDecision}
           onRefresh={() => { void discoveriesQuery.reload(); }}
           onUpdateDraft={updateDecisionDraft}

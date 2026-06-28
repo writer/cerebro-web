@@ -1359,6 +1359,32 @@ export type GRCVendorsResponse = {
   generated_at: string;
 };
 
+export type GRCVendorCreateRequest = {
+  tenant_id?: string;
+  name: string;
+  vendor_id?: string;
+  source_id?: string;
+  runtime_id?: string;
+  provider?: string;
+  status?: string;
+  category?: string;
+  website_url?: string;
+  services_provided?: string;
+  owner?: string;
+  security_owner_user_id?: string;
+  business_owner_user_id?: string;
+  lifecycle_state?: string;
+  review_state?: string;
+  risk_level?: string;
+  discovery_urn?: string;
+  attributes?: Record<string, string>;
+};
+
+export type GRCVendorCreateResponse = {
+  vendor: GRCVendor;
+  generated_at: string;
+};
+
 export type GRCVendorDetailResponse = {
   vendor: GRCVendor;
   relationships?: GRCVendorRelationships;
