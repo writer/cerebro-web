@@ -26,6 +26,7 @@ describe("navigation entries", () => {
     expect(hrefs).toContain("/ask");
     expect(hrefs).toContain("/controls");
     expect(hrefs).toContain("/connectors");
+    expect(hrefs).toContain("/credential-stores");
   });
 
   it("includes developer tools in utility links", () => {

@@ -194,7 +194,7 @@ function OperationsSummary({
         icon={<Database className="h-3.5 w-3.5" />}
       />
       <SummaryTile
-        label="Secret Stores"
+        label="Credential stores"
         value={secretStoreCount}
         detail="Available for setup"
         icon={<KeyRound className="h-3.5 w-3.5" />}
