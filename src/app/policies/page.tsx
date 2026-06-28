@@ -924,7 +924,7 @@ function PolicyDetail({
                   item={item}
                   generatedAt={generatedAt}
                   onAction={onAction}
-                  saving={savingActionID === `${item.id}:${item.action}`}
+                  saving={savingActionID === reminderPlanActionForItem(item).id}
                 />
               ))}
             </div>
