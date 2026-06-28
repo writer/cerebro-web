@@ -371,16 +371,14 @@ export default function PoliciesPage() {
   );
   const visibleGovernanceGaps = useMemo(() => {
     const ownerFilter = normalized(debouncedOwner);
-    const stateFilter = normalized(state);
     const textFilter = normalized(debouncedQuery);
     return governanceGaps.filter((gap) => {
       const ownerText = normalized(gap.owner || "Unassigned");
       if (ownerFilter && !ownerText.includes(ownerFilter)) return false;
-      if (stateFilter && !normalized(gap.status).includes(stateFilter)) return false;
       if (textFilter && !governanceGapSearchText(gap).includes(textFilter)) return false;
       return true;
     });
-  }, [debouncedOwner, debouncedQuery, governanceGaps, state]);
+  }, [debouncedOwner, debouncedQuery, governanceGaps]);
   const selectedPolicy = selectedPolicyFallback(policies, filteredPolicies, selectedPolicyID);
   const ownerOptions = useMemo(
     () => Array.from(new Set([
