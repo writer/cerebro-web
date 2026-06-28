@@ -126,7 +126,7 @@ function DefinitionList({
               <Badge value={definition.stage || "draft"} />
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-[var(--text-muted)]">
-              <span>{definition.resource_families?.length ?? 0} resource families</span>
+              <span>{definition.resource_families?.length ?? 0} resource types</span>
               <span>{definition.updated_at ? displayDate(definition.updated_at) : "Not saved"}</span>
             </div>
           </button>
@@ -198,12 +198,12 @@ function FamilyEditor({
   };
 
   return (
-    <Panel title="Resource families" action={<button type="button" onClick={addFamily} className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px]"><Plus className="h-3.5 w-3.5" />Add</button>}>
+    <Panel title="Resource types" action={<button type="button" onClick={addFamily} className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px]"><Plus className="h-3.5 w-3.5" />Add</button>}>
       <div className="space-y-3">
         {families.map((family, index) => (
           <div key={`${family.id}-${index}`} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
             <div className="grid gap-3 md:grid-cols-2">
-              <label className={labelClass}>Family ID<input value={family.id} onChange={(event) => updateFamily(index, { id: normalizeConnectorDefinitionID(event.target.value) })} className={inputClass} /></label>
+              <label className={labelClass}>Resource type ID<input value={family.id} onChange={(event) => updateFamily(index, { id: normalizeConnectorDefinitionID(event.target.value) })} className={inputClass} /></label>
               <label className={labelClass}>Label<input value={family.label ?? ""} onChange={(event) => updateFamily(index, { label: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>{depositMode ? "Path (optional for deposit)" : "Path"}<input value={family.path ?? ""} onChange={(event) => updateFamily(index, { path: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>List key<input value={family.list_key ?? ""} onChange={(event) => updateFamily(index, { list_key: event.target.value })} className={inputClass} /></label>
@@ -211,7 +211,7 @@ function FamilyEditor({
               <label className={labelClass}>Name field<input value={family.name_field ?? ""} onChange={(event) => updateFamily(index, { name_field: event.target.value })} className={inputClass} /></label>
               <label className={labelClass}>Event kind<input value={family.event?.kind ?? ""} onChange={(event) => updateFamilyEvent(index, { kind: normalizeConnectorDefinitionID(event.target.value).replace(/-/g, "_") })} placeholder="custom_asset" className={inputClass} /></label>
               <label className={labelClass}>Schema ref<input value={family.event?.schema_ref ?? ""} onChange={(event) => updateFamilyEvent(index, { schema_ref: event.target.value })} placeholder="schemas/custom_asset.json" className={inputClass} /></label>
-              <label className={labelClass}>Projection template<input value={family.projection?.template ?? ""} onChange={(event) => updateFamilyProjection(index, { template: event.target.value })} placeholder="asset" className={inputClass} /></label>
+              <label className={labelClass}>Resource type mapping<input value={family.projection?.template ?? ""} onChange={(event) => updateFamilyProjection(index, { template: event.target.value })} placeholder="asset" className={inputClass} /></label>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 border-t border-[color:var(--border)] pt-3">
               <label className="inline-flex items-center gap-2 text-[12px] font-semibold text-[var(--text-secondary)]">
@@ -229,7 +229,7 @@ function FamilyEditor({
             </div>
           </div>
         ))}
-        {families.length === 0 && <EmptyBlock label="No resource families modeled." />}
+        {families.length === 0 && <EmptyBlock label="No resource types modeled." />}
       </div>
     </Panel>
   );
@@ -454,7 +454,7 @@ function ConnectorBuilderContent() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Stage" value={stageLabel(draft.stage)} detail={stageDetail} state={metricState} />
         <MetricCard label="Validation" value={connectorDefinitionValidationLabel(draft.validation?.status)} detail={`${blockingChecks} blocking gates`} intent={validationStatus === "blocked" ? "danger" : validationStatus === "warning" ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Resources" value={resourceFamilies.length} detail="resource families" state={metricState} />
+        <MetricCard label="Resource Types" value={resourceFamilies.length} detail="custom resource types" state={metricState} />
         <MetricCard label="Secret Stores" value={selectedStores.length} detail={secretStoreDetail} intent={secretStoreIntent} state={metricState} />
         <MetricCard label="Ingest" value={ingestMode === "deposit" ? "Deposit" : "Pull"} detail={ingestMode === "deposit" ? "customer-pushed records" : "scheduled runtime pull"} state={metricState} />
       </div>
@@ -510,7 +510,7 @@ function ConnectorBuilderContent() {
           <Panel title={ingestMode === "deposit" ? "Deposit transport" : "Runtime transport"}>
             {ingestMode === "deposit" && (
               <div className="mb-3 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 text-[12px] leading-5 text-[var(--text-muted)]">
-                Deposit mode uses the same resource schema and graph projection, but records are posted into a connector-scoped inbox instead of pulled from an API. Path fields are optional for deposit-only families.
+                Deposit mode uses the same resource schema and resource type mapping, but records are posted into a connector-scoped inbox instead of pulled from an API. Path fields are optional for deposit-only resource types.
               </div>
             )}
             <div className="grid gap-3 md:grid-cols-2">
@@ -639,7 +639,7 @@ function ConnectorBuilderContent() {
               {[
                 { icon: Bot, label: "Discovery", value: "Provider docs, API base, auth model, resources" },
                 { icon: KeyRound, label: "Secrets", value: "Credential references and store policy only" },
-                { icon: DatabaseZap, label: "Runtime", value: "JSON API executor with read-only resource families" },
+                { icon: DatabaseZap, label: "Runtime", value: "JSON API executor with read-only resource types" },
               ].map((item) => {
                 const Icon = item.icon;
                 return (
