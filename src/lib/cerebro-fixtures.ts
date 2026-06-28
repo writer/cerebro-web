@@ -21,6 +21,8 @@ const repoURN = `urn:cerebro:${tenantID}:repository:public-demo`;
 const bucketURN = `urn:cerebro:${tenantID}:storage:audit-bucket`;
 const installedAppURN = `urn:cerebro:${tenantID}:sentinelone_installed_app:agent-1:browser`;
 const emailAliasURN = `urn:cerebro:${tenantID}:identifier:email:platform-admin@example.com`;
+const coreSsoVendorURN = `urn:cerebro:${tenantID}:vendor:core-sso`;
+const paymentsProcessorVendorURN = `urn:cerebro:${tenantID}:vendor:payments-processor`;
 
 const truthy = (value: string | undefined) =>
   ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
@@ -415,6 +417,200 @@ const assets = [
   },
 ];
 
+const vendors = [
+  {
+    urn: coreSsoVendorURN,
+    vendor_id: "core-sso",
+    name: "Core SSO",
+    source_id: "grc",
+    runtime_id: "demo-grc-runtime",
+    provider: "GRC fixture",
+    status: "active",
+    category: "identity",
+    website_url: "https://vendors.example.com/core-sso",
+    services_provided: "Identity provider and single sign-on",
+    source_status: "active",
+    lifecycle_state: "restricted",
+    lifecycle_reason: "Security review is overdue.",
+    owner: "Security",
+    security_owner_user_id: "security@example.com",
+    owner_state: "assigned",
+    review_state: "overdue",
+    review_due_at: "2026-01-10T12:00:00.000Z",
+    last_review_completed_at: "2025-10-15T12:00:00.000Z",
+    risk_level: "high",
+    risk_score: 86,
+    risk_score_level: "high",
+    risk_score_source: "fixture",
+    risk_tier: "tier_1",
+    review_cadence_days: 90,
+    data_sensitivity: "confidential",
+    access_level: "privileged",
+    criticality: "high",
+    subprocessor: "yes",
+    geography: "US",
+    system_dependency: "production_identity",
+    risk_drivers: ["Privileged access", "Confidential data"],
+    dpa_status: "current",
+    baa_status: "not_applicable",
+    soc2_status: "current",
+    iso27001_status: "missing",
+    security_review_status: "overdue",
+    privacy_review_status: "current",
+    document_status: "needs_review",
+    assessment_state: "in_progress",
+    assessment_progress: 65,
+    open_assessments: 1,
+    completed_assessments: 2,
+    assessment_types: ["security_review", "privacy_review"],
+    questionnaire_state: "in_progress",
+    questionnaire_progress: 70,
+    last_assessment_at: "2025-10-15T12:00:00.000Z",
+    next_assessment_at: "2026-01-20T12:00:00.000Z",
+    evidence_freshness_state: "stale",
+    evidence_freshness: [
+      { id: "core-sso-soc2", label: "SOC 2 report", source: "grc", status: "stale", observed_at: "2025-09-01T12:00:00.000Z", expires_at: "2026-01-01T12:00:00.000Z", age_days: 136, stale_after_days: 90 },
+    ],
+    monitoring_state: "alert",
+    monitoring_signals: [
+      { id: "core-sso-rating", label: "External rating changed", severity: "high", source: "security-rating", observed_at: "2026-01-14T12:00:00.000Z" },
+    ],
+    external_rating: "B",
+    external_rating_updated_at: "2026-01-14T12:00:00.000Z",
+    last_material_change_at: "2026-01-14T12:00:00.000Z",
+    spend_amount: "24000",
+    spend_currency: "USD",
+    contract_value: "96000",
+    contract_currency: "USD",
+    renewal_notice_at: "2026-02-01T12:00:00.000Z",
+    renewal_state: "notice_due",
+    primary_contact: "vendor@example.com",
+    business_unit: "Security",
+    cost_center: "SEC-100",
+    exposure_level: "high",
+    exposure_reasons: ["Privileged workforce access", "Sensitive user profile data"],
+    packet_state: "needs_work",
+    packet_ready_items: ["DPA", "SOC 2"],
+    packet_missing_items: ["ISO 27001 certificate"],
+    remediation_state: "overdue",
+    remediation_due_at: "2026-01-12T12:00:00.000Z",
+    open_remediation_items: 2,
+    overdue_remediation_items: 1,
+    offboarding_state: "not_due",
+    data_deletion_state: "not_due",
+    contract_start_at: "2025-01-01T12:00:00.000Z",
+    contract_renewal_at: "2026-03-01T12:00:00.000Z",
+    contract_count: 1,
+    security_review_count: 1,
+    questionnaire_count: 1,
+    assurance_document_count: 2,
+    open_findings: 2,
+    critical_findings: 0,
+    high_findings: 2,
+    evidence_items: 4,
+    risk_queue_rank: 1,
+    queue_reasons: ["review_overdue", "stale_evidence"],
+    next_actions: [
+      { id: "core-sso-review", label: "Update review", reason: "Security review is overdue.", action_type: "review", target_state: "current", priority: 90 },
+    ],
+    close_actions: [
+      { id: "core-sso-close-review", label: "Review completed", closes_when: "security_review_current" },
+    ],
+    attributes: { source_system: "fixture" },
+  },
+  {
+    urn: paymentsProcessorVendorURN,
+    vendor_id: "payments-processor",
+    name: "Payments Processor",
+    source_id: "grc",
+    runtime_id: "demo-grc-runtime",
+    provider: "GRC fixture",
+    status: "active",
+    category: "payments",
+    website_url: "https://vendors.example.com/payments-processor",
+    services_provided: "Payment processing",
+    source_status: "active",
+    lifecycle_state: "approved",
+    lifecycle_reason: "Current review and contract.",
+    business_owner_user_id: "finance@example.com",
+    owner_state: "missing",
+    review_state: "current",
+    last_review_completed_at: "2026-01-05T12:00:00.000Z",
+    risk_level: "medium",
+    risk_score: 54,
+    risk_score_level: "medium",
+    risk_score_source: "fixture",
+    risk_tier: "tier_2",
+    review_cadence_days: 180,
+    data_sensitivity: "restricted",
+    access_level: "limited",
+    criticality: "medium",
+    subprocessor: "no",
+    geography: "US",
+    system_dependency: "payments",
+    risk_drivers: ["Cardholder data"],
+    dpa_status: "current",
+    baa_status: "not_applicable",
+    soc2_status: "current",
+    iso27001_status: "current",
+    security_review_status: "current",
+    privacy_review_status: "current",
+    document_status: "current",
+    assessment_state: "current",
+    assessment_progress: 100,
+    open_assessments: 0,
+    completed_assessments: 1,
+    assessment_types: ["security_review"],
+    questionnaire_state: "complete",
+    questionnaire_progress: 100,
+    last_assessment_at: "2026-01-05T12:00:00.000Z",
+    evidence_freshness_state: "current",
+    monitoring_state: "quiet",
+    monitoring_signals: [],
+    renewal_state: "current",
+    contract_renewal_at: "2026-09-01T12:00:00.000Z",
+    exposure_level: "medium",
+    exposure_reasons: ["Payment data"],
+    packet_state: "ready",
+    packet_ready_items: ["DPA", "SOC 2", "Security review"],
+    packet_missing_items: [],
+    remediation_state: "current",
+    open_remediation_items: 0,
+    overdue_remediation_items: 0,
+    offboarding_state: "not_due",
+    data_deletion_state: "not_due",
+    contract_count: 1,
+    security_review_count: 1,
+    questionnaire_count: 1,
+    assurance_document_count: 1,
+    open_findings: 0,
+    critical_findings: 0,
+    high_findings: 0,
+    evidence_items: 3,
+    queue_reasons: [],
+    next_actions: [],
+    close_actions: [],
+    attributes: { source_system: "fixture" },
+  },
+];
+
+const vendorDiscoveries = [
+  {
+    urn: `urn:cerebro:${tenantID}:vendor-discovery:collaboration-suite`,
+    discovery_id: "collaboration-suite",
+    name: "Collaboration Suite",
+    normalized_name: "collaboration suite",
+    source_id: "grc",
+    runtime_id: "demo-grc-runtime",
+    provider: "GRC fixture",
+    source_status: "discovered",
+    decision_state: "discovered",
+    category: "collaboration",
+    website_url: "https://vendors.example.com/collaboration-suite",
+    attributes: { source_system: "fixture" },
+  },
+];
+
 const assetReports = [
   {
     id: "demo-report-1",
@@ -656,6 +852,79 @@ const filterAssets = (params?: URLSearchParams) => {
     return true;
   }), params);
 };
+
+const filterVendors = (params?: URLSearchParams) => {
+  const sourceID = params?.get("source_id")?.trim().toLowerCase();
+  const query = params?.get("q")?.trim().toLowerCase();
+  const riskLevel = params?.get("risk_level")?.trim().toLowerCase();
+  const reviewState = params?.get("review_state")?.trim().toLowerCase();
+  const ownerState = params?.get("owner_state")?.trim().toLowerCase();
+  const lifecycleState = params?.get("lifecycle_state")?.trim().toLowerCase();
+  const queue = params?.get("queue")?.trim().toLowerCase();
+  return limitList(vendors.filter((vendor) => {
+    if (sourceID && vendor.source_id?.toLowerCase() !== sourceID) return false;
+    if (riskLevel && vendor.risk_level.toLowerCase() !== riskLevel && vendor.risk_score_level?.toLowerCase() !== riskLevel) return false;
+    if (reviewState && vendor.review_state.toLowerCase() !== reviewState) return false;
+    if (ownerState && vendor.owner_state.toLowerCase() !== ownerState) return false;
+    if (lifecycleState && vendor.lifecycle_state?.toLowerCase() !== lifecycleState) return false;
+    if (queue === "true" && (vendor.queue_reasons?.length ?? 0) === 0) return false;
+    if (queue === "false" && (vendor.queue_reasons?.length ?? 0) > 0) return false;
+    if (query && ![
+      vendor.name,
+      vendor.owner,
+      vendor.security_owner_user_id,
+      vendor.business_owner_user_id,
+      vendor.services_provided,
+      vendor.category,
+      vendor.provider,
+    ].some((value) => contains(value, query))) return false;
+    return true;
+  }), params);
+};
+
+const vendorSummary = (items: typeof vendors) => ({
+  total_vendors: items.length,
+  active_vendors: items.filter((vendor) => vendor.status === "active").length,
+  high_risk_vendors: items.filter((vendor) => ["critical", "high"].includes(vendor.risk_level)).length,
+  owner_missing_vendors: items.filter((vendor) => vendor.owner_state === "missing").length,
+  review_overdue_vendors: items.filter((vendor) => vendor.review_state === "overdue").length,
+  review_due_soon_vendors: items.filter((vendor) => vendor.review_state === "due_soon").length,
+  review_not_scheduled: items.filter((vendor) => vendor.review_state === "not_scheduled").length,
+  risk_queue_vendors: items.filter((vendor) => (vendor.queue_reasons?.length ?? 0) > 0).length,
+  stale_evidence_vendors: items.filter((vendor) => ["stale", "expired"].includes(vendor.evidence_freshness_state ?? "")).length,
+  restricted_vendors: items.filter((vendor) => ["restricted", "conditionally_approved"].includes(vendor.lifecycle_state ?? "")).length,
+  critical_tier_vendors: items.filter((vendor) => vendor.risk_tier === "tier_1").length,
+  assessment_due_vendors: items.filter((vendor) => ["overdue", "due_soon", "in_progress"].includes(vendor.assessment_state ?? "")).length,
+  monitoring_alert_vendors: items.filter((vendor) => ["alert", "critical"].includes(vendor.monitoring_state ?? "")).length,
+  renewal_due_vendors: items.filter((vendor) => ["notice_due", "due_soon", "overdue"].includes(vendor.renewal_state ?? "")).length,
+  packet_blocked_vendors: items.filter((vendor) => ["blocked", "needs_work"].includes(vendor.packet_state ?? "")).length,
+  high_exposure_vendors: items.filter((vendor) => ["critical", "high"].includes(vendor.exposure_level ?? "")).length,
+  remediation_due_vendors: items.filter((vendor) => ["overdue", "due_soon"].includes(vendor.remediation_state ?? "")).length,
+  offboarding_due_vendors: items.filter((vendor) => ["overdue", "due_soon"].includes(vendor.offboarding_state ?? "")).length,
+  open_findings: items.reduce((sum, vendor) => sum + (vendor.open_findings ?? 0), 0),
+  critical_findings: items.reduce((sum, vendor) => sum + (vendor.critical_findings ?? 0), 0),
+  high_findings: items.reduce((sum, vendor) => sum + (vendor.high_findings ?? 0), 0),
+  evidence_items: items.reduce((sum, vendor) => sum + (vendor.evidence_items ?? 0), 0),
+});
+
+const filterVendorDiscoveries = (params?: URLSearchParams) => {
+  const sourceID = params?.get("source_id")?.trim().toLowerCase();
+  const query = params?.get("q")?.trim().toLowerCase();
+  return limitList(vendorDiscoveries.filter((discovery) => {
+    if (sourceID && discovery.source_id?.toLowerCase() !== sourceID) return false;
+    if (query && ![discovery.name, discovery.normalized_name, discovery.discovery_id, discovery.category, discovery.provider].some((value) => contains(value, query))) return false;
+    return true;
+  }), params);
+};
+
+const vendorDiscoverySummary = (items: typeof vendorDiscoveries) => ({
+  total_discoveries: items.length,
+  discovered: items.filter((discovery) => discovery.decision_state === "discovered").length,
+  approved: items.filter((discovery) => discovery.decision_state === "approved").length,
+  rejected: items.filter((discovery) => discovery.decision_state === "rejected").length,
+  ignored: items.filter((discovery) => discovery.decision_state === "ignored").length,
+  linked: items.filter((discovery) => discovery.decision_state === "linked").length,
+});
 
 const entityImpactFixture = (rawURN: string) => {
   const entityURN = safeDecode(rawURN);
@@ -1413,6 +1682,26 @@ const writeFixture = (path: string, body?: string) => {
     });
   }
 
+  const vendorDiscoveryDecisionMatch = /^grc\/vendor-discoveries\/(.+)\/decision$/.exec(path);
+  if (vendorDiscoveryDecisionMatch) {
+    return jsonFixture({
+      decision: {
+        id: "fixture-vendor-discovery-decision",
+        tenant_id: parsed.tenant_id ?? tenantID,
+        discovery_urn: safeDecode(vendorDiscoveryDecisionMatch[1]),
+        source_id: parsed.source_id ?? "grc",
+        decision: parsed.decision ?? "approved",
+        reason: parsed.reason,
+        linked_vendor_urn: parsed.linked_vendor_urn,
+        updated_by: "local-developer",
+        version: 1,
+        created_at: generatedAt,
+        updated_at: generatedAt,
+      },
+      generated_at: generatedAt,
+    });
+  }
+
   if (path === "grc/findings/triage" || /^findings\/[^/]+\/(assign|due|notes|tickets|external-refs|resolve|suppress)$/.test(path)) {
     return jsonFixture({ ok: true, finding: findings[0], generated_at: generatedAt });
   }
@@ -1528,6 +1817,42 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "grc/findings/export") {
     return textFixture("id,title,severity,status\ndemo-finding-critical,Privileged account missing MFA,CRITICAL,open\n", "text/csv; charset=utf-8");
+  }
+
+  if (normalizedPath === "grc/vendors") {
+    const filteredVendors = filterVendors(searchParams);
+    return jsonFixture({ vendors: filteredVendors, summary: vendorSummary(filteredVendors), generated_at: generatedAt });
+  }
+
+  const vendorDetailMatch = /^grc\/vendors\/(.+)$/.exec(normalizedPath);
+  if (vendorDetailMatch) {
+    const vendorURN = safeDecode(vendorDetailMatch[1]);
+    const vendor = vendors.find((item) => item.urn === vendorURN);
+    if (!vendor) {
+      return jsonFixture({ error: `No fixture vendor found for ${vendorURN}`, generated_at: generatedAt }, 404);
+    }
+    return jsonFixture({
+      vendor,
+      relationships: {
+        contracts: [{ urn: `${vendor.urn}:contract`, entity_type: "contract", label: `${vendor.name} contract`, source_id: vendor.source_id, runtime_id: vendor.runtime_id, relation: "contract" }],
+        security_reviews: [{ urn: `${vendor.urn}:security-review`, entity_type: "security_review", label: `${vendor.name} security review`, source_id: vendor.source_id, runtime_id: vendor.runtime_id, relation: "review" }],
+        owners: vendor.owner ? [{ urn: `${vendor.urn}:owner`, entity_type: "identity_user", label: vendor.owner, source_id: vendor.source_id, runtime_id: vendor.runtime_id, relation: "owner" }] : [],
+      },
+      findings: findings.slice(0, vendor.open_findings ?? 0),
+      evidence: evidence.slice(0, vendor.evidence_items ?? 0),
+      generated_at: generatedAt,
+    });
+  }
+
+  if (normalizedPath === "grc/vendor-discoveries") {
+    const filteredDiscoveries = filterVendorDiscoveries(searchParams);
+    return jsonFixture({
+      discoveries: filteredDiscoveries,
+      summary: vendorDiscoverySummary(filteredDiscoveries),
+      decisions: [],
+      decision_events: [],
+      generated_at: generatedAt,
+    });
   }
 
   if (normalizedPath === "grc/controls") {

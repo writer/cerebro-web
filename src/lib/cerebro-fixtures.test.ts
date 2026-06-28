@@ -62,6 +62,29 @@ describe("cerebro fixture proxy responses", () => {
     expect(payload.findings).toMatchObject([{ id: "demo-finding-high" }]);
   });
 
+  it("returns and filters vendor fixtures", () => {
+    withFixtureMode();
+    const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/vendors" });
+    expect(response?.status).toBe(200);
+    expect(parseFixture(response!)).toMatchObject({
+      summary: { total_vendors: 2, risk_queue_vendors: 1 },
+      vendors: [
+        expect.objectContaining({ name: "Core SSO" }),
+        expect.objectContaining({ name: "Payments Processor" }),
+      ],
+    });
+
+    const filtered = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/vendors",
+      searchParams: new URLSearchParams("queue=true"),
+    });
+    expect(parseFixture(filtered!)).toMatchObject({
+      summary: { total_vendors: 1, risk_queue_vendors: 1 },
+      vendors: [expect.objectContaining({ name: "Core SSO" })],
+    });
+  });
+
   it("returns policy lifecycle records in fixture mode", () => {
     withFixtureMode();
     const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle" });
