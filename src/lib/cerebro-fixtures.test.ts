@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { cerebroFixtureResponseFor, isCerebroFixtureMode } from "./cerebro-fixtures";
+import { cerebroFixtureResponseFor, isCerebroFixtureMode, resetCerebroFixtureStateForTests } from "./cerebro-fixtures";
 
 const originalFixtureMode = process.env.CEREBRO_WEB_FIXTURE_MODE;
 const originalApiBase = process.env.CEREBRO_API_BASE;
@@ -15,6 +15,7 @@ const parseFixture = (response: NonNullable<ReturnType<typeof cerebroFixtureResp
 
 describe("cerebro fixture proxy responses", () => {
   afterEach(() => {
+    resetCerebroFixtureStateForTests();
     if (originalFixtureMode === undefined) delete process.env.CEREBRO_WEB_FIXTURE_MODE;
     else process.env.CEREBRO_WEB_FIXTURE_MODE = originalFixtureMode;
     if (originalApiBase === undefined) delete process.env.CEREBRO_API_BASE;
@@ -82,6 +83,42 @@ describe("cerebro fixture proxy responses", () => {
     expect(parseFixture(filtered!)).toMatchObject({
       summary: { total_vendors: 1, risk_queue_vendors: 1 },
       vendors: [expect.objectContaining({ name: "Core SSO" })],
+    });
+  });
+
+  it("creates vendor fixtures and returns them in the register", () => {
+    withFixtureMode();
+    const created = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/vendors",
+      body: JSON.stringify({
+        tenant_id: "demo-tenant",
+        name: "New Vendor",
+        owner: "Security",
+        category: "security",
+        risk_level: "medium",
+        lifecycle_state: "in_review",
+      }),
+    });
+    expect(created?.status).toBe(201);
+    expect(parseFixture(created!)).toMatchObject({
+      vendor: {
+        name: "New Vendor",
+        owner: "Security",
+        owner_state: "assigned",
+        risk_level: "medium",
+        lifecycle_state: "in_review",
+      },
+    });
+
+    const filtered = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/vendors",
+      searchParams: new URLSearchParams("q=New Vendor"),
+    });
+    expect(parseFixture(filtered!)).toMatchObject({
+      summary: { total_vendors: 1 },
+      vendors: [expect.objectContaining({ name: "New Vendor" })],
     });
   });
 

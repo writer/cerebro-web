@@ -1,16 +1,17 @@
 "use client";
 
-import { RefreshCw, SearchCheck, Upload } from "lucide-react";
+import { Link2, Plus, RefreshCw, Search, SearchCheck, SlidersHorizontal, Upload, X } from "lucide-react";
 import Link from "next/link";
-import type { FormEvent } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useMemo, useRef, useState } from "react";
 
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import {
   displayDate,
   GRCUploadResponse,
   GRCVendor,
+  GRCVendorCreateRequest,
+  GRCVendorCreateResponse,
   GRCVendorDiscoveriesResponse,
   GRCVendorDiscovery,
   GRCVendorDiscoverySignal,
@@ -77,6 +78,49 @@ type DiscoveryDecisionDraft = {
   linkedVendorURN: string;
 };
 
+type VendorCreateDraft = {
+  name: string;
+  owner: string;
+  category: string;
+  websiteURL: string;
+  servicesProvided: string;
+  riskLevel: string;
+  lifecycleState: string;
+  reviewState: string;
+};
+
+const defaultVendorCreateDraft = (): VendorCreateDraft => ({
+  name: "",
+  owner: "",
+  category: "",
+  websiteURL: "",
+  servicesProvided: "",
+  riskLevel: "unknown",
+  lifecycleState: "in_review",
+  reviewState: "not_scheduled",
+});
+
+const createRiskOptions = riskFilters.filter((item) => item.value);
+const createLifecycleOptions = lifecycleFilters.filter((item) =>
+  ["active", "approved", "in_review", "conditionally_approved", "restricted"].includes(item.value));
+const createReviewOptions = reviewFilters.filter((item) => item.value);
+
+const compactAttributes = (attributes: Record<string, string | undefined>) =>
+  Object.fromEntries(Object.entries(attributes).filter(([, value]) => Boolean(value))) as Record<string, string>;
+
+const vendorCreateRequest = (draft: VendorCreateDraft, tenantID: string): GRCVendorCreateRequest => ({
+  tenant_id: tenantID.trim() || undefined,
+  name: draft.name.trim(),
+  source_id: "grc",
+  owner: draft.owner.trim() || undefined,
+  category: draft.category.trim() || undefined,
+  website_url: draft.websiteURL.trim() || undefined,
+  services_provided: draft.servicesProvided.trim() || undefined,
+  risk_level: draft.riskLevel,
+  lifecycle_state: draft.lifecycleState,
+  review_state: draft.reviewState,
+});
+
 function VendorRiskBadge({ level }: { level?: string }) {
   const normalized = level?.trim().toLowerCase() || "unknown";
   return (
@@ -118,35 +162,11 @@ const freshnessLabel = (vendor: GRCVendor) =>
 const riskScoreLabel = (vendor: GRCVendor) =>
   typeof vendor.risk_score === "number" ? `${vendor.risk_score}/100` : "Not scored";
 
-const assessmentDetail = (vendor: GRCVendor) => {
-  if (vendor.next_assessment_at) return `Due ${displayDate(vendor.next_assessment_at)}`;
-  if (vendor.last_assessment_at) return `Last ${displayDate(vendor.last_assessment_at)}`;
-  return `${vendor.open_assessments ?? 0} open`;
-};
-
-const monitoringDetail = (vendor: GRCVendor) =>
-  `${vendor.monitoring_signals?.length ?? 0} signals`;
-
-const renewalDetail = (vendor: GRCVendor) => {
-  if (vendor.renewal_notice_at) return `Notice ${displayDate(vendor.renewal_notice_at)}`;
-  if (vendor.contract_renewal_at) return `Renewal ${displayDate(vendor.contract_renewal_at)}`;
-  return "No renewal date";
-};
-
 const packetDetail = (vendor: GRCVendor) => {
   const missing = vendor.packet_missing_items?.length ?? 0;
   if (missing > 0) return `${missing} missing`;
   const ready = vendor.packet_ready_items?.length ?? 0;
   return ready > 0 ? `${ready} ready` : "No packet items";
-};
-
-const exposureDetail = (vendor: GRCVendor) =>
-  vendor.exposure_reasons?.slice(0, 2).join(", ") || "No exposure drivers";
-
-const remediationDetail = (vendor: GRCVendor) => {
-  if (vendor.remediation_due_at) return `Due ${displayDate(vendor.remediation_due_at)}`;
-  const open = vendor.open_remediation_items ?? vendor.open_findings ?? 0;
-  return `${open} open`;
 };
 
 function DiscoveryStateBadge({ state }: { state?: string }) {
@@ -171,6 +191,24 @@ const discoverySourceIDs = (discovery: GRCVendorDiscovery) =>
 
 const discoverySourceLabel = (source: Pick<GRCVendorDiscoverySourceSummary, "provider" | "source_id">) =>
   source.provider || humanize(source.source_id);
+
+function SourceStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+      <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
+function latestSourceSync(sources: GRCVendorDiscoverySourceSummary[]) {
+  const latest = sources.reduce<string | undefined>((current, source) => {
+    if (!source.last_synced_at) return current;
+    if (!current) return source.last_synced_at;
+    return Date.parse(source.last_synced_at) > Date.parse(current) ? source.last_synced_at : current;
+  }, undefined);
+  return latest ? displayDate(latest) : "not recorded";
+}
 
 function DiscoverySignals({ signals }: { signals?: GRCVendorDiscoverySignal[] }) {
   const visibleSignals = signals?.slice(0, 3) ?? [];
@@ -218,11 +256,11 @@ function DiscoverySourceSummary({
   sources: GRCVendorDiscoverySourceSummary[];
   summary?: GRCVendorDiscoveriesResponse["summary"];
 }) {
-  const total = summary?.total_discoveries ?? 0;
   const pending = summary?.discovered ?? 0;
   const linked = summary?.linked ?? 0;
   const sourceCount = summary?.source_count ?? sources.length;
   const signals = summary?.evidence_signals ?? sources.reduce((sum, source) => sum + source.total, 0);
+  const latestSync = latestSourceSync(sources);
   return (
     <section className="surface-panel px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -233,7 +271,7 @@ function DiscoverySourceSummary({
           <div className="min-w-0">
             <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Automatic discovery</h2>
             <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
-              {loading ? "Loading source candidates." : `${countLabel(total, "candidate")} from ${countLabel(sourceCount, "source")}. ${countLabel(pending, "candidate")} need a decision, ${linked} linked, ${countLabel(signals, "source signal")}.`}
+              {loading ? "Loading source candidates." : `${countLabel(sourceCount, "source")} checked. ${countLabel(pending, "candidate")} need review, ${linked} linked, ${countLabel(signals, "source signal")}. Last sync ${latestSync}.`}
             </p>
           </div>
         </div>
@@ -243,43 +281,676 @@ function DiscoverySourceSummary({
         </button>
       </div>
       {sources.length > 0 && (
-        <div className="mt-4 divide-y divide-[color:var(--border)] border-y border-[color:var(--border)]">
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
           {sources.map((source) => {
             const selected = selectedSourceID === source.source_id;
             return (
-              <button
+              <div
                 key={source.source_id}
-                type="button"
-                onClick={() => onSelectSource(selected ? "" : source.source_id)}
-                className={`grid w-full gap-2 px-0 py-3 text-left transition md:grid-cols-[minmax(0,1.2fr)_110px_110px_minmax(0,1fr)] ${selected ? "text-[var(--primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                className={`rounded-md border px-3 py-3 transition ${selected ? "border-[color:var(--primary)] bg-[var(--surface-muted)]" : "border-[color:var(--border)] bg-[var(--surface-raised)]"}`}
               >
-                <div className="min-w-0">
-                  <div className="font-semibold">{discoverySourceLabel(source)}</div>
-                  <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-muted)]">{source.runtime_id || source.source_id}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onSelectSource(selected ? "" : source.source_id)}
+                    className={`min-w-0 text-left ${selected ? "text-[var(--primary)]" : "text-[var(--text-primary)] hover:text-[var(--primary)]"}`}
+                    aria-pressed={selected}
+                  >
+                    <span className="block truncate text-[13px] font-semibold">{discoverySourceLabel(source)}</span>
+                    <span className="mt-1 block truncate font-mono text-[12px] text-[var(--text-muted)]">{source.runtime_id || source.source_id}</span>
+                  </button>
+                  <Badge value={source.status || "unknown"} />
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</div>
-                  <div className="mt-1"><Badge value={source.status || "unknown"} /></div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
+                  <SourceStat label="Candidates" value={source.total} />
+                  <SourceStat label="Needs review" value={source.discovered} />
+                  <SourceStat label="Linked" value={source.linked ?? 0} />
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Candidates</div>
-                  <div className="mt-1 text-[13px] font-semibold">{source.total}</div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--border)] pt-3 text-[12px] text-[var(--text-muted)]">
+                  <span>Last sync {displayDate(source.last_synced_at)}</span>
+                  <button type="button" onClick={onRefresh} disabled={loading} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)] disabled:opacity-50">
+                    Retry
+                  </button>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last sync</div>
-                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDate(source.last_synced_at)}</div>
-                </div>
-              </button>
+              </div>
             );
           })}
+        </div>
+      )}
+      {sources.length === 0 && !loading && (
+        <div className="mt-4 rounded-md border border-dashed border-[color:var(--border)] px-4 py-5 text-[13px] text-[var(--text-muted)]">
+          No discovery sources reported status.
         </div>
       )}
     </section>
   );
 }
 
+function CreateVendorModal({
+  draft,
+  error,
+  onClose,
+  onSubmit,
+  onUpdateDraft,
+  open,
+  saving,
+}: {
+  draft: VendorCreateDraft;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: (draft: VendorCreateDraft) => Promise<void> | void;
+  onUpdateDraft: (patch: Partial<VendorCreateDraft>) => void;
+  open: boolean;
+  saving: boolean;
+}) {
+  if (!open) return null;
+  const nameMissing = draft.name.trim() === "";
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (nameMissing || saving) return;
+    void Promise.resolve(onSubmit(draft)).catch(() => undefined);
+  };
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/45 px-4 py-10 backdrop-blur-sm">
+      <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="add-vendor-title" className="surface-raised mx-auto w-full max-w-2xl overflow-hidden rounded-lg border border-[color:var(--border)] shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-4">
+          <div>
+            <h2 id="add-vendor-title" className="text-[15px] font-semibold text-[var(--text-primary)]">Add vendor</h2>
+            <p className="mt-1 text-[12px] text-[var(--text-muted)]">Create a vendor record for review and owner tracking.</p>
+          </div>
+          <button type="button" onClick={onClose} className="secondary-button inline-flex h-8 w-8 items-center justify-center p-0" aria-label="Close add vendor">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          {error && <ErrorBlock error={error} recoveryDetail="Vendor was not saved." />}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={`${labelClass} sm:col-span-2`}>
+              Vendor name
+              <input
+                value={draft.name}
+                onChange={(event) => onUpdateDraft({ name: event.target.value })}
+                className={inputClass}
+                required
+                autoFocus
+              />
+            </label>
+            <label className={labelClass}>
+              Owner
+              <input
+                value={draft.owner}
+                onChange={(event) => onUpdateDraft({ owner: event.target.value })}
+                placeholder="Security"
+                className={inputClass}
+              />
+            </label>
+            <label className={labelClass}>
+              Category
+              <input
+                value={draft.category}
+                onChange={(event) => onUpdateDraft({ category: event.target.value })}
+                placeholder="Identity"
+                className={inputClass}
+              />
+            </label>
+            <label className={`${labelClass} sm:col-span-2`}>
+              Website
+              <input
+                value={draft.websiteURL}
+                onChange={(event) => onUpdateDraft({ websiteURL: event.target.value })}
+                placeholder="https://www.example.com/vendor"
+                className={inputClass}
+              />
+            </label>
+            <label className={`${labelClass} sm:col-span-2`}>
+              Services provided
+              <textarea
+                value={draft.servicesProvided}
+                onChange={(event) => onUpdateDraft({ servicesProvided: event.target.value })}
+                rows={3}
+                className={inputClass}
+              />
+            </label>
+            <label className={labelClass}>
+              Risk
+              <select value={draft.riskLevel} onChange={(event) => onUpdateDraft({ riskLevel: event.target.value })} className={inputClass}>
+                {createRiskOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Lifecycle
+              <select value={draft.lifecycleState} onChange={(event) => onUpdateDraft({ lifecycleState: event.target.value })} className={inputClass}>
+                {createLifecycleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Review
+              <select value={draft.reviewState} onChange={(event) => onUpdateDraft({ reviewState: event.target.value })} className={inputClass}>
+                {createReviewOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[color:var(--border)] px-5 py-4">
+          <button type="button" onClick={onClose} className="secondary-button px-3 py-1.5 text-[13px]">Cancel</button>
+          <button type="submit" disabled={nameMissing || saving} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Add vendor
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 const selectLabel = (options: Array<{ value: string; label: string }>, value: string) =>
   options.find((item) => item.value === value)?.label ?? value;
+
+const reviewStates = new Set(["discovered", "pending", "needs_review"]);
+
+const discoveryNeedsReview = (discovery: GRCVendorDiscovery) =>
+  reviewStates.has((discovery.decision_state || "discovered").toLowerCase());
+
+const discoveryHandledLabel = (discovery: GRCVendorDiscovery) => {
+  const state = (discovery.decision_state || "").toLowerCase();
+  if (state === "approved") return "Vendor saved";
+  if (state === "linked") return "Vendor linked";
+  if (state === "ignored") return "Discovery dismissed";
+  if (state === "rejected") return "Discovery rejected";
+  return "Decision recorded";
+};
+
+function HealthStat({
+  detail,
+  intent = "neutral",
+  label,
+  pendingDetail = "Waiting for vendor data",
+  state,
+  value,
+}: {
+  detail: string;
+  intent?: "danger" | "neutral" | "success" | "warning";
+  label: string;
+  pendingDetail?: string;
+  state: RuntimeState;
+  value: number;
+}) {
+  const accents = {
+    danger: "border-l-red-500",
+    neutral: "border-l-[color:var(--border-strong)]",
+    success: "border-l-emerald-500",
+    warning: "border-l-amber-500",
+  };
+  const displayValue = state === "loading" ? "..." : state === "ready" ? value.toLocaleString() : "Unavailable";
+  const displayDetail = state === "ready" ? detail : pendingDetail;
+  const accentIntent = state === "ready" ? intent : "neutral";
+  return (
+    <div className={`border-l-[3px] ${accents[accentIntent]} px-4 py-3`}>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+      <div className="mt-2 text-xl font-semibold text-[var(--text-primary)]">{displayValue}</div>
+      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDetail}</div>
+    </div>
+  );
+}
+
+function VendorHealthStrip({
+  discoveries,
+  discoveryMetricState,
+  discoverySummary,
+  summary,
+  vendorMetricState,
+  vendors,
+}: {
+  discoveries: GRCVendorDiscovery[];
+  discoveryMetricState: RuntimeState;
+  discoverySummary?: GRCVendorDiscoveriesResponse["summary"];
+  summary?: GRCVendorsResponse["summary"];
+  vendorMetricState: RuntimeState;
+  vendors: GRCVendor[];
+}) {
+  const vendorCount = summary?.total_vendors ?? vendors.length;
+  const activeCount = summary?.active_vendors ?? vendors.filter((vendor) => vendor.status === "active").length;
+  const needsReview = discoverySummary?.discovered ?? discoveries.filter(discoveryNeedsReview).length;
+  const missingOwner = summary?.owner_missing_vendors ?? vendors.filter((vendor) => vendor.owner_state === "missing").length;
+  const highRisk = summary?.high_risk_vendors ?? vendors.filter((vendor) => ["critical", "high"].includes(vendor.risk_level)).length;
+
+  return (
+    <section className="surface-panel grid overflow-hidden sm:grid-cols-2 xl:grid-cols-4">
+      <HealthStat label="Vendors" value={vendorCount} detail={`${activeCount.toLocaleString()} active`} state={vendorMetricState} intent="success" />
+      <HealthStat label="Needs review" value={needsReview} detail="discovery candidates" state={discoveryMetricState} intent={needsReview > 0 ? "warning" : "success"} pendingDetail="Waiting for discovery data" />
+      <HealthStat label="Missing owner" value={missingOwner} detail="vendors without an owner" state={vendorMetricState} intent={missingOwner > 0 ? "warning" : "success"} />
+      <HealthStat label="High risk" value={highRisk} detail="critical or high vendors" state={vendorMetricState} intent={highRisk > 0 ? "danger" : "success"} />
+    </section>
+  );
+}
+
+function DiscoveryActionButtons({
+  createSaving,
+  discovery,
+  draft,
+  onCreateVendor,
+  onDecision,
+  saving,
+}: {
+  createSaving: boolean;
+  discovery: GRCVendorDiscovery;
+  draft: DiscoveryDecisionDraft;
+  onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
+  onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
+  saving: boolean;
+}) {
+  if (!discoveryNeedsReview(discovery)) {
+    return <div className="text-[12px] font-semibold text-[var(--text-muted)]">{discoveryHandledLabel(discovery)}</div>;
+  }
+  const busy = saving || createSaving;
+  const linkDisabled = busy || draft.linkedVendorURN.trim() === "";
+  const commitDecision = (decision: DiscoveryDecision) => {
+    void Promise.resolve(onDecision(discovery, decision)).catch(() => undefined);
+  };
+  const createVendor = () => {
+    void Promise.resolve(onCreateVendor(discovery)).catch(() => undefined);
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <button
+        type="button"
+        disabled={linkDisabled}
+        onClick={() => commitDecision("linked")}
+        className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] disabled:opacity-50"
+      >
+        <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+        Link
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={createVendor}
+        className="primary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] disabled:opacity-50"
+      >
+        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+        Create vendor
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => commitDecision("ignored")}
+        className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] disabled:opacity-50"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
+function DiscoveryCandidateTitle({ discovery }: { discovery: GRCVendorDiscovery }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="font-semibold text-[var(--text-primary)]">{discovery.name || shortEntity(discovery.urn)}</div>
+        {typeof discovery.confidence_score === "number" && (
+          <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-secondary)]">
+            {confidenceLabel(discovery.confidence_score)}
+          </span>
+        )}
+      </div>
+      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.normalized_name || discovery.discovery_id || shortEntity(discovery.urn)}</div>
+      {discovery.discovery_reason && <div className="mt-1 max-w-[24rem] text-[12px] leading-5 text-[var(--text-secondary)]">{discovery.discovery_reason}</div>}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {discovery.category && <Badge value={discovery.category} />}
+        <Badge value={discovery.source_status || "discovered"} />
+      </div>
+    </div>
+  );
+}
+
+function DiscoverySourceCell({ discovery }: { discovery: GRCVendorDiscovery }) {
+  return (
+    <div className="text-[12px] text-[var(--text-muted)]">
+      <div className="font-semibold text-[var(--text-primary)]">{discovery.provider || discovery.source_id || "Source not set"}</div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {discoverySourceIDs(discovery).map((id) => <Badge key={id} value={id} />)}
+      </div>
+      <div className="mt-1 font-mono">{shortEntity(discovery.runtime_id)}</div>
+      <div className="mt-2 text-[var(--text-muted)]">
+        <div>First seen {displayDate(discovery.first_observed_at)}</div>
+        <div>Last seen {displayDate(discovery.last_observed_at)}</div>
+      </div>
+    </div>
+  );
+}
+
+function SuggestedVendorInputs({
+  discovery,
+  draft,
+  onUpdateDraft,
+}: {
+  discovery: GRCVendorDiscovery;
+  draft: DiscoveryDecisionDraft;
+  onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      {discovery.linked_vendor_urn ? (
+        <Link href={`/vendors/${encodeURIComponent(discovery.linked_vendor_urn)}`} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+          {shortEntity(discovery.linked_vendor_urn)}
+        </Link>
+      ) : (
+        <span className="text-[12px] text-[var(--text-muted)]">No linked vendor</span>
+      )}
+      <input
+        value={draft.linkedVendorURN}
+        onChange={(event) => onUpdateDraft(discovery.urn, { linkedVendorURN: event.target.value })}
+        placeholder="Vendor URN"
+        className="control-input px-2 py-1 font-mono text-[12px]"
+      />
+      <input
+        value={draft.reason}
+        onChange={(event) => onUpdateDraft(discovery.urn, { reason: event.target.value })}
+        placeholder="Decision note"
+        className="control-input px-2 py-1 text-[12px]"
+      />
+    </div>
+  );
+}
+
+function DiscoveryEmptyState({
+  latestSync,
+  onRefresh,
+  sourceCount,
+}: {
+  latestSync: string;
+  onRefresh: () => void;
+  sourceCount: number;
+}) {
+  return (
+    <div className="px-5 py-10 text-center">
+      <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">No candidates need review</h3>
+      <p className="mx-auto mt-2 max-w-xl text-[13px] leading-5 text-[var(--text-muted)]">
+        {countLabel(sourceCount, "source")} checked. Last sync {latestSync}.
+      </p>
+      <button type="button" onClick={onRefresh} className="secondary-button mt-4 inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+        Refresh sources
+      </button>
+    </div>
+  );
+}
+
+function DiscoveryCandidateCard({
+  createSaving,
+  decisionSaving,
+  discovery,
+  draft,
+  onCreateVendor,
+  onDecision,
+  onUpdateDraft,
+}: {
+  createSaving: boolean;
+  decisionSaving: boolean;
+  discovery: GRCVendorDiscovery;
+  draft: DiscoveryDecisionDraft;
+  onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
+  onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
+  onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
+}) {
+  return (
+    <article className="rounded-md border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <DiscoveryCandidateTitle discovery={discovery} />
+        <DiscoveryStateBadge state={discovery.decision_state} />
+      </div>
+      <div className="mt-4 grid gap-4 text-[12px] sm:grid-cols-2">
+        <div>
+          <div className={labelClass}>Found in</div>
+          <div className="mt-2"><DiscoverySourceCell discovery={discovery} /></div>
+        </div>
+        <div>
+          <div className={labelClass}>Suggested vendor</div>
+          <div className="mt-2"><SuggestedVendorInputs discovery={discovery} draft={draft} onUpdateDraft={onUpdateDraft} /></div>
+        </div>
+      </div>
+      <div className="mt-4">
+        <div className={labelClass}>Evidence</div>
+        <div className="mt-2 text-[12px] text-[var(--text-secondary)]"><DiscoverySignals signals={discovery.signals} /></div>
+      </div>
+      <div className="mt-4 border-t border-[color:var(--border)] pt-3">
+        <DiscoveryActionButtons createSaving={createSaving} discovery={discovery} draft={draft} onCreateVendor={onCreateVendor} onDecision={onDecision} saving={decisionSaving} />
+      </div>
+    </article>
+  );
+}
+
+function DiscoveryQueue({
+  createSaving,
+  decisionDrafts,
+  decisionSaving,
+  discoveries,
+  latestSync,
+  onCreateVendor,
+  onDecision,
+  onRefresh,
+  onUpdateDraft,
+  sourceCount,
+}: {
+  createSaving: boolean;
+  decisionDrafts: Record<string, DiscoveryDecisionDraft>;
+  decisionSaving: boolean;
+  discoveries: GRCVendorDiscovery[];
+  latestSync: string;
+  onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
+  onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
+  onRefresh: () => void;
+  onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
+  sourceCount: number;
+}) {
+  const signalCount = discoveries.reduce((sum, discovery) => sum + (discovery.signals?.length ?? 0), 0);
+  return (
+    <section className="surface-panel overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
+        <div>
+          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Discovery queue</h2>
+          <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+            {countLabel(discoveries.length, "candidate")} in this view. {countLabel(signalCount, "source signal")}.
+          </p>
+        </div>
+      </div>
+      {discoveries.length === 0 ? (
+        <DiscoveryEmptyState sourceCount={sourceCount} latestSync={latestSync} onRefresh={onRefresh} />
+      ) : (
+        <>
+          <div className="space-y-3 p-4 md:hidden">
+            {discoveries.map((discovery) => (
+              <DiscoveryCandidateCard
+                key={discovery.urn}
+                createSaving={createSaving}
+                decisionSaving={decisionSaving}
+                discovery={discovery}
+                draft={decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" }}
+                onCreateVendor={onCreateVendor}
+                onDecision={onDecision}
+                onUpdateDraft={onUpdateDraft}
+              />
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="data-table min-w-[920px]">
+              <thead>
+                <tr>
+                  <th>Candidate</th>
+                  <th>Evidence</th>
+                  <th>Suggested vendor</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {discoveries.map((discovery) => {
+                  const draft = decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
+                  return (
+                    <tr key={discovery.urn}>
+                      <td className="min-w-[17rem]">
+                        <DiscoveryCandidateTitle discovery={discovery} />
+                        <div className="mt-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-2">
+                          <DiscoverySourceCell discovery={discovery} />
+                        </div>
+                      </td>
+                      <td className="min-w-[18rem] text-[12px] text-[var(--text-secondary)]"><DiscoverySignals signals={discovery.signals} /></td>
+                      <td className="min-w-[14rem]"><SuggestedVendorInputs discovery={discovery} draft={draft} onUpdateDraft={onUpdateDraft} /></td>
+                      <td className="min-w-[14rem]">
+                        <DiscoveryStateBadge state={discovery.decision_state} />
+                        <div className="mt-2 text-[12px] text-[var(--text-muted)]">Confidence {confidenceLabel(discovery.confidence_score)}</div>
+                        {discovery.decision_updated_by && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.decision_updated_by}</div>}
+                        <div className="mt-3">
+                          <DiscoveryActionButtons createSaving={createSaving} discovery={discovery} draft={draft} onCreateVendor={onCreateVendor} onDecision={onDecision} saving={decisionSaving} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function VendorRegisterCard({ vendor }: { vendor: GRCVendor }) {
+  const action = firstQueueAction(vendor);
+  return (
+    <article className="rounded-md border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link href={vendorDetailHref(vendor)} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+            {vendor.name || shortEntity(vendor.urn)}
+          </Link>
+          <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
+            {vendor.category && <span>{humanize(vendor.category)}</span>}
+            {vendor.status && <span>{humanize(vendor.status)}</span>}
+          </div>
+        </div>
+        <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
+      </div>
+      {action && <div className="mt-3 text-[12px] font-semibold text-[var(--text-primary)]">{action.label}</div>}
+      <div className="mt-4 grid gap-3 text-[12px] sm:grid-cols-2">
+        <div>
+          <div className={labelClass}>Owner</div>
+          <div className="mt-1 text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
+        </div>
+        <div>
+          <div className={labelClass}>Review</div>
+          <div className="mt-1"><Badge value={vendor.review_state} /></div>
+          <div className="mt-1 text-[var(--text-muted)]">{reviewDetail(vendor)}</div>
+        </div>
+        <div>
+          <div className={labelClass}>Evidence</div>
+          <div className="mt-1 text-[var(--text-muted)]">{freshnessLabel(vendor)}</div>
+          <div className="mt-1 text-[var(--text-muted)]">{packetDetail(vendor)}</div>
+        </div>
+        <div>
+          <div className={labelClass}>Source</div>
+          <div className="mt-1 text-[var(--text-muted)]">{sourceLabel(vendor)}</div>
+        </div>
+      </div>
+      <Link href={vendorDetailHref(vendor)} className="secondary-button mt-4 inline-flex px-3 py-1.5 text-[12px]">
+        Open vendor
+      </Link>
+    </article>
+  );
+}
+
+function VendorRegisterSection({ assuranceItems, vendors }: { assuranceItems: number; vendors: GRCVendor[] }) {
+  return (
+    <section className="surface-panel overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
+        <div>
+          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Vendor register</h2>
+          <p className="mt-1 text-[12px] text-[var(--text-muted)]">{countLabel(vendors.length, "vendor")} in this view. {assuranceItems.toLocaleString()} linked GRC records.</p>
+        </div>
+        <Link href="/inventory?entity_type=vendor" className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+          Open in inventory
+        </Link>
+      </div>
+      {vendors.length === 0 ? (
+        <div className="px-5 py-10 text-center text-[13px] text-[var(--text-muted)]">No vendors match these filters.</div>
+      ) : (
+        <>
+          <div className="space-y-3 p-4 md:hidden">
+            {vendors.map((vendor) => <VendorRegisterCard key={vendor.urn} vendor={vendor} />)}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="data-table min-w-[980px]">
+              <thead>
+                <tr>
+                  <th>Vendor</th>
+                  <th>Next action</th>
+                  <th>Owner</th>
+                  <th>Review</th>
+                  <th>Risk</th>
+                  <th>Evidence</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vendors.map((vendor) => {
+                  const action = firstQueueAction(vendor);
+                  return (
+                    <tr key={vendor.urn}>
+                      <td className="min-w-[18rem]">
+                        <Link href={vendorDetailHref(vendor)} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                          {vendor.name || shortEntity(vendor.urn)}
+                        </Link>
+                        <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
+                          {vendor.category && <span>{humanize(vendor.category)}</span>}
+                          {vendor.status && <span>{humanize(vendor.status)}</span>}
+                          {vendor.services_provided && <span className="max-w-[18rem] truncate">{vendor.services_provided}</span>}
+                        </div>
+                      </td>
+                      <td className="min-w-[14rem] text-[12px] text-[var(--text-secondary)]">
+                        {action ? (
+                          <div>
+                            <div className="font-semibold text-[var(--text-primary)]">{action.label}</div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {vendor.queue_reasons?.slice(0, 2).map((reason) => <Badge key={reason} value={reason} />)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">No queued action</span>
+                        )}
+                      </td>
+                      <td className="min-w-[12rem]">
+                        <div className="text-[13px] font-medium text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
+                        <div className="mt-1">{vendor.owner_state === "missing" ? <Badge value="missing" /> : <Badge value="assigned" />}</div>
+                      </td>
+                      <td className="min-w-[10rem]">
+                        <Badge value={vendor.review_state} />
+                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">{reviewDetail(vendor)}</div>
+                      </td>
+                      <td className="min-w-[9rem]">
+                        <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
+                        <div className="mt-1 text-[12px] font-semibold text-[var(--text-primary)]">{riskScoreLabel(vendor)}</div>
+                      </td>
+                      <td className="min-w-[13rem] text-[12px] text-[var(--text-muted)]">
+                        <div>{freshnessLabel(vendor)}</div>
+                        <div className="mt-1">{packetDetail(vendor)}</div>
+                        <div className="mt-1">{vendor.evidence_items ?? 0} evidence items</div>
+                      </td>
+                      <td className="min-w-[12rem] text-[12px] text-[var(--text-muted)]">
+                        <div>{sourceLabel(vendor)}</div>
+                        <div className="mt-1 font-mono">{shortEntity(vendor.runtime_id)}</div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 export default function VendorsPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
@@ -299,6 +970,9 @@ export default function VendorsPage() {
   const [vendorUploadWebsite, setVendorUploadWebsite] = useState("");
   const [lastVendorUpload, setLastVendorUpload] = useState<GRCUploadResponse | null>(null);
   const vendorUploadInputRef = useRef<HTMLInputElement>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<VendorCreateDraft>(() => defaultVendorCreateDraft());
+  const [createMessage, setCreateMessage] = useState("");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
@@ -332,6 +1006,12 @@ export default function VendorsPage() {
   const { mutate: mutateDiscoveryDecision, saving: decisionSaving, error: decisionError } = useGRCMutation();
   const { mutate: uploadVendorDocument, saving: vendorUploadSaving, error: vendorUploadError, setError: setVendorUploadError } =
     useGRCFormMutation<GRCUploadResponse>();
+  const {
+    mutate: mutateCreateVendor,
+    saving: createSaving,
+    error: createError,
+    setError: setCreateError,
+  } = useGRCMutation<GRCVendorCreateResponse>();
 
   const vendors = useMemo(() => vendorsQuery.data?.vendors ?? [], [vendorsQuery.data?.vendors]);
   const summary = vendorsQuery.data?.summary;
@@ -340,9 +1020,8 @@ export default function VendorsPage() {
   const discoverySources = useMemo(() => discoveriesQuery.data?.source_summaries ?? [], [discoveriesQuery.data?.source_summaries]);
   const error = vendorsQuery.error;
   const discoveryError = discoveriesQuery.error;
-  const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : vendorsQuery.loading && !vendorsQuery.data ? "loading" : "ready";
-  const riskWithOwnerGaps = useMemo(() => vendors.filter((vendor) => vendor.owner_state === "missing" && ["critical", "high"].includes(vendor.risk_level)).length, [vendors]);
+  const vendorMetricState: RuntimeState = error ? runtimeStateForError(error) : vendorsQuery.loading && !vendorsQuery.data ? "loading" : "ready";
+  const discoveryMetricState: RuntimeState = discoveryError ? runtimeStateForError(discoveryError) : discoveriesQuery.loading && !discoveriesQuery.data ? "loading" : "ready";
   const assuranceItems = useMemo(() => vendors.reduce((sum, vendor) => sum + vendor.contract_count + vendor.security_review_count + vendor.questionnaire_count + vendor.assurance_document_count, 0), [vendors]);
   const sourceFilterOptions = useMemo(() => {
     const options = new Map<string, string>();
@@ -358,6 +1037,26 @@ export default function VendorsPage() {
     }
     return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) => left.label.localeCompare(right.label));
   }, [discoveries, discoverySources, sourceID, vendors]);
+  const updateCreateDraft = useCallback((patch: Partial<VendorCreateDraft>) => {
+    setCreateDraft((current) => ({ ...current, ...patch }));
+  }, []);
+  const openCreateVendor = useCallback(() => {
+    setCreateDraft(defaultVendorCreateDraft());
+    setCreateMessage("");
+    setCreateError(null);
+    setCreateOpen(true);
+  }, [setCreateError]);
+  const closeCreateVendor = useCallback(() => {
+    setCreateOpen(false);
+    setCreateError(null);
+  }, [setCreateError]);
+  const submitVendorCreate = useCallback(async (draft: VendorCreateDraft) => {
+    const response = await mutateCreateVendor("/grc/vendors", vendorCreateRequest(draft, tenantID));
+    setCreateOpen(false);
+    setCreateDraft(defaultVendorCreateDraft());
+    setCreateMessage(`${response.vendor.name} saved.`);
+    await Promise.all([vendorsQuery.reload(), discoveriesQuery.reload()]);
+  }, [discoveriesQuery, mutateCreateVendor, tenantID, vendorsQuery]);
   const updateDecisionDraft = useCallback((urn: string, patch: Partial<DiscoveryDecisionDraft>) => {
     setDecisionDrafts((current) => ({
       ...current,
@@ -386,6 +1085,42 @@ export default function VendorsPage() {
     await discoveriesQuery.reload();
     await vendorsQuery.reload();
   }, [decisionDrafts, discoveriesQuery, mutateDiscoveryDecision, tenantID, vendorsQuery]);
+  const createVendorFromDiscovery = useCallback(async (discovery: GRCVendorDiscovery) => {
+    setCreateMessage("");
+    const response = await mutateCreateVendor("/grc/vendors", {
+      tenant_id: tenantID.trim() || undefined,
+      name: discovery.name || shortEntity(discovery.urn),
+      source_id: discovery.source_id || "grc",
+      runtime_id: discovery.runtime_id,
+      provider: discovery.provider,
+      category: discovery.category,
+      website_url: discovery.website_url,
+      services_provided: discovery.discovery_reason,
+      lifecycle_state: "in_review",
+      review_state: "not_scheduled",
+      risk_level: "unknown",
+      discovery_urn: discovery.urn,
+      attributes: compactAttributes({
+        discovery_id: discovery.discovery_id,
+        source_status: discovery.source_status,
+      }),
+    } satisfies GRCVendorCreateRequest);
+    await mutateDiscoveryDecision(`/grc/vendor-discoveries/${encodeURIComponent(discovery.urn)}/decision`, {
+      tenant_id: tenantID.trim(),
+      discovery_urn: discovery.urn,
+      source_id: discovery.source_id,
+      decision: "approved",
+      reason: "Vendor created from discovery.",
+      linked_vendor_urn: response.vendor.urn,
+    });
+    setDecisionDrafts((current) => {
+      const next = { ...current };
+      delete next[discovery.urn];
+      return next;
+    });
+    setCreateMessage(`${response.vendor.name} saved.`);
+    await Promise.all([discoveriesQuery.reload(), vendorsQuery.reload()]);
+  }, [discoveriesQuery, mutateCreateVendor, mutateDiscoveryDecision, tenantID, vendorsQuery]);
 
   const submitVendorUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -453,11 +1188,26 @@ export default function VendorsPage() {
         title="Vendors"
         description="Review vendors, owners, lifecycle state, evidence freshness, source discoveries, and open risk."
         action={
-          <button type="button" onClick={() => { void vendorsQuery.reload(); void discoveriesQuery.reload(); }} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => { void vendorsQuery.reload(); void discoveriesQuery.reload(); }} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              Refresh
+            </button>
+            <button type="button" onClick={openCreateVendor} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Add vendor
+            </button>
+          </div>
         }
+      />
+      <CreateVendorModal
+        draft={createDraft}
+        error={createError}
+        onClose={closeCreateVendor}
+        onSubmit={submitVendorCreate}
+        onUpdateDraft={updateCreateDraft}
+        open={createOpen}
+        saving={createSaving}
       />
 
       {error && (
@@ -480,13 +1230,26 @@ export default function VendorsPage() {
           recoveryDetail="Discovery decisions need GRC inventory write access."
         />
       )}
+      {createError && !createOpen && (
+        <ErrorBlock
+          error={createError}
+          recoveryDetail="Vendor was not saved."
+        />
+      )}
+      {createMessage && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] font-semibold text-emerald-700 dark:text-emerald-200">
+          {createMessage}
+        </div>
+      )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Vendors" value={summary?.total_vendors ?? vendors.length} detail={`${summary?.active_vendors ?? vendors.length} active`} state={metricState} />
-        <MetricCard label="Risk queue" value={summary?.risk_queue_vendors ?? vendors.filter((vendor) => (vendor.queue_reasons?.length ?? 0) > 0).length} detail={`${summary?.restricted_vendors ?? vendors.filter((vendor) => ["restricted", "conditionally_approved"].includes(vendor.lifecycle_state ?? "")).length} restricted`} intent={(summary?.risk_queue_vendors ?? 0) > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Missing owner" value={summary?.owner_missing_vendors ?? vendors.filter((vendor) => vendor.owner_state === "missing").length} detail={`${riskWithOwnerGaps} high risk`} intent={riskWithOwnerGaps > 0 ? "warning" : "neutral"} state={metricState} />
-        <MetricCard label="Review overdue" value={summary?.review_overdue_vendors ?? vendors.filter((vendor) => vendor.review_state === "overdue").length} detail={`${summary?.review_due_soon_vendors ?? vendors.filter((vendor) => vendor.review_state === "due_soon").length} due soon`} intent={(summary?.review_overdue_vendors ?? 0) > 0 ? "danger" : "neutral"} state={metricState} />
-      </div>
+      <VendorHealthStrip
+        discoveries={discoveries}
+        discoveryMetricState={discoveryMetricState}
+        discoverySummary={discoverySummary}
+        summary={summary}
+        vendorMetricState={vendorMetricState}
+        vendors={vendors}
+      />
 
       <Panel
         title="Upload vendor document"
@@ -537,7 +1300,7 @@ export default function VendorsPage() {
           </label>
           <label className={labelClass}>
             Website
-            <input value={vendorUploadWebsite} onChange={(event) => setVendorUploadWebsite(event.target.value)} placeholder="https://vendor.example" className={inputClass} />
+            <input value={vendorUploadWebsite} onChange={(event) => setVendorUploadWebsite(event.target.value)} placeholder="https://www.example.com/vendor" className={inputClass} />
           </label>
           <button
             type="submit"
@@ -561,41 +1324,14 @@ export default function VendorsPage() {
         )}
       </Panel>
 
-      <section className="surface-panel px-5 py-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(0,1fr)_145px_145px_145px_170px_140px_140px_140px]">
+      <section className="surface-panel p-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
           <label className={labelClass}>
             Search
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Vendor, owner, service" className={inputClass} />
-          </label>
-          <label className={labelClass}>
-            Risk
-            <select value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)} className={inputClass}>
-              {riskFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Review
-            <select value={reviewState} onChange={(event) => setReviewState(event.target.value)} className={inputClass}>
-              {reviewFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Owner
-            <select value={ownerState} onChange={(event) => setOwnerState(event.target.value)} className={inputClass}>
-              {ownerFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Lifecycle
-            <select value={lifecycleState} onChange={(event) => setLifecycleState(event.target.value)} className={inputClass}>
-              {lifecycleFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Queue
-            <select value={queueState} onChange={(event) => setQueueState(event.target.value)} className={inputClass}>
-              {queueFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
-            </select>
+            <div className="relative mt-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden="true" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Vendor, owner, source" className="control-input w-full px-9 py-2 text-[13px]" />
+            </div>
           </label>
           <label className={labelClass}>
             Source
@@ -605,10 +1341,48 @@ export default function VendorsPage() {
             </select>
           </label>
           <label className={labelClass}>
-            Tenant
-            <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="Current" className={inputClass} />
+            Risk
+            <select value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)} className={inputClass}>
+              {riskFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
+            </select>
           </label>
         </div>
+        <details className="mt-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-[12px] font-semibold text-[var(--text-secondary)]">
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            More filters
+          </summary>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <label className={labelClass}>
+              Review
+              <select value={reviewState} onChange={(event) => setReviewState(event.target.value)} className={inputClass}>
+                {reviewFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Owner
+              <select value={ownerState} onChange={(event) => setOwnerState(event.target.value)} className={inputClass}>
+                {ownerFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Lifecycle
+              <select value={lifecycleState} onChange={(event) => setLifecycleState(event.target.value)} className={inputClass}>
+                {lifecycleFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Register
+              <select value={queueState} onChange={(event) => setQueueState(event.target.value)} className={inputClass}>
+                {queueFilters.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={labelClass}>
+              Tenant
+              <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="Current" className={inputClass} />
+            </label>
+          </div>
+        </details>
         <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </section>
 
@@ -624,242 +1398,24 @@ export default function VendorsPage() {
       {discoveriesQuery.loading && !discoveriesQuery.data ? (
         <LoadingBlock label="Loading vendor discoveries..." />
       ) : (
-        <section className="surface-panel overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
-            <div>
-              <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Discovery queue</h2>
-              <p className="mt-1 text-[12px] text-[var(--text-muted)]">
-                {countLabel(discoveries.length, "candidate")} in this view. {countLabel(discoveries.reduce((sum, discovery) => sum + (discovery.signals?.length ?? 0), 0), "source signal")}.
-              </p>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Candidate</th>
-                  <th>Decision</th>
-                  <th>Evidence</th>
-                  <th>Source</th>
-                  <th>Linked vendor</th>
-                  <th>Decision input</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {discoveries.map((discovery) => {
-                  const draft = decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
-                  const linkDisabled = decisionSaving || draft.linkedVendorURN.trim() === "";
-                  return (
-                    <tr key={discovery.urn}>
-                      <td className="min-w-[16rem]">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="font-semibold text-[var(--text-primary)]">{discovery.name || shortEntity(discovery.urn)}</div>
-                          {typeof discovery.confidence_score === "number" && (
-                            <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-secondary)]">
-                              {confidenceLabel(discovery.confidence_score)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.normalized_name || discovery.discovery_id || shortEntity(discovery.urn)}</div>
-                        {discovery.discovery_reason && <div className="mt-1 max-w-[24rem] text-[12px] leading-5 text-[var(--text-secondary)]">{discovery.discovery_reason}</div>}
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {discovery.category && <Badge value={discovery.category} />}
-                          <Badge value={discovery.source_status || "discovered"} />
-                        </div>
-                        {discovery.decision_reason && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.decision_reason}</div>}
-                      </td>
-                      <td><DiscoveryStateBadge state={discovery.decision_state} /></td>
-                      <td className="min-w-[18rem] text-[12px] text-[var(--text-secondary)]">
-                        <DiscoverySignals signals={discovery.signals} />
-                      </td>
-                      <td className="min-w-[12rem] text-[12px] text-[var(--text-muted)]">
-                        <div className="font-semibold text-[var(--text-primary)]">{discovery.provider || discovery.source_id || "Source not set"}</div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {discoverySourceIDs(discovery).map((id) => <Badge key={id} value={id} />)}
-                        </div>
-                        <div className="mt-1 font-mono">{shortEntity(discovery.runtime_id)}</div>
-                        <div className="mt-2 text-[var(--text-muted)]">
-                          <div>First seen {displayDate(discovery.first_observed_at)}</div>
-                          <div>Last seen {displayDate(discovery.last_observed_at)}</div>
-                        </div>
-                      </td>
-                      <td className="text-[12px]">
-                        {discovery.linked_vendor_urn ? (
-                          <Link href={`/vendors/${encodeURIComponent(discovery.linked_vendor_urn)}`} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-                            {shortEntity(discovery.linked_vendor_urn)}
-                          </Link>
-                        ) : (
-                          <span className="text-[var(--text-muted)]">Not linked</span>
-                        )}
-                        {discovery.decision_updated_by && <div className="mt-1 text-[var(--text-muted)]">{discovery.decision_updated_by}</div>}
-                      </td>
-                      <td className="min-w-[18rem]">
-                        <div className="grid gap-2">
-                          <input
-                            value={draft.reason}
-                            onChange={(event) => updateDecisionDraft(discovery.urn, { reason: event.target.value })}
-                            placeholder="Decision reason"
-                            className="control-input px-2 py-1 text-[12px]"
-                          />
-                          <input
-                            value={draft.linkedVendorURN}
-                            onChange={(event) => updateDecisionDraft(discovery.urn, { linkedVendorURN: event.target.value })}
-                            placeholder="Vendor URN for link"
-                            className="control-input px-2 py-1 font-mono text-[12px]"
-                          />
-                        </div>
-                      </td>
-                      <td>
-                        <div className="flex flex-wrap gap-1.5">
-                          <button type="button" disabled={decisionSaving} onClick={() => { void setDiscoveryDecision(discovery, "approved").catch(() => undefined); }} className="secondary-button px-2 py-1 text-[12px] disabled:opacity-50">Approve</button>
-                          <button type="button" disabled={decisionSaving} onClick={() => { void setDiscoveryDecision(discovery, "rejected").catch(() => undefined); }} className="secondary-button px-2 py-1 text-[12px] disabled:opacity-50">Reject</button>
-                          <button type="button" disabled={decisionSaving} onClick={() => { void setDiscoveryDecision(discovery, "ignored").catch(() => undefined); }} className="secondary-button px-2 py-1 text-[12px] disabled:opacity-50">Ignore</button>
-                          <button type="button" disabled={linkDisabled} onClick={() => { void setDiscoveryDecision(discovery, "linked").catch(() => undefined); }} className="secondary-button px-2 py-1 text-[12px] disabled:opacity-50">Link</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {discoveries.length === 0 && (
-            <div className="px-5 py-10 text-center text-[13px] text-[var(--text-muted)]">No discovery candidates need a decision.</div>
-          )}
-        </section>
+        <DiscoveryQueue
+          createSaving={createSaving}
+          decisionDrafts={decisionDrafts}
+          decisionSaving={decisionSaving}
+          discoveries={discoveries}
+          latestSync={latestSourceSync(discoverySources)}
+          onCreateVendor={createVendorFromDiscovery}
+          onDecision={setDiscoveryDecision}
+          onRefresh={() => { void discoveriesQuery.reload(); }}
+          onUpdateDraft={updateDecisionDraft}
+          sourceCount={discoverySummary?.source_count ?? discoverySources.length}
+        />
       )}
 
       {vendorsQuery.loading && !vendorsQuery.data ? (
         <LoadingBlock label="Loading vendors..." />
       ) : (
-        <section className="surface-panel overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
-            <div>
-              <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Vendor register</h2>
-              <p className="mt-1 text-[12px] text-[var(--text-muted)]">{countLabel(vendors.length, "vendor")} in this view. {assuranceItems.toLocaleString()} linked GRC records.</p>
-            </div>
-            <Link href="/inventory?entity_type=vendor" className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-              Open in inventory
-            </Link>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Vendor</th>
-                  <th>Queue</th>
-                  <th>Owner</th>
-                  <th>Review</th>
-	                  <th>Lifecycle</th>
-	                  <th>Risk</th>
-	                  <th>Packet</th>
-	                  <th>Exposure</th>
-	                  <th>Remediation</th>
-	                  <th>Assessment</th>
-	                  <th>Monitoring</th>
-                  <th>Freshness</th>
-                  <th>Renewal</th>
-                  <th>GRC records</th>
-                  <th>Open risk</th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendors.map((vendor) => (
-                  <tr key={vendor.urn}>
-                    <td className="min-w-[18rem]">
-                      <Link href={vendorDetailHref(vendor)} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-                        {vendor.name || shortEntity(vendor.urn)}
-                      </Link>
-                      <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
-                        {vendor.category && <span>{humanize(vendor.category)}</span>}
-                        {vendor.status && <span>{humanize(vendor.status)}</span>}
-                        {vendor.services_provided && <span className="max-w-[18rem] truncate">{vendor.services_provided}</span>}
-                      </div>
-                    </td>
-                    <td className="min-w-[14rem] text-[12px] text-[var(--text-secondary)]">
-                      {(vendor.queue_reasons?.length ?? 0) > 0 ? (
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap gap-1.5">
-                            {vendor.queue_reasons?.slice(0, 3).map((reason) => <Badge key={reason} value={reason} />)}
-                          </div>
-                          {firstQueueAction(vendor) && (
-                            <div className="font-semibold text-[var(--text-primary)]">{firstQueueAction(vendor)?.label}</div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-[var(--text-muted)]">No queue reason</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="text-[13px] font-medium text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
-                      <div className="mt-1">{vendor.owner_state === "missing" ? <Badge value="missing" /> : <Badge value="assigned" />}</div>
-                    </td>
-                    <td>
-                      <Badge value={vendor.review_state} />
-                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{reviewDetail(vendor)}</div>
-                    </td>
-                    <td>
-                      <Badge value={vendor.lifecycle_state || "unknown"} />
-                      {vendor.lifecycle_reason && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{vendor.lifecycle_reason}</div>}
-                    </td>
-	                    <td>
-	                      <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
-	                      <div className="mt-1 text-[12px] font-semibold text-[var(--text-primary)]">{riskScoreLabel(vendor)}</div>
-	                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{vendor.risk_tier ? humanize(vendor.risk_tier) : "No tier"}</div>
-	                    </td>
-	                    <td>
-	                      <Badge value={vendor.packet_state || "unknown"} />
-	                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{packetDetail(vendor)}</div>
-	                    </td>
-	                    <td>
-	                      <VendorRiskBadge level={vendor.exposure_level || "unknown"} />
-	                      <div className="mt-1 max-w-[12rem] truncate text-[12px] text-[var(--text-muted)]">{exposureDetail(vendor)}</div>
-	                    </td>
-	                    <td>
-	                      <Badge value={vendor.remediation_state || "unknown"} />
-	                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{remediationDetail(vendor)}</div>
-	                    </td>
-	                    <td>
-	                      <Badge value={vendor.assessment_state || "unknown"} />
-                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{assessmentDetail(vendor)}</div>
-                    </td>
-                    <td>
-                      <Badge value={vendor.monitoring_state || "unknown"} />
-                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{monitoringDetail(vendor)}</div>
-                    </td>
-                    <td>
-                      <Badge value={vendor.evidence_freshness_state || "unknown"} />
-                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{freshnessLabel(vendor)}</div>
-                    </td>
-                    <td>
-                      <Badge value={vendor.renewal_state || "unknown"} />
-                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{renewalDetail(vendor)}</div>
-                    </td>
-                    <td className="text-[12px] text-[var(--text-secondary)]">
-                      <div>{vendor.contract_count} contracts</div>
-                      <div>{vendor.security_review_count} reviews</div>
-                      <div>{vendor.questionnaire_count + vendor.assurance_document_count} assurance</div>
-                    </td>
-                    <td className="text-[12px] text-[var(--text-secondary)]">
-                      <div className="font-semibold text-[var(--text-primary)]">{vendor.open_findings ?? 0} open</div>
-                      <div>{vendor.critical_findings ?? 0} critical, {vendor.high_findings ?? 0} high</div>
-                      <div>{vendor.evidence_items ?? 0} evidence</div>
-                    </td>
-                    <td className="text-[12px] text-[var(--text-muted)]">
-                      <div>{sourceLabel(vendor)}</div>
-                      <div className="mt-1 font-mono">{shortEntity(vendor.runtime_id)}</div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {vendors.length === 0 && (
-            <div className="px-5 py-10 text-center text-[13px] text-[var(--text-muted)]">No vendors match these filters.</div>
-          )}
-        </section>
+        <VendorRegisterSection assuranceItems={assuranceItems} vendors={vendors} />
       )}
     </main>
   );
