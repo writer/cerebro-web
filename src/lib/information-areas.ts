@@ -95,9 +95,9 @@ export const informationAreas: InformationArea[] = [
     label: "Controls",
     shortLabel: "Controls",
     tagline: "Control blockers, evidence freshness, and packet readiness.",
-    description: "Control posture, framework readiness, evidence blockers, coverage gaps, and audit-ready exports.",
-    searchPlaceholder: "Search controls, evidence, frameworks...",
-    priorities: ["Packet readiness", "Evidence gaps", "Failing controls", "Proof lineage"],
+    description: "Control posture, policy owners, framework readiness, evidence blockers, coverage gaps, and audit-ready exports.",
+    searchPlaceholder: "Search controls, policies, evidence, frameworks...",
+    priorities: ["Packet readiness", "Policy approvals", "Evidence gaps", "Failing controls"],
     headline: "evidence gaps block audit readiness",
     summaryFocus: ["missing or stale evidence", "failing controls", "packet readiness"],
     signals: [
@@ -110,7 +110,7 @@ export const informationAreas: InformationArea[] = [
     ],
     workQueue: {
       title: "Controls",
-      description: "Controls and evidence items that affect export readiness.",
+      description: "Policy approvals, controls, and evidence items that affect export readiness.",
       actionLabel: "Review controls",
       actionHref: "/controls",
       empty: "All in-scope controls are defensible. Export the packet or schedule the next run.",
@@ -118,6 +118,7 @@ export const informationAreas: InformationArea[] = [
     primaryRoutes: [
       { href: "/", label: "Home", detail: "Audit readiness, control posture, and proof coverage." },
       { href: "/controls", label: "Controls", detail: "Control status, mapped findings, and evidence gaps." },
+      { href: "/policies", label: "Policies", detail: "Policy versions, approvals, attestations, exceptions, and mappings." },
       { href: "/frameworks", label: "Frameworks", detail: "Framework readiness, maturity, gaps, planning, and exports." },
       { href: "/evidence", label: "Evidence", detail: "Evidence register linked to findings, rules, and graph roots." },
       { href: "/reports", label: "Reports", detail: "Audit packs with controls, evidence, and impact proof." },

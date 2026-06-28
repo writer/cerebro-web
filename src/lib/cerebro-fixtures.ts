@@ -766,6 +766,316 @@ const controlPacketFixture = () => ({
   generated_at: generatedAt,
 });
 
+const policyLifecycleFixture = () => ({
+  summary: {
+    policies: 4,
+    templates: 4,
+    draft_versions: 2,
+    pending_approvals: 2,
+    overdue_reviews: 1,
+    open_exceptions: 2,
+    expiring_exceptions: 1,
+    attestation_coverage_pct: 82,
+    overdue_attestations: 6,
+    mapped_controls: 7,
+    evidence_items: 9,
+  },
+  templates: [
+    {
+      id: "tpl-access-control",
+      urn: `urn:cerebro:${tenantID}:policy_template:policyops:tpl-access-control`,
+      title: "Access Control Policy",
+      status: "published",
+      category: "Security",
+      frameworks: ["SOC 2", "ISO 27001"],
+      owner: "Security",
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" },
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.5.15`, control_id: "A.5.15", framework: "ISO 27001", title: "Access control" },
+      ],
+      evidence: [
+        { urn: "evidencecas://policy/access-template", title: "Template review checklist", evidence_type: "checklist" },
+      ],
+    },
+    {
+      id: "tpl-incident-response",
+      urn: `urn:cerebro:${tenantID}:policy_template:policyops:tpl-incident-response`,
+      title: "Incident Response Policy",
+      status: "published",
+      category: "Operations",
+      frameworks: ["SOC 2", "NIST CSF"],
+      owner: "Security",
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC7.2`, control_id: "CC7.2", framework: "SOC 2", title: "Security event monitoring" },
+      ],
+    },
+    {
+      id: "tpl-data-retention",
+      urn: `urn:cerebro:${tenantID}:policy_template:policyops:tpl-data-retention`,
+      title: "Data Retention Policy",
+      status: "published",
+      category: "Privacy",
+      frameworks: ["ISO 27001", "Privacy"],
+      owner: "Legal",
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.5.34`, control_id: "A.5.34", framework: "ISO 27001", title: "Privacy and PII protection" },
+      ],
+    },
+    {
+      id: "tpl-secure-development",
+      urn: `urn:cerebro:${tenantID}:policy_template:policyops:tpl-secure-development`,
+      title: "Secure Development Policy",
+      status: "draft",
+      category: "Engineering",
+      frameworks: ["SOC 2", "ISO 27001"],
+      owner: "AppSec",
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC7.1`, control_id: "CC7.1", framework: "SOC 2", title: "System changes" },
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.8.25`, control_id: "A.8.25", framework: "ISO 27001", title: "Secure development lifecycle" },
+      ],
+    },
+  ],
+  policies: [
+    {
+      id: "access-control",
+      urn: `urn:cerebro:${tenantID}:policy:policyops:policy:access-control`,
+      title: "Access Control Policy",
+      status: "approved",
+      owner: "Security",
+      reviewer: "GRC",
+      review_cadence: "annual",
+      next_review_due_at: "2026-02-15",
+      latest_version: "2.1",
+      version_status: "draft",
+      approval_status: "pending",
+      acceptance_summary: { accepted: 72, overdue: 5, pending: 11, total: 88 },
+      exception_summary: { active: 1, expiring: 1, expired: 0 },
+      versions: [
+        {
+          id: "access-control-2.1",
+          urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`,
+          policy_id: "access-control",
+          title: "Access Control Policy v2.1",
+          version: "2.1",
+          status: "draft",
+          author: "security@example.com",
+          owner: "Security",
+          created_at: "2026-01-08T10:00:00.000Z",
+          effective_at: "2026-02-01",
+          change_summary: "Expanded privileged access review scope.",
+          diff_summary: "Added break-glass account review, service account inventory, and quarterly owner certification.",
+          diff_url: "https://cerebro.example.com/policies/access-control/compare/2.0...2.1",
+          controls: [
+            { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" },
+          ],
+          evidence: [
+            { urn: "evidencecas://policy/access-control-draft", title: "Draft approval packet", evidence_type: "approval_packet" },
+          ],
+          assignments: [
+            { target_urn: `urn:cerebro:${tenantID}:grc_group:policyops:employees`, target_type: "grc.group", label: "All employees", scope: "attestation" },
+          ],
+        },
+        {
+          id: "access-control-2.0",
+          urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.0`,
+          policy_id: "access-control",
+          title: "Access Control Policy v2.0",
+          version: "2.0",
+          status: "approved",
+          author: "grc@example.com",
+          owner: "Security",
+          created_at: "2025-07-01T10:00:00.000Z",
+          approved_at: "2025-07-12T16:00:00.000Z",
+          effective_at: "2025-08-01",
+          change_summary: "Annual review completed.",
+        },
+      ],
+      approvals: [
+        {
+          id: "access-control-approval-2.1",
+          urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`,
+          policy_id: "access-control",
+          policy_version_id: "access-control-2.1",
+          step: "Legal and security approval",
+          status: "pending",
+          approvers: ["legal@example.com", "security@example.com"],
+          requested_by: "grc@example.com",
+          requested_at: "2026-01-10T14:00:00.000Z",
+          due_at: "2026-01-20",
+        },
+      ],
+      attestations: [
+        { id: "access-attest-accepted", urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-accepted`, policy_id: "access-control", policy_version_id: "access-control-2.0", person: "maya@example.com", assignees: ["All employees"], status: "accepted", accepted_at: "2026-01-12T09:00:00.000Z", due_at: "2026-01-15" },
+        { id: "access-attest-overdue", urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-overdue`, policy_id: "access-control", policy_version_id: "access-control-2.0", person: "sam@example.com", assignees: ["All employees"], status: "overdue", due_at: "2026-01-11" },
+        { id: "access-attest-pending", urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-pending`, policy_id: "access-control", policy_version_id: "access-control-2.0", person: "allie@example.com", assignees: ["All employees"], status: "pending", due_at: "2026-01-22" },
+      ],
+      reviews: [
+        { id: "access-review-2026", urn: `urn:cerebro:${tenantID}:policy_review:policyops:access-review-2026`, policy_id: "access-control", status: "scheduled", cadence: "annual", owner: "Security", reviewers: ["GRC"], review_due_at: "2026-02-15" },
+      ],
+      exceptions: [
+        {
+          id: "access-device-waiver",
+          urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`,
+          policy_id: "access-control",
+          title: "Shared build host waiver",
+          status: "active",
+          owner: "Platform",
+          approvers: ["Security"],
+          targets: [{ urn: apiURN, entity_type: "service", label: "payments-api" }],
+          controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" }],
+          reason: "Temporary access pattern while build host isolation is completed.",
+          approved_at: "2026-01-02T12:00:00.000Z",
+          expires_at: "2026-01-28",
+        },
+      ],
+      assignments: [
+        { target_urn: `urn:cerebro:${tenantID}:grc_group:policyops:employees`, target_type: "grc.group", label: "All employees", scope: "attestation" },
+      ],
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" },
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.5.15`, control_id: "A.5.15", framework: "ISO 27001", title: "Access control" },
+      ],
+      evidence: [
+        { urn: "evidencecas://policy/access-control-2.0", title: "Approved policy PDF", evidence_type: "policy_document" },
+        { urn: "evidencecas://policy/access-attestations", title: "Employee attestation export", evidence_type: "attestation_export" },
+      ],
+    },
+    {
+      id: "incident-response",
+      urn: `urn:cerebro:${tenantID}:policy:policyops:policy:incident-response`,
+      title: "Incident Response Policy",
+      status: "approved",
+      owner: "Security",
+      reviewer: "Compliance",
+      review_cadence: "annual",
+      next_review_due_at: "2026-01-12",
+      latest_version: "1.4",
+      version_status: "approved",
+      approval_status: "approved",
+      acceptance_summary: { accepted: 18, overdue: 0, pending: 0, total: 18 },
+      exception_summary: { active: 0, expiring: 0, expired: 0 },
+      versions: [
+        { id: "incident-response-1.4", urn: `urn:cerebro:${tenantID}:policy_version:policyops:incident-response-1.4`, policy_id: "incident-response", title: "Incident Response Policy v1.4", version: "1.4", status: "approved", author: "security@example.com", owner: "Security", created_at: "2025-12-04T10:00:00.000Z", approved_at: "2025-12-15T16:00:00.000Z", effective_at: "2026-01-01", change_summary: "Updated breach notification escalation matrix." },
+      ],
+      approvals: [
+        { id: "incident-approval-1.4", urn: `urn:cerebro:${tenantID}:policy_approval:policyops:incident-approval-1.4`, policy_id: "incident-response", policy_version_id: "incident-response-1.4", step: "Security approval", status: "approved", approvers: ["security@example.com"], requested_by: "grc@example.com", requested_at: "2025-12-10T13:00:00.000Z", approved_at: "2025-12-15T16:00:00.000Z" },
+      ],
+      attestations: [
+        { id: "incident-team-attest", urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:incident-team-attest`, policy_id: "incident-response", policy_version_id: "incident-response-1.4", person: "security-oncall@example.com", assignees: ["Security on-call"], status: "accepted", accepted_at: "2026-01-05T09:00:00.000Z", due_at: "2026-01-07" },
+      ],
+      reviews: [
+        { id: "incident-review-2026", urn: `urn:cerebro:${tenantID}:policy_review:policyops:incident-review-2026`, policy_id: "incident-response", status: "pending", cadence: "annual", owner: "Security", reviewers: ["Compliance"], review_due_at: "2026-01-12" },
+      ],
+      exceptions: [],
+      assignments: [
+        { target_urn: `urn:cerebro:${tenantID}:grc_group:policyops:security-on-call`, target_type: "grc.group", label: "Security on-call", scope: "training" },
+      ],
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC7.2`, control_id: "CC7.2", framework: "SOC 2", title: "Security event monitoring" },
+      ],
+      evidence: [
+        { urn: "evidencecas://policy/incident-response-1.4", title: "Approved incident response policy", evidence_type: "policy_document" },
+        { urn: "evidencecas://policy/incident-review-notes", title: "Review notes", evidence_type: "review_notes" },
+      ],
+    },
+    {
+      id: "data-retention",
+      urn: `urn:cerebro:${tenantID}:policy:policyops:policy:data-retention`,
+      title: "Data Retention Policy",
+      status: "approved",
+      owner: "Legal",
+      reviewer: "Privacy",
+      review_cadence: "semiannual",
+      next_review_due_at: "2026-05-01",
+      latest_version: "3.0",
+      version_status: "approved",
+      approval_status: "approved",
+      acceptance_summary: { accepted: 41, overdue: 1, pending: 6, total: 48 },
+      exception_summary: { active: 1, expiring: 0, expired: 0 },
+      versions: [
+        { id: "data-retention-3.0", urn: `urn:cerebro:${tenantID}:policy_version:policyops:data-retention-3.0`, policy_id: "data-retention", title: "Data Retention Policy v3.0", version: "3.0", status: "approved", author: "privacy@example.com", owner: "Legal", created_at: "2025-10-02T10:00:00.000Z", approved_at: "2025-10-20T16:00:00.000Z", effective_at: "2025-11-01", change_summary: "Aligned retention schedule with product data classes." },
+      ],
+      approvals: [],
+      attestations: [
+        { id: "data-retention-overdue", urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:data-retention-overdue`, policy_id: "data-retention", policy_version_id: "data-retention-3.0", person: "data-owner@example.com", assignees: ["Data owners"], status: "overdue", due_at: "2026-01-14" },
+      ],
+      reviews: [
+        { id: "data-retention-review-2026", urn: `urn:cerebro:${tenantID}:policy_review:policyops:data-retention-review-2026`, policy_id: "data-retention", status: "scheduled", cadence: "semiannual", owner: "Legal", reviewers: ["Privacy"], review_due_at: "2026-05-01" },
+      ],
+      exceptions: [
+        { id: "retention-analytics-waiver", urn: `urn:cerebro:${tenantID}:policy_exception:policyops:retention-analytics-waiver`, policy_id: "data-retention", title: "Analytics retention waiver", status: "active", owner: "Data Platform", approvers: ["Legal"], targets: [{ urn: bucketURN, entity_type: "storage_bucket", label: "audit-bucket" }], controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.5.34`, control_id: "A.5.34", framework: "ISO 27001", title: "Privacy and PII protection" }], reason: "Customer support analytics migration needs historical event parity.", approved_at: "2025-12-18T12:00:00.000Z", expires_at: "2026-03-31" },
+      ],
+      assignments: [
+        { target_urn: `urn:cerebro:${tenantID}:grc_group:policyops:data-owners`, target_type: "grc.group", label: "Data owners", scope: "attestation" },
+      ],
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.5.34`, control_id: "A.5.34", framework: "ISO 27001", title: "Privacy and PII protection" },
+      ],
+      evidence: [
+        { urn: "evidencecas://policy/data-retention-3.0", title: "Approved retention policy", evidence_type: "policy_document" },
+        { urn: "evidencecas://policy/retention-schedule", title: "Retention schedule", evidence_type: "schedule" },
+      ],
+    },
+    {
+      id: "secure-development",
+      urn: `urn:cerebro:${tenantID}:policy:policyops:policy:secure-development`,
+      title: "Secure Development Policy",
+      status: "in_review",
+      owner: "AppSec",
+      reviewer: "Engineering",
+      review_cadence: "annual",
+      next_review_due_at: "2026-01-24",
+      latest_version: "1.0",
+      version_status: "changes_requested",
+      approval_status: "pending",
+      acceptance_summary: { accepted: 0, overdue: 0, pending: 42, total: 42 },
+      exception_summary: { active: 0, expiring: 0, expired: 0 },
+      versions: [
+        { id: "secure-development-1.0", urn: `urn:cerebro:${tenantID}:policy_version:policyops:secure-development-1.0`, policy_id: "secure-development", title: "Secure Development Policy v1.0", version: "1.0", status: "changes_requested", author: "appsec@example.com", owner: "AppSec", created_at: "2026-01-06T10:00:00.000Z", effective_at: "2026-02-15", change_summary: "Initial policy for code review, dependency scanning, and release gates.", diff_summary: "Reviewer requested clearer ownership for emergency releases." },
+      ],
+      approvals: [
+        { id: "secure-development-approval-1.0", urn: `urn:cerebro:${tenantID}:policy_approval:policyops:secure-development-approval-1.0`, policy_id: "secure-development", policy_version_id: "secure-development-1.0", step: "Engineering approval", status: "requested", approvers: ["engineering@example.com"], requested_by: "appsec@example.com", requested_at: "2026-01-13T13:00:00.000Z", due_at: "2026-01-21" },
+      ],
+      attestations: [],
+      reviews: [
+        { id: "secure-development-review-2026", urn: `urn:cerebro:${tenantID}:policy_review:policyops:secure-development-review-2026`, policy_id: "secure-development", status: "in_review", cadence: "annual", owner: "AppSec", reviewers: ["Engineering"], review_due_at: "2026-01-24" },
+      ],
+      exceptions: [],
+      assignments: [
+        { target_urn: `urn:cerebro:${tenantID}:grc_group:policyops:engineering`, target_type: "grc.group", label: "Engineering", scope: "attestation" },
+      ],
+      controls: [
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC7.1`, control_id: "CC7.1", framework: "SOC 2", title: "System changes" },
+        { urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.8.25`, control_id: "A.8.25", framework: "ISO 27001", title: "Secure development lifecycle" },
+      ],
+      evidence: [
+        { urn: "evidencecas://policy/secure-development-draft", title: "Draft policy", evidence_type: "draft_document" },
+      ],
+    },
+  ],
+  work_queue: [
+    { id: "incident-review-2026:review", policy_id: "incident-response", policy: "Incident Response Policy", record_urn: `urn:cerebro:${tenantID}:policy_review:policyops:incident-review-2026`, type: "review", status: "pending", owner: "Security", due_at: "2026-01-12", action: "Complete owner review" },
+    { id: "data-retention-overdue:attestation", policy_id: "data-retention", policy: "Data Retention Policy", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:data-retention-overdue`, type: "attestation", status: "overdue", owner: "data-owner@example.com", due_at: "2026-01-14", action: "Send reminder" },
+    { id: "access-control-2.1:draft", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, type: "version", status: "draft", owner: "Security", due_at: "2026-02-01", action: "Review draft" },
+    { id: "access-control-approval-2.1:approval", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, type: "approval", status: "pending", owner: "legal@example.com", due_at: "2026-01-20", action: "Approve version" },
+    { id: "secure-development-approval-1.0:approval", policy_id: "secure-development", policy: "Secure Development Policy", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:secure-development-approval-1.0`, type: "approval", status: "requested", owner: "engineering@example.com", due_at: "2026-01-21", action: "Approve version" },
+    { id: "access-device-waiver:exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, type: "exception", status: "active", owner: "Platform", due_at: "2026-01-28", action: "Renew or close exception" },
+  ],
+  reminders: [
+    { id: "access-attestation-reminder", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:access-attestation-reminder`, policy_id: "access-control", policy_version_id: "access-control-2.0", title: "Access Control attestation reminder", status: "sent", channel: "email", recipients: ["All employees"], escalated_to: ["Security"], due_at: "2026-01-22", sent_at: "2026-01-15T09:00:00.000Z" },
+    { id: "retention-owner-escalation", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:retention-owner-escalation`, policy_id: "data-retention", policy_version_id: "data-retention-3.0", title: "Data owner attestation escalation", status: "sent", channel: "slack", recipients: ["Data owners"], escalated_to: ["Legal"], due_at: "2026-01-14", sent_at: "2026-01-15T10:00:00.000Z" },
+    { id: "secure-development-review-reminder", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:secure-development-review-reminder`, policy_id: "secure-development", policy_version_id: "secure-development-1.0", title: "Secure Development review reminder", status: "scheduled", channel: "email", recipients: ["Engineering"], escalated_to: [], due_at: "2026-01-24", sent_at: "" },
+  ],
+  mappings: [
+    { policy_id: "access-control", policy_title: "Access Control Policy", source_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, source_type: "policy.version", target: { urn: apiURN, entity_type: "service", label: "payments-api" }, controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" }], evidence: [{ urn: "evidencecas://policy/access-control-draft", title: "Draft approval packet", evidence_type: "approval_packet" }] },
+    { policy_id: "access-control", policy_title: "Access Control Policy", source_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, source_type: "policy.exception", target: { urn: apiURN, entity_type: "service", label: "payments-api" }, controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" }], evidence: [{ urn: "evidencecas://policy/access-attestations", title: "Employee attestation export", evidence_type: "attestation_export" }] },
+    { policy_id: "incident-response", policy_title: "Incident Response Policy", source_urn: `urn:cerebro:${tenantID}:policy_version:policyops:incident-response-1.4`, source_type: "policy.version", target: { urn: repoURN, entity_type: "repository", label: "public-demo" }, controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC7.2`, control_id: "CC7.2", framework: "SOC 2", title: "Security event monitoring" }], evidence: [{ urn: "evidencecas://policy/incident-response-1.4", title: "Approved incident response policy", evidence_type: "policy_document" }] },
+    { policy_id: "data-retention", policy_title: "Data Retention Policy", source_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:retention-analytics-waiver`, source_type: "policy.exception", target: { urn: bucketURN, entity_type: "storage_bucket", label: "audit-bucket" }, controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.5.34`, control_id: "A.5.34", framework: "ISO 27001", title: "Privacy and PII protection" }], evidence: [{ urn: "evidencecas://policy/retention-schedule", title: "Retention schedule", evidence_type: "schedule" }] },
+    { policy_id: "secure-development", policy_title: "Secure Development Policy", source_urn: `urn:cerebro:${tenantID}:policy_version:policyops:secure-development-1.0`, source_type: "policy.version", target: { urn: repoURN, entity_type: "repository", label: "public-demo" }, controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:A.8.25`, control_id: "A.8.25", framework: "ISO 27001", title: "Secure development lifecycle" }], evidence: [{ urn: "evidencecas://policy/secure-development-draft", title: "Draft policy", evidence_type: "draft_document" }] },
+  ],
+  generated_at: generatedAt,
+});
+
 const programReadinessFixture = () => ({
   profile: { id: "fixture", name: "Fixture readiness profile" },
   summary: {
@@ -1222,6 +1532,10 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "grc/controls") {
     return jsonFixture({ controls: limitList(controls, searchParams), generated_at: generatedAt });
+  }
+
+  if (normalizedPath === "grc/policy-lifecycle") {
+    return jsonFixture(policyLifecycleFixture());
   }
 
   if (normalizedPath === "grc/evidence") {
