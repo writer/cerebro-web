@@ -6,6 +6,11 @@ import {
   connectorCapabilities,
   connectorCapabilityLabel,
   connectorPath,
+  connectorProjectedGraphItems,
+  connectorProjectionStats,
+  connectorProjectionTemplate,
+  connectorResourceFamilyEventKind,
+  connectorResourceFamilySchemaRef,
   connectorPrimaryAction,
   filterConnectorCards,
 } from "./connector-view";
@@ -124,5 +129,44 @@ describe("connector view model", () => {
         { id: "vulnerabilities", label: "Vulnerabilities" },
       ],
     }, 2)).toEqual(["Endpoint devices", "Findings"]);
+  });
+
+  it("normalizes projected graph metadata from generated resource families", () => {
+    const family = {
+      id: "users",
+      label: "Users",
+      path: "/api/v1/users",
+      event: { kind: "okta.users", schema_ref: "okta/users/v1" },
+      projection: { template: "identity_user" },
+    };
+
+    expect(connectorProjectionTemplate(family)).toBe("identity_user");
+    expect(connectorResourceFamilyEventKind(family)).toBe("okta.users");
+    expect(connectorResourceFamilySchemaRef(family)).toBe("okta/users/v1");
+  });
+
+  it("summarizes projected graph items without duplicate labels", () => {
+    const card = {
+      source_id: "okta",
+      name: "Okta",
+      integration_depth: { resource_families: 4, projection_templates: 3, high_value_families: 2, coverage_dimensions: 3 },
+      resource_families: [
+        { id: "users", label: "Users", projection_template: "identity_user", coverage: ["identity_configuration"], high_value: true },
+        { id: "admins", label: "Admins", projection: { template: "identity_user" }, coverage: ["access_review"] },
+        { id: "groups", label: "Groups", projection: { template: "identity_group" }, high_value: true },
+      ],
+    };
+
+    expect(connectorProjectedGraphItems(card)).toEqual([
+      { template: "identity_user", label: "Users", families: 2 },
+      { template: "identity_group", label: "Groups", families: 1 },
+    ]);
+    expect(connectorProjectionStats(card)).toEqual({
+      resourceFamilies: 4,
+      projectedFamilies: 3,
+      projectionTemplates: 3,
+      highValueFamilies: 2,
+      coverageItems: 3,
+    });
   });
 });

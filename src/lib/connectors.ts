@@ -119,9 +119,21 @@ export type ConnectorCatalogResourceFamily = {
   id: string;
   label?: string;
   path?: string;
+  method?: string;
+  record_selector?: string;
+  id_field?: string;
+  name_field?: string;
   event_kind?: string;
   schema_ref?: string;
+  event?: {
+    kind?: string;
+    schema_ref?: string;
+  };
   projection_template?: string;
+  projection?: {
+    template?: string;
+    fields?: Record<string, string>;
+  };
   coverage?: Array<string | ConnectorCoverageDimension>;
   high_value?: boolean;
 };
@@ -1748,7 +1760,17 @@ export const connectorSearchText = (connector: ConnectorCatalogEntry) =>
       family.id,
       family.label,
       family.path,
+      family.method,
+      family.record_selector,
+      family.id_field,
+      family.name_field,
       family.event_kind,
+      family.event?.kind,
+      family.schema_ref,
+      family.event?.schema_ref,
+      family.projection_template,
+      family.projection?.template,
+      family.projection?.fields ? Object.values(family.projection.fields) : [],
       ...(family.coverage ?? []).flatMap(connectorCoverageSearchValues),
     ]),
     ...(connector.scope_options ?? []).flatMap(connectorScopeOptionSearchValues),

@@ -49,6 +49,8 @@ import {
   connectorCapabilities,
   connectorHealthyTotal,
   connectorPath,
+  connectorProjectedGraphItems,
+  connectorProjectionStats,
   connectorPrimaryAction,
   connectorRuntimeTotal,
   filterConnectorCards,
@@ -151,6 +153,8 @@ function ConnectorLibraryRow({
   const meta = connectorDisplayMetadata(card);
   const displayName = connectorDisplayName(card);
   const capabilities = connectorCapabilities(card, 4);
+  const projectedGraphItems = connectorProjectedGraphItems(card, 4);
+  const projectionStats = connectorProjectionStats(card);
   const total = connectorRuntimeTotal(card);
   const healthy = connectorHealthyTotal(card);
   const attention = connectorAttentionTotal(card);
@@ -216,6 +220,16 @@ function ConnectorLibraryRow({
               )}
               {capabilities.length === 0 && !meta.authBadge && !card.catalog_status && <span className="text-[12px] text-[var(--text-muted)]">No advertised capabilities</span>}
             </div>
+            {projectedGraphItems.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-[var(--text-muted)]">Projects</span>
+                {projectedGraphItems.map((item) => (
+                  <span key={item.template} title={item.template} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                    {item.label}{item.families > 1 ? ` (${item.families})` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
@@ -232,9 +246,10 @@ function ConnectorLibraryRow({
           )}
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-6">
         <SourceSignal label="Connections" value={total} attention={total === 0} />
         <SourceSignal label="Healthy" value={`${healthy}/${Math.max(total, 1)}`} attention={total > 0 && healthy < total} />
+        <SourceSignal label="Projected" value={projectionStats.projectedFamilies > 0 ? `${projectionStats.projectedFamilies} families` : "None"} attention={projectionStats.resourceFamilies > 0 && projectionStats.projectedFamilies === 0} />
         <SourceSignal label="Depth" value={card.integration_depth ? connectorIntegrationDepthLabel(card) : "Unknown"} />
         <SourceSignal label="Action" value={attention} attention={attention > 0} />
         <SourceSignal label="Last activity" value={latestActivity} />
@@ -512,29 +527,76 @@ function CustomConnectorPanel({
   );
 }
 
-function CatalogDemandPanel({ cards, tenantID }: { cards: ConnectorCard[]; tenantID: string }) {
+function projectionTotalsForCards(cards: ConnectorCard[]) {
+  const graphItems = new Set<string>();
+  let sources = 0;
+  let families = 0;
+  let highValueFamilies = 0;
+  let coverageItems = 0;
+  let depthOnlyGraphItems = 0;
+
+  cards.forEach((card) => {
+    const stats = connectorProjectionStats(card);
+    const projectedItems = connectorProjectedGraphItems(card, 100);
+    if (stats.projectedFamilies > 0) sources += 1;
+    families += stats.projectedFamilies;
+    highValueFamilies += stats.highValueFamilies;
+    coverageItems += stats.coverageItems;
+    if (projectedItems.length === 0) {
+      depthOnlyGraphItems += stats.projectionTemplates;
+      return;
+    }
+    projectedItems.forEach((item) => graphItems.add(item.template.toLowerCase()));
+  });
+
+  return {
+    sources,
+    families,
+    graphItems: graphItems.size + depthOnlyGraphItems,
+    highValueFamilies,
+    coverageItems,
+  };
+}
+
+function CatalogProjectionPanel({ cards, tenantID }: { cards: ConnectorCard[]; tenantID: string }) {
   const requestable = cards.filter((card) => !connectorSetupAllowed(card) && card.requestable);
   const runtimeReady = requestable.filter((card) => card.readiness_stage === "sourcegen_ready").length;
   const authNeeded = requestable.filter((card) => card.readiness_stage === "auth_extension_required").length;
   const runtimeNeeded = requestable.filter((card) => card.readiness_stage === "runtime_required").length;
+  const projectionTotals = projectionTotalsForCards(cards);
+  const projectedCards = [...cards]
+    .filter((card) => connectorProjectionStats(card).projectedFamilies > 0)
+    .sort((left, right) =>
+      connectorProjectionStats(right).projectedFamilies - connectorProjectionStats(left).projectedFamilies ||
+      connectorDisplayName(left).localeCompare(connectorDisplayName(right)),
+    )
+    .slice(0, 4);
+
   return (
-    <Panel title="Catalog demand" action={<Badge value={`${requestable.length} requestable`} />}>
+    <Panel title="Catalog projection" action={<Badge value={`${projectionTotals.sources} sources`} />}>
       <div className="grid grid-cols-3 gap-2">
+        <SourceSignal label="Families" value={projectionTotals.families} />
+        <SourceSignal label="Graph items" value={projectionTotals.graphItems} />
+        <SourceSignal label="High value" value={projectionTotals.highValueFamilies} />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
         <SourceSignal label="Runtime ready" value={runtimeReady} />
         <SourceSignal label="Auth" value={authNeeded} attention={authNeeded > 0} />
         <SourceSignal label="Runtime" value={runtimeNeeded} attention={runtimeNeeded > 0} />
       </div>
       <div className="mt-3 space-y-2">
-        {requestable.slice(0, 4).map((card) => {
+        {projectedCards.map((card) => {
           const requestHref = card.request_access_url?.trim();
           const detailHref = connectorPath(card.source_id, { tenant_id: tenantID });
+          const stats = connectorProjectionStats(card);
+          const graphItemsForCard = connectorProjectedGraphItems(card, 3);
           return (
             <div key={card.source_id} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(card)}</div>
                   <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                    {connectorReadinessStageLabel(card.readiness_stage)} · {card.integration_depth ? connectorIntegrationDepthLabel(card) : "Depth unknown"}
+                    {stats.projectedFamilies} families · {graphItemsForCard.map((item) => item.label).join(", ") || `${stats.projectionTemplates} graph items`}
                   </div>
                 </div>
                 {requestHref ? (
@@ -550,7 +612,7 @@ function CatalogDemandPanel({ cards, tenantID }: { cards: ConnectorCard[]; tenan
             </div>
           );
         })}
-        {requestable.length === 0 && <EmptyBlock label="No catalog-only or restricted connectors are requestable." />}
+        {projectedCards.length === 0 && <EmptyBlock label="No projected graph families advertised." />}
       </div>
     </Panel>
   );
@@ -686,6 +748,7 @@ export default function ConnectorsPage() {
   const metricState: RuntimeState = libraryQuery.error ? runtimeState : libraryLoading ? "loading" : "ready";
   const totalConnections = cards.reduce((sum, card) => sum + connectorRuntimeTotal(card), 0);
   const actionConnections = cards.reduce((sum, card) => sum + connectorAttentionTotal(card), 0);
+  const projectionTotals = projectionTotalsForCards(cards);
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Source", value: sourceID, onClear: () => setSourceID("") },
@@ -757,7 +820,7 @@ export default function ConnectorsPage() {
           <MetricCard label="Secret Stores" value={readyStores.length} detail="ready credential stores" intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
         </div>
         <div className="hidden md:block">
-          <MetricCard label="Custom" value={customDefinitions.length} detail="dynamic definitions" intent={customDefinitions.length > 0 ? "success" : "neutral"} state={definitionsQuery.error ? runtimeStateForError(definitionsQuery.error) : definitionsQuery.loading ? "loading" : "ready"} />
+          <MetricCard label="Projected" value={projectionTotals.sources} detail={`${projectionTotals.families} catalog families`} intent={projectionTotals.sources > 0 ? "success" : "neutral"} state={metricState} />
         </div>
       </div>
 
@@ -860,7 +923,7 @@ export default function ConnectorsPage() {
 
         <div className="space-y-5">
           <CredentialStorePanel library={libraryQuery.data ?? undefined} />
-          <CatalogDemandPanel cards={cards} tenantID={debouncedTenantID} />
+          <CatalogProjectionPanel cards={cards} tenantID={debouncedTenantID} />
           <CustomConnectorPanel definitions={customDefinitions} error={definitionsQuery.error} onRetry={() => void definitionsQuery.reload()} tenantID={debouncedTenantID} />
           <ReadinessMix counts={readinessCounts} filter={readinessFilter} onFilter={setReadinessFilter} />
         </div>

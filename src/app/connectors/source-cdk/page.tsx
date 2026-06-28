@@ -21,6 +21,7 @@ import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel } from "
 import { useApiKey } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { withQuery } from "@/lib/cerebro-data";
+import { connectorPath, connectorProjectedGraphItems, connectorProjectionStats } from "@/lib/connector-view";
 import {
   ConnectorCatalogEntry,
   ConnectorConnectedContext,
@@ -32,12 +33,15 @@ import {
   ConnectorDetailResponse,
   ConnectorLibraryResponse,
   SourceCDKPromotionPlan,
+  connectorDisplayName,
   connectorDepositsPath,
   connectorDefinitionBlockingChecks,
   connectorDefinitionNextStage,
   connectorDefinitionStageLabels,
   connectorDefinitionStages,
   connectorDefinitionStatus,
+  connectorRuntimeSurfaceLabel,
+  connectorSetupAllowed,
   normalizeCredentialStores,
   sourceCDKPlanCategoryCounts,
   sourceCDKPlanPath,
@@ -570,6 +574,58 @@ function SourcesQueue({
   );
 }
 
+function CatalogSourcesPanel({ connectors, tenantID }: { connectors: ConnectorCatalogEntry[]; tenantID: string }) {
+  const rows = connectors
+    .map((connector) => ({
+      connector,
+      graphItems: connectorProjectedGraphItems(connector, 3),
+      stats: connectorProjectionStats(connector),
+    }))
+    .filter((row) => row.stats.resourceFamilies > 0 || row.stats.projectedFamilies > 0)
+    .sort((left, right) =>
+      right.stats.projectedFamilies - left.stats.projectedFamilies ||
+      connectorDisplayName(left.connector).localeCompare(connectorDisplayName(right.connector)),
+    );
+  const projectedCount = rows.filter((row) => row.stats.projectedFamilies > 0).length;
+
+  return (
+    <Panel title="Catalog sources" action={<Badge value={`${projectedCount} projected`} />}>
+      <div className="space-y-2">
+        {rows.slice(0, 8).map(({ connector, graphItems, stats }) => {
+          const setupAllowed = connectorSetupAllowed(connector);
+          const href = connectorPath(connector.source_id, { tenant_id: tenantID, tab: setupAllowed ? "setup" : undefined });
+          return (
+            <Link key={connector.source_id} href={href} className="block rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3 transition hover:border-[color:var(--border-strong)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(connector)}</div>
+                  <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+                    {stats.projectedFamilies}/{Math.max(stats.resourceFamilies, stats.projectedFamilies)} projected families
+                  </div>
+                </div>
+                <Badge value={connectorRuntimeSurfaceLabel(connector)} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {graphItems.length > 0 ? graphItems.map((item) => (
+                  <span key={item.template} title={item.template} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                    {item.label}
+                  </span>
+                )) : <span className="text-[11px] text-[var(--text-muted)]">No graph template</span>}
+              </div>
+            </Link>
+          );
+        })}
+        {rows.length > 8 && (
+          <Link href={`/connectors${tenantID ? `?tenant_id=${encodeURIComponent(tenantID)}&tab=available` : "?tab=available"}`} className="secondary-button inline-flex w-full justify-center px-3 py-2 text-[12px]">
+            Open {rows.length - 8} more
+          </Link>
+        )}
+        {rows.length === 0 && <EmptyBlock label="No catalog sources advertise graph families yet." />}
+      </div>
+    </Panel>
+  );
+}
+
 function firstConnection(connections: ConnectorConnectionSummary[] | undefined, tenantID: string) {
   const cleanTenant = tenantID.trim();
   return (connections ?? []).find((connection) => !cleanTenant || connection.tenant_id === cleanTenant) ?? connections?.[0];
@@ -691,6 +747,7 @@ function SourceReadinessContent() {
   );
   const plan = planQuery.data?.plan;
   const credentialStores = useMemo(() => normalizeCredentialStores(libraryQuery.data), [libraryQuery.data]);
+  const catalogConnectors = libraryQuery.data?.connectors ?? [];
   const connector = detailQuery.data?.connector ?? libraryQuery.data?.connectors?.find((entry) => entry.source_id === selectedDefinition?.source_id);
   const existingConnection = firstConnection(detailQuery.data?.connections, tenantID);
   const reloadActivation = async () => {
@@ -763,7 +820,10 @@ function SourceReadinessContent() {
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(260px,0.3fr)_minmax(0,0.7fr)]">
         <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
-          <SourcesQueue definitions={definitions} selectedID={selectedDefinitionID} tenantID={tenantID} />
+          <div className="space-y-5">
+            <SourcesQueue definitions={definitions} selectedID={selectedDefinitionID} tenantID={tenantID} />
+            <CatalogSourcesPanel connectors={catalogConnectors} tenantID={tenantID} />
+          </div>
         </div>
         <div className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-2">

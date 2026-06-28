@@ -196,7 +196,12 @@ describe("connector catalog metadata", () => {
           id: "users",
           label: "Users",
           path: "/users",
+          method: "GET",
+          record_selector: "$.users[*]",
+          id_field: "id",
           event_kind: "auth0.users",
+          schema_ref: "auth0/users/v1",
+          projection_template: "identity_user",
           high_value: true,
           coverage: [{
             id: "auth0.users.identity",
@@ -208,7 +213,14 @@ describe("connector catalog metadata", () => {
             control_refs: [{ framework_name: "SOC 2", control_id: "CC6.1" }],
           }],
         },
-        { id: "roles", label: "Roles", path: "/roles", event_kind: "auth0.roles", high_value: true },
+        {
+          id: "roles",
+          label: "Roles",
+          path: "/roles",
+          event: { kind: "auth0.roles", schema_ref: "auth0/roles/v1" },
+          projection: { template: "identity_group", fields: { name: "$.name" } },
+          high_value: true,
+        },
       ],
       scope_options: [{
         id: "auth0.users.identity",
@@ -235,6 +247,11 @@ describe("connector catalog metadata", () => {
     });
     expect(connectorSearchText(connector)).toContain("oauth_client_credentials");
     expect(connectorSearchText(connector)).toContain("/roles");
+    expect(connectorSearchText(connector)).toContain("get");
+    expect(connectorSearchText(connector)).toContain("$.users[*]");
+    expect(connectorSearchText(connector)).toContain("auth0/roles/v1");
+    expect(connectorSearchText(connector)).toContain("identity_user");
+    expect(connectorSearchText(connector)).toContain("identity_group");
     expect(connectorSearchText(connector)).toContain("sourcegen-ready");
     expect(connectorSearchText(connector)).toContain("catalog/identity.yaml");
     expect(connectorSearchText(connector)).toContain("identity_configuration");
