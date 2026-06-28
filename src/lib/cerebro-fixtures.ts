@@ -24,6 +24,13 @@ const emailAliasURN = `urn:cerebro:${tenantID}:identifier:email:platform-admin@e
 const coreSsoVendorURN = `urn:cerebro:${tenantID}:vendor:core-sso`;
 const paymentsProcessorVendorURN = `urn:cerebro:${tenantID}:vendor:payments-processor`;
 
+const vendorDiscoverySourceLabels: Record<string, string> = {
+  aws: "AWS",
+  github: "GitHub",
+  grc: "GRC",
+  okta: "Okta",
+};
+
 const truthy = (value: string | undefined) =>
   ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 
@@ -72,6 +79,9 @@ const limitList = <T,>(items: T[], params?: URLSearchParams) => {
 
 const contains = (value: string | undefined, query: string) =>
   (value ?? "").toLowerCase().includes(query.toLowerCase());
+
+const sourceProvider = (sourceID?: string) =>
+  sourceID ? vendorDiscoverySourceLabels[sourceID] ?? sourceID : undefined;
 
 const findings = [
   {
@@ -596,18 +606,126 @@ const vendors = [
 
 const vendorDiscoveries = [
   {
-    urn: `urn:cerebro:${tenantID}:vendor-discovery:collaboration-suite`,
-    discovery_id: "collaboration-suite",
-    name: "Collaboration Suite",
-    normalized_name: "collaboration suite",
-    source_id: "grc",
-    runtime_id: "demo-grc-runtime",
-    provider: "GRC fixture",
+    urn: `urn:cerebro:${tenantID}:vendor-discovery:okta-design-suite`,
+    discovery_id: "okta-design-suite",
+    name: "Design Suite",
+    normalized_name: "design suite",
+    source_id: "okta",
+    source_ids: ["okta"],
+    runtime_id: "demo-okta-runtime",
+    provider: sourceProvider("okta"),
     source_status: "discovered",
     decision_state: "discovered",
     category: "collaboration",
-    website_url: "https://vendors.example.com/collaboration-suite",
-    attributes: { source_system: "fixture" },
+    website_url: "https://vendors.example.com/design-suite",
+    confidence_score: 92,
+    discovery_reason: "Okta app assignments show active workforce access without a linked vendor record.",
+    first_observed_at: "2026-01-12T12:00:00.000Z",
+    last_observed_at: "2026-01-15T11:55:00.000Z",
+    signals: [
+      {
+        id: "okta-design-suite-app",
+        label: "Okta application assignment",
+        source_id: "okta",
+        runtime_id: "demo-okta-runtime",
+        entity_type: "okta.application",
+        entity_urn: `urn:cerebro:${tenantID}:okta_application:design-suite`,
+        confidence_score: 92,
+        observed_at: "2026-01-15T11:55:00.000Z",
+        reason: "Active SAML app assigned to 34 users.",
+      },
+      {
+        id: "okta-design-suite-groups",
+        label: "User group access",
+        source_id: "okta",
+        runtime_id: "demo-okta-runtime",
+        entity_type: "okta.group",
+        entity_urn: `urn:cerebro:${tenantID}:okta_group:design-users`,
+        confidence_score: 86,
+        observed_at: "2026-01-15T11:55:00.000Z",
+        reason: "Two Okta groups grant access.",
+      },
+    ],
+    attributes: { source_system: "okta", discovery_kind: "application_access", assigned_users: "34" },
+  },
+  {
+    urn: `urn:cerebro:${tenantID}:vendor-discovery:github-code-quality`,
+    discovery_id: "github-code-quality",
+    name: "Code Quality Service",
+    normalized_name: "code quality service",
+    source_id: "github",
+    source_ids: ["github"],
+    runtime_id: "demo-github-runtime",
+    provider: sourceProvider("github"),
+    source_status: "discovered",
+    decision_state: "discovered",
+    category: "engineering",
+    website_url: "https://vendors.example.com/code-quality-service",
+    confidence_score: 84,
+    discovery_reason: "GitHub app installation and repository checks indicate a vendor integration.",
+    first_observed_at: "2026-01-13T12:00:00.000Z",
+    last_observed_at: "2026-01-15T09:30:00.000Z",
+    signals: [
+      {
+        id: "github-code-quality-app",
+        label: "GitHub app installation",
+        source_id: "github",
+        runtime_id: "demo-github-runtime",
+        entity_type: "github.app_installation",
+        entity_urn: `urn:cerebro:${tenantID}:github_app_installation:code-quality-service`,
+        confidence_score: 84,
+        observed_at: "2026-01-15T09:30:00.000Z",
+        reason: "App has repository read access in three repositories.",
+      },
+    ],
+    attributes: { source_system: "github", discovery_kind: "app_installation", repositories: "3" },
+  },
+  {
+    urn: `urn:cerebro:${tenantID}:vendor-discovery:aws-data-warehouse`,
+    discovery_id: "aws-data-warehouse",
+    name: "Data Warehouse",
+    normalized_name: "data warehouse",
+    source_id: "aws",
+    source_ids: ["aws", "github"],
+    runtime_id: "demo-aws-runtime",
+    provider: sourceProvider("aws"),
+    source_status: "discovered",
+    decision_state: "linked",
+    category: "data",
+    website_url: "https://vendors.example.com/data-warehouse",
+    confidence_score: 79,
+    discovery_reason: "AWS marketplace subscription and deployment references match an existing vendor record.",
+    first_observed_at: "2026-01-10T12:00:00.000Z",
+    last_observed_at: "2026-01-15T11:45:00.000Z",
+    linked_vendor_urn: paymentsProcessorVendorURN,
+    decision_reason: "Linked from marketplace subscription review.",
+    decision_updated_by: "security@example.com",
+    decision_updated_at: "2026-01-15T11:50:00.000Z",
+    signals: [
+      {
+        id: "aws-data-warehouse-marketplace",
+        label: "AWS marketplace subscription",
+        source_id: "aws",
+        runtime_id: "demo-aws-runtime",
+        entity_type: "aws.marketplace_subscription",
+        entity_urn: `urn:cerebro:${tenantID}:aws_marketplace_subscription:data-warehouse`,
+        confidence_score: 79,
+        observed_at: "2026-01-15T11:45:00.000Z",
+        reason: "Subscription is active in the production account.",
+      },
+      {
+        id: "github-data-warehouse-deploy",
+        label: "Deployment reference",
+        source_id: "github",
+        runtime_id: "demo-github-runtime",
+        entity_type: "github.repository_file",
+        entity_urn: `urn:cerebro:${tenantID}:github_repository_file:data-warehouse`,
+        confidence_score: 66,
+        observed_at: "2026-01-15T09:30:00.000Z",
+        reason: "Deployment manifest references the service endpoint.",
+      },
+    ],
+    attributes: { source_system: "aws", discovery_kind: "marketplace_subscription", linked_reason: "existing_vendor_match" },
   },
 ];
 
@@ -907,12 +1025,40 @@ const vendorSummary = (items: typeof vendors) => ({
   evidence_items: items.reduce((sum, vendor) => sum + (vendor.evidence_items ?? 0), 0),
 });
 
+const vendorDiscoverySourceIDs = (discovery: (typeof vendorDiscoveries)[number]) =>
+  Array.from(new Set([
+    discovery.source_id,
+    ...(discovery.source_ids ?? []),
+    ...(discovery.signals ?? []).map((signal) => signal.source_id),
+  ].filter((value): value is string => Boolean(value))));
+
+const vendorDiscoverySearchValues = (discovery: (typeof vendorDiscoveries)[number]) => [
+  discovery.name,
+  discovery.normalized_name,
+  discovery.discovery_id,
+  discovery.category,
+  discovery.provider,
+  discovery.source_id,
+  discovery.source_status,
+  discovery.discovery_reason,
+  discovery.website_url,
+  ...vendorDiscoverySourceIDs(discovery),
+  ...Object.values(discovery.attributes ?? {}),
+  ...(discovery.signals ?? []).flatMap((signal) => [
+    signal.label,
+    signal.source_id,
+    signal.entity_type,
+    signal.entity_urn,
+    signal.reason,
+  ]),
+].filter((value): value is string => typeof value === "string" && value.length > 0);
+
 const filterVendorDiscoveries = (params?: URLSearchParams) => {
   const sourceID = params?.get("source_id")?.trim().toLowerCase();
   const query = params?.get("q")?.trim().toLowerCase();
   return limitList(vendorDiscoveries.filter((discovery) => {
-    if (sourceID && discovery.source_id?.toLowerCase() !== sourceID) return false;
-    if (query && ![discovery.name, discovery.normalized_name, discovery.discovery_id, discovery.category, discovery.provider].some((value) => contains(value, query))) return false;
+    if (sourceID && !vendorDiscoverySourceIDs(discovery).some((id) => id.toLowerCase() === sourceID)) return false;
+    if (query && !vendorDiscoverySearchValues(discovery).some((value) => contains(value, query))) return false;
     return true;
   }), params);
 };
@@ -924,7 +1070,51 @@ const vendorDiscoverySummary = (items: typeof vendorDiscoveries) => ({
   rejected: items.filter((discovery) => discovery.decision_state === "rejected").length,
   ignored: items.filter((discovery) => discovery.decision_state === "ignored").length,
   linked: items.filter((discovery) => discovery.decision_state === "linked").length,
+  source_count: new Set(items.flatMap(vendorDiscoverySourceIDs)).size,
+  evidence_signals: items.reduce((sum, discovery) => sum + (discovery.signals?.length ?? 0), 0),
 });
+
+const vendorDiscoverySourceSummaries = (items: typeof vendorDiscoveries) => {
+  const summaries = new Map<string, {
+    source_id: string;
+    provider?: string;
+    runtime_id?: string;
+    status?: string;
+    total: number;
+    discovered: number;
+    approved: number;
+    rejected: number;
+    ignored: number;
+    linked: number;
+    last_synced_at?: string;
+  }>();
+  items.forEach((discovery) => {
+    vendorDiscoverySourceIDs(discovery).forEach((sourceID) => {
+      const connector = connectors.find((item) => item.source_id === sourceID);
+      const current = summaries.get(sourceID) ?? {
+        source_id: sourceID,
+        provider: sourceProvider(sourceID),
+        runtime_id: connector?.runtime_id,
+        status: connector?.status ?? discovery.source_status,
+        total: 0,
+        discovered: 0,
+        approved: 0,
+        rejected: 0,
+        ignored: 0,
+        linked: 0,
+        last_synced_at: connector?.last_synced_at,
+      };
+      current.total += 1;
+      if (discovery.decision_state === "approved") current.approved += 1;
+      else if (discovery.decision_state === "rejected") current.rejected += 1;
+      else if (discovery.decision_state === "ignored") current.ignored += 1;
+      else if (discovery.decision_state === "linked") current.linked += 1;
+      else current.discovered += 1;
+      summaries.set(sourceID, current);
+    });
+  });
+  return Array.from(summaries.values()).sort((left, right) => left.source_id.localeCompare(right.source_id));
+};
 
 const entityImpactFixture = (rawURN: string) => {
   const entityURN = safeDecode(rawURN);
@@ -2063,6 +2253,7 @@ export const cerebroFixtureResponseFor = ({
     return jsonFixture({
       discoveries: filteredDiscoveries,
       summary: vendorDiscoverySummary(filteredDiscoveries),
+      source_summaries: vendorDiscoverySourceSummaries(filteredDiscoveries),
       decisions: [],
       decision_events: [],
       generated_at: generatedAt,

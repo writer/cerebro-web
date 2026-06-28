@@ -1218,16 +1218,35 @@ export type GRCVendorDiscovery = {
   name: string;
   normalized_name?: string;
   source_id?: string;
+  source_ids?: string[];
   runtime_id?: string;
   provider?: string;
   source_status: string;
   decision_state: string;
   category?: string;
   website_url?: string;
+  confidence_score?: number;
+  discovery_reason?: string;
+  first_observed_at?: string;
+  last_observed_at?: string;
   linked_vendor_urn?: string;
   decision_reason?: string;
   decision_updated_by?: string;
   decision_updated_at?: string;
+  signals?: GRCVendorDiscoverySignal[];
+  attributes?: Record<string, string>;
+};
+
+export type GRCVendorDiscoverySignal = {
+  id: string;
+  label: string;
+  source_id?: string;
+  runtime_id?: string;
+  entity_type?: string;
+  entity_urn?: string;
+  confidence_score?: number;
+  observed_at?: string;
+  reason?: string;
   attributes?: Record<string, string>;
 };
 
@@ -1263,6 +1282,22 @@ export type GRCVendorDiscoverySummary = {
   rejected: number;
   ignored: number;
   linked: number;
+  source_count?: number;
+  evidence_signals?: number;
+};
+
+export type GRCVendorDiscoverySourceSummary = {
+  source_id: string;
+  provider?: string;
+  runtime_id?: string;
+  status?: string;
+  total: number;
+  discovered: number;
+  approved?: number;
+  rejected?: number;
+  ignored?: number;
+  linked?: number;
+  last_synced_at?: string;
 };
 
 export type GRCVendorDiscoveryDecision = {
@@ -1336,6 +1371,7 @@ export type GRCVendorDetailResponse = {
 
 export type GRCVendorDiscoveriesResponse = {
   summary?: GRCVendorDiscoverySummary;
+  source_summaries?: GRCVendorDiscoverySourceSummary[];
   discoveries: GRCVendorDiscovery[];
   decisions?: GRCVendorDiscoveryDecision[];
   decision_events?: GRCVendorDiscoveryDecisionEvent[];
