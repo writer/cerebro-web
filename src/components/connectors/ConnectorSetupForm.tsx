@@ -342,7 +342,7 @@ function RegionGuidancePanel({ method }: { method?: ConnectorConnectionMethod })
       <p className="text-[12px] leading-5 text-[var(--text-muted)]">{guidance.description}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {guidance.default_region && <Badge value={`default ${guidance.default_region}`} />}
-        {guidance.supports_global && <Badge value="global families" />}
+        {guidance.supports_global && <Badge value="global resource types" />}
         {guidance.supports_multi_region && <Badge value="multi-region" />}
         {(guidance.examples ?? []).map((example) => (
           <span key={example} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--text-secondary)]">
@@ -374,7 +374,7 @@ function ProductGroupSelector({
           Product and permission groups
         </div>
         <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
-          Turning a group off excludes those resource families from collection where supported.
+          Turning a group off excludes those resource types from collection where supported.
         </p>
       </div>
       <div className="grid min-w-0 gap-3 p-4 md:grid-cols-2">
@@ -1439,7 +1439,7 @@ function ScopePolicyBuilder({
           <div>
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">Resource collection</div>
             <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
-              Resource types are collected by default. Switch a type off to skip that source family before collection; exact assets can be added separately.
+              Resource types are collected by default. Switch a type off to skip that resource type before collection; exact assets can be added separately.
             </div>
           </div>
           <div className="grid grid-cols-3 overflow-hidden rounded-md border border-[color:var(--border)] bg-[var(--surface)] text-center text-[11px]">
@@ -2422,7 +2422,7 @@ export default function ConnectorSetupForm({
                   <div>
                     <div className="text-[13px] font-semibold text-[var(--text-primary)]">Resource types to collect</div>
                     <div className="mt-0.5 max-w-3xl text-[12px] leading-5 text-[var(--text-muted)]">
-                      Source-advertised classes. Disabled families are skipped before collection where supported.
+                      Source-advertised resource types. Disabled resource types are skipped before collection where supported.
                     </div>
                   </div>
                   <Badge value={scopeCount > 0 ? `${scopeCount} excluded` : "all collected"} />
