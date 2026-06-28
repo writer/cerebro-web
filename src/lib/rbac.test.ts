@@ -85,6 +85,8 @@ describe("Cerebro proxy route permissions", () => {
     expect(permissionForCerebroProxyRequest("POST", "reports/aws-soc2/runs")).toBe("reports:run");
     expect(permissionForCerebroProxyRequest("PATCH", "grc/inventory/asset-reports/report-1/triage")).toBe("grc:inventory:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/policy-lifecycle/actions")).toBe("grc:policies:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/policy-lifecycle/uploads")).toBe("grc:policies:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/vendors/uploads")).toBe("grc:inventory:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/dashboards")).toBe("dashboards:write");
     expect(permissionForCerebroProxyRequest("PATCH", "grc/dashboards/dashboard-1")).toBe("dashboards:write");
     expect(permissionForCerebroProxyRequest("DELETE", "grc/dashboards/dashboard-1")).toBe("dashboards:write");

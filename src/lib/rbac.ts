@@ -258,6 +258,8 @@ export const permissionForCerebroProxyRequest = (
   if (normalizedPath.startsWith("grc/dashboards/") && normalizedPath.endsWith("/clone")) return "dashboards:write";
   if (normalizedPath === "grc/findings/triage") return "findings:write";
   if (normalizedPath === "grc/policy-lifecycle/actions") return "grc:policies:write";
+  if (normalizedPath === "grc/policy-lifecycle/uploads") return "grc:policies:write";
+  if (normalizedPath === "grc/vendors/uploads") return "grc:inventory:write";
   if (readOnlyPostPaths.has(normalizedPath)) return "cerebro:read";
   if (normalizedPath.startsWith("grc/control-packs/")) return "cerebro:read";
   if (matchesReportRunPath(normalizedPath)) return "reports:run";
