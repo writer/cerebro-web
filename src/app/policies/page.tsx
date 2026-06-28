@@ -123,6 +123,21 @@ const riskSearchText = (risk: GRCPolicyRiskRegisterItem) => [
   ...(risk.controls ?? []).flatMap((control) => [control.framework, control.control_id, control.title]),
 ].filter(Boolean).join("\n").toLowerCase();
 
+const governanceGapSearchText = (gap: GRCPolicyGovernanceGap) => [
+  gap.id,
+  gap.subject,
+  gap.subject_id,
+  gap.title,
+  gap.status,
+  gap.owner,
+  gap.severity,
+  gap.reason,
+  gap.action,
+  gap.policy_id,
+  gap.document_id,
+  gap.risk_id,
+].filter(Boolean).join("\n").toLowerCase();
+
 const dateValue = (value?: string) => {
   if (!value) return Number.POSITIVE_INFINITY;
   const timestamp = Date.parse(value);
@@ -354,14 +369,18 @@ export default function PoliciesPage() {
     ),
     [data?.document_work_queue, visibleDocumentIDs, visiblePolicyIDs, visibleRiskIDs],
   );
-  const visibleGovernanceGaps = useMemo(
-    () => governanceGaps.filter((gap) =>
-      (!gap.policy_id || visiblePolicyIDs.has(gap.policy_id)) &&
-      (!gap.document_id || visibleDocumentIDs.has(gap.document_id)) &&
-      (!gap.risk_id || visibleRiskIDs.has(gap.risk_id)),
-    ),
-    [governanceGaps, visibleDocumentIDs, visiblePolicyIDs, visibleRiskIDs],
-  );
+  const visibleGovernanceGaps = useMemo(() => {
+    const ownerFilter = normalized(debouncedOwner);
+    const stateFilter = normalized(state);
+    const textFilter = normalized(debouncedQuery);
+    return governanceGaps.filter((gap) => {
+      const ownerText = normalized(gap.owner || "Unassigned");
+      if (ownerFilter && !ownerText.includes(ownerFilter)) return false;
+      if (stateFilter && !normalized(gap.status).includes(stateFilter)) return false;
+      if (textFilter && !governanceGapSearchText(gap).includes(textFilter)) return false;
+      return true;
+    });
+  }, [debouncedOwner, debouncedQuery, governanceGaps, state]);
   const selectedPolicy = selectedPolicyFallback(policies, filteredPolicies, selectedPolicyID);
   const ownerOptions = useMemo(
     () => Array.from(new Set([
