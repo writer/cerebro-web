@@ -1,15 +1,20 @@
 "use client";
 
-import { ArrowRight, Bell, FileText, GitCompare, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, Bell, CheckCircle2, Download, FileText, GitCompare, History, ListChecks, RefreshCw, Search, Send, ShieldCheck, Users, X, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { TableColumn } from "@/components/grc/DataTable";
 import { WorklistTable } from "@/components/grc/DataTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { useApiKey } from "@/components/providers";
 import { countLabel } from "@/lib/format";
 import type {
   GRCPolicyAcceptance,
+  GRCPolicyLifecycleAction,
+  GRCPolicyLifecycleActionRequest,
+  GRCPolicyLifecycleActionResponse,
+  GRCPolicyLifecycleEvent,
   GRCPolicyApproval,
   GRCPolicyControlRef,
   GRCPolicyException,
@@ -17,13 +22,15 @@ import type {
   GRCPolicyLifecyclePolicy,
   GRCPolicyLifecycleResponse,
   GRCPolicyLifecycleWork,
+  GRCPolicyReminderPlan,
   GRCPolicyReminder,
   GRCPolicyReview,
   GRCPolicyTemplate,
   GRCPolicyVersion,
+  GRCPolicyVersionDiff,
 } from "@/lib/grc";
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -100,6 +107,13 @@ const displayPolicyDate = (value?: string) => {
   return displayDate(value);
 };
 
+const dateInputValue = (value?: string) => {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString().slice(0, 10) : "";
+};
+
 const dueClassName = (value: string | undefined, generatedAt?: string) => {
   const due = dateValue(value);
   if (!Number.isFinite(due)) return "text-slate-500";
@@ -115,6 +129,107 @@ const statusIntent = (status?: string): "severity" | "status" => {
   return ["overdue", "expired", "rejected"].includes(value) ? "severity" : "status";
 };
 
+const actionTone = (action: string) => {
+  if (action.endsWith(".reject") || action.endsWith(".close")) return "danger";
+  if (action.includes("reminder") || action.includes("renew") || action.includes("exception")) return "warning";
+  return "primary";
+};
+
+const actionDateField = (action: string): "due_at" | "effective_at" | "expires_at" | null => {
+  if (action === "exception.renew") return "expires_at";
+  if (action === "version.publish") return "effective_at";
+  if (action.includes("reminder") || action.includes("attestation") || action.includes("approval") || action.includes("review")) return "due_at";
+  return null;
+};
+
+const actionDateLabel = (action: string) => {
+  const field = actionDateField(action);
+  if (field === "expires_at") return "Expires";
+  if (field === "effective_at") return "Effective";
+  if (field === "due_at") return "Due";
+  return "Date";
+};
+
+const actionIconElement = (action: string, className: string) => {
+  if (action.includes("approval.approve") || action.includes("attestation.accept") || action.includes("review.complete")) return <CheckCircle2 className={className} aria-hidden="true" />;
+  if (action.includes("approval.reject") || action.includes("exception.close")) return <XCircle className={className} aria-hidden="true" />;
+  if (action.includes("reminder")) return <Send className={className} aria-hidden="true" />;
+  if (action.includes("exception")) return <ShieldCheck className={className} aria-hidden="true" />;
+  if (action.includes("draft") || action.includes("version")) return <GitCompare className={className} aria-hidden="true" />;
+  return <ListChecks className={className} aria-hidden="true" />;
+};
+
+const actionButtonClass = (tone: string) => [
+  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition",
+  tone === "danger" ? "border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100" : "",
+  tone === "warning" ? "border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300 hover:bg-amber-100" : "",
+  tone === "primary" ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:border-indigo-300 hover:bg-indigo-100" : "",
+].filter(Boolean).join(" ");
+
+const workQueueActionForItem = (item: GRCPolicyLifecycleWork): GRCPolicyLifecycleAction | null => {
+  const type = normalized(item.type);
+  const status = normalized(item.status);
+  let action = "";
+  let label = item.action || "Record action";
+  if (type === "version") {
+    action = "draft.submit";
+    label = "Submit draft";
+  } else if (type === "approval") {
+    action = "approval.approve";
+    label = "Approve version";
+  } else if (type === "review") {
+    action = "review.complete";
+    label = "Complete review";
+  } else if (type === "attestation") {
+    action = status === "overdue" ? "reminder.escalate" : "reminder.send";
+    label = status === "overdue" ? "Escalate reminder" : "Send reminder";
+  } else if (type === "exception") {
+    action = item.action.toLowerCase().includes("renew") ? "exception.renew" : "exception.approve";
+    label = item.action.toLowerCase().includes("renew") ? "Renew exception" : "Approve exception";
+  }
+  if (!action) return null;
+  return {
+    id: `${item.id}:${action}`,
+    action,
+    label,
+    policy_id: item.policy_id,
+    policy: item.policy,
+    record_urn: item.record_urn,
+    record_type: type ? `policy.${type}` : undefined,
+    status: item.status,
+    owner: item.owner,
+    due_at: item.due_at,
+    reason: item.action,
+  };
+};
+
+const reminderPlanActionForItem = (item: GRCPolicyReminderPlan): GRCPolicyLifecycleAction => {
+  const reminderAction = normalized(item.action);
+  const recordType = normalized(item.record_type);
+  let action = "reminder.send";
+  let label = "Send reminder";
+  if (recordType === "policy.exception" || reminderAction.includes("exception")) {
+    action = "exception.renew";
+    label = "Renew exception";
+  } else if (reminderAction.includes("escalat")) {
+    action = "reminder.escalate";
+    label = "Escalate reminder";
+  }
+  return {
+    id: `${item.id}:${action}`,
+    action,
+    label,
+    policy_id: item.policy_id,
+    policy: item.policy,
+    record_urn: item.record_urn,
+    record_type: item.record_type,
+    status: "planned",
+    owner: item.owner,
+    due_at: item.due_at,
+    reason: item.reason,
+  };
+};
+
 const selectedPolicyFallback = (
   policies: GRCPolicyLifecyclePolicy[],
   filteredPolicies: GRCPolicyLifecyclePolicy[],
@@ -126,14 +241,23 @@ const selectedPolicyFallback = (
   null;
 
 export default function PoliciesPage() {
+  const { apiKey } = useApiKey();
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [owner, setOwner] = useQueryParamState("owner");
   const [state, setState] = useQueryParamState("state");
   const [query, setQuery] = useQueryParamState("q");
   const [selectedPolicyID, setSelectedPolicyID] = useState<string | null>(null);
+  const [selectedAction, setSelectedAction] = useState<GRCPolicyLifecycleAction | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [actionDate, setActionDate] = useState("");
+  const [lastActionStatus, setLastActionStatus] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedOwner = useDebouncedValue(owner.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
+  const { mutate: recordAction, saving: actionSaving, error: actionError, setError: setActionError } =
+    useGRCMutation<GRCPolicyLifecycleActionResponse>();
   const { data, error, loading, reload } = useGRCQuery<GRCPolicyLifecycleResponse>(
     grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, limit: 300 }),
   );
@@ -170,6 +294,60 @@ export default function PoliciesPage() {
   ]);
   const summary = data?.summary;
   const generatedAt = data?.generated_at;
+
+  const openAction = (action: GRCPolicyLifecycleAction) => {
+    setSelectedAction(action);
+    setActionReason(action.reason ?? "");
+    setActionDate(dateInputValue(action.due_at));
+    setLastActionStatus(null);
+    setActionError(null);
+  };
+
+  const submitSelectedAction = async () => {
+    if (!selectedAction) return;
+    const dateField = actionDateField(selectedAction.action);
+    const body: GRCPolicyLifecycleActionRequest = {
+      action: selectedAction.action,
+      tenant_id: tenantID.trim() || undefined,
+      policy_id: selectedAction.policy_id,
+      policy_version_id: selectedAction.policy_version_id,
+      record_urn: selectedAction.record_urn,
+      reason: actionReason.trim() || selectedAction.reason,
+      idempotency_key: `${selectedAction.id}:${Date.now()}`,
+      attributes: {
+        source_surface: "cerebro-web",
+        record_type: selectedAction.record_type ?? "",
+      },
+    };
+    if (dateField && actionDate.trim()) {
+      (body as Record<string, unknown>)[dateField] = actionDate.trim();
+    }
+    try {
+      const response = await recordAction(grcPath("/grc/policy-lifecycle/actions", { tenant_id: tenantID.trim() }), body);
+      setLastActionStatus(`${humanize(response.action)} ${humanize(response.status)}`);
+      setSelectedAction(null);
+      await reload();
+    } catch {
+      return;
+    }
+  };
+
+  const exportPolicies = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const result = await downloadGRCExport(
+        grcPath("/grc/policy-lifecycle/export", { tenant_id: debouncedTenantID }),
+        apiKey,
+        grcExportFilename("policy-lifecycle"),
+      );
+      if (!result.ok) setExportError(result.error);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const workColumns = useMemo<TableColumn<GRCPolicyLifecycleWork>[]>(() => [
     { key: "action", label: "Action", render: (_value, item) => <span className="font-medium text-slate-900">{item.action}</span> },
@@ -257,6 +435,60 @@ export default function PoliciesPage() {
     { key: "due_at", label: "Due", render: (_value, item) => <span className={dueClassName(item.due_at, generatedAt)}>{displayPolicyDate(item.due_at)}</span> },
   ], [generatedAt]);
 
+  const reminderPlanColumns = useMemo<TableColumn<GRCPolicyReminderPlan>[]>(() => [
+    { key: "action", label: "Action", render: (_value, item) => <span className="font-medium text-slate-900">{humanize(item.action)}</span> },
+    { key: "policy", label: "Policy", render: (_value, item) => <span className="text-slate-700">{item.policy || item.policy_id || "-"}</span> },
+    { key: "owner", label: "Owner", render: (_value, item) => <span className="text-slate-600">{item.owner || "Unassigned"}</span> },
+    { key: "recipients", label: "Recipients", render: (_value, item) => <span className="text-slate-600">{listLabel(item.recipients)}</span> },
+    { key: "due_at", label: "Due", render: (_value, item) => <span className={dueClassName(item.due_at, generatedAt)}>{displayPolicyDate(item.due_at)}</span> },
+    { key: "escalate_at", label: "Escalate", render: (_value, item) => <span className={dueClassName(item.escalate_at, generatedAt)}>{displayPolicyDate(item.escalate_at)}</span> },
+  ], [generatedAt]);
+
+  const versionDiffColumns = useMemo<TableColumn<GRCPolicyVersionDiff>[]>(() => [
+    {
+      key: "policy_title",
+      label: "Policy",
+      render: (_value, item) => (
+        <div className="min-w-[12rem]">
+          <div className="font-medium text-slate-900">{item.policy_title || item.policy_id || "-"}</div>
+          <div className="mt-0.5 text-[12px] text-slate-500">
+            {[item.from_version, item.to_version].filter(Boolean).join(" -> ") || item.to_version_id || "-"}
+          </div>
+        </div>
+      ),
+    },
+    { key: "status", label: "State", render: (_value, item) => <Badge value={item.status || "unknown"} /> },
+    { key: "change_summary", label: "Change", render: (_value, item) => <span className="text-slate-600">{item.change_summary || item.diff_summary || "-"}</span> },
+    { key: "approved_at", label: "Approved", render: (_value, item) => <span className="text-slate-500">{displayPolicyDate(item.approved_at)}</span> },
+    {
+      key: "diff_url",
+      label: "Diff",
+      render: (_value, item) => item.diff_url ? (
+        <Link href={item.diff_url} className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800">
+          Open
+          <ArrowRight className="h-3 w-3" aria-hidden="true" />
+        </Link>
+      ) : <span className="text-slate-400">-</span>,
+    },
+  ], []);
+
+  const eventColumns = useMemo<TableColumn<GRCPolicyLifecycleEvent>[]>(() => [
+    {
+      key: "action",
+      label: "Event",
+      render: (_value, item) => (
+        <div className="min-w-[11rem]">
+          <div className="font-medium text-slate-900">{humanize(item.action || item.event_kind || "event")}</div>
+          <div className="mt-0.5 text-[12px] text-slate-500">{humanize(item.record_type || "policy")}</div>
+        </div>
+      ),
+    },
+    { key: "status", label: "State", render: (_value, item) => <Badge value={item.status || "recorded"} tone={statusIntent(item.status)} /> },
+    { key: "policy_id", label: "Policy", render: (_value, item) => <span className="text-slate-600">{item.policy_id || "-"}</span> },
+    { key: "actor", label: "Actor", render: (_value, item) => <span className="text-slate-600">{item.actor || "System"}</span> },
+    { key: "occurred_at", label: "Recorded", render: (_value, item) => <span className="text-slate-500">{displayPolicyDate(item.occurred_at)}</span> },
+  ], []);
+
   const mappingColumns = useMemo<TableColumn<GRCPolicyLifecycleMapping>[]>(() => [
     {
       key: "policy_title",
@@ -280,12 +512,18 @@ export default function PoliciesPage() {
       <PageHeader
         contractId="policies"
         title="Policies"
-        description="Policy versions, approvals, attestations, exceptions, reminders, and control mappings."
+        description="Versions, approvals, attestations, exceptions, reminders, and mappings."
         action={
-          <button type="button" onClick={() => void reload()} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => void exportPolicies()} disabled={exporting} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-200 hover:text-indigo-700 disabled:opacity-60">
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              {exporting ? "Exporting" : "Export"}
+            </button>
+            <button type="button" onClick={() => void reload()} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              Refresh
+            </button>
+          </div>
         }
       />
 
@@ -321,10 +559,17 @@ export default function PoliciesPage() {
         <MetricCard label="Pending Approvals" value={summary?.pending_approvals ?? 0} detail={`${summary?.draft_versions ?? 0} drafts`} intent={(summary?.pending_approvals ?? 0) > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Attestations" value={`${summary?.attestation_coverage_pct ?? 0}%`} detail={`${summary?.overdue_attestations ?? 0} overdue`} intent={(summary?.overdue_attestations ?? 0) > 0 ? "danger" : "success"} state={metricState} />
         <MetricCard label="Exceptions" value={summary?.open_exceptions ?? 0} detail={`${summary?.expiring_exceptions ?? 0} expiring`} intent={(summary?.expiring_exceptions ?? 0) > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Mappings" value={summary?.mapped_controls ?? 0} detail={`${summary?.evidence_items ?? 0} evidence items`} state={metricState} />
+        <MetricCard label="History" value={summary?.lifecycle_events ?? 0} detail={`${summary?.next_reminders ?? 0} reminders`} state={metricState} />
       </div>
 
       {error && <ErrorBlock error={error} onRetry={() => void reload()} />}
+      {exportError && <ErrorBlock error={exportError} onRetry={() => void exportPolicies()} />}
+      {actionError && <ErrorBlock error={actionError} onRetry={() => selectedAction && void submitSelectedAction()} />}
+      {lastActionStatus && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-800">
+          {lastActionStatus}
+        </div>
+      )}
       {isInitialLoading && <LoadingBlock label="Loading policies..." />}
 
       {data && (
@@ -340,19 +585,39 @@ export default function PoliciesPage() {
             pageSize={10}
             getRowKey={(item) => item.id}
             refreshing={isRefreshing}
-            rowActions={(item) => (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (item.policy_id) setSelectedPolicyID(item.policy_id);
-                }}
-                title="Open policy"
-                className="inline-flex items-center rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:border-indigo-200 hover:text-indigo-700"
-              >
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            )}
+            rowActions={(item) => {
+              const action = workQueueActionForItem(item);
+              return (
+                <div className="flex justify-end gap-2">
+                  {action && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openAction(action);
+                      }}
+                      disabled={actionSaving}
+                      title={action.label}
+                      className={actionButtonClass(actionTone(action.action))}
+                    >
+                      {actionIconElement(action.action, "h-3.5 w-3.5")}
+                      {action.label}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (item.policy_id) setSelectedPolicyID(item.policy_id);
+                    }}
+                    title="Open policy"
+                    className="inline-flex items-center rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:border-indigo-200 hover:text-indigo-700"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            }}
           />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
@@ -382,7 +647,12 @@ export default function PoliciesPage() {
                 </button>
               )}
             />
-            <PolicyDetail policy={selectedPolicy} generatedAt={generatedAt} />
+            <PolicyDetail
+              policy={selectedPolicy}
+              generatedAt={generatedAt}
+              onAction={openAction}
+              savingActionID={actionSaving ? selectedAction?.id : undefined}
+            />
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
@@ -412,6 +682,48 @@ export default function PoliciesPage() {
             />
           </div>
 
+          <div className="grid gap-4 xl:grid-cols-2">
+            <WorklistTable
+              title="Reminder plan"
+              description="Scheduled notices and escalation dates for pending reviews and attestations."
+              rows={data.reminder_plan ?? []}
+              columns={reminderPlanColumns}
+              emptyMessage="No reminder plan is available."
+              searchPlaceholder="Search reminder plan"
+              filterKeys={["policy", "policy_id", "action", "owner", "recipients", "due_at", "escalate_at"]}
+              pageSize={8}
+              getRowKey={(item) => item.id}
+              rowActions={(item) => {
+                const action = reminderPlanActionForItem(item);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => openAction(action)}
+                    disabled={actionSaving}
+                    title={action.label}
+                    className={actionButtonClass(actionTone(action.action))}
+                  >
+                    {actionIconElement(action.action, "h-3.5 w-3.5")}
+                    {action.label}
+                  </button>
+                );
+              }}
+              action={<Bell className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+            />
+            <WorklistTable
+              title="Version diffs"
+              description="Draft, published, and approved version changes with review status."
+              rows={data.version_diffs ?? []}
+              columns={versionDiffColumns}
+              emptyMessage="No version diffs are available."
+              searchPlaceholder="Search diffs"
+              filterKeys={["policy_title", "policy_id", "from_version", "to_version", "status", "change_summary", "diff_summary"]}
+              pageSize={8}
+              getRowKey={(item, index) => `${item.policy_id ?? "policy"}:${item.from_version_id ?? "from"}:${item.to_version_id ?? index}`}
+              action={<GitCompare className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+            />
+          </div>
+
           <WorklistTable
             title="Policy mappings"
             description="Evidence, controls, and targets linked through policy, version, template, and exception records."
@@ -424,13 +736,48 @@ export default function PoliciesPage() {
             getRowKey={(item, index) => `${item.source_urn}:${item.target.urn}:${index}`}
             action={<ShieldCheck className="h-4 w-4 text-slate-400" aria-hidden="true" />}
           />
+
+          <WorklistTable
+            title="Lifecycle events"
+            description="Policy actions recorded from templates, drafts, approvals, attestations, reviews, exceptions, and reminders."
+            rows={data.events ?? []}
+            columns={eventColumns}
+            emptyMessage="No lifecycle events are available."
+            searchPlaceholder="Search events"
+            filterKeys={["id", "policy_id", "record_type", "event_kind", "action", "status", "actor", "reason", "occurred_at"]}
+            pageSize={10}
+            getRowKey={(item) => item.id}
+            action={<History className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+          />
         </>
       )}
+      <ActionModal
+        action={selectedAction}
+        reason={actionReason}
+        dateValue={actionDate}
+        saving={actionSaving}
+        onReasonChange={setActionReason}
+        onDateChange={setActionDate}
+        onClose={() => {
+          if (!actionSaving) setSelectedAction(null);
+        }}
+        onSubmit={() => void submitSelectedAction()}
+      />
     </div>
   );
 }
 
-function PolicyDetail({ policy, generatedAt }: { policy: GRCPolicyLifecyclePolicy | null; generatedAt?: string }) {
+function PolicyDetail({
+  policy,
+  generatedAt,
+  onAction,
+  savingActionID,
+}: {
+  policy: GRCPolicyLifecyclePolicy | null;
+  generatedAt?: string;
+  onAction: (action: GRCPolicyLifecycleAction) => void;
+  savingActionID?: string;
+}) {
   if (!policy) {
     return (
       <Panel title="Policy detail">
@@ -444,6 +791,10 @@ function PolicyDetail({ policy, generatedAt }: { policy: GRCPolicyLifecyclePolic
   const pendingApprovals = (policy.approvals ?? []).filter((approval) => ["", "pending", "requested", "in_review"].includes(normalized(approval.status)));
   const openReviews = (policy.reviews ?? []).filter((review) => ["", "pending", "scheduled", "in_review", "overdue"].includes(normalized(review.status)));
   const openExceptions = (policy.exceptions ?? []).filter((exception) => !["closed", "expired", "rejected"].includes(normalized(exception.status)));
+  const policyActions = policy.actions ?? [];
+  const policyVersionDiffs = policy.version_diffs ?? [];
+  const policyReminderPlan = policy.reminder_plan ?? [];
+  const policyEvents = policy.events ?? [];
 
   return (
     <Panel
@@ -485,12 +836,39 @@ function PolicyDetail({ policy, generatedAt }: { policy: GRCPolicyLifecyclePolic
           <DetailMetric icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} label="Controls" value={policy.controls?.length ?? 0} detail={countLabel(policy.evidence?.length ?? 0, "evidence item")} />
         </div>
 
+        <DetailSection title="Actions">
+          {policyActions.length === 0 ? (
+            <EmptyDetail label="No actions available." />
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {policyActions.map((action) => (
+                <PolicyActionButton
+                  key={action.id}
+                  action={action}
+                  saving={savingActionID === action.id}
+                  onAction={onAction}
+                />
+              ))}
+            </div>
+          )}
+        </DetailSection>
+
         <DetailSection title="Version history">
           {(policy.versions ?? []).length === 0 ? (
             <EmptyDetail label="No versions are linked." />
           ) : (
             <div className="space-y-3">
               {(policy.versions ?? []).map((version) => <VersionRow key={version.id} version={version} generatedAt={generatedAt} />)}
+            </div>
+          )}
+        </DetailSection>
+
+        <DetailSection title="Version diffs">
+          {policyVersionDiffs.length === 0 ? (
+            <EmptyDetail label="No diffs are linked." />
+          ) : (
+            <div className="space-y-3">
+              {policyVersionDiffs.slice(0, 5).map((diff, index) => <VersionDiffRow key={`${diff.from_version_id ?? "from"}:${diff.to_version_id ?? index}`} diff={diff} />)}
             </div>
           )}
         </DetailSection>
@@ -535,14 +913,231 @@ function PolicyDetail({ policy, generatedAt }: { policy: GRCPolicyLifecyclePolic
           )}
         </DetailSection>
 
+        <DetailSection title="Reminder plan">
+          {policyReminderPlan.length === 0 ? (
+            <EmptyDetail label="No reminders are scheduled." />
+          ) : (
+            <div className="space-y-2">
+              {policyReminderPlan.slice(0, 5).map((item) => (
+                <ReminderPlanRow
+                  key={item.id}
+                  item={item}
+                  generatedAt={generatedAt}
+                  onAction={onAction}
+                  saving={savingActionID === `${item.id}:${item.action}`}
+                />
+              ))}
+            </div>
+          )}
+        </DetailSection>
+
         <DetailSection title="Controls and evidence">
           <div className="space-y-3 text-[12px]">
             <ChipList values={(policy.controls ?? []).map(controlLabel)} empty="No controls linked." />
             <ChipList values={(policy.evidence ?? []).map((item) => item.title || shortEntity(item.urn))} empty="No evidence linked." />
           </div>
         </DetailSection>
+
+        <DetailSection title="Event history">
+          {policyEvents.length === 0 ? (
+            <EmptyDetail label="No events are linked." />
+          ) : (
+            <div className="space-y-2">
+              {policyEvents.slice(0, 7).map((event) => <EventRow key={event.id} event={event} />)}
+            </div>
+          )}
+        </DetailSection>
       </div>
     </Panel>
+  );
+}
+
+function PolicyActionButton({
+  action,
+  saving,
+  onAction,
+}: {
+  action: GRCPolicyLifecycleAction;
+  saving?: boolean;
+  onAction: (action: GRCPolicyLifecycleAction) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onAction(action)}
+      disabled={saving}
+      className={`${actionButtonClass(actionTone(action.action))} justify-between`}
+    >
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        {actionIconElement(action.action, "h-3.5 w-3.5 shrink-0")}
+        <span className="truncate">{action.label}</span>
+      </span>
+      {action.due_at && <span className="shrink-0 text-[11px] opacity-75">{displayPolicyDate(action.due_at)}</span>}
+    </button>
+  );
+}
+
+function VersionDiffRow({ diff }: { diff: GRCPolicyVersionDiff }) {
+  return (
+    <div className="rounded-md border border-slate-200 px-3 py-2.5 text-[12px]">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="font-medium text-slate-900">
+            {[diff.from_version, diff.to_version].filter(Boolean).join(" -> ") || diff.to_version_id || "Version diff"}
+          </div>
+          <div className="mt-0.5 text-slate-500">{diff.change_summary || diff.diff_summary || "No summary"}</div>
+        </div>
+        <Badge value={diff.status || "unknown"} />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-500">
+        <span>Created {displayPolicyDate(diff.created_at)}</span>
+        <span>Approved {displayPolicyDate(diff.approved_at)}</span>
+        {diff.diff_url && <Link href={diff.diff_url} className="text-indigo-600 hover:text-indigo-800">Diff</Link>}
+      </div>
+    </div>
+  );
+}
+
+function ReminderPlanRow({
+  item,
+  generatedAt,
+  saving,
+  onAction,
+}: {
+  item: GRCPolicyReminderPlan;
+  generatedAt?: string;
+  saving?: boolean;
+  onAction: (action: GRCPolicyLifecycleAction) => void;
+}) {
+  const action = reminderPlanActionForItem(item);
+  return (
+    <div className="grid gap-2 rounded-md border border-slate-200 px-3 py-2.5 text-[12px] md:grid-cols-[minmax(0,1fr)_auto]">
+      <div>
+        <div className="font-medium text-slate-900">{humanize(item.action)}</div>
+        <div className="mt-0.5 text-slate-500">{listLabel(item.recipients, "No recipient")}</div>
+        <div className={`mt-1 ${dueClassName(item.due_at, generatedAt)}`}>Due {displayPolicyDate(item.due_at)}</div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onAction(action)}
+        disabled={saving}
+        className={actionButtonClass(actionTone(action.action))}
+      >
+        {actionIconElement(action.action, "h-3.5 w-3.5")}
+        {action.label}
+      </button>
+    </div>
+  );
+}
+
+function EventRow({ event }: { event: GRCPolicyLifecycleEvent }) {
+  return (
+    <div className="grid gap-2 rounded-md border border-slate-200 px-3 py-2.5 text-[12px] md:grid-cols-[minmax(0,1fr)_auto]">
+      <div>
+        <div className="font-medium text-slate-900">{humanize(event.action || event.event_kind || "event")}</div>
+        <div className="mt-0.5 text-slate-500">{event.actor || "System"} / {humanize(event.record_type || "policy")}</div>
+        {event.reason && <div className="mt-1 text-slate-600">{event.reason}</div>}
+      </div>
+      <div className="text-right">
+        <Badge value={event.status || "recorded"} tone={statusIntent(event.status)} />
+        <div className="mt-1 text-slate-500">{displayPolicyDate(event.occurred_at)}</div>
+      </div>
+    </div>
+  );
+}
+
+function ActionModal({
+  action,
+  reason,
+  dateValue: currentDateValue,
+  saving,
+  onReasonChange,
+  onDateChange,
+  onClose,
+  onSubmit,
+}: {
+  action: GRCPolicyLifecycleAction | null;
+  reason: string;
+  dateValue: string;
+  saving: boolean;
+  onReasonChange: (value: string) => void;
+  onDateChange: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  if (!action) return null;
+  const dateField = actionDateField(action.action);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 py-6">
+      <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
+              {actionIconElement(action.action, "h-4 w-4 text-indigo-600")}
+              {action.label}
+            </div>
+            <div className="mt-1 text-[12px] text-slate-500">{action.policy || action.policy_id || humanize(action.record_type || "policy")}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            title="Close"
+            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:opacity-60"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          <dl className="grid gap-3 text-[12px] sm:grid-cols-2">
+            <DetailItem label="Record" value={humanize(action.record_type || "policy")} />
+            <DetailItem label="Owner" value={action.owner || "Unassigned"} />
+            <DetailItem label="State" value={humanize(action.status || "pending")} />
+            <DetailItem label="Due" value={displayPolicyDate(action.due_at)} valueClassName={dueClassName(action.due_at)} />
+          </dl>
+          {dateField && (
+            <label className={labelClass}>
+              {actionDateLabel(action.action)}
+              <input
+                type="date"
+                value={currentDateValue}
+                onChange={(event) => onDateChange(event.target.value)}
+                className={inputClass}
+              />
+            </label>
+          )}
+          <label className={labelClass}>
+            Reason
+            <textarea
+              value={reason}
+              onChange={(event) => onReasonChange(event.target.value)}
+              rows={4}
+              placeholder="Decision note"
+              className={`${inputClass} min-h-24 resize-y`}
+            />
+          </label>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={saving}
+            className={actionButtonClass(actionTone(action.action))}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            {saving ? "Saving" : "Record"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

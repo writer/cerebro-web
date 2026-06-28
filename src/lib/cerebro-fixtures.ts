@@ -1039,6 +1039,7 @@ const policyLifecycleFixture = () => ({
   summary: {
     policies: 4,
     templates: 4,
+    lifecycle_events: 7,
     draft_versions: 2,
     pending_approvals: 2,
     overdue_reviews: 1,
@@ -1046,6 +1047,7 @@ const policyLifecycleFixture = () => ({
     expiring_exceptions: 1,
     attestation_coverage_pct: 82,
     overdue_attestations: 6,
+    next_reminders: 5,
     mapped_controls: 7,
     evidence_items: 9,
   },
@@ -1197,6 +1199,27 @@ const policyLifecycleFixture = () => ({
           expires_at: "2026-01-28",
         },
       ],
+      events: [
+        { id: "access-draft-created", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-draft-created`, policy_id: "access-control", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, record_type: "policy.version", event_kind: "grc.policy_version", action: "draft.create", status: "draft", actor: "security@example.com", occurred_at: "2026-01-08T10:00:00.000Z" },
+        { id: "access-approval-requested", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-approval-requested`, policy_id: "access-control", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", event_kind: "grc.policy_approval", action: "approval.request", status: "pending", actor: "grc@example.com", reason: "Ready for legal and security approval.", occurred_at: "2026-01-10T14:00:00.000Z" },
+        { id: "access-waiver-approved", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-waiver-approved`, policy_id: "access-control", policy_version_id: "access-control-2.0", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", event_kind: "grc.policy_exception", action: "exception.approve", status: "active", actor: "security@example.com", reason: "Build host isolation is in progress.", occurred_at: "2026-01-02T12:00:00.000Z" },
+      ],
+      actions: [
+        { id: "access-control-2.1:draft.submit", action: "draft.submit", label: "Submit draft", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, record_type: "policy.version", status: "draft", owner: "Security", due_at: "2026-02-01", reason: "Draft version" },
+        { id: "access-control-approval-2.1:approval.approve", action: "approval.approve", label: "Approve version", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", status: "pending", owner: "legal@example.com", due_at: "2026-01-20", reason: "Pending approval" },
+        { id: "access-control-approval-2.1:approval.reject", action: "approval.reject", label: "Reject version", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", status: "pending", owner: "legal@example.com", due_at: "2026-01-20", reason: "Pending approval" },
+        { id: "access-attest-overdue:attestation.accept", action: "attestation.accept", label: "Record attestation", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.0", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-overdue`, record_type: "policy.acceptance", status: "overdue", owner: "sam@example.com", due_at: "2026-01-11", reason: "Open attestation" },
+        { id: "access-attest-overdue:reminder.escalate", action: "reminder.escalate", label: "Escalate reminder", policy_id: "access-control", policy: "Access Control Policy", policy_version_id: "access-control-2.0", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-overdue`, record_type: "policy.acceptance", status: "overdue", owner: "sam@example.com", due_at: "2026-01-11", reason: "Overdue attestation" },
+        { id: "access-device-waiver:exception.renew", action: "exception.renew", label: "Renew exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", status: "active", owner: "Platform", due_at: "2026-01-28", reason: "Expiring exception" },
+        { id: "access-device-waiver:exception.close", action: "exception.close", label: "Close exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", status: "active", owner: "Platform", due_at: "2026-01-28", reason: "Open exception" },
+      ],
+      version_diffs: [
+        { policy_id: "access-control", policy_title: "Access Control Policy", from_version_id: "access-control-2.0", from_version: "2.0", to_version_id: "access-control-2.1", to_version: "2.1", status: "draft", change_summary: "Expanded privileged access review scope.", diff_summary: "Added break-glass account review, service account inventory, and quarterly owner certification.", diff_url: "https://cerebro.example.com/policies/access-control/compare/2.0...2.1", created_at: "2026-01-08T10:00:00.000Z" },
+      ],
+      reminder_plan: [
+        { id: "access-attest-overdue:attestation", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:access-attest-overdue`, record_type: "policy.acceptance", action: "Attestation escalation", owner: "sam@example.com", recipients: ["All employees"], due_at: "2026-01-11", escalate_at: "2026-01-14", channel: "email", reason: "Overdue attestation" },
+        { id: "access-device-waiver:exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", action: "Exception renewal", owner: "Platform", recipients: ["Security"], due_at: "2026-01-28", escalate_at: "2026-01-31", channel: "email", reason: "Expiring exception" },
+      ],
       assignments: [
         { target_urn: `urn:cerebro:${tenantID}:grc_group:policyops:employees`, target_type: "grc.group", label: "All employees", scope: "attestation" },
       ],
@@ -1334,6 +1357,34 @@ const policyLifecycleFixture = () => ({
     { id: "access-attestation-reminder", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:access-attestation-reminder`, policy_id: "access-control", policy_version_id: "access-control-2.0", title: "Access Control attestation reminder", status: "sent", channel: "email", recipients: ["All employees"], escalated_to: ["Security"], due_at: "2026-01-22", sent_at: "2026-01-15T09:00:00.000Z" },
     { id: "retention-owner-escalation", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:retention-owner-escalation`, policy_id: "data-retention", policy_version_id: "data-retention-3.0", title: "Data owner attestation escalation", status: "sent", channel: "slack", recipients: ["Data owners"], escalated_to: ["Legal"], due_at: "2026-01-14", sent_at: "2026-01-15T10:00:00.000Z" },
     { id: "secure-development-review-reminder", urn: `urn:cerebro:${tenantID}:policy_reminder:policyops:secure-development-review-reminder`, policy_id: "secure-development", policy_version_id: "secure-development-1.0", title: "Secure Development review reminder", status: "scheduled", channel: "email", recipients: ["Engineering"], escalated_to: [], due_at: "2026-01-24", sent_at: "" },
+  ],
+  events: [
+    { id: "access-approval-requested", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:access-approval-requested`, policy_id: "access-control", policy_version_id: "access-control-2.1", record_urn: `urn:cerebro:${tenantID}:policy_approval:policyops:access-control-approval-2.1`, record_type: "policy.approval", event_kind: "grc.policy_approval", action: "approval.request", status: "pending", actor: "grc@example.com", reason: "Ready for legal and security approval.", occurred_at: "2026-01-10T14:00:00.000Z" },
+    { id: "incident-review-opened", urn: `urn:cerebro:${tenantID}:policy_lifecycle_event:policyops:incident-review-opened`, policy_id: "incident-response", policy_version_id: "incident-response-1.4", record_urn: `urn:cerebro:${tenantID}:policy_review:policyops:incident-review-2026`, record_type: "policy.review", event_kind: "grc.policy_review", action: "review.open", status: "pending", actor: "compliance@example.com", occurred_at: "2026-01-02T10:00:00.000Z" },
+  ],
+  available_actions: [
+    { id: "draft.create", label: "Create draft", event_kind: "grc.policy_version", record_type: "policy.version", status: "draft", requires_policy_id: true },
+    { id: "draft.submit", label: "Submit draft", event_kind: "grc.policy_approval", record_type: "policy.approval", status: "requested", requires_policy_id: true, requires_version_id: true },
+    { id: "approval.approve", label: "Approve version", event_kind: "grc.policy_approval", record_type: "policy.approval", status: "approved", requires_policy_id: true, requires_version_id: true },
+    { id: "approval.reject", label: "Reject version", event_kind: "grc.policy_approval", record_type: "policy.approval", status: "rejected", requires_policy_id: true, requires_version_id: true },
+    { id: "version.publish", label: "Publish version", event_kind: "grc.policy_version", record_type: "policy.version", status: "approved", requires_policy_id: true, requires_version_id: true },
+    { id: "attestation.assign", label: "Assign attestation", event_kind: "grc.policy_acceptance", record_type: "policy.acceptance", status: "pending", requires_policy_id: true, requires_version_id: true },
+    { id: "attestation.accept", label: "Record attestation", event_kind: "grc.policy_acceptance", record_type: "policy.acceptance", status: "accepted", requires_policy_id: true, requires_version_id: true },
+    { id: "review.complete", label: "Complete review", event_kind: "grc.policy_review", record_type: "policy.review", status: "completed", requires_policy_id: true },
+    { id: "exception.request", label: "Request exception", event_kind: "grc.policy_exception", record_type: "policy.exception", status: "requested", requires_policy_id: true },
+    { id: "exception.renew", label: "Renew exception", event_kind: "grc.policy_exception", record_type: "policy.exception", status: "active", requires_policy_id: true },
+    { id: "exception.close", label: "Close exception", event_kind: "grc.policy_exception", record_type: "policy.exception", status: "closed", requires_policy_id: true },
+    { id: "reminder.send", label: "Send reminder", event_kind: "grc.policy_reminder", record_type: "policy.reminder", status: "sent", requires_policy_id: true },
+    { id: "reminder.escalate", label: "Escalate reminder", event_kind: "grc.policy_reminder", record_type: "policy.reminder", status: "escalated", requires_policy_id: true },
+  ],
+  version_diffs: [
+    { policy_id: "access-control", policy_title: "Access Control Policy", from_version_id: "access-control-2.0", from_version: "2.0", to_version_id: "access-control-2.1", to_version: "2.1", status: "draft", change_summary: "Expanded privileged access review scope.", diff_summary: "Added break-glass account review, service account inventory, and quarterly owner certification.", diff_url: "https://cerebro.example.com/policies/access-control/compare/2.0...2.1", created_at: "2026-01-08T10:00:00.000Z" },
+    { policy_id: "secure-development", policy_title: "Secure Development Policy", from_version_id: "", from_version: "", to_version_id: "secure-development-1.0", to_version: "1.0", status: "changes_requested", change_summary: "Initial policy for code review, dependency scanning, and release gates.", diff_summary: "Reviewer requested clearer ownership for emergency releases.", created_at: "2026-01-06T10:00:00.000Z" },
+  ],
+  reminder_plan: [
+    { id: "incident-review-2026:review", policy_id: "incident-response", policy: "Incident Response Policy", record_urn: `urn:cerebro:${tenantID}:policy_review:policyops:incident-review-2026`, record_type: "policy.review", action: "Review reminder", owner: "Security", recipients: ["Compliance"], due_at: "2026-01-12", escalate_at: "2026-01-15", channel: "email", reason: "Owner review" },
+    { id: "data-retention-overdue:attestation", policy_id: "data-retention", policy: "Data Retention Policy", record_urn: `urn:cerebro:${tenantID}:policy_acceptance:policyops:data-retention-overdue`, record_type: "policy.acceptance", action: "Attestation escalation", owner: "data-owner@example.com", recipients: ["Data owners"], due_at: "2026-01-14", escalate_at: "2026-01-17", channel: "email", reason: "Overdue attestation" },
+    { id: "access-device-waiver:exception", policy_id: "access-control", policy: "Access Control Policy", record_urn: `urn:cerebro:${tenantID}:policy_exception:policyops:access-device-waiver`, record_type: "policy.exception", action: "Exception renewal", owner: "Platform", recipients: ["Security"], due_at: "2026-01-28", escalate_at: "2026-01-31", channel: "email", reason: "Expiring exception" },
   ],
   mappings: [
     { policy_id: "access-control", policy_title: "Access Control Policy", source_urn: `urn:cerebro:${tenantID}:policy_version:policyops:access-control-2.1`, source_type: "policy.version", target: { urn: apiURN, entity_type: "service", label: "payments-api" }, controls: [{ urn: `urn:cerebro:${tenantID}:policy:policyops:control:CC6.1`, control_id: "CC6.1", framework: "SOC 2", title: "Logical access" }], evidence: [{ urn: "evidencecas://policy/access-control-draft", title: "Draft approval packet", evidence_type: "approval_packet" }] },
@@ -1778,6 +1829,24 @@ export const cerebroFixtureResponseFor = ({
     if (normalizedMethod === "POST" && normalizedPath === "grc/ask") {
       return textFixture("event: done\ndata: {\"answer\":\"Fixture mode is enabled.\",\"trace_id\":\"fixture-trace\"}\n\n", "text/event-stream; charset=utf-8");
     }
+    if (normalizedMethod === "POST" && normalizedPath === "grc/policy-lifecycle/actions") {
+      let action = "policy.lifecycle.action";
+      try {
+        const parsed = body ? JSON.parse(body) as { action?: string; status?: string } : {};
+        action = parsed.action || action;
+      } catch {
+        action = "policy.lifecycle.action";
+      }
+      return jsonFixture({
+        action,
+        status: "accepted",
+        event_id: `fixture-${action.replaceAll(".", "-")}`,
+        event_kind: "grc.policy_lifecycle",
+        schema_ref: "grc/policy/v1",
+        attributes: { action, status: "accepted" },
+        generated_at: generatedAt,
+      });
+    }
     return writeFixture(normalizedPath, body);
   }
 
@@ -1861,6 +1930,10 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "grc/policy-lifecycle") {
     return jsonFixture(policyLifecycleFixture());
+  }
+
+  if (normalizedPath === "grc/policy-lifecycle/export") {
+    return textFixture("record_type,record_id,policy_id,policy_title,status,action\npolicy.version,access-control-2.1,access-control,Access Control Policy,draft,draft.create\npolicy.approval,access-control-approval-2.1,access-control,Access Control Policy,pending,approval.request\n", "text/csv; charset=utf-8");
   }
 
   if (normalizedPath === "grc/evidence") {

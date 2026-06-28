@@ -8,6 +8,7 @@ export type AuthorizationPermission =
   | "preferences:write"
   | "findings:write"
   | "grc:inventory:write"
+  | "grc:policies:write"
   | "dashboards:write"
   | "connector-credentials:read"
   | "connector-credentials:write"
@@ -29,6 +30,7 @@ const permissionOrder: AuthorizationPermission[] = [
   "cerebro:write",
   "findings:write",
   "grc:inventory:write",
+  "grc:policies:write",
   "dashboards:write",
   "connector-credentials:read",
   "connector-credentials:write",
@@ -52,6 +54,7 @@ const findingManagerPermissions: AuthorizationPermission[] = [
 const grcReviewerPermissions: AuthorizationPermission[] = [
   ...viewerPermissions,
   "grc:inventory:write",
+  "grc:policies:write",
   "dashboards:write",
 ];
 
@@ -64,18 +67,21 @@ const rolePermissionBundles: Record<string, AuthorizationPermission[]> = {
     ...viewerPermissions,
     "findings:write",
     "grc:inventory:write",
+    "grc:policies:write",
     "dashboards:write",
   ],
   analyst: [
     ...viewerPermissions,
     "findings:write",
     "grc:inventory:write",
+    "grc:policies:write",
     "dashboards:write",
   ],
   editor: [
     ...viewerPermissions,
     "findings:write",
     "grc:inventory:write",
+    "grc:policies:write",
     "dashboards:write",
   ],
   "cerebro.finding_manager": findingManagerPermissions,
@@ -143,6 +149,7 @@ const scopePermissionBundles: Record<string, AuthorizationPermission[]> = {
   "cerebro.finding_candidates.promote": ["findings:write"],
   "cerebro.findings.write": ["findings:write"],
   "cerebro.grc.inventory.write": ["grc:inventory:write"],
+  "cerebro.grc.policy_lifecycle.write": ["grc:policies:write"],
   "cerebro.dashboards.write": ["dashboards:write"],
   "cerebro.connector_credentials.read": ["connector-credentials:read"],
   "cerebro.connector_credentials.write": ["connector-credentials:write"],
@@ -225,6 +232,7 @@ export const permissionForCerebroProxyRequest = (
   if (normalizedMethod === "PATCH") {
     if (normalizedPath.startsWith("grc/dashboards/")) return "dashboards:write";
     if (normalizedPath.startsWith("grc/inventory/")) return "grc:inventory:write";
+    if (normalizedPath.startsWith("grc/policy-lifecycle/")) return "grc:policies:write";
     return "cerebro:write";
   }
 
@@ -249,6 +257,7 @@ export const permissionForCerebroProxyRequest = (
   if (normalizedPath === "grc/dashboards") return "dashboards:write";
   if (normalizedPath.startsWith("grc/dashboards/") && normalizedPath.endsWith("/clone")) return "dashboards:write";
   if (normalizedPath === "grc/findings/triage") return "findings:write";
+  if (normalizedPath === "grc/policy-lifecycle/actions") return "grc:policies:write";
   if (readOnlyPostPaths.has(normalizedPath)) return "cerebro:read";
   if (normalizedPath.startsWith("grc/control-packs/")) return "cerebro:read";
   if (matchesReportRunPath(normalizedPath)) return "reports:run";

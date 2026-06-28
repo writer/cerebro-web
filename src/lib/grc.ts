@@ -1797,6 +1797,114 @@ export type GRCPolicyExceptionSummary = {
   expired: number;
 };
 
+export type GRCPolicyLifecycleEvent = {
+  id: string;
+  urn: string;
+  policy_id?: string;
+  policy_version_id?: string;
+  record_urn?: string;
+  record_type?: string;
+  event_kind?: string;
+  action?: string;
+  status?: string;
+  actor?: string;
+  reason?: string;
+  occurred_at?: string;
+  attributes?: Record<string, string>;
+};
+
+export type GRCPolicyLifecycleAction = {
+  id: string;
+  action: string;
+  label: string;
+  policy_id?: string;
+  policy?: string;
+  policy_version_id?: string;
+  record_urn?: string;
+  record_type?: string;
+  status?: string;
+  owner?: string;
+  due_at?: string;
+  reason?: string;
+};
+
+export type GRCPolicyLifecycleActionDefinition = {
+  id: string;
+  label: string;
+  event_kind: string;
+  record_type: string;
+  status: string;
+  requires_policy_id?: boolean;
+  requires_version_id?: boolean;
+};
+
+export type GRCPolicyLifecycleActionRequest = {
+  action: string;
+  tenant_id?: string;
+  source_id?: string;
+  runtime_id?: string;
+  policy_id?: string;
+  policy_version_id?: string;
+  template_id?: string;
+  record_id?: string;
+  record_urn?: string;
+  title?: string;
+  version?: string;
+  status?: string;
+  actor_user_id?: string;
+  reason?: string;
+  due_at?: string;
+  effective_at?: string;
+  expires_at?: string;
+  idempotency_key?: string;
+  assignees?: string[];
+  approvers?: string[];
+  reviewers?: string[];
+  control_ids?: string[];
+  evidence_urns?: string[];
+  attributes?: Record<string, string>;
+};
+
+export type GRCPolicyLifecycleActionResponse = {
+  action: string;
+  status: string;
+  event_id: string;
+  event_kind: string;
+  schema_ref: string;
+  attributes?: Record<string, string>;
+  generated_at: string;
+};
+
+export type GRCPolicyVersionDiff = {
+  policy_id?: string;
+  policy_title?: string;
+  from_version_id?: string;
+  from_version?: string;
+  to_version_id?: string;
+  to_version?: string;
+  status?: string;
+  change_summary?: string;
+  diff_summary?: string;
+  diff_url?: string;
+  created_at?: string;
+  approved_at?: string;
+};
+
+export type GRCPolicyReminderPlan = {
+  id: string;
+  policy_id?: string;
+  policy?: string;
+  record_urn?: string;
+  record_type?: string;
+  action: string;
+  owner?: string;
+  recipients?: string[];
+  due_at?: string;
+  escalate_at?: string;
+  channel?: string;
+  reason?: string;
+};
+
 export type GRCPolicyTemplate = {
   id: string;
   urn: string;
@@ -1940,6 +2048,10 @@ export type GRCPolicyLifecyclePolicy = {
   attestations?: GRCPolicyAcceptance[];
   reviews?: GRCPolicyReview[];
   exceptions?: GRCPolicyException[];
+  events?: GRCPolicyLifecycleEvent[];
+  actions?: GRCPolicyLifecycleAction[];
+  version_diffs?: GRCPolicyVersionDiff[];
+  reminder_plan?: GRCPolicyReminderPlan[];
   assignments?: GRCPolicyAssignment[];
   controls?: GRCPolicyControlRef[];
   evidence?: GRCPolicyEvidenceRef[];
@@ -1949,6 +2061,7 @@ export type GRCPolicyLifecyclePolicy = {
 export type GRCPolicyLifecycleSummary = {
   policies: number;
   templates: number;
+  lifecycle_events?: number;
   draft_versions: number;
   pending_approvals: number;
   overdue_reviews: number;
@@ -1956,6 +2069,7 @@ export type GRCPolicyLifecycleSummary = {
   expiring_exceptions: number;
   attestation_coverage_pct: number;
   overdue_attestations: number;
+  next_reminders?: number;
   mapped_controls: number;
   evidence_items: number;
 };
@@ -1966,6 +2080,10 @@ export type GRCPolicyLifecycleResponse = {
   policies: GRCPolicyLifecyclePolicy[];
   work_queue: GRCPolicyLifecycleWork[];
   reminders: GRCPolicyReminder[];
+  events?: GRCPolicyLifecycleEvent[];
+  available_actions?: GRCPolicyLifecycleActionDefinition[];
+  version_diffs?: GRCPolicyVersionDiff[];
+  reminder_plan?: GRCPolicyReminderPlan[];
   mappings: GRCPolicyLifecycleMapping[];
   generated_at: string;
 };

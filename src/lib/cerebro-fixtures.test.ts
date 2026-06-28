@@ -90,13 +90,34 @@ describe("cerebro fixture proxy responses", () => {
     const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle" });
     const payload = parseFixture(response!);
     expect(response?.status).toBe(200);
-    expect(payload.summary).toMatchObject({ policies: 4, pending_approvals: 2 });
+    expect(payload.summary).toMatchObject({ policies: 4, pending_approvals: 2, lifecycle_events: 7 });
     expect(payload.templates).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "tpl-access-control" }),
     ]));
     expect(payload.work_queue).toEqual(expect.arrayContaining([
       expect.objectContaining({ action: "Approve version" }),
     ]));
+    expect(payload.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "approval.request" }),
+    ]));
+    expect(payload.reminder_plan).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "Exception renewal" }),
+    ]));
+  });
+
+  it("returns policy lifecycle action and export fixtures", () => {
+    withFixtureMode();
+    const actionResponse = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/policy-lifecycle/actions",
+      body: JSON.stringify({ action: "approval.approve", policy_id: "access-control", policy_version_id: "access-control-2.1" }),
+    });
+    expect(actionResponse?.status).toBe(200);
+    expect(parseFixture(actionResponse!)).toMatchObject({ action: "approval.approve", status: "accepted" });
+
+    const exportResponse = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle/export" });
+    expect(exportResponse?.headers["content-type"]).toContain("text/csv");
+    expect(exportResponse?.body).toContain("policy.version");
   });
 
   it("returns asset detail fixtures for encoded URNs", () => {
