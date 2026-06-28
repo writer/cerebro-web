@@ -1915,12 +1915,19 @@ export type GRCPolicyLifecycleAction = {
   policy_id?: string;
   policy?: string;
   policy_version_id?: string;
+  gap_id?: string;
+  gap_ids?: string[];
+  gap_state?: string;
   record_urn?: string;
   record_type?: string;
   status?: string;
   owner?: string;
   due_at?: string;
   reason?: string;
+  date_field?: "due_at" | "effective_at" | "expires_at" | string;
+  value_field?: string;
+  value_label?: string;
+  attributes?: Record<string, string>;
 };
 
 export type GRCPolicyLifecycleActionDefinition = {
@@ -1931,6 +1938,11 @@ export type GRCPolicyLifecycleActionDefinition = {
   status: string;
   requires_policy_id?: boolean;
   requires_version_id?: boolean;
+  requires_record_id?: boolean;
+  requires_gap_id?: boolean;
+  date_field?: string;
+  value_field?: string;
+  value_label?: string;
 };
 
 export type GRCPolicyLifecycleActionRequest = {
@@ -1941,6 +1953,9 @@ export type GRCPolicyLifecycleActionRequest = {
   policy_id?: string;
   policy_version_id?: string;
   template_id?: string;
+  gap_id?: string;
+  gap_ids?: string[];
+  gap_state?: string;
   record_id?: string;
   record_urn?: string;
   title?: string;
@@ -2103,9 +2118,55 @@ export type GRCPolicyGovernanceGap = {
   severity: string;
   reason: string;
   action: string;
+  action_id?: string;
+  rule_id?: string;
+  gap_state?: string;
+  due_at?: string;
+  state_reason?: string;
+  state_updated_at?: string;
+  last_action?: string;
+  last_actor?: string;
+  missing_fields?: string[];
+  source_fields?: Record<string, string>;
+  trace?: GRCPolicyGovernanceGapTrace[];
   policy_id?: string;
   document_id?: string;
   risk_id?: string;
+};
+
+export type GRCPolicyGovernanceGapTrace = {
+  event_id?: string;
+  action?: string;
+  actor?: string;
+  status?: string;
+  occurred_at?: string;
+  reason?: string;
+};
+
+export type GRCPolicyGovernanceRule = {
+  id: string;
+  profile: string;
+  subject: string;
+  field: string;
+  label: string;
+  severity: string;
+  required?: boolean;
+  action_id: string;
+  action: string;
+  applies_to?: string[];
+  confidence?: string;
+};
+
+export type GRCPolicyGovernanceGapRollup = {
+  key: string;
+  count: number;
+};
+
+export type GRCPolicyGovernanceGapRollups = {
+  by_state?: GRCPolicyGovernanceGapRollup[];
+  by_owner?: GRCPolicyGovernanceGapRollup[];
+  by_severity?: GRCPolicyGovernanceGapRollup[];
+  by_subject?: GRCPolicyGovernanceGapRollup[];
 };
 
 export type GRCPolicyVersion = {
@@ -2276,6 +2337,13 @@ export type GRCPolicyLifecycleSummary = {
   governance_gaps?: number;
   policy_document_gaps?: number;
   risk_register_gaps?: number;
+  open_governance_gaps?: number;
+  in_progress_governance_gaps?: number;
+  acknowledged_governance_gaps?: number;
+  snoozed_governance_gaps?: number;
+  accepted_governance_gaps?: number;
+  resolved_governance_gaps?: number;
+  high_governance_gaps?: number;
   open_exceptions: number;
   expiring_exceptions: number;
   open_risks?: number;
@@ -2294,6 +2362,8 @@ export type GRCPolicyLifecycleResponse = {
   documents?: GRCPolicyDocument[];
   risk_register?: GRCPolicyRiskRegisterItem[];
   governance_gaps?: GRCPolicyGovernanceGap[];
+  governance_rules?: GRCPolicyGovernanceRule[];
+  governance_gap_rollups?: GRCPolicyGovernanceGapRollups;
   work_queue: GRCPolicyLifecycleWork[];
   document_work_queue?: GRCPolicyDocumentWork[];
   reminders: GRCPolicyReminder[];

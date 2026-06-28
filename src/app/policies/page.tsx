@@ -13,6 +13,7 @@ import { countLabel } from "@/lib/format";
 import type {
   GRCPolicyAcceptance,
   GRCPolicyLifecycleAction,
+  GRCPolicyLifecycleActionDefinition,
   GRCPolicyLifecycleActionRequest,
   GRCPolicyLifecycleActionResponse,
   GRCPolicyLifecycleEvent,
@@ -22,6 +23,8 @@ import type {
   GRCPolicyDocumentWork,
   GRCPolicyException,
   GRCPolicyGovernanceGap,
+  GRCPolicyGovernanceGapRollups,
+  GRCPolicyGovernanceRule,
   GRCPolicyLifecycleMapping,
   GRCPolicyLifecyclePolicy,
   GRCPolicyLifecycleResponse,
@@ -51,6 +54,11 @@ const lifecycleStates = [
   { value: "attestation", label: "Attestations" },
   { value: "review", label: "Reviews" },
   { value: "exception", label: "Exceptions" },
+];
+
+const ruleProfiles = [
+  { value: "baseline", label: "Baseline" },
+  { value: "strict", label: "Strict evidence" },
 ];
 
 const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
@@ -135,6 +143,11 @@ const governanceGapSearchText = (gap: GRCPolicyGovernanceGap) => [
   gap.severity,
   gap.reason,
   gap.action,
+  gap.action_id,
+  gap.rule_id,
+  gap.gap_state,
+  gap.due_at,
+  ...(gap.missing_fields ?? []),
   gap.policy_id,
   gap.document_id,
   gap.risk_id,
@@ -187,22 +200,71 @@ const actionTone = (action: string) => {
   return "primary";
 };
 
-const actionDateField = (action: string): "due_at" | "effective_at" | "expires_at" | null => {
+const actionDateField = (action: string, field?: string): "due_at" | "effective_at" | "expires_at" | null => {
+  if (field === "due_at" || field === "effective_at" || field === "expires_at") return field;
   if (action === "exception.renew") return "expires_at";
   if (action === "version.publish") return "effective_at";
+  if (action === "governance_gap.set_review_date" || action === "governance_gap.set_treatment_date" || action === "governance_gap.snooze") return "due_at";
   if (action.includes("reminder") || action.includes("attestation") || action.includes("approval") || action.includes("review")) return "due_at";
   return null;
 };
 
-const actionDateLabel = (action: string) => {
-  const field = actionDateField(action);
-  if (field === "expires_at") return "Expires";
-  if (field === "effective_at") return "Effective";
-  if (field === "due_at") return "Due";
+const actionDateLabel = (action: string, field?: string) => {
+  const normalizedField = actionDateField(action, field);
+  if (action === "governance_gap.snooze") return "Snooze until";
+  if (action === "governance_gap.set_review_date") return "Review due";
+  if (action === "governance_gap.set_treatment_date") return "Treatment due";
+  if (normalizedField === "expires_at") return "Expires";
+  if (normalizedField === "effective_at") return "Effective";
+  if (normalizedField === "due_at") return "Due";
   return "Date";
 };
 
+const actionValueField = (action: GRCPolicyLifecycleAction) => {
+  if (action.value_field) return action.value_field;
+  switch (action.action) {
+    case "governance_gap.assign_owner":
+      return "assigned_user_ids";
+    case "governance_gap.link_policy":
+      return "target_policy_id";
+    case "governance_gap.map_controls":
+      return "control_ids";
+    case "governance_gap.add_treatment":
+      return "treatment";
+    case "governance_gap.link_source_document":
+      return "source_document_id";
+    case "governance_gap.attach_evidence":
+      return "evidence_urns";
+    default:
+      return "";
+  }
+};
+
+const actionValueLabel = (action: GRCPolicyLifecycleAction) => {
+  if (action.value_label) return action.value_label;
+  switch (actionValueField(action)) {
+    case "assigned_user_ids":
+      return "Owner";
+    case "target_policy_id":
+    case "policy_id":
+      return "Policy ID";
+    case "control_ids":
+      return "Control IDs";
+    case "evidence_urns":
+      return "Evidence URNs";
+    case "source_document_id":
+      return "Source document ID";
+    case "treatment":
+      return "Treatment";
+    default:
+      return "Value";
+  }
+};
+
+const splitActionValues = (value: string) => value.split(/[,;\n]/).map((item) => item.trim()).filter(Boolean);
+
 const actionIconElement = (action: string, className: string) => {
+  if (action.includes("governance_gap")) return <ListChecks className={className} aria-hidden="true" />;
   if (action.includes("approval.approve") || action.includes("attestation.accept") || action.includes("review.complete")) return <CheckCircle2 className={className} aria-hidden="true" />;
   if (action.includes("approval.reject") || action.includes("exception.close")) return <XCircle className={className} aria-hidden="true" />;
   if (action.includes("reminder")) return <Send className={className} aria-hidden="true" />;
@@ -282,6 +344,74 @@ const reminderPlanActionForItem = (item: GRCPolicyReminderPlan): GRCPolicyLifecy
   };
 };
 
+const governanceGapFallbackActionID = (gap: GRCPolicyGovernanceGap) => {
+  const reason = normalized(gap.reason);
+  if (reason.includes("owner")) return "governance_gap.assign_owner";
+  if (reason.includes("treatment date")) return "governance_gap.set_treatment_date";
+  if (reason.includes("treatment")) return "governance_gap.add_treatment";
+  if (reason.includes("review date")) return "governance_gap.set_review_date";
+  if (reason.includes("source document")) return "governance_gap.link_source_document";
+  if (reason.includes("linked policy")) return "governance_gap.link_policy";
+  if (reason.includes("controls")) return "governance_gap.map_controls";
+  if (reason.includes("evidence")) return "governance_gap.attach_evidence";
+  return "governance_gap.acknowledge";
+};
+
+const governanceGapActionForItem = (
+  gap: GRCPolicyGovernanceGap,
+  definition?: GRCPolicyLifecycleActionDefinition,
+): GRCPolicyLifecycleAction => {
+  const action = definition?.id ?? gap.action_id ?? governanceGapFallbackActionID(gap);
+  return {
+    id: `${gap.id}:${action}`,
+    action,
+    label: definition?.label ?? gap.action ?? "Record action",
+    policy_id: gap.policy_id,
+    gap_id: gap.id,
+    gap_state: gap.gap_state,
+    record_urn: gap.id,
+    record_type: "governance.gap",
+    status: gap.gap_state ?? gap.status ?? "open",
+    owner: gap.owner,
+    due_at: gap.due_at,
+    reason: gap.reason,
+    date_field: definition?.date_field,
+    value_field: definition?.value_field,
+    value_label: definition?.value_label,
+    attributes: {
+      document_id: gap.document_id ?? "",
+      risk_id: gap.risk_id ?? "",
+      rule_id: gap.rule_id ?? "",
+      subject: gap.subject,
+      subject_id: gap.subject_id ?? "",
+    },
+  };
+};
+
+const governanceGapStateAction = (gap: GRCPolicyGovernanceGap, action: string, label: string): GRCPolicyLifecycleAction => ({
+  id: `${gap.id}:${action}`,
+  action,
+  label,
+  policy_id: gap.policy_id,
+  gap_id: gap.id,
+  gap_state: gap.gap_state,
+  record_urn: gap.id,
+  record_type: "governance.gap",
+  status: gap.gap_state ?? gap.status ?? "open",
+  owner: gap.owner,
+  due_at: gap.due_at,
+  reason: gap.reason,
+  attributes: {
+    document_id: gap.document_id ?? "",
+    risk_id: gap.risk_id ?? "",
+    rule_id: gap.rule_id ?? "",
+    subject: gap.subject,
+    subject_id: gap.subject_id ?? "",
+  },
+});
+
+const rollupLabel = (key: string) => key === "unassigned" ? "Unassigned" : humanize(key);
+
 const riskIntent = (risk?: string): "severity" | "status" => {
   const value = normalized(risk);
   return ["critical", "high", "very_high", "very high", "severe"].includes(value) ? "severity" : "status";
@@ -302,11 +432,13 @@ export default function PoliciesPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [owner, setOwner] = useQueryParamState("owner");
   const [state, setState] = useQueryParamState("state");
+  const [ruleProfile, setRuleProfile] = useQueryParamState("rule_profile");
   const [query, setQuery] = useQueryParamState("q");
   const [selectedPolicyID, setSelectedPolicyID] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<GRCPolicyLifecycleAction | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionDate, setActionDate] = useState("");
+  const [actionValue, setActionValue] = useState("");
   const [actionIdempotencyKey, setActionIdempotencyKey] = useState("");
   const [lastActionStatus, setLastActionStatus] = useState<string | null>(null);
   const [policyUploadFile, setPolicyUploadFile] = useState<File | null>(null);
@@ -322,12 +454,13 @@ export default function PoliciesPage() {
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedOwner = useDebouncedValue(owner.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
+  const activeRuleProfile = normalized(ruleProfile) === "strict" ? "strict" : "baseline";
   const { mutate: recordAction, saving: actionSaving, error: actionError, setError: setActionError } =
     useGRCMutation<GRCPolicyLifecycleActionResponse>();
   const { mutate: uploadPolicyDocument, saving: policyUploadSaving, error: policyUploadError, setError: setPolicyUploadError } =
     useGRCFormMutation<GRCUploadResponse>();
   const { data, error, loading, reload } = useGRCQuery<GRCPolicyLifecycleResponse>(
-    grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, limit: 300 }),
+    grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, rule_profile: activeRuleProfile, limit: 300 }),
   );
   const isInitialLoading = loading && !data;
   const isRefreshing = loading && Boolean(data);
@@ -337,6 +470,10 @@ export default function PoliciesPage() {
   const documents = useMemo(() => data?.documents ?? [], [data?.documents]);
   const riskRegister = useMemo(() => data?.risk_register ?? [], [data?.risk_register]);
   const governanceGaps = useMemo(() => data?.governance_gaps ?? [], [data?.governance_gaps]);
+  const availableActionDefinitions = useMemo(
+    () => new Map((data?.available_actions ?? []).map((action) => [action.id, action])),
+    [data?.available_actions],
+  );
   const filteredPolicies = useMemo(() => {
     const ownerFilter = normalized(debouncedOwner);
     const textFilter = normalized(debouncedQuery);
@@ -405,16 +542,19 @@ export default function PoliciesPage() {
     { key: "tenant_id", label: "Tenant", value: tenantID, setValue: setTenantID },
     { key: "owner", label: "Owner", value: owner, setValue: setOwner },
     { key: "state", label: "State", value: state, setValue: setState },
+    { key: "rule_profile", label: "Rules", value: ruleProfile, setValue: setRuleProfile },
     { key: "q", label: "Search", value: query, setValue: setQuery },
   ]);
   const summary = data?.summary;
   const generatedAt = data?.generated_at;
+  const activeGapCount = (summary?.open_governance_gaps ?? 0) + (summary?.in_progress_governance_gaps ?? 0) + (summary?.acknowledged_governance_gaps ?? 0) + (summary?.snoozed_governance_gaps ?? 0);
 
   const openAction = (action: GRCPolicyLifecycleAction) => {
     actionIdempotencyCounterRef.current += 1;
     setSelectedAction(action);
     setActionReason(action.reason ?? "");
     setActionDate(dateInputValue(action.due_at));
+    setActionValue("");
     setActionIdempotencyKey(`${action.id}:${globalThis.crypto?.randomUUID?.() ?? actionIdempotencyCounterRef.current}`);
     setLastActionStatus(null);
     setActionError(null);
@@ -422,27 +562,42 @@ export default function PoliciesPage() {
 
   const submitSelectedAction = async () => {
     if (!selectedAction) return;
-    const dateField = actionDateField(selectedAction.action);
+    const dateField = actionDateField(selectedAction.action, selectedAction.date_field);
+    const valueField = actionValueField(selectedAction);
+    const value = actionValue.trim();
     const body: GRCPolicyLifecycleActionRequest = {
       action: selectedAction.action,
       tenant_id: tenantID.trim() || undefined,
       policy_id: selectedAction.policy_id,
       policy_version_id: selectedAction.policy_version_id,
+      gap_id: selectedAction.gap_id,
+      gap_ids: selectedAction.gap_ids,
+      gap_state: selectedAction.gap_state,
+      record_id: selectedAction.gap_id,
       record_urn: selectedAction.record_urn,
       reason: actionReason.trim() || selectedAction.reason,
       idempotency_key: actionIdempotencyKey || selectedAction.id,
       attributes: {
         source_surface: "cerebro-web",
         record_type: selectedAction.record_type ?? "",
+        ...(selectedAction.attributes ?? {}),
       },
     };
     if (dateField && actionDate.trim()) {
       (body as Record<string, unknown>)[dateField] = actionDate.trim();
     }
+    if (value) {
+      if (valueField === "assigned_user_ids") body.assignees = splitActionValues(value);
+      else if (valueField === "control_ids") body.control_ids = splitActionValues(value);
+      else if (valueField === "evidence_urns") body.evidence_urns = splitActionValues(value);
+      else if (selectedAction.action === "governance_gap.link_policy" && valueField === "policy_id") body.attributes = { ...(body.attributes ?? {}), target_policy_id: value };
+      else if (valueField) body.attributes = { ...(body.attributes ?? {}), [valueField]: value };
+    }
     try {
       const response = await recordAction(grcPath("/grc/policy-lifecycle/actions", { tenant_id: tenantID.trim() }), body);
       setLastActionStatus(`${humanize(response.action)} ${humanize(response.status)}`);
       setSelectedAction(null);
+      setActionValue("");
       setActionIdempotencyKey("");
       await reload();
     } catch {
@@ -493,7 +648,7 @@ export default function PoliciesPage() {
     setExportError(null);
     try {
       const result = await downloadGRCExport(
-        grcPath("/grc/policy-lifecycle/export", { tenant_id: debouncedTenantID }),
+        grcPath("/grc/policy-lifecycle/export", { tenant_id: debouncedTenantID, rule_profile: activeRuleProfile }),
         apiKey,
         grcExportFilename("policy-lifecycle"),
       );
@@ -538,10 +693,15 @@ export default function PoliciesPage() {
       ),
     },
     { key: "reason", label: "Gap", render: (_value, gap) => <span className="font-medium text-slate-800">{gap.reason}</span> },
-    { key: "action", label: "Action", render: (_value, gap) => <span className="text-slate-700">{gap.action}</span> },
+    {
+      key: "missing_fields",
+      label: "Fields",
+      render: (_value, gap) => <span className="text-slate-600">{listLabel(gap.missing_fields, gap.rule_id || "-")}</span>,
+    },
     { key: "owner", label: "Owner", render: (_value, gap) => <span className="text-slate-600">{gap.owner || "Unassigned"}</span> },
-    { key: "status", label: "State", render: (_value, gap) => <Badge value={gap.status || "open"} tone={statusIntent(gap.status)} /> },
-  ], []);
+    { key: "due_at", label: "Due", render: (_value, gap) => <span className={dueClassName(gap.due_at, generatedAt)}>{displayPolicyDate(gap.due_at)}</span> },
+    { key: "gap_state", label: "State", render: (_value, gap) => <Badge value={gap.gap_state || "open"} tone={statusIntent(gap.gap_state)} /> },
+  ], [generatedAt]);
 
   const policyColumns = useMemo<TableColumn<GRCPolicyLifecyclePolicy>[]>(() => [
     {
@@ -753,7 +913,7 @@ export default function PoliciesPage() {
       />
 
       <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-5">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
           <label className={labelClass}>
             Owner
@@ -766,6 +926,16 @@ export default function PoliciesPage() {
             State
             <select value={state} onChange={(event) => setState(event.target.value)} className={inputClass}>
               {lifecycleStates.map((item) => <option key={item.value || "all"} value={item.value}>{item.label}</option>)}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Rules
+            <select
+              value={activeRuleProfile}
+              onChange={(event) => setRuleProfile(event.target.value === "baseline" ? "" : event.target.value)}
+              className={inputClass}
+            >
+              {ruleProfiles.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
           <label className={labelClass}>
@@ -840,7 +1010,7 @@ export default function PoliciesPage() {
         <MetricCard label="Policies" value={summary?.policies ?? 0} detail={`${summary?.templates ?? 0} templates`} state={metricState} />
         <MetricCard label="Documents" value={summary?.policy_documents ?? 0} detail={`${summary?.documents_due_for_review ?? 0} due for review`} intent={(summary?.documents_due_for_review ?? 0) > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Risks" value={summary?.risk_register_items ?? 0} detail={`${summary?.high_risks ?? 0} high`} intent={(summary?.high_risks ?? 0) > 0 ? "danger" : "success"} state={metricState} />
-        <MetricCard label="Gaps" value={summary?.governance_gaps ?? 0} detail={`${summary?.policy_document_gaps ?? 0} document / ${summary?.risk_register_gaps ?? 0} risk`} intent={(summary?.governance_gaps ?? 0) > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Gaps" value={summary?.governance_gaps ?? 0} detail={`${activeGapCount} active / ${summary?.resolved_governance_gaps ?? 0} resolved`} intent={activeGapCount > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Mappings" value={summary?.mapped_controls ?? 0} detail={`${summary?.evidence_items ?? 0} evidence items`} state={metricState} />
         <MetricCard label="Pending Approvals" value={summary?.pending_approvals ?? 0} detail={`${summary?.draft_versions ?? 0} drafts`} intent={(summary?.pending_approvals ?? 0) > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Attestations" value={`${summary?.attestation_coverage_pct ?? 0}%`} detail={`${summary?.overdue_attestations ?? 0} overdue`} intent={(summary?.overdue_attestations ?? 0) > 0 ? "danger" : "success"} state={metricState} />
@@ -927,11 +1097,53 @@ export default function PoliciesPage() {
             columns={governanceGapColumns}
             emptyMessage="No governance gaps match the current filters."
             searchPlaceholder="Search gaps"
-            filterKeys={["subject", "subject_id", "title", "status", "owner", "severity", "reason", "action", "policy_id", "document_id", "risk_id"]}
+            filterKeys={["subject", "subject_id", "title", "status", "owner", "severity", "reason", "action", "action_id", "rule_id", "gap_state", "due_at", "policy_id", "document_id", "risk_id"]}
             pageSize={8}
             getRowKey={(gap) => gap.id}
             refreshing={isRefreshing}
+            rowActions={(gap) => {
+              const recommended = governanceGapActionForItem(gap, availableActionDefinitions.get(gap.action_id ?? governanceGapFallbackActionID(gap)));
+              const state = normalized(gap.gap_state);
+              const acknowledge = governanceGapStateAction(gap, "governance_gap.acknowledge", "Acknowledge");
+              return (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openAction(recommended);
+                    }}
+                    disabled={actionSaving}
+                    title={recommended.label}
+                    className={actionButtonClass(actionTone(recommended.action))}
+                  >
+                    {actionIconElement(recommended.action, "h-3.5 w-3.5")}
+                    {recommended.label}
+                  </button>
+                  {(!state || state === "open") && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openAction(acknowledge);
+                      }}
+                      disabled={actionSaving}
+                      title="Acknowledge"
+                      className={actionButtonClass("primary")}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      Acknowledge
+                    </button>
+                  )}
+                </div>
+              );
+            }}
             action={<ListChecks className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+          />
+
+          <GapRollupsPanel
+            rollups={data.governance_gap_rollups}
+            rules={data.governance_rules ?? []}
           />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
@@ -1097,12 +1309,15 @@ export default function PoliciesPage() {
         action={selectedAction}
         reason={actionReason}
         dateValue={actionDate}
+        value={actionValue}
         saving={actionSaving}
         onReasonChange={setActionReason}
         onDateChange={setActionDate}
+        onValueChange={setActionValue}
         onClose={() => {
           if (!actionSaving) {
             setSelectedAction(null);
+            setActionValue("");
             setActionIdempotencyKey("");
             setActionError(null);
           }
@@ -1110,6 +1325,45 @@ export default function PoliciesPage() {
         onSubmit={() => void submitSelectedAction()}
       />
     </div>
+  );
+}
+
+function GapRollupsPanel({
+  rollups,
+  rules,
+}: {
+  rollups?: GRCPolicyGovernanceGapRollups;
+  rules: GRCPolicyGovernanceRule[];
+}) {
+  const groups = [
+    { title: "State", items: rollups?.by_state ?? [] },
+    { title: "Owner", items: rollups?.by_owner ?? [] },
+    { title: "Severity", items: rollups?.by_severity ?? [] },
+    { title: "Record", items: rollups?.by_subject ?? [] },
+  ];
+  return (
+    <Panel
+      title="Gap rollups"
+      action={<span className="text-[12px] text-slate-500">{countLabel(rules.length, "rule")}</span>}
+    >
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {groups.map((group) => (
+          <div key={group.title} className="rounded-md border border-slate-200 px-3 py-2.5">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{group.title}</div>
+            <div className="mt-2 space-y-1.5">
+              {group.items.length === 0 ? (
+                <div className="text-[12px] text-slate-500">No gaps</div>
+              ) : group.items.slice(0, 4).map((item) => (
+                <div key={`${group.title}:${item.key}`} className="flex items-center justify-between gap-3 text-[12px]">
+                  <span className="truncate text-slate-700">{rollupLabel(item.key)}</span>
+                  <span className="font-medium text-slate-900">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -1396,23 +1650,28 @@ function ActionModal({
   action,
   reason,
   dateValue: currentDateValue,
+  value,
   saving,
   onReasonChange,
   onDateChange,
+  onValueChange,
   onClose,
   onSubmit,
 }: {
   action: GRCPolicyLifecycleAction | null;
   reason: string;
   dateValue: string;
+  value: string;
   saving: boolean;
   onReasonChange: (value: string) => void;
   onDateChange: (value: string) => void;
+  onValueChange: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
   if (!action) return null;
-  const dateField = actionDateField(action.action);
+  const dateField = actionDateField(action.action, action.date_field);
+  const valueField = actionValueField(action);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 py-6">
       <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white shadow-xl">
@@ -1443,11 +1702,22 @@ function ActionModal({
           </dl>
           {dateField && (
             <label className={labelClass}>
-              {actionDateLabel(action.action)}
+              {actionDateLabel(action.action, action.date_field)}
               <input
                 type="date"
                 value={currentDateValue}
                 onChange={(event) => onDateChange(event.target.value)}
+                className={inputClass}
+              />
+            </label>
+          )}
+          {valueField && (
+            <label className={labelClass}>
+              {actionValueLabel(action)}
+              <input
+                value={value}
+                onChange={(event) => onValueChange(event.target.value)}
+                placeholder={valueField === "control_ids" || valueField === "evidence_urns" ? "Comma-separated" : ""}
                 className={inputClass}
               />
             </label>
