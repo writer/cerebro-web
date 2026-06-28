@@ -52,15 +52,15 @@ export function KeyValueList({
   emptyMessage?: string;
 }) {
   if (!data || Object.keys(data).length === 0) {
-    return <div className="text-xs text-slate-500">{emptyMessage}</div>;
+    return <div className="text-xs text-[var(--text-muted)]">{emptyMessage}</div>;
   }
 
   return (
-    <div className="space-y-2 text-xs text-slate-800">
+    <div className="space-y-2 text-xs text-[var(--text-secondary)]">
       {Object.entries(data).map(([key, value]) => (
         <div key={key} className="flex justify-between gap-4">
-          <span className="text-slate-500">{key}</span>
-          <span className="text-right text-slate-900">
+          <span className="text-[var(--text-muted)]">{key}</span>
+          <span className="text-right text-[var(--text-primary)]">
             {formatValue(value)}
           </span>
         </div>
@@ -99,7 +99,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   onRowClick,
   rowActions,
   selectedRowKey,
-  tableContainerClassName = "overflow-auto rounded-lg border border-slate-200 bg-white",
+  tableContainerClassName = "overflow-auto rounded-lg border border-[color:var(--border)] bg-[var(--surface)]",
 }: DataTableProps<Row>) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -134,7 +134,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
 
   if (!rows || rows.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+      <div className="rounded-md border border-dashed border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-4 text-xs text-[var(--text-muted)]">
         {emptyMessage}
       </div>
     );
@@ -150,21 +150,21 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
             setPage(1);
           }}
           placeholder={searchPlaceholder}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 sm:max-w-xs"
+          className="w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)] sm:max-w-xs"
         />
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-[var(--text-muted)]">
           Showing {filteredRows.length === 0 ? 0 : pageStart + 1}-
           {Math.min(pageStart + pageSize, filteredRows.length)} of {filteredRows.length}
         </div>
       </div>
       {filteredRows.length === 0 ? (
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+        <div className="rounded-md border border-dashed border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-4 text-xs text-[var(--text-muted)]">
           No rows match the current filter.
         </div>
       ) : (
         <div className={tableContainerClassName}>
-          <table className="w-full text-left text-xs text-slate-800">
-            <thead className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <table className="w-full text-left text-xs text-[var(--text-secondary)]">
+            <thead className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
               <tr>
                 {resolvedColumns.map((column) => (
                   <th key={column.key} className="px-3 py-2 font-semibold">
@@ -184,7 +184,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
                   <tr
                     key={key}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    className={`border-b border-slate-100 hover:bg-slate-50/60 ${onRowClick ? "cursor-pointer" : ""} ${selected ? "bg-indigo-50/60" : ""}`}
+                    className={`border-b border-[color:var(--border)] hover:bg-[var(--surface-muted)] ${onRowClick ? "cursor-pointer" : ""} ${selected ? "bg-indigo-50/70 dark:bg-indigo-500/15" : ""}`}
                   >
                     {resolvedColumns.map((column) => (
                       <td key={column.key} className="px-3 py-2">
@@ -196,11 +196,11 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
                     {getRowHref && (
                       <td className="px-3 py-2">
                         {href ? (
-                          <Link className="text-indigo-600 hover:text-indigo-800" href={href}>
+                          <Link className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300" href={href}>
                             Open
                           </Link>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-[var(--text-muted)]">—</span>
                         )}
                       </td>
                     )}
@@ -222,18 +222,18 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
             type="button"
             onClick={() => setPage(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
-            className="rounded-md border border-slate-200 px-2 py-1 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-[color:var(--border)] px-2 py-1 text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Previous
           </button>
-          <span className="text-slate-500">
+          <span className="text-[var(--text-muted)]">
             Page {currentPage} of {totalPages}
           </span>
           <button
             type="button"
             onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
             disabled={currentPage === totalPages}
-            className="rounded-md border border-slate-200 px-2 py-1 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-[color:var(--border)] px-2 py-1 text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next
           </button>
@@ -256,16 +256,16 @@ export function WorklistTable<Row extends object = Record<string, unknown>>({
   refreshing?: boolean;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+    <div className="surface-panel overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3.5">
         <div>
-          <h2 className="text-[13px] font-semibold text-slate-900">{title}</h2>
-          {description && <p className="mt-0.5 text-[12px] text-slate-500">{description}</p>}
+          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</h2>
+          {description && <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">{description}</p>}
         </div>
         {action}
       </div>
       {refreshing && (
-        <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-[12px] text-slate-500">
+        <div className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-2 text-[12px] text-[var(--text-muted)]">
           Refreshing...
         </div>
       )}
