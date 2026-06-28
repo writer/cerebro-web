@@ -1975,6 +1975,21 @@ export type GRCPolicyRiskRegisterItem = {
   attributes?: Record<string, string>;
 };
 
+export type GRCPolicyGovernanceGap = {
+  id: string;
+  subject: string;
+  subject_id?: string;
+  title: string;
+  status?: string;
+  owner?: string;
+  severity: string;
+  reason: string;
+  action: string;
+  policy_id?: string;
+  document_id?: string;
+  risk_id?: string;
+};
+
 export type GRCPolicyVersion = {
   id: string;
   urn: string;
@@ -2140,6 +2155,9 @@ export type GRCPolicyLifecycleSummary = {
   pending_approvals: number;
   overdue_reviews: number;
   documents_due_for_review?: number;
+  governance_gaps?: number;
+  policy_document_gaps?: number;
+  risk_register_gaps?: number;
   open_exceptions: number;
   expiring_exceptions: number;
   open_risks?: number;
@@ -2157,6 +2175,7 @@ export type GRCPolicyLifecycleResponse = {
   policies: GRCPolicyLifecyclePolicy[];
   documents?: GRCPolicyDocument[];
   risk_register?: GRCPolicyRiskRegisterItem[];
+  governance_gaps?: GRCPolicyGovernanceGap[];
   work_queue: GRCPolicyLifecycleWork[];
   document_work_queue?: GRCPolicyDocumentWork[];
   reminders: GRCPolicyReminder[];
