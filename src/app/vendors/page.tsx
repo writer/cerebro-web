@@ -202,13 +202,10 @@ export default function VendorsPage() {
   const vendors = useMemo(() => vendorsQuery.data?.vendors ?? [], [vendorsQuery.data?.vendors]);
   const summary = vendorsQuery.data?.summary;
   const discoveries = useMemo(() => discoveriesQuery.data?.discoveries ?? [], [discoveriesQuery.data?.discoveries]);
-  const discoverySummary = discoveriesQuery.data?.summary;
   const error = vendorsQuery.error;
   const discoveryError = discoveriesQuery.error;
-  const decisionEventCount = discoveriesQuery.data?.decision_events?.length ?? 0;
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : vendorsQuery.loading && !vendorsQuery.data ? "loading" : "ready";
-  const discoveryMetricState: RuntimeState = discoveryError ? runtimeStateForError(discoveryError) : discoveriesQuery.loading && !discoveriesQuery.data ? "loading" : "ready";
   const riskWithOwnerGaps = useMemo(() => vendors.filter((vendor) => vendor.owner_state === "missing" && ["critical", "high"].includes(vendor.risk_level)).length, [vendors]);
   const assuranceItems = useMemo(() => vendors.reduce((sum, vendor) => sum + vendor.contract_count + vendor.security_review_count + vendor.questionnaire_count + vendor.assurance_document_count, 0), [vendors]);
   const updateDecisionDraft = useCallback((urn: string, patch: Partial<DiscoveryDecisionDraft>) => {
@@ -294,19 +291,11 @@ export default function VendorsPage() {
         />
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Vendors" value={summary?.total_vendors ?? vendors.length} detail={`${summary?.active_vendors ?? vendors.length} active`} state={metricState} />
         <MetricCard label="Risk queue" value={summary?.risk_queue_vendors ?? vendors.filter((vendor) => (vendor.queue_reasons?.length ?? 0) > 0).length} detail={`${summary?.restricted_vendors ?? vendors.filter((vendor) => ["restricted", "conditionally_approved"].includes(vendor.lifecycle_state ?? "")).length} restricted`} intent={(summary?.risk_queue_vendors ?? 0) > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Packet" value={summary?.packet_blocked_vendors ?? vendors.filter((vendor) => ["blocked", "needs_work"].includes(vendor.packet_state ?? "")).length} detail="blocked or incomplete" intent={(summary?.packet_blocked_vendors ?? 0) > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Exposure" value={summary?.high_exposure_vendors ?? vendors.filter((vendor) => ["critical", "high"].includes(vendor.exposure_level ?? "")).length} detail="high or critical" intent={(summary?.high_exposure_vendors ?? 0) > 0 ? "warning" : "neutral"} state={metricState} />
-        <MetricCard label="Remediation" value={summary?.remediation_due_vendors ?? vendors.filter((vendor) => ["overdue", "due_soon"].includes(vendor.remediation_state ?? "")).length} detail="due now" intent={(summary?.remediation_due_vendors ?? 0) > 0 ? "danger" : "success"} state={metricState} />
         <MetricCard label="Missing owner" value={summary?.owner_missing_vendors ?? vendors.filter((vendor) => vendor.owner_state === "missing").length} detail={`${riskWithOwnerGaps} high risk`} intent={riskWithOwnerGaps > 0 ? "warning" : "neutral"} state={metricState} />
         <MetricCard label="Review overdue" value={summary?.review_overdue_vendors ?? vendors.filter((vendor) => vendor.review_state === "overdue").length} detail={`${summary?.review_due_soon_vendors ?? vendors.filter((vendor) => vendor.review_state === "due_soon").length} due soon`} intent={(summary?.review_overdue_vendors ?? 0) > 0 ? "danger" : "neutral"} state={metricState} />
-        <MetricCard label="Assessments" value={summary?.assessment_due_vendors ?? vendors.filter((vendor) => ["overdue", "due_soon", "in_progress"].includes(vendor.assessment_state ?? "")).length} detail="due or active" intent={(summary?.assessment_due_vendors ?? 0) > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Monitoring" value={summary?.monitoring_alert_vendors ?? vendors.filter((vendor) => ["alert", "critical"].includes(vendor.monitoring_state ?? "")).length} detail="active alerts" intent={(summary?.monitoring_alert_vendors ?? 0) > 0 ? "danger" : "success"} state={metricState} />
-        <MetricCard label="Stale evidence" value={summary?.stale_evidence_vendors ?? vendors.filter((vendor) => ["stale", "expired"].includes(vendor.evidence_freshness_state ?? "")).length} detail={`${summary?.evidence_items ?? 0} evidence items`} intent={(summary?.stale_evidence_vendors ?? 0) > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Offboarding" value={summary?.offboarding_due_vendors ?? vendors.filter((vendor) => ["overdue", "due_soon"].includes(vendor.offboarding_state ?? "")).length} detail="due now" intent={(summary?.offboarding_due_vendors ?? 0) > 0 ? "warning" : "success"} state={metricState} />
-        <MetricCard label="Discoveries" value={discoverySummary?.discovered ?? discoveries.length} detail={`${discoverySummary?.linked ?? 0} linked, ${decisionEventCount} events`} intent={(discoverySummary?.discovered ?? discoveries.length) > 0 ? "warning" : "success"} state={discoveryMetricState} />
       </div>
 
       <section className="surface-panel px-5 py-4">
