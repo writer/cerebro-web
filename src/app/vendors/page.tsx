@@ -1,6 +1,23 @@
 "use client";
 
-import { Link2, Plus, RefreshCw, Search, SearchCheck, SlidersHorizontal, Upload, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck,
+  FileText,
+  GitMerge,
+  Link2,
+  PanelRightOpen,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  SearchCheck,
+  SlidersHorizontal,
+  Upload,
+  UserPlus,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useCallback, useMemo, useRef, useState } from "react";
 
@@ -10,11 +27,14 @@ import {
   displayDate,
   GRCUploadResponse,
   GRCVendor,
+  GRCVendorActionResponse,
   GRCVendorCreateRequest,
   GRCVendorCreateResponse,
+  GRCVendorDetailResponse,
   GRCVendorDiscoveriesResponse,
   GRCVendorDiscovery,
   GRCVendorDiscoverySignal,
+  GRCVendorDiscoverySyncResponse,
   GRCVendorDiscoverySourceSummary,
   GRCVendorsResponse,
   humanize,
@@ -89,6 +109,28 @@ type VendorCreateDraft = {
   reviewState: string;
 };
 
+type DuplicateMatch = {
+  id: string;
+  label: string;
+  detail: string;
+  reason: string;
+  vendorURN?: string;
+  discoveryURN?: string;
+};
+
+type BulkDiscoveryDraft = {
+  owner: string;
+  riskLevel: string;
+  linkedVendorURN: string;
+  reason: string;
+};
+
+type VendorQuickActionDraft = {
+  owner: string;
+  lifecycleState: string;
+  reviewState: string;
+};
+
 const defaultVendorCreateDraft = (): VendorCreateDraft => ({
   name: "",
   owner: "",
@@ -100,10 +142,27 @@ const defaultVendorCreateDraft = (): VendorCreateDraft => ({
   reviewState: "not_scheduled",
 });
 
+const defaultBulkDiscoveryDraft = (): BulkDiscoveryDraft => ({
+  owner: "",
+  riskLevel: "unknown",
+  linkedVendorURN: "",
+  reason: "",
+});
+
+const defaultVendorQuickActionDraft = (): VendorQuickActionDraft => ({
+  owner: "",
+  lifecycleState: "approved",
+  reviewState: "in_progress",
+});
+
 const createRiskOptions = riskFilters.filter((item) => item.value);
 const createLifecycleOptions = lifecycleFilters.filter((item) =>
   ["active", "approved", "in_review", "conditionally_approved", "restricted"].includes(item.value));
 const createReviewOptions = reviewFilters.filter((item) => item.value);
+const quickReviewOptions = [
+  { value: "in_progress", label: "In progress" },
+  ...createReviewOptions,
+];
 
 const compactAttributes = (attributes: Record<string, string | undefined>) =>
   Object.fromEntries(Object.entries(attributes).filter(([, value]) => Boolean(value))) as Record<string, string>;
@@ -121,12 +180,224 @@ const vendorCreateRequest = (draft: VendorCreateDraft, tenantID: string): GRCVen
   review_state: draft.reviewState,
 });
 
+const normalizeMatchText = (value?: string) =>
+  (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const compactMatchKey = (value?: string) =>
+  normalizeMatchText(value).replace(/\s+/g, "");
+
+const hostForURL = (value?: string) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed.includes("://") ? trimmed : "https://" + trimmed);
+    return url.hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+const websiteLooksValid = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  try {
+    const url = new URL(trimmed.includes("://") ? trimmed : "https://" + trimmed);
+    return Boolean(url.hostname) && ["http:", "https:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
+
+const uniqueByID = <T extends { id: string }>(items: T[]) =>
+  Array.from(new Map(items.map((item) => [item.id, item])).values());
+
+const duplicateMatchesForValues = ({
+  currentDiscoveryURN,
+  discoveries,
+  name,
+  normalizedName,
+  vendors,
+  websiteURL,
+}: {
+  currentDiscoveryURN?: string;
+  discoveries: GRCVendorDiscovery[];
+  name?: string;
+  normalizedName?: string;
+  vendors: GRCVendor[];
+  websiteURL?: string;
+}): DuplicateMatch[] => {
+  const nameKey = compactMatchKey(normalizedName || name);
+  const host = hostForURL(websiteURL);
+  if (!nameKey && !host) return [];
+
+  const vendorMatches = vendors.flatMap((vendor): DuplicateMatch[] => {
+    const vendorNameKey = compactMatchKey(vendor.name);
+    const vendorHost = hostForURL(vendor.website_url);
+    if (nameKey && vendorNameKey && nameKey === vendorNameKey) {
+      return [{
+        id: `vendor:${vendor.urn}:name`,
+        label: vendor.name || shortEntity(vendor.urn),
+        detail: ownerLabel(vendor),
+        reason: "Same vendor name",
+        vendorURN: vendor.urn,
+      }];
+    }
+    if (host && vendorHost && host === vendorHost) {
+      return [{
+        id: `vendor:${vendor.urn}:host`,
+        label: vendor.name || shortEntity(vendor.urn),
+        detail: vendorHost,
+        reason: "Same website",
+        vendorURN: vendor.urn,
+      }];
+    }
+    return [];
+  });
+
+  const discoveryMatches = discoveries.flatMap((discovery): DuplicateMatch[] => {
+    if (discovery.urn === currentDiscoveryURN) return [];
+    const discoveryNameKey = compactMatchKey(discovery.normalized_name || discovery.name);
+    const discoveryHost = hostForURL(discovery.website_url);
+    if (nameKey && discoveryNameKey && nameKey === discoveryNameKey) {
+      return [{
+        id: `discovery:${discovery.urn}:name`,
+        label: discovery.name || shortEntity(discovery.urn),
+        detail: discovery.provider || discovery.source_id || "Discovery",
+        reason: "Same candidate name",
+        discoveryURN: discovery.urn,
+        vendorURN: discovery.linked_vendor_urn,
+      }];
+    }
+    if (host && discoveryHost && host === discoveryHost) {
+      return [{
+        id: `discovery:${discovery.urn}:host`,
+        label: discovery.name || shortEntity(discovery.urn),
+        detail: discoveryHost,
+        reason: "Same candidate website",
+        discoveryURN: discovery.urn,
+        vendorURN: discovery.linked_vendor_urn,
+      }];
+    }
+    return [];
+  });
+
+  return uniqueByID([...vendorMatches, ...discoveryMatches]).slice(0, 4);
+};
+
+const duplicateMatchesForDiscovery = (
+  discovery: GRCVendorDiscovery,
+  vendors: GRCVendor[],
+  discoveries: GRCVendorDiscovery[],
+) =>
+  duplicateMatchesForValues({
+    currentDiscoveryURN: discovery.urn,
+    discoveries,
+    name: discovery.name,
+    normalizedName: discovery.normalized_name,
+    vendors,
+    websiteURL: discovery.website_url,
+  });
+
+const duplicateMatchesForDraft = (
+  draft: VendorCreateDraft,
+  vendors: GRCVendor[],
+  discoveries: GRCVendorDiscovery[],
+) =>
+  duplicateMatchesForValues({
+    discoveries,
+    name: draft.name,
+    vendors,
+    websiteURL: draft.websiteURL,
+  });
+
+const vendorRiskDrivers = (vendor: GRCVendor) => {
+  const drivers = [
+    ...(vendor.risk_drivers ?? []),
+    ...(vendor.exposure_reasons ?? []),
+    ...(vendor.queue_reasons ?? []).map(humanize),
+  ];
+  if (vendor.owner_state === "missing") drivers.push("No owner");
+  if (["stale", "expired"].includes(vendor.evidence_freshness_state ?? "")) drivers.push("Stale evidence");
+  if (["critical", "high"].includes(vendor.risk_level)) drivers.push(`${humanize(vendor.risk_level)} risk`);
+  if (vendor.access_level === "privileged") drivers.push("Privileged access");
+  if (vendor.open_findings && vendor.open_findings > 0) drivers.push(`${vendor.open_findings} open risks`);
+  return Array.from(new Set(drivers.filter(Boolean))).slice(0, 6);
+};
+
+const formatSyncLag = (seconds?: number) => {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return "Lag not reported";
+  if (seconds < 60) return `${Math.round(seconds)}s lag`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m lag`;
+  return `${Math.round(seconds / 3600)}h lag`;
+};
+
 function VendorRiskBadge({ level }: { level?: string }) {
   const normalized = level?.trim().toLowerCase() || "unknown";
   return (
     <span className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${riskBadgeClassFor(normalized)}`}>
       {humanize(normalized)}
     </span>
+  );
+}
+
+function RiskDriverList({ drivers, limit = 4 }: { drivers: string[]; limit?: number }) {
+  if (drivers.length === 0) {
+    return <span className="text-[12px] text-[var(--text-muted)]">No risk drivers reported</span>;
+  }
+  const visible = drivers.slice(0, limit);
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visible.map((driver) => <Badge key={driver} value={driver} />)}
+      {drivers.length > visible.length && (
+        <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
+          +{drivers.length - visible.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function DuplicateMatchList({
+  matches,
+  onOpenVendor,
+  onUseMatch,
+}: {
+  matches: DuplicateMatch[];
+  onOpenVendor?: (vendorURN: string) => void;
+  onUseMatch?: (vendorURN: string) => void;
+}) {
+  if (matches.length === 0) return null;
+  return (
+    <div className="rounded-md border border-amber-500/25 bg-amber-500/10 p-3 text-[12px]">
+      <div className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-200">
+        <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
+        Possible duplicate
+      </div>
+      <div className="mt-2 space-y-2">
+        {matches.map((match) => (
+          <div key={match.id} className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate font-semibold text-[var(--text-primary)]">{match.label}</div>
+              <div className="text-[var(--text-muted)]">{match.reason}. {match.detail}</div>
+            </div>
+            {match.vendorURN && (
+              <div className="flex shrink-0 gap-1.5">
+                {onUseMatch && (
+                  <button type="button" onClick={() => onUseMatch(match.vendorURN!)} className="secondary-button px-2 py-1 text-[12px]">
+                    Use match
+                  </button>
+                )}
+                {onOpenVendor && (
+                  <button type="button" onClick={() => onOpenVendor(match.vendorURN!)} className="secondary-button px-2 py-1 text-[12px]">
+                    Open
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -244,14 +515,18 @@ function DiscoverySignals({ signals }: { signals?: GRCVendorDiscoverySignal[] })
 function DiscoverySourceSummary({
   loading,
   onRefresh,
+  onRunSource,
   onSelectSource,
+  runSaving,
   selectedSourceID,
   sources,
   summary,
 }: {
   loading: boolean;
   onRefresh: () => void;
+  onRunSource: (sourceID?: string) => void;
   onSelectSource: (sourceID: string) => void;
+  runSaving: boolean;
   selectedSourceID: string;
   sources: GRCVendorDiscoverySourceSummary[];
   summary?: GRCVendorDiscoveriesResponse["summary"];
@@ -260,6 +535,7 @@ function DiscoverySourceSummary({
   const linked = summary?.linked ?? 0;
   const sourceCount = summary?.source_count ?? sources.length;
   const signals = summary?.evidence_signals ?? sources.reduce((sum, source) => sum + source.total, 0);
+  const sourcesWithIssues = sources.filter((source) => (source.failed ?? 0) > 0 || (source.stale ?? 0) > 0 || source.status === "needs_refresh").length;
   const latestSync = latestSourceSync(sources);
   return (
     <section className="surface-panel px-5 py-4">
@@ -269,16 +545,22 @@ function DiscoverySourceSummary({
             <SearchCheck className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Automatic discovery</h2>
+            <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Source coverage</h2>
             <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
-              {loading ? "Loading source candidates." : `${countLabel(sourceCount, "source")} checked. ${countLabel(pending, "candidate")} need review, ${linked} linked, ${countLabel(signals, "source signal")}. Last sync ${latestSync}.`}
+              {loading ? "Loading source candidates." : `${countLabel(sourceCount, "source")} checked. ${countLabel(pending, "candidate")} need review, ${linked} linked, ${countLabel(signals, "source signal")}, ${sourcesWithIssues} sources need attention. Last sync ${latestSync}.`}
             </p>
           </div>
         </div>
-        <button type="button" onClick={onRefresh} disabled={loading} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-          Refresh
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => onRunSource()} disabled={runSaving} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
+            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            Run discovery
+          </button>
+          <button type="button" onClick={onRefresh} disabled={loading} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+            Refresh
+          </button>
+        </div>
       </div>
       {sources.length > 0 && (
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -304,13 +586,23 @@ function DiscoverySourceSummary({
                 <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
                   <SourceStat label="Candidates" value={source.total} />
                   <SourceStat label="Needs review" value={source.discovered} />
-                  <SourceStat label="Linked" value={source.linked ?? 0} />
+                  <SourceStat label="Issues" value={(source.failed ?? 0) + (source.stale ?? 0) + (source.cursor_pending ?? 0)} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Badge value={source.freshness || "freshness_unknown"} />
+                  {source.cursor_pending ? <Badge value="cursor pending" /> : null}
+                  {source.last_error ? <Badge value="sync error" /> : null}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--border)] pt-3 text-[12px] text-[var(--text-muted)]">
-                  <span>Last sync {displayDate(source.last_synced_at)}</span>
-                  <button type="button" onClick={onRefresh} disabled={loading} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)] disabled:opacity-50">
-                    Retry
-                  </button>
+                  <span>Last sync {displayDate(source.last_synced_at)}. {formatSyncLag(source.sync_lag_seconds)}</span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => onSelectSource(selected ? "" : source.source_id)} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                      {selected ? "Clear filter" : "Filter"}
+                    </button>
+                    <button type="button" onClick={() => onRunSource(source.source_id)} disabled={runSaving} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)] disabled:opacity-50">
+                      Run
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -327,17 +619,21 @@ function DiscoverySourceSummary({
 }
 
 function CreateVendorModal({
+  duplicateMatches,
   draft,
   error,
   onClose,
+  onOpenVendor,
   onSubmit,
   onUpdateDraft,
   open,
   saving,
 }: {
+  duplicateMatches: DuplicateMatch[];
   draft: VendorCreateDraft;
   error: string | null;
   onClose: () => void;
+  onOpenVendor: (vendorURN: string) => void;
   onSubmit: (draft: VendorCreateDraft) => Promise<void> | void;
   onUpdateDraft: (patch: Partial<VendorCreateDraft>) => void;
   open: boolean;
@@ -345,9 +641,10 @@ function CreateVendorModal({
 }) {
   if (!open) return null;
   const nameMissing = draft.name.trim() === "";
+  const websiteInvalid = !websiteLooksValid(draft.websiteURL);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (nameMissing || saving) return;
+    if (nameMissing || websiteInvalid || saving) return;
     void Promise.resolve(onSubmit(draft)).catch(() => undefined);
   };
   return (
@@ -364,6 +661,13 @@ function CreateVendorModal({
         </div>
         <div className="space-y-4 px-5 py-4">
           {error && <ErrorBlock error={error} recoveryDetail="Vendor was not saved." />}
+          <DuplicateMatchList
+            matches={duplicateMatches}
+            onOpenVendor={(vendorURN) => {
+              onClose();
+              onOpenVendor(vendorURN);
+            }}
+          />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className={`${labelClass} sm:col-span-2`}>
               Vendor name
@@ -399,8 +703,10 @@ function CreateVendorModal({
                 value={draft.websiteURL}
                 onChange={(event) => onUpdateDraft({ websiteURL: event.target.value })}
                 placeholder="https://www.example.com/vendor"
-                className={inputClass}
+                className={`${inputClass} ${websiteInvalid ? "border-red-400" : ""}`}
+                aria-invalid={websiteInvalid}
               />
+              {websiteInvalid && <span className="mt-1 block text-[12px] normal-case tracking-normal text-red-700 dark:text-red-300">Enter a valid website.</span>}
             </label>
             <label className={`${labelClass} sm:col-span-2`}>
               Services provided
@@ -433,7 +739,7 @@ function CreateVendorModal({
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[color:var(--border)] px-5 py-4">
           <button type="button" onClick={onClose} className="secondary-button px-3 py-1.5 text-[13px]">Cancel</button>
-          <button type="submit" disabled={nameMissing || saving} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
+          <button type="submit" disabled={nameMissing || websiteInvalid || saving} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Add vendor
           </button>
@@ -583,11 +889,17 @@ function DiscoveryActionButtons({
   );
 }
 
-function DiscoveryCandidateTitle({ discovery }: { discovery: GRCVendorDiscovery }) {
+function DiscoveryCandidateTitle({ discovery, duplicateMatches }: { discovery: GRCVendorDiscovery; duplicateMatches: DuplicateMatch[] }) {
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-2">
         <div className="font-semibold text-[var(--text-primary)]">{discovery.name || shortEntity(discovery.urn)}</div>
+        {duplicateMatches.length > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            <GitMerge className="h-3 w-3" aria-hidden="true" />
+            Possible duplicate
+          </span>
+        )}
         {typeof discovery.confidence_score === "number" && (
           <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-secondary)]">
             {confidenceLabel(discovery.confidence_score)}
@@ -622,15 +934,24 @@ function DiscoverySourceCell({ discovery }: { discovery: GRCVendorDiscovery }) {
 
 function SuggestedVendorInputs({
   discovery,
+  duplicateMatches,
   draft,
+  onOpenVendor,
   onUpdateDraft,
 }: {
   discovery: GRCVendorDiscovery;
+  duplicateMatches: DuplicateMatch[];
   draft: DiscoveryDecisionDraft;
+  onOpenVendor: (vendorURN: string) => void;
   onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
 }) {
   return (
     <div className="grid gap-2">
+      <DuplicateMatchList
+        matches={duplicateMatches}
+        onOpenVendor={onOpenVendor}
+        onUseMatch={(vendorURN) => onUpdateDraft(discovery.urn, { linkedVendorURN: vendorURN })}
+      />
       {discovery.linked_vendor_urn ? (
         <Link href={`/vendors/${encodeURIComponent(discovery.linked_vendor_urn)}`} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
           {shortEntity(discovery.linked_vendor_urn)}
@@ -681,23 +1002,27 @@ function DiscoveryCandidateCard({
   createSaving,
   decisionSaving,
   discovery,
+  duplicateMatches,
   draft,
   onCreateVendor,
   onDecision,
+  onOpenVendor,
   onUpdateDraft,
 }: {
   createSaving: boolean;
   decisionSaving: boolean;
   discovery: GRCVendorDiscovery;
+  duplicateMatches: DuplicateMatch[];
   draft: DiscoveryDecisionDraft;
   onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
   onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
+  onOpenVendor: (vendorURN: string) => void;
   onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
 }) {
   return (
     <article className="rounded-md border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <DiscoveryCandidateTitle discovery={discovery} />
+        <DiscoveryCandidateTitle discovery={discovery} duplicateMatches={duplicateMatches} />
         <DiscoveryStateBadge state={discovery.decision_state} />
       </div>
       <div className="mt-4 grid gap-4 text-[12px] sm:grid-cols-2">
@@ -707,7 +1032,7 @@ function DiscoveryCandidateCard({
         </div>
         <div>
           <div className={labelClass}>Suggested vendor</div>
-          <div className="mt-2"><SuggestedVendorInputs discovery={discovery} draft={draft} onUpdateDraft={onUpdateDraft} /></div>
+          <div className="mt-2"><SuggestedVendorInputs discovery={discovery} duplicateMatches={duplicateMatches} draft={draft} onOpenVendor={onOpenVendor} onUpdateDraft={onUpdateDraft} /></div>
         </div>
       </div>
       <div className="mt-4">
@@ -722,29 +1047,53 @@ function DiscoveryCandidateCard({
 }
 
 function DiscoveryQueue({
+  bulkDraft,
+  bulkSaving,
   createSaving,
   decisionDrafts,
   decisionSaving,
   discoveries,
+  duplicateMatchesByURN,
   latestSync,
+  onBulkAction,
+  onBulkDraftChange,
+  onClearSelection,
   onCreateVendor,
   onDecision,
+  onOpenVendor,
   onRefresh,
+  onToggleDiscovery,
+  onToggleVisible,
   onUpdateDraft,
+  selectedDiscoveryURNs,
   sourceCount,
 }: {
+  bulkDraft: BulkDiscoveryDraft;
+  bulkSaving: boolean;
   createSaving: boolean;
   decisionDrafts: Record<string, DiscoveryDecisionDraft>;
   decisionSaving: boolean;
   discoveries: GRCVendorDiscovery[];
+  duplicateMatchesByURN: Record<string, DuplicateMatch[]>;
   latestSync: string;
+  onBulkAction: (action: "create" | "dismiss" | "link") => Promise<void> | void;
+  onBulkDraftChange: (patch: Partial<BulkDiscoveryDraft>) => void;
+  onClearSelection: () => void;
   onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
   onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
+  onOpenVendor: (vendorURN: string) => void;
   onRefresh: () => void;
+  onToggleDiscovery: (urn: string) => void;
+  onToggleVisible: () => void;
   onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
+  selectedDiscoveryURNs: Set<string>;
   sourceCount: number;
 }) {
   const signalCount = discoveries.reduce((sum, discovery) => sum + (discovery.signals?.length ?? 0), 0);
+  const reviewableDiscoveries = discoveries.filter(discoveryNeedsReview);
+  const allVisibleSelected = reviewableDiscoveries.length > 0 && reviewableDiscoveries.every((discovery) => selectedDiscoveryURNs.has(discovery.urn));
+  const selectedCount = reviewableDiscoveries.filter((discovery) => selectedDiscoveryURNs.has(discovery.urn)).length;
+  const busy = bulkSaving || decisionSaving || createSaving;
   return (
     <section className="surface-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
@@ -754,29 +1103,86 @@ function DiscoveryQueue({
             {countLabel(discoveries.length, "candidate")} in this view. {countLabel(signalCount, "source signal")}.
           </p>
         </div>
+        {reviewableDiscoveries.length > 0 && (
+          <label className="inline-flex items-center gap-2 text-[12px] font-semibold text-[var(--text-secondary)]">
+            <input type="checkbox" checked={allVisibleSelected} onChange={onToggleVisible} className="h-4 w-4" />
+            Select visible
+          </label>
+        )}
       </div>
+      {selectedCount > 0 && (
+        <div className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] px-5 py-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[8rem]">
+              <div className={labelClass}>{selectedCount} selected</div>
+              <button type="button" onClick={onClearSelection} className="mt-1 text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                Clear selection
+              </button>
+            </div>
+            <label className={`${labelClass} min-w-[10rem] flex-1`}>
+              Owner for new vendors
+              <input value={bulkDraft.owner} onChange={(event) => onBulkDraftChange({ owner: event.target.value })} placeholder="Security" className={inputClass} />
+            </label>
+            <label className={`${labelClass} min-w-[9rem]`}>
+              Risk for new vendors
+              <select value={bulkDraft.riskLevel} onChange={(event) => onBulkDraftChange({ riskLevel: event.target.value })} className={inputClass}>
+                {createRiskOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className={`${labelClass} min-w-[14rem] flex-1`}>
+              Link selected to vendor
+              <input value={bulkDraft.linkedVendorURN} onChange={(event) => onBulkDraftChange({ linkedVendorURN: event.target.value })} placeholder="Vendor URN" className={`${inputClass} font-mono`} />
+            </label>
+            <label className={`${labelClass} min-w-[12rem] flex-1`}>
+              Decision note
+              <input value={bulkDraft.reason} onChange={(event) => onBulkDraftChange({ reason: event.target.value })} placeholder="Bulk triage" className={inputClass} />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={busy} onClick={() => { void Promise.resolve(onBulkAction("create")).catch(() => undefined); }} className="primary-button px-3 py-1.5 text-[13px] disabled:opacity-50">
+                Create vendors
+              </button>
+              <button type="button" disabled={busy || !bulkDraft.linkedVendorURN.trim()} onClick={() => { void Promise.resolve(onBulkAction("link")).catch(() => undefined); }} className="secondary-button px-3 py-1.5 text-[13px] disabled:opacity-50">
+                Link selected
+              </button>
+              <button type="button" disabled={busy} onClick={() => { void Promise.resolve(onBulkAction("dismiss")).catch(() => undefined); }} className="secondary-button px-3 py-1.5 text-[13px] disabled:opacity-50">
+                Dismiss selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {discoveries.length === 0 ? (
         <DiscoveryEmptyState sourceCount={sourceCount} latestSync={latestSync} onRefresh={onRefresh} />
       ) : (
         <>
           <div className="space-y-3 p-4 md:hidden">
             {discoveries.map((discovery) => (
-              <DiscoveryCandidateCard
-                key={discovery.urn}
-                createSaving={createSaving}
-                decisionSaving={decisionSaving}
-                discovery={discovery}
-                draft={decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" }}
-                onCreateVendor={onCreateVendor}
-                onDecision={onDecision}
-                onUpdateDraft={onUpdateDraft}
-              />
+              <div key={discovery.urn} className="space-y-2">
+                {discoveryNeedsReview(discovery) && (
+                  <label className="inline-flex items-center gap-2 text-[12px] font-semibold text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={selectedDiscoveryURNs.has(discovery.urn)} onChange={() => onToggleDiscovery(discovery.urn)} className="h-4 w-4" />
+                    Select candidate
+                  </label>
+                )}
+                <DiscoveryCandidateCard
+                  createSaving={createSaving}
+                  decisionSaving={decisionSaving}
+                  discovery={discovery}
+                  duplicateMatches={duplicateMatchesByURN[discovery.urn] ?? []}
+                  draft={decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" }}
+                  onCreateVendor={onCreateVendor}
+                  onDecision={onDecision}
+                  onOpenVendor={onOpenVendor}
+                  onUpdateDraft={onUpdateDraft}
+                />
+              </div>
             ))}
           </div>
           <div className="hidden overflow-x-auto md:block">
-            <table className="data-table min-w-[920px]">
+            <table className="data-table min-w-[1040px]">
               <thead>
                 <tr>
+                  <th className="w-10">Select</th>
                   <th>Candidate</th>
                   <th>Evidence</th>
                   <th>Suggested vendor</th>
@@ -786,16 +1192,28 @@ function DiscoveryQueue({
               <tbody>
                 {discoveries.map((discovery) => {
                   const draft = decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
+                  const duplicateMatches = duplicateMatchesByURN[discovery.urn] ?? [];
                   return (
                     <tr key={discovery.urn}>
+                      <td>
+                        {discoveryNeedsReview(discovery) ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedDiscoveryURNs.has(discovery.urn)}
+                            onChange={() => onToggleDiscovery(discovery.urn)}
+                            className="h-4 w-4"
+                            aria-label={`Select ${discovery.name || discovery.urn}`}
+                          />
+                        ) : null}
+                      </td>
                       <td className="min-w-[17rem]">
-                        <DiscoveryCandidateTitle discovery={discovery} />
+                        <DiscoveryCandidateTitle discovery={discovery} duplicateMatches={duplicateMatches} />
                         <div className="mt-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-2">
                           <DiscoverySourceCell discovery={discovery} />
                         </div>
                       </td>
                       <td className="min-w-[18rem] text-[12px] text-[var(--text-secondary)]"><DiscoverySignals signals={discovery.signals} /></td>
-                      <td className="min-w-[14rem]"><SuggestedVendorInputs discovery={discovery} draft={draft} onUpdateDraft={onUpdateDraft} /></td>
+                      <td className="min-w-[16rem]"><SuggestedVendorInputs discovery={discovery} duplicateMatches={duplicateMatches} draft={draft} onOpenVendor={onOpenVendor} onUpdateDraft={onUpdateDraft} /></td>
                       <td className="min-w-[14rem]">
                         <DiscoveryStateBadge state={discovery.decision_state} />
                         <div className="mt-2 text-[12px] text-[var(--text-muted)]">Confidence {confidenceLabel(discovery.confidence_score)}</div>
@@ -816,15 +1234,111 @@ function DiscoveryQueue({
   );
 }
 
-function VendorRegisterCard({ vendor }: { vendor: GRCVendor }) {
+function DuplicateQueue({
+  decisionSaving,
+  discoveries,
+  duplicateMatchesByURN,
+  onDecision,
+  onOpenVendor,
+}: {
+  decisionSaving: boolean;
+  discoveries: GRCVendorDiscovery[];
+  duplicateMatchesByURN: Record<string, DuplicateMatch[]>;
+  onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision, draft?: DiscoveryDecisionDraft) => Promise<void> | void;
+  onOpenVendor: (vendorURN: string) => void;
+}) {
+  const duplicateRows = discoveries
+    .filter(discoveryNeedsReview)
+    .map((discovery) => ({
+      discovery,
+      matches: duplicateMatchesByURN[discovery.urn] ?? [],
+    }))
+    .filter((row) => row.matches.length > 0)
+    .slice(0, 6);
+
+  if (duplicateRows.length === 0) return null;
+
+  return (
+    <section className="surface-panel overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
+        <div>
+          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Possible duplicates</h2>
+          <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+            {countLabel(duplicateRows.length, "candidate")} match a vendor or another discovery.
+          </p>
+        </div>
+        <GitMerge className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+      </div>
+      <div className="divide-y divide-[color:var(--border)]">
+        {duplicateRows.map(({ discovery, matches }) => {
+          const firstVendorMatch = matches.find((match) => match.vendorURN);
+          return (
+            <div key={discovery.urn} className="grid gap-3 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <div className="min-w-0">
+                <div className="font-semibold text-[var(--text-primary)]">{discovery.name || shortEntity(discovery.urn)}</div>
+                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.provider || discovery.source_id || "Source not set"} · Confidence {confidenceLabel(discovery.confidence_score)}</div>
+              </div>
+              <div className="space-y-2">
+                {matches.slice(0, 2).map((match) => (
+                  <div key={match.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px]">
+                    <div className="font-semibold text-[var(--text-primary)]">{match.label}</div>
+                    <div className="text-[var(--text-muted)]">{match.reason}. {match.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-start gap-2 lg:justify-end">
+                {firstVendorMatch?.vendorURN && (
+                  <>
+                    <button type="button" onClick={() => onOpenVendor(firstVendorMatch.vendorURN!)} className="secondary-button px-3 py-1.5 text-[12px]">
+                      Open match
+                    </button>
+                    <button
+                      type="button"
+                      disabled={decisionSaving}
+                      onClick={() => {
+                        void Promise.resolve(onDecision(discovery, "linked", {
+                          linkedVendorURN: firstVendorMatch.vendorURN!,
+                          reason: "Linked from duplicate review.",
+                        })).catch(() => undefined);
+                      }}
+                      className="primary-button px-3 py-1.5 text-[12px] disabled:opacity-50"
+                    >
+                      Link match
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  disabled={decisionSaving}
+                  onClick={() => {
+                    void Promise.resolve(onDecision(discovery, "ignored", {
+                      linkedVendorURN: "",
+                      reason: "Dismissed from duplicate review.",
+                    })).catch(() => undefined);
+                  }}
+                  className="secondary-button px-3 py-1.5 text-[12px] disabled:opacity-50"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function VendorRegisterCard({ onOpenVendor, vendor }: { onOpenVendor: (vendorURN: string) => void; vendor: GRCVendor }) {
   const action = firstQueueAction(vendor);
+  const drivers = vendorRiskDrivers(vendor);
   return (
     <article className="rounded-md border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link href={vendorDetailHref(vendor)} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+          <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="text-left font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
             {vendor.name || shortEntity(vendor.urn)}
-          </Link>
+          </button>
           <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
             {vendor.category && <span>{humanize(vendor.category)}</span>}
             {vendor.status && <span>{humanize(vendor.status)}</span>}
@@ -833,6 +1347,9 @@ function VendorRegisterCard({ vendor }: { vendor: GRCVendor }) {
         <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
       </div>
       {action && <div className="mt-3 text-[12px] font-semibold text-[var(--text-primary)]">{action.label}</div>}
+      <div className="mt-3">
+        <RiskDriverList drivers={drivers} />
+      </div>
       <div className="mt-4 grid gap-3 text-[12px] sm:grid-cols-2">
         <div>
           <div className={labelClass}>Owner</div>
@@ -853,14 +1370,20 @@ function VendorRegisterCard({ vendor }: { vendor: GRCVendor }) {
           <div className="mt-1 text-[var(--text-muted)]">{sourceLabel(vendor)}</div>
         </div>
       </div>
-      <Link href={vendorDetailHref(vendor)} className="secondary-button mt-4 inline-flex px-3 py-1.5 text-[12px]">
-        Open vendor
-      </Link>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="primary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px]">
+          <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
+          Review
+        </button>
+        <Link href={vendorDetailHref(vendor)} className="secondary-button inline-flex px-3 py-1.5 text-[12px]">
+          Full detail
+        </Link>
+      </div>
     </article>
   );
 }
 
-function VendorRegisterSection({ assuranceItems, vendors }: { assuranceItems: number; vendors: GRCVendor[] }) {
+function VendorRegisterSection({ assuranceItems, onOpenVendor, vendors }: { assuranceItems: number; onOpenVendor: (vendorURN: string) => void; vendors: GRCVendor[] }) {
   return (
     <section className="surface-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
@@ -877,10 +1400,10 @@ function VendorRegisterSection({ assuranceItems, vendors }: { assuranceItems: nu
       ) : (
         <>
           <div className="space-y-3 p-4 md:hidden">
-            {vendors.map((vendor) => <VendorRegisterCard key={vendor.urn} vendor={vendor} />)}
+            {vendors.map((vendor) => <VendorRegisterCard key={vendor.urn} onOpenVendor={onOpenVendor} vendor={vendor} />)}
           </div>
           <div className="hidden overflow-x-auto md:block">
-            <table className="data-table min-w-[980px]">
+            <table className="data-table min-w-[1080px]">
               <thead>
                 <tr>
                   <th>Vendor</th>
@@ -895,16 +1418,26 @@ function VendorRegisterSection({ assuranceItems, vendors }: { assuranceItems: nu
               <tbody>
                 {vendors.map((vendor) => {
                   const action = firstQueueAction(vendor);
+                  const drivers = vendorRiskDrivers(vendor);
                   return (
                     <tr key={vendor.urn}>
                       <td className="min-w-[18rem]">
-                        <Link href={vendorDetailHref(vendor)} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                        <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="text-left font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
                           {vendor.name || shortEntity(vendor.urn)}
-                        </Link>
+                        </button>
                         <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
                           {vendor.category && <span>{humanize(vendor.category)}</span>}
                           {vendor.status && <span>{humanize(vendor.status)}</span>}
                           {vendor.services_provided && <span className="max-w-[18rem] truncate">{vendor.services_provided}</span>}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px]">
+                            <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                            Review
+                          </button>
+                          <Link href={vendorDetailHref(vendor)} className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                            Full detail
+                          </Link>
                         </div>
                       </td>
                       <td className="min-w-[14rem] text-[12px] text-[var(--text-secondary)]">
@@ -912,11 +1445,11 @@ function VendorRegisterSection({ assuranceItems, vendors }: { assuranceItems: nu
                           <div>
                             <div className="font-semibold text-[var(--text-primary)]">{action.label}</div>
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              {vendor.queue_reasons?.slice(0, 2).map((reason) => <Badge key={reason} value={reason} />)}
+                              <RiskDriverList drivers={drivers} limit={3} />
                             </div>
                           </div>
                         ) : (
-                          <span className="text-[var(--text-muted)]">No queued action</span>
+                          <RiskDriverList drivers={drivers} limit={3} />
                         )}
                       </td>
                       <td className="min-w-[12rem]">
@@ -952,6 +1485,251 @@ function VendorRegisterSection({ assuranceItems, vendors }: { assuranceItems: nu
   );
 }
 
+function DetailField({ label, value }: { label: string; value?: string | number }) {
+  return (
+    <div className="grid grid-cols-[116px_minmax(0,1fr)] gap-3 border-t border-[color:var(--border)] py-2 text-[12px]">
+      <dt className="text-[var(--text-muted)]">{label}</dt>
+      <dd className="break-words font-medium text-[var(--text-primary)]">{value === undefined || value === "" ? "Not set" : value}</dd>
+    </div>
+  );
+}
+
+function DrawerCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+      <div className="text-lg font-semibold text-[var(--text-primary)]">{value.toLocaleString()}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
+    </div>
+  );
+}
+
+function VendorDetailDrawer({
+  actionDraft,
+  actionError,
+  actionSaving,
+  detail,
+  detailError,
+  detailLoading,
+  linkedDiscoveries,
+  onClose,
+  onOpenUpload,
+  onQuickAction,
+  onReload,
+  onUpdateActionDraft,
+  vendor,
+}: {
+  actionDraft: VendorQuickActionDraft;
+  actionError: string | null;
+  actionSaving: boolean;
+  detail?: GRCVendorDetailResponse | null;
+  detailError: string | null;
+  detailLoading: boolean;
+  linkedDiscoveries: GRCVendorDiscovery[];
+  onClose: () => void;
+  onOpenUpload: (vendor: GRCVendor) => void;
+  onQuickAction: (action: "assign_owner" | "change_lifecycle" | "start_review") => Promise<void> | void;
+  onReload: () => void;
+  onUpdateActionDraft: (patch: Partial<VendorQuickActionDraft>) => void;
+  vendor?: GRCVendor | null;
+}) {
+  const activeVendor = detail?.vendor ?? vendor;
+  if (!activeVendor) return null;
+  const relationships = detail?.relationships ?? {};
+  const reviewRecords = [
+    ...(relationships.security_reviews ?? []),
+    ...(relationships.security_questionnaires ?? []),
+    ...(relationships.assurance_documents ?? []),
+  ];
+  const drivers = vendorRiskDrivers(activeVendor);
+  const nextActions = detail?.packet?.next_actions ?? activeVendor.next_actions ?? [];
+  const evidence = detail?.evidence ?? [];
+  const findings = detail?.findings ?? [];
+  const recentChanges = [
+    activeVendor.last_material_change_at ? `Material change ${displayDate(activeVendor.last_material_change_at)}` : "",
+    activeVendor.last_review_completed_at ? `Review completed ${displayDate(activeVendor.last_review_completed_at)}` : "",
+    activeVendor.review_due_at ? `Review due ${displayDate(activeVendor.review_due_at)}` : "",
+    activeVendor.renewal_notice_at ? `Renewal notice ${displayDate(activeVendor.renewal_notice_at)}` : "",
+  ].filter(Boolean);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-hidden bg-stone-950/45 backdrop-blur-sm">
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl">
+        <aside role="dialog" aria-modal="true" aria-labelledby="vendor-drawer-title" className="surface-raised flex w-full flex-col border-l border-[color:var(--border)] shadow-2xl">
+          <div className="flex items-start justify-between gap-4 border-b border-[color:var(--border)] px-5 py-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 id="vendor-drawer-title" className="truncate text-[16px] font-semibold text-[var(--text-primary)]">{activeVendor.name || shortEntity(activeVendor.urn)}</h2>
+                <VendorRiskBadge level={activeVendor.risk_score_level || activeVendor.risk_level} />
+              </div>
+              <p className="mt-1 text-[12px] text-[var(--text-muted)]">{activeVendor.category ? humanize(activeVendor.category) : "No category"} · {humanize(activeVendor.lifecycle_state || "unknown")}</p>
+            </div>
+            <button type="button" onClick={onClose} className="secondary-button inline-flex h-8 w-8 items-center justify-center p-0" aria-label="Close vendor detail">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            {detailError && <ErrorBlock error={detailError} onRetry={onReload} recoveryDetail="Using register data until detail loads." />}
+            {actionError && <ErrorBlock error={actionError} recoveryDetail="Vendor action was not saved." />}
+            {detailLoading && !detail && <LoadingBlock label="Loading vendor detail..." />}
+
+            <div className="grid gap-3 sm:grid-cols-4">
+              <DrawerCount label="Open risk" value={activeVendor.open_findings ?? findings.length} />
+              <DrawerCount label="Documents" value={activeVendor.assurance_document_count + activeVendor.contract_count + activeVendor.questionnaire_count} />
+              <DrawerCount label="Evidence" value={activeVendor.evidence_items ?? evidence.length} />
+              <DrawerCount label="Actions" value={nextActions.length} />
+            </div>
+
+            <section className="mt-5 rounded-md border border-[color:var(--border)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                Risk drivers
+              </div>
+              <RiskDriverList drivers={drivers} limit={8} />
+            </section>
+
+            <section className="mt-4 rounded-md border border-[color:var(--border)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                <ClipboardCheck className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                Next actions
+              </div>
+              {nextActions.length === 0 ? (
+                <div className="text-[13px] text-[var(--text-muted)]">No queued action.</div>
+              ) : (
+                <div className="space-y-3">
+                  {nextActions.slice(0, 4).map((action) => (
+                    <div key={action.id} className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px]">
+                      <div className="font-semibold text-[var(--text-primary)]">{action.label}</div>
+                      <div className="mt-1 text-[var(--text-muted)]">{action.reason || humanize(action.action_type)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="mt-4 rounded-md border border-[color:var(--border)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                <FileText className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                Documents and evidence
+              </div>
+              <dl>
+                <DetailField label="Assurance" value={activeVendor.assurance_document_count} />
+                <DetailField label="Contracts" value={activeVendor.contract_count} />
+                <DetailField label="Questionnaires" value={activeVendor.questionnaire_count} />
+                <DetailField label="Freshness" value={freshnessLabel(activeVendor)} />
+                <DetailField label="Packet" value={packetDetail(activeVendor)} />
+              </dl>
+              {reviewRecords.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {reviewRecords.slice(0, 4).map((record) => <Badge key={record.urn} value={record.entity_type} />)}
+                </div>
+              )}
+            </section>
+
+            <section className="mt-4 rounded-md border border-[color:var(--border)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                <GitMerge className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                Linked discoveries
+              </div>
+              {linkedDiscoveries.length === 0 ? (
+                <div className="text-[13px] text-[var(--text-muted)]">No linked discoveries.</div>
+              ) : (
+                <div className="space-y-2">
+                  {linkedDiscoveries.map((discovery) => (
+                    <div key={discovery.urn} className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-[12px]">
+                      <div className="font-semibold text-[var(--text-primary)]">{discovery.name || shortEntity(discovery.urn)}</div>
+                      <div className="mt-1 text-[var(--text-muted)]">{discovery.provider || discovery.source_id || "Source not set"} · {humanize(discovery.decision_state)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="mt-4 rounded-md border border-[color:var(--border)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                <CheckCircle2 className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                Vendor detail
+              </div>
+              <dl>
+                <DetailField label="Owner" value={ownerLabel(activeVendor)} />
+                <DetailField label="Review" value={humanize(activeVendor.review_state)} />
+                <DetailField label="Source" value={sourceLabel(activeVendor)} />
+                <DetailField label="Website" value={activeVendor.website_url} />
+                <DetailField label="Services" value={activeVendor.services_provided} />
+              </dl>
+            </section>
+
+            <section className="mt-4 rounded-md border border-[color:var(--border)] p-4">
+              <div className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Recent changes</div>
+              {recentChanges.length === 0 ? (
+                <div className="text-[13px] text-[var(--text-muted)]">No recent changes reported.</div>
+              ) : (
+                <ul className="space-y-2 text-[12px] text-[var(--text-secondary)]">
+                  {recentChanges.map((change) => <li key={change}>{change}</li>)}
+                </ul>
+              )}
+            </section>
+
+            <section className="mt-4 rounded-md border border-[color:var(--border)] p-4">
+              <div className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Quick actions</div>
+              <div className="grid gap-3">
+                <label className={labelClass}>
+                  Owner
+                  <div className="mt-1 flex gap-2">
+                    <input value={actionDraft.owner} onChange={(event) => onUpdateActionDraft({ owner: event.target.value })} placeholder={ownerLabel(activeVendor)} className="control-input min-w-0 flex-1 px-3 py-1.5 text-[13px]" />
+                    <button type="button" disabled={actionSaving || !actionDraft.owner.trim()} onClick={() => { void Promise.resolve(onQuickAction("assign_owner")).catch(() => undefined); }} className="secondary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] disabled:opacity-50">
+                      <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Assign
+                    </button>
+                  </div>
+                </label>
+                <label className={labelClass}>
+                  Lifecycle
+                  <div className="mt-1 flex gap-2">
+                    <select value={actionDraft.lifecycleState} onChange={(event) => onUpdateActionDraft({ lifecycleState: event.target.value })} className="control-input min-w-0 flex-1 px-3 py-1.5 text-[13px]">
+                      {createLifecycleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                    <button type="button" disabled={actionSaving} onClick={() => { void Promise.resolve(onQuickAction("change_lifecycle")).catch(() => undefined); }} className="secondary-button px-3 py-1.5 text-[13px] disabled:opacity-50">
+                      Change
+                    </button>
+                  </div>
+                </label>
+                <label className={labelClass}>
+                  Review
+                  <div className="mt-1 flex gap-2">
+                    <select value={actionDraft.reviewState} onChange={(event) => onUpdateActionDraft({ reviewState: event.target.value })} className="control-input min-w-0 flex-1 px-3 py-1.5 text-[13px]">
+                      {quickReviewOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                    <button type="button" disabled={actionSaving} onClick={() => { void Promise.resolve(onQuickAction("start_review")).catch(() => undefined); }} className="secondary-button px-3 py-1.5 text-[13px] disabled:opacity-50">
+                      Start
+                    </button>
+                  </div>
+                </label>
+              </div>
+            </section>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--border)] px-5 py-4">
+            <button type="button" onClick={() => onOpenUpload(activeVendor)} className="secondary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px]">
+              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+              Add document
+            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={onReload} className="secondary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px]">
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                Refresh
+              </button>
+              <Link href={vendorDetailHref(activeVendor)} className="primary-button px-3 py-1.5 text-[13px]">
+                Open full detail
+              </Link>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
 export default function VendorsPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [query, setQuery] = useQueryParamState("q");
@@ -973,6 +1751,15 @@ export default function VendorsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState<VendorCreateDraft>(() => defaultVendorCreateDraft());
   const [createMessage, setCreateMessage] = useState("");
+  const [createdVendor, setCreatedVendor] = useState<GRCVendor | null>(null);
+  const [selectedVendorURN, setSelectedVendorURN] = useState("");
+  const [bulkDraft, setBulkDraft] = useState<BulkDiscoveryDraft>(() => defaultBulkDiscoveryDraft());
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [selectedDiscoveryURNs, setSelectedDiscoveryURNs] = useState<Set<string>>(() => new Set());
+  const [syncMessage, setSyncMessage] = useState("");
+  const [quickActionMessage, setQuickActionMessage] = useState("");
+  const [quickActionDraft, setQuickActionDraft] = useState<VendorQuickActionDraft>(() => defaultVendorQuickActionDraft());
+  const uploadPanelRef = useRef<HTMLDivElement>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
@@ -1003,6 +1790,11 @@ export default function VendorsPage() {
       limit: 100,
     }),
   );
+  const vendorDetailQuery = useGRCQuery<GRCVendorDetailResponse>(
+    selectedVendorURN
+      ? grcPath(`/grc/vendors/${encodeURIComponent(selectedVendorURN)}`, { tenant_id: debouncedTenantID, limit: 100 })
+      : null,
+  );
   const { mutate: mutateDiscoveryDecision, saving: decisionSaving, error: decisionError } = useGRCMutation();
   const { mutate: uploadVendorDocument, saving: vendorUploadSaving, error: vendorUploadError, setError: setVendorUploadError } =
     useGRCFormMutation<GRCUploadResponse>();
@@ -1012,6 +1804,8 @@ export default function VendorsPage() {
     error: createError,
     setError: setCreateError,
   } = useGRCMutation<GRCVendorCreateResponse>();
+  const { mutate: mutateDiscoverySync, saving: syncSaving, error: syncError } = useGRCMutation<GRCVendorDiscoverySyncResponse>();
+  const { mutate: mutateVendorAction, saving: quickActionSaving, error: quickActionError } = useGRCMutation<GRCVendorActionResponse>();
 
   const vendors = useMemo(() => vendorsQuery.data?.vendors ?? [], [vendorsQuery.data?.vendors]);
   const summary = vendorsQuery.data?.summary;
@@ -1037,12 +1831,84 @@ export default function VendorsPage() {
     }
     return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) => left.label.localeCompare(right.label));
   }, [discoveries, discoverySources, sourceID, vendors]);
+  const duplicateMatchesByURN = useMemo(() => Object.fromEntries(
+    discoveries.map((discovery) => [discovery.urn, duplicateMatchesForDiscovery(discovery, vendors, discoveries)]),
+  ), [discoveries, vendors]);
+  const createDuplicateMatches = useMemo(
+    () => duplicateMatchesForDraft(createDraft, vendors, discoveries),
+    [createDraft, discoveries, vendors],
+  );
+  const selectedVendor = useMemo(
+    () => vendors.find((vendor) => vendor.urn === selectedVendorURN) ?? vendorDetailQuery.data?.vendor ?? null,
+    [selectedVendorURN, vendorDetailQuery.data?.vendor, vendors],
+  );
+  const linkedDiscoveriesForSelectedVendor = useMemo(() => {
+    if (!selectedVendorURN) return [];
+    const selectedHost = hostForURL(selectedVendor?.website_url);
+    const selectedNameKey = compactMatchKey(selectedVendor?.name);
+    return discoveries.filter((discovery) => {
+      if (discovery.linked_vendor_urn === selectedVendorURN) return true;
+      if (discovery.attributes?.discovery_urn === selectedVendorURN) return true;
+      const discoveryHost = hostForURL(discovery.website_url);
+      const discoveryNameKey = compactMatchKey(discovery.normalized_name || discovery.name);
+      return Boolean((selectedHost && discoveryHost === selectedHost) || (selectedNameKey && discoveryNameKey === selectedNameKey));
+    });
+  }, [discoveries, selectedVendor?.name, selectedVendor?.website_url, selectedVendorURN]);
+  const openVendorDrawer = useCallback((vendorURN: string) => {
+    const vendor = vendors.find((item) => item.urn === vendorURN) ?? vendorDetailQuery.data?.vendor;
+    setSelectedVendorURN(vendorURN);
+    setQuickActionMessage("");
+    setQuickActionDraft({
+      owner: vendor?.owner || vendor?.security_owner_user_id || vendor?.business_owner_user_id || "",
+      lifecycleState: vendor?.lifecycle_state || "approved",
+      reviewState: "in_progress",
+    });
+  }, [vendorDetailQuery.data?.vendor, vendors]);
+  const closeVendorDrawer = useCallback(() => {
+    setSelectedVendorURN("");
+  }, []);
+  const updateBulkDraft = useCallback((patch: Partial<BulkDiscoveryDraft>) => {
+    setBulkDraft((current) => ({ ...current, ...patch }));
+  }, []);
+  const updateQuickActionDraft = useCallback((patch: Partial<VendorQuickActionDraft>) => {
+    setQuickActionDraft((current) => ({ ...current, ...patch }));
+  }, []);
+  const toggleDiscoverySelection = useCallback((urn: string) => {
+    setSelectedDiscoveryURNs((current) => {
+      const next = new Set(current);
+      if (next.has(urn)) next.delete(urn);
+      else next.add(urn);
+      return next;
+    });
+  }, []);
+  const clearDiscoverySelection = useCallback(() => {
+    setSelectedDiscoveryURNs(new Set());
+  }, []);
+  const toggleVisibleDiscoveries = useCallback(() => {
+    const visible = discoveries.filter(discoveryNeedsReview).map((discovery) => discovery.urn);
+    setSelectedDiscoveryURNs((current) => {
+      const allSelected = visible.length > 0 && visible.every((urn) => current.has(urn));
+      const next = new Set(current);
+      visible.forEach((urn) => {
+        if (allSelected) next.delete(urn);
+        else next.add(urn);
+      });
+      return next;
+    });
+  }, [discoveries]);
+  const openUploadForVendor = useCallback((vendor: GRCVendor) => {
+    setVendorUploadName(vendor.name || "");
+    setVendorUploadID(vendor.vendor_id || shortEntity(vendor.urn));
+    setVendorUploadWebsite(vendor.website_url || "");
+    uploadPanelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, []);
   const updateCreateDraft = useCallback((patch: Partial<VendorCreateDraft>) => {
     setCreateDraft((current) => ({ ...current, ...patch }));
   }, []);
   const openCreateVendor = useCallback(() => {
     setCreateDraft(defaultVendorCreateDraft());
     setCreateMessage("");
+    setCreatedVendor(null);
     setCreateError(null);
     setCreateOpen(true);
   }, [setCreateError]);
@@ -1055,6 +1921,7 @@ export default function VendorsPage() {
     setCreateOpen(false);
     setCreateDraft(defaultVendorCreateDraft());
     setCreateMessage(`${response.vendor.name} saved.`);
+    setCreatedVendor(response.vendor);
     await Promise.all([vendorsQuery.reload(), discoveriesQuery.reload()]);
   }, [discoveriesQuery, mutateCreateVendor, tenantID, vendorsQuery]);
   const updateDecisionDraft = useCallback((urn: string, patch: Partial<DiscoveryDecisionDraft>) => {
@@ -1067,8 +1934,8 @@ export default function VendorsPage() {
       },
     }));
   }, []);
-  const setDiscoveryDecision = useCallback(async (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => {
-    const draft = decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
+  const setDiscoveryDecision = useCallback(async (discovery: GRCVendorDiscovery, decision: DiscoveryDecision, overrideDraft?: DiscoveryDecisionDraft) => {
+    const draft = overrideDraft ?? decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
     await mutateDiscoveryDecision(`/grc/vendor-discoveries/${encodeURIComponent(discovery.urn)}/decision`, {
       tenant_id: tenantID.trim(),
       discovery_urn: discovery.urn,
@@ -1085,7 +1952,7 @@ export default function VendorsPage() {
     await discoveriesQuery.reload();
     await vendorsQuery.reload();
   }, [decisionDrafts, discoveriesQuery, mutateDiscoveryDecision, tenantID, vendorsQuery]);
-  const createVendorFromDiscovery = useCallback(async (discovery: GRCVendorDiscovery) => {
+  const createVendorFromDiscovery = useCallback(async (discovery: GRCVendorDiscovery, overrides?: Partial<Pick<VendorCreateDraft, "owner" | "riskLevel">>) => {
     setCreateMessage("");
     const response = await mutateCreateVendor("/grc/vendors", {
       tenant_id: tenantID.trim() || undefined,
@@ -1098,7 +1965,8 @@ export default function VendorsPage() {
       services_provided: discovery.discovery_reason,
       lifecycle_state: "in_review",
       review_state: "not_scheduled",
-      risk_level: "unknown",
+      owner: overrides?.owner?.trim() || undefined,
+      risk_level: overrides?.riskLevel || "unknown",
       discovery_urn: discovery.urn,
       attributes: compactAttributes({
         discovery_id: discovery.discovery_id,
@@ -1119,8 +1987,75 @@ export default function VendorsPage() {
       return next;
     });
     setCreateMessage(`${response.vendor.name} saved.`);
+    setCreatedVendor(response.vendor);
     await Promise.all([discoveriesQuery.reload(), vendorsQuery.reload()]);
   }, [discoveriesQuery, mutateCreateVendor, mutateDiscoveryDecision, tenantID, vendorsQuery]);
+
+  const runBulkDiscoveryAction = useCallback(async (action: "create" | "dismiss" | "link") => {
+    const selectedDiscoveries = discoveries.filter((discovery) => selectedDiscoveryURNs.has(discovery.urn) && discoveryNeedsReview(discovery));
+    if (selectedDiscoveries.length === 0) return;
+    setBulkSaving(true);
+    setCreateMessage("");
+    setCreatedVendor(null);
+    try {
+      if (action === "create") {
+        for (const discovery of selectedDiscoveries) {
+          await createVendorFromDiscovery(discovery, {
+            owner: bulkDraft.owner,
+            riskLevel: bulkDraft.riskLevel,
+          });
+        }
+        setCreateMessage(`${countLabel(selectedDiscoveries.length, "vendor")} saved.`);
+      } else if (action === "link") {
+        const linkedVendorURN = bulkDraft.linkedVendorURN.trim();
+        if (!linkedVendorURN) return;
+        for (const discovery of selectedDiscoveries) {
+          await setDiscoveryDecision(discovery, "linked", {
+            linkedVendorURN,
+            reason: bulkDraft.reason.trim() || "Linked from bulk triage.",
+          });
+        }
+        setCreateMessage(`${countLabel(selectedDiscoveries.length, "candidate")} linked.`);
+      } else {
+        for (const discovery of selectedDiscoveries) {
+          await setDiscoveryDecision(discovery, "ignored", {
+            linkedVendorURN: "",
+            reason: bulkDraft.reason.trim() || "Dismissed from bulk triage.",
+          });
+        }
+        setCreateMessage(`${countLabel(selectedDiscoveries.length, "candidate")} dismissed.`);
+      }
+      setSelectedDiscoveryURNs(new Set());
+    } finally {
+      setBulkSaving(false);
+    }
+  }, [bulkDraft.linkedVendorURN, bulkDraft.owner, bulkDraft.reason, bulkDraft.riskLevel, createVendorFromDiscovery, discoveries, selectedDiscoveryURNs, setDiscoveryDecision]);
+
+  const runDiscoverySync = useCallback(async (runSourceID?: string) => {
+    const response = await mutateDiscoverySync("/grc/vendor-discoveries/sync", {
+      tenant_id: tenantID.trim() || undefined,
+      source_id: runSourceID,
+    });
+    const sourceName = runSourceID
+      ? discoverySources.find((source) => source.source_id === runSourceID)?.provider || humanize(runSourceID)
+      : "All sources";
+    setSyncMessage(`${sourceName} discovery ${response.status}.`);
+    await discoveriesQuery.reload();
+  }, [discoveriesQuery, discoverySources, mutateDiscoverySync, tenantID]);
+
+  const runVendorQuickAction = useCallback(async (action: "assign_owner" | "change_lifecycle" | "start_review") => {
+    if (!selectedVendorURN) return;
+    const response = await mutateVendorAction(`/grc/vendors/${encodeURIComponent(selectedVendorURN)}/actions`, {
+      tenant_id: tenantID.trim() || undefined,
+      action,
+      owner: action === "assign_owner" ? quickActionDraft.owner.trim() : undefined,
+      lifecycle_state: action === "change_lifecycle" ? quickActionDraft.lifecycleState : undefined,
+      review_state: action === "start_review" ? quickActionDraft.reviewState : undefined,
+      reason: action === "change_lifecycle" ? "Changed from vendor drawer." : undefined,
+    });
+    setQuickActionMessage(`${response.vendor.name} updated.`);
+    await Promise.all([vendorsQuery.reload(), vendorDetailQuery.reload()]);
+  }, [mutateVendorAction, quickActionDraft.lifecycleState, quickActionDraft.owner, quickActionDraft.reviewState, selectedVendorURN, tenantID, vendorDetailQuery, vendorsQuery]);
 
   const submitVendorUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1201,13 +2136,30 @@ export default function VendorsPage() {
         }
       />
       <CreateVendorModal
+        duplicateMatches={createDuplicateMatches}
         draft={createDraft}
         error={createError}
         onClose={closeCreateVendor}
+        onOpenVendor={openVendorDrawer}
         onSubmit={submitVendorCreate}
         onUpdateDraft={updateCreateDraft}
         open={createOpen}
         saving={createSaving}
+      />
+      <VendorDetailDrawer
+        actionDraft={quickActionDraft}
+        actionError={quickActionError}
+        actionSaving={quickActionSaving}
+        detail={vendorDetailQuery.data}
+        detailError={vendorDetailQuery.error}
+        detailLoading={vendorDetailQuery.loading}
+        linkedDiscoveries={linkedDiscoveriesForSelectedVendor}
+        onClose={closeVendorDrawer}
+        onOpenUpload={openUploadForVendor}
+        onQuickAction={runVendorQuickAction}
+        onReload={() => { void vendorDetailQuery.reload(); }}
+        onUpdateActionDraft={updateQuickActionDraft}
+        vendor={selectedVendor}
       />
 
       {error && (
@@ -1230,15 +2182,41 @@ export default function VendorsPage() {
           recoveryDetail="Discovery decisions need GRC inventory write access."
         />
       )}
+      {syncError && (
+        <ErrorBlock
+          error={syncError}
+          recoveryDetail="Discovery run was not started."
+        />
+      )}
       {createError && !createOpen && (
         <ErrorBlock
           error={createError}
           recoveryDetail="Vendor was not saved."
         />
       )}
-      {createMessage && (
+      {quickActionMessage && (
         <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] font-semibold text-emerald-700 dark:text-emerald-200">
-          {createMessage}
+          {quickActionMessage}
+        </div>
+      )}
+      {syncMessage && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] font-semibold text-emerald-700 dark:text-emerald-200">
+          {syncMessage}
+        </div>
+      )}
+      {createMessage && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] font-semibold text-emerald-700 dark:text-emerald-200">
+          <span>{createMessage}</span>
+          {createdVendor && (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => openVendorDrawer(createdVendor.urn)} className="secondary-button px-3 py-1.5 text-[12px]">
+                Open vendor
+              </button>
+              <button type="button" onClick={() => openUploadForVendor(createdVendor)} className="secondary-button px-3 py-1.5 text-[12px]">
+                Add document
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1251,10 +2229,11 @@ export default function VendorsPage() {
         vendors={vendors}
       />
 
-      <Panel
-        title="Upload vendor document"
-        action={<Upload className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />}
-      >
+      <div ref={uploadPanelRef}>
+        <Panel
+          title="Upload vendor document"
+          action={<Upload className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />}
+        >
         <form onSubmit={submitVendorUpload} className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,1fr)_auto]">
           <label className={labelClass}>
             File
@@ -1322,7 +2301,8 @@ export default function VendorsPage() {
             {lastVendorUpload.chunk_count ? `${countLabel(lastVendorUpload.chunk_count, "chunk")} parsed.` : humanize(lastVendorUpload.parse_status || "parsed")}
           </div>
         )}
-      </Panel>
+        </Panel>
+      </div>
 
       <section className="surface-panel p-4">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
@@ -1389,25 +2369,45 @@ export default function VendorsPage() {
       <DiscoverySourceSummary
         loading={discoveriesQuery.loading && !discoveriesQuery.data}
         onRefresh={() => { void discoveriesQuery.reload(); }}
+        onRunSource={(runSourceID) => { void runDiscoverySync(runSourceID).catch(() => undefined); }}
         onSelectSource={setSourceID}
+        runSaving={syncSaving}
         selectedSourceID={sourceID}
         sources={discoverySources}
         summary={discoverySummary}
+      />
+
+      <DuplicateQueue
+        decisionSaving={decisionSaving}
+        discoveries={discoveries}
+        duplicateMatchesByURN={duplicateMatchesByURN}
+        onDecision={setDiscoveryDecision}
+        onOpenVendor={openVendorDrawer}
       />
 
       {discoveriesQuery.loading && !discoveriesQuery.data ? (
         <LoadingBlock label="Loading vendor discoveries..." />
       ) : (
         <DiscoveryQueue
+          bulkDraft={bulkDraft}
+          bulkSaving={bulkSaving}
           createSaving={createSaving}
           decisionDrafts={decisionDrafts}
           decisionSaving={decisionSaving}
           discoveries={discoveries}
+          duplicateMatchesByURN={duplicateMatchesByURN}
           latestSync={latestSourceSync(discoverySources)}
+          onBulkAction={runBulkDiscoveryAction}
+          onBulkDraftChange={updateBulkDraft}
+          onClearSelection={clearDiscoverySelection}
           onCreateVendor={createVendorFromDiscovery}
           onDecision={setDiscoveryDecision}
+          onOpenVendor={openVendorDrawer}
           onRefresh={() => { void discoveriesQuery.reload(); }}
+          onToggleDiscovery={toggleDiscoverySelection}
+          onToggleVisible={toggleVisibleDiscoveries}
           onUpdateDraft={updateDecisionDraft}
+          selectedDiscoveryURNs={selectedDiscoveryURNs}
           sourceCount={discoverySummary?.source_count ?? discoverySources.length}
         />
       )}
@@ -1415,7 +2415,7 @@ export default function VendorsPage() {
       {vendorsQuery.loading && !vendorsQuery.data ? (
         <LoadingBlock label="Loading vendors..." />
       ) : (
-        <VendorRegisterSection assuranceItems={assuranceItems} vendors={vendors} />
+        <VendorRegisterSection assuranceItems={assuranceItems} onOpenVendor={openVendorDrawer} vendors={vendors} />
       )}
     </main>
   );

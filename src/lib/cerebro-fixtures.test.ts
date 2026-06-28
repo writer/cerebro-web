@@ -127,9 +127,9 @@ describe("cerebro fixture proxy responses", () => {
     const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/vendor-discoveries" });
     expect(response?.status).toBe(200);
     expect(parseFixture(response!)).toMatchObject({
-      summary: { total_discoveries: 3, discovered: 2, linked: 1, source_count: 3, evidence_signals: 5 },
+      summary: { total_discoveries: 4, discovered: 3, linked: 1, source_count: 3, evidence_signals: 6 },
       source_summaries: expect.arrayContaining([
-        expect.objectContaining({ source_id: "okta", provider: "Okta", total: 1, discovered: 1 }),
+        expect.objectContaining({ source_id: "okta", provider: "Okta", total: 2, discovered: 2 }),
         expect.objectContaining({ source_id: "github", provider: "GitHub", total: 2 }),
         expect.objectContaining({ source_id: "aws", provider: "AWS", total: 1, linked: 1 }),
       ]),
@@ -151,8 +151,11 @@ describe("cerebro fixture proxy responses", () => {
       searchParams: new URLSearchParams("source_id=okta"),
     });
     expect(parseFixture(oktaFiltered!)).toMatchObject({
-      summary: { total_discoveries: 1, source_count: 1 },
-      discoveries: [expect.objectContaining({ source_id: "okta" })],
+      summary: { total_discoveries: 2, source_count: 1 },
+      discoveries: [
+        expect.objectContaining({ source_id: "okta" }),
+        expect.objectContaining({ source_id: "okta" }),
+      ],
     });
 
     const signalSearch = cerebroFixtureResponseFor({
@@ -163,6 +166,54 @@ describe("cerebro fixture proxy responses", () => {
     expect(parseFixture(signalSearch!)).toMatchObject({
       discoveries: [expect.objectContaining({ name: "Data Warehouse" })],
     });
+  });
+
+  it("runs vendor discovery sync fixtures", () => {
+    withFixtureMode();
+    const response = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/vendor-discoveries/sync",
+      body: JSON.stringify({ source_id: "okta" }),
+    });
+    expect(response?.status).toBe(200);
+    expect(parseFixture(response!)).toMatchObject({
+      status: "completed",
+      source_id: "okta",
+      source_summaries: [expect.objectContaining({ source_id: "okta", total: 2 })],
+    });
+  });
+
+  it("updates vendor fixtures through quick actions", () => {
+    withFixtureMode();
+    const vendorURN = "urn:cerebro:demo-tenant:vendor:payments-processor";
+    const response = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/vendors/${encodeURIComponent(vendorURN)}/actions`,
+      body: JSON.stringify({ action: "assign_owner", owner: "Finance" }),
+    });
+    expect(response?.status).toBe(200);
+    expect(parseFixture(response!)).toMatchObject({
+      action: "assign_owner",
+      vendor: {
+        name: "Payments Processor",
+        owner: "Finance",
+        owner_state: "assigned",
+      },
+    });
+
+    resetCerebroFixtureStateForTests();
+    const resetResponse = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/vendors",
+      searchParams: new URLSearchParams("q=payments"),
+    });
+    expect(parseFixture(resetResponse!)).toMatchObject({
+      vendors: [expect.objectContaining({
+        name: "Payments Processor",
+        owner_state: "missing",
+      })],
+    });
+    expect(parseFixture(resetResponse!).vendors[0].owner).toBeUndefined();
   });
 
   it("returns policy lifecycle records in fixture mode", () => {
