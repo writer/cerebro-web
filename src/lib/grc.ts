@@ -948,6 +948,144 @@ export type GRCGraph = {
   relations?: GRCGraphRelation[];
 };
 
+export type GRCVendor = {
+  urn: string;
+  vendor_id?: string;
+  name: string;
+  source_id?: string;
+  runtime_id?: string;
+  provider?: string;
+  status?: string;
+  category?: string;
+  website_url?: string;
+  services_provided?: string;
+  security_owner_user_id?: string;
+  business_owner_user_id?: string;
+  owner?: string;
+  inherent_risk_level?: string;
+  residual_risk_level?: string;
+  risk_level: string;
+  owner_state: "assigned" | "missing" | string;
+  review_state: "current" | "due_soon" | "overdue" | "not_scheduled" | string;
+  review_due_at?: string;
+  last_review_completed_at?: string;
+  contract_start_at?: string;
+  contract_renewal_at?: string;
+  contract_termination_at?: string;
+  contract_count: number;
+  security_review_count: number;
+  questionnaire_count: number;
+  assurance_document_count: number;
+  open_findings?: number;
+  critical_findings?: number;
+  high_findings?: number;
+  evidence_items?: number;
+  attributes?: Record<string, string>;
+};
+
+export type GRCVendorDiscovery = {
+  urn: string;
+  discovery_id?: string;
+  name: string;
+  normalized_name?: string;
+  source_id?: string;
+  runtime_id?: string;
+  provider?: string;
+  source_status: string;
+  decision_state: string;
+  category?: string;
+  website_url?: string;
+  linked_vendor_urn?: string;
+  decision_reason?: string;
+  decision_updated_by?: string;
+  decision_updated_at?: string;
+  attributes?: Record<string, string>;
+};
+
+export type GRCVendorSummary = {
+  total_vendors: number;
+  active_vendors: number;
+  high_risk_vendors: number;
+  owner_missing_vendors: number;
+  review_overdue_vendors: number;
+  review_due_soon_vendors: number;
+  review_not_scheduled: number;
+  open_findings: number;
+  critical_findings: number;
+  high_findings: number;
+  evidence_items: number;
+};
+
+export type GRCVendorDiscoverySummary = {
+  total_discoveries: number;
+  discovered: number;
+  approved: number;
+  rejected: number;
+  ignored: number;
+  linked: number;
+};
+
+export type GRCVendorDiscoveryDecision = {
+  tenant_id: string;
+  discovery_urn: string;
+  source_id?: string;
+  decision: string;
+  reason?: string;
+  linked_vendor_urn?: string;
+  updated_by?: string;
+  attributes?: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GRCVendorRelatedRecord = {
+  urn: string;
+  entity_type: string;
+  label: string;
+  source_id?: string;
+  runtime_id?: string;
+  relation?: string;
+  attributes?: Record<string, string>;
+};
+
+export type GRCVendorRelationships = {
+  contracts?: GRCVendorRelatedRecord[];
+  security_reviews?: GRCVendorRelatedRecord[];
+  security_questionnaires?: GRCVendorRelatedRecord[];
+  assurance_documents?: GRCVendorRelatedRecord[];
+  owners?: GRCVendorRelatedRecord[];
+  hosts?: GRCVendorRelatedRecord[];
+};
+
+export type GRCVendorsResponse = {
+  summary?: GRCVendorSummary;
+  vendors: GRCVendor[];
+  generated_at: string;
+};
+
+export type GRCVendorDetailResponse = {
+  vendor: GRCVendor;
+  relationships?: GRCVendorRelationships;
+  graph?: GRCGraph;
+  findings?: GRCFinding[];
+  evidence?: GRCEvidence[];
+  generated_at: string;
+};
+
+export type GRCVendorDiscoveriesResponse = {
+  summary?: GRCVendorDiscoverySummary;
+  discoveries: GRCVendorDiscovery[];
+  decisions?: GRCVendorDiscoveryDecision[];
+  generated_at: string;
+};
+
+export type GRCVendorRiskVendor = GRCVendor;
+export type GRCVendorRiskSummary = GRCVendorSummary;
+export type GRCVendorRiskRelatedRecord = GRCVendorRelatedRecord;
+export type GRCVendorRiskRelationships = GRCVendorRelationships;
+export type GRCVendorRiskVendorsResponse = GRCVendorsResponse;
+export type GRCVendorRiskDetailResponse = GRCVendorDetailResponse;
+
 export type GRCInventoryCategory = {
   id: string;
   label: string;
