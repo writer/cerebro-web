@@ -148,7 +148,7 @@ export function connectorCapabilityLabel(capability: string) {
     .join(" ");
 }
 
-const connectorProjectionLabels: Record<string, string> = {
+const connectorResourceTypeLabels: Record<string, string> = {
   account: "Accounts",
   alert: "Alerts",
   api_key: "API keys",
@@ -186,17 +186,17 @@ const connectorProjectionLabels: Record<string, string> = {
   workspace: "Workspaces",
 };
 
-export type ConnectorProjectedGraphItem = {
+export type ConnectorResourceTypeSummary = {
   template: string;
   label: string;
-  families: number;
+  resourceFamilies: number;
 };
 
-export type ConnectorProjectionStats = {
-  resourceFamilies: number;
-  projectedFamilies: number;
-  projectionTemplates: number;
-  highValueFamilies: number;
+export type ConnectorResourceTypeStats = {
+  catalogResourceTypes: number;
+  resourceTypes: number;
+  distinctResourceTypes: number;
+  highValueResourceTypes: number;
   coverageItems: number;
 };
 
@@ -214,10 +214,10 @@ export function connectorResourceFamilySchemaRef(family: ConnectorCatalogResourc
   return family.schema_ref?.trim() || family.event?.schema_ref?.trim() || "";
 }
 
-export function connectorProjectionLabel(template: string) {
+export function connectorResourceTypeLabel(template: string) {
   const normalized = template.trim().toLowerCase();
   if (!normalized) return "";
-  const label = connectorProjectionLabels[normalized];
+  const label = connectorResourceTypeLabels[normalized];
   if (label) return label;
   return normalized
     .split(/[._-]+/)
@@ -226,48 +226,48 @@ export function connectorProjectionLabel(template: string) {
     .join(" ");
 }
 
-export function connectorProjectedGraphItems(
+export function connectorResourceTypes(
   card: Pick<ConnectorCatalogEntry, "resource_families">,
   limit = 5,
-): ConnectorProjectedGraphItem[] {
-  const itemsByTemplate = new Map<string, ConnectorProjectedGraphItem>();
+): ConnectorResourceTypeSummary[] {
+  const itemsByTemplate = new Map<string, ConnectorResourceTypeSummary>();
   (card.resource_families ?? []).forEach((family) => {
     const template = connectorProjectionTemplate(family);
     if (!template) return;
     const key = template.toLowerCase();
     const existing = itemsByTemplate.get(key);
     if (existing) {
-      existing.families += 1;
+      existing.resourceFamilies += 1;
       return;
     }
-    itemsByTemplate.set(key, { template, label: connectorProjectionLabel(template), families: 1 });
+    itemsByTemplate.set(key, { template, label: connectorResourceTypeLabel(template), resourceFamilies: 1 });
   });
   return [...itemsByTemplate.values()]
-    .sort((left, right) => right.families - left.families || left.label.localeCompare(right.label))
+    .sort((left, right) => right.resourceFamilies - left.resourceFamilies || left.label.localeCompare(right.label))
     .slice(0, limit);
 }
 
-export function connectorProjectionStats(card: Pick<ConnectorCatalogEntry, "resource_families" | "integration_depth">): ConnectorProjectionStats {
+export function connectorResourceTypeStats(card: Pick<ConnectorCatalogEntry, "resource_families" | "integration_depth">): ConnectorResourceTypeStats {
   const families = card.resource_families ?? [];
   const templates = new Set<string>();
-  let projectedFamilies = 0;
-  let highValueFamilies = 0;
+  let mappedResourceTypes = 0;
+  let highValueResourceTypes = 0;
   let coverageItems = 0;
 
   families.forEach((family) => {
     if (connectorProjectionTemplate(family)) {
-      projectedFamilies += 1;
+      mappedResourceTypes += 1;
       templates.add(connectorProjectionTemplate(family).toLowerCase());
     }
-    if (family.high_value) highValueFamilies += 1;
+    if (family.high_value) highValueResourceTypes += 1;
     coverageItems += family.coverage?.length ?? 0;
   });
 
   return {
-    resourceFamilies: Math.max(families.length, positiveNumber(card.integration_depth?.resource_families)),
-    projectedFamilies: Math.max(projectedFamilies, positiveNumber(card.integration_depth?.projection_templates)),
-    projectionTemplates: Math.max(templates.size, positiveNumber(card.integration_depth?.projection_templates)),
-    highValueFamilies: Math.max(highValueFamilies, positiveNumber(card.integration_depth?.high_value_families)),
+    catalogResourceTypes: Math.max(families.length, positiveNumber(card.integration_depth?.resource_families)),
+    resourceTypes: Math.max(mappedResourceTypes, positiveNumber(card.integration_depth?.projection_templates)),
+    distinctResourceTypes: Math.max(templates.size, positiveNumber(card.integration_depth?.projection_templates)),
+    highValueResourceTypes: Math.max(highValueResourceTypes, positiveNumber(card.integration_depth?.high_value_families)),
     coverageItems: Math.max(coverageItems, positiveNumber(card.integration_depth?.coverage_dimensions)),
   };
 }
