@@ -192,23 +192,24 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const [params, currentUser, requestBody] = await Promise.all([
+  const [params, currentUser] = await Promise.all([
     context.params,
     resolveCurrentUserFromHeadersWithFallback(request.headers),
-    request.text(),
   ]);
   const path = (params.path ?? []).join("/");
   const span = startWebSpan(
     "cerebro.proxy.request",
-    proxySpanAttributes("POST", path, request, requestBody),
+    proxySpanAttributes("POST", path, request),
     request.headers.get("traceparent"),
   );
   const normalizedPath = normalizeProxyPath(path);
+  const isMultipartUpload = isMultipartFormDataRequest(request);
   const requiredPermission = permissionForCerebroProxyRequest("POST", normalizedPath);
   const decision = authorizeCurrentUser(currentUser, requiredPermission);
   span.annotate(authorizationSpanAttributes(decision, currentUser));
   span.annotate({
-    request_body_was_stamped_with_actor: decision.allowed,
+    request_body_was_stamped_with_actor: decision.allowed && !isMultipartUpload,
+    multipart_request: isMultipartUpload,
     normalized_proxy_path: normalizedPath,
   });
   if (!decision.allowed) {
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return tracedAuthorizationError(decision, span);
   }
   const url = new URL(request.url);
-  let body = requestBody;
+  let body: string | ArrayBuffer;
   const currentActor = currentUserActor(currentUser);
   const acceptsEventStream = (request.headers.get("accept") ?? "").includes("text/event-stream");
   const isAskStreamRequest = normalizedPath === "grc/ask" && acceptsEventStream;
@@ -224,22 +225,34 @@ export async function POST(request: NextRequest, context: RouteContext) {
     stream_requested: acceptsEventStream,
     stream_surface: isAskStreamRequest ? "ask" : "none",
   });
-  if (isAskStreamRequest) {
-    body = normalizeAskRequestBody(body);
-  }
-  body = stampCurrentUserOnWriteBody(body, normalizedPath, currentActor);
-  const fixture = tracedFixtureResponse("POST", path, request, span, body);
-  if (fixture) {
-    return fixture;
+  if (isMultipartUpload) {
+    body = await request.arrayBuffer();
+  } else {
+    let requestBody = await request.text();
+    if (isAskStreamRequest) {
+      requestBody = normalizeAskRequestBody(requestBody);
+    }
+    body = stampCurrentUserOnWriteBody(requestBody, normalizedPath, currentActor);
+    const fixture = tracedFixtureResponse("POST", path, request, span, body);
+    if (fixture) {
+      return fixture;
+    }
   }
   const target = buildCerebroUrl(path, url.search);
-  const headers = {
-    ...authHeadersFor(request),
-    ...currentUserPreferenceHeaders(currentUser),
-    "content-type": request.headers.get("content-type") ?? "application/json",
-    accept: isAskStreamRequest ? "text/event-stream" : "application/json, text/plain;q=0.9, */*;q=0.8",
-    ...(isAskStreamRequest ? { "x-cerebro-web-surface": "ask" } : {}),
-  };
+  const requestContentType = request.headers.get("content-type");
+  const headers = new Headers(authHeadersFor(request));
+  for (const [key, value] of Object.entries(currentUserPreferenceHeaders(currentUser))) {
+    headers.set(key, value);
+  }
+  headers.set("accept", isAskStreamRequest ? "text/event-stream" : "application/json, text/plain;q=0.9, */*;q=0.8");
+  if (isAskStreamRequest) {
+    headers.set("x-cerebro-web-surface", "ask");
+  }
+  if (requestContentType) {
+    headers.set("content-type", requestContentType);
+  } else if (!isMultipartUpload) {
+    headers.set("content-type", "application/json");
+  }
 
   let response: Response;
   try {
@@ -472,6 +485,10 @@ function normalizeAskRequestBody(body: string): string {
   } catch {
     return body;
   }
+}
+
+function isMultipartFormDataRequest(request: NextRequest) {
+  return (request.headers.get("content-type") ?? "").toLowerCase().includes("multipart/form-data");
 }
 
 function tracedFixtureResponse(method: string, path: string, request: NextRequest, span: WebSpan, body?: string) {

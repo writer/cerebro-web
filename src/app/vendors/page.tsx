@@ -1,12 +1,15 @@
 "use client";
 
+import { Upload } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import {
   displayDate,
+  GRCUploadResponse,
   GRCVendor,
   GRCVendorDiscoveriesResponse,
   GRCVendorDiscovery,
@@ -14,7 +17,7 @@ import {
   humanize,
   shortEntity,
 } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { grcPath, useDebouncedValue, useGRCFormMutation, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { riskBadgeClassFor } from "@/lib/grc-status";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -167,6 +170,14 @@ export default function VendorsPage() {
   const [lifecycleState, setLifecycleState] = useQueryParamState("lifecycle_state");
   const [queueState, setQueueState] = useQueryParamState("queue");
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, DiscoveryDecisionDraft>>({});
+  const [vendorUploadFile, setVendorUploadFile] = useState<File | null>(null);
+  const [vendorUploadName, setVendorUploadName] = useState("");
+  const [vendorUploadID, setVendorUploadID] = useState("");
+  const [vendorUploadDocumentType, setVendorUploadDocumentType] = useState("assurance_document");
+  const [vendorUploadRiskLevel, setVendorUploadRiskLevel] = useState("");
+  const [vendorUploadWebsite, setVendorUploadWebsite] = useState("");
+  const [lastVendorUpload, setLastVendorUpload] = useState<GRCUploadResponse | null>(null);
+  const vendorUploadInputRef = useRef<HTMLInputElement>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
@@ -198,6 +209,8 @@ export default function VendorsPage() {
     }),
   );
   const { mutate: mutateDiscoveryDecision, saving: decisionSaving, error: decisionError } = useGRCMutation();
+  const { mutate: uploadVendorDocument, saving: vendorUploadSaving, error: vendorUploadError, setError: setVendorUploadError } =
+    useGRCFormMutation<GRCUploadResponse>();
 
   const vendors = useMemo(() => vendorsQuery.data?.vendors ?? [], [vendorsQuery.data?.vendors]);
   const summary = vendorsQuery.data?.summary;
@@ -236,6 +249,45 @@ export default function VendorsPage() {
     await discoveriesQuery.reload();
     await vendorsQuery.reload();
   }, [decisionDrafts, discoveriesQuery, mutateDiscoveryDecision, tenantID, vendorsQuery]);
+
+  const submitVendorUpload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!vendorUploadFile) {
+      setVendorUploadError("Select a vendor document.");
+      return;
+    }
+    const vendorName = vendorUploadName.trim() || vendorUploadFile.name.replace(/\.[^.]+$/, "");
+    const body = new FormData();
+    body.set("file", vendorUploadFile);
+    body.set("vendor_name", vendorName);
+    body.set("document_title", vendorUploadFile.name);
+    body.set("document_type", vendorUploadDocumentType.trim() || "assurance_document");
+    body.set("status", "active");
+    if (tenantID.trim()) body.set("tenant_id", tenantID.trim());
+    if (sourceID.trim()) body.set("source_id", sourceID.trim());
+    if (vendorUploadID.trim()) body.set("vendor_id", vendorUploadID.trim());
+    if (vendorUploadRiskLevel.trim()) body.set("risk_level", vendorUploadRiskLevel.trim());
+    if (vendorUploadWebsite.trim()) body.set("website_url", vendorUploadWebsite.trim());
+    try {
+      const response = await uploadVendorDocument(
+        grcPath("/grc/vendors/uploads", { tenant_id: tenantID.trim(), source_id: sourceID.trim() }),
+        body,
+      );
+      setLastVendorUpload(response);
+      setVendorUploadFile(null);
+      setVendorUploadName("");
+      setVendorUploadID("");
+      setVendorUploadDocumentType("assurance_document");
+      setVendorUploadRiskLevel("");
+      setVendorUploadWebsite("");
+      if (vendorUploadInputRef.current) {
+        vendorUploadInputRef.current.value = "";
+      }
+      await vendorsQuery.reload();
+    } catch {
+      return;
+    }
+  };
 
   const filterChips = [
     { label: "Search", value: query, onClear: () => setQuery("") },
@@ -298,8 +350,81 @@ export default function VendorsPage() {
         <MetricCard label="Review overdue" value={summary?.review_overdue_vendors ?? vendors.filter((vendor) => vendor.review_state === "overdue").length} detail={`${summary?.review_due_soon_vendors ?? vendors.filter((vendor) => vendor.review_state === "due_soon").length} due soon`} intent={(summary?.review_overdue_vendors ?? 0) > 0 ? "danger" : "neutral"} state={metricState} />
       </div>
 
+      <Panel
+        title="Upload vendor document"
+        action={<Upload className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />}
+      >
+        <form onSubmit={submitVendorUpload} className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,1fr)_auto]">
+          <label className={labelClass}>
+            File
+            <input
+              ref={vendorUploadInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+              onChange={(event) => {
+                setVendorUploadFile(event.target.files?.[0] ?? null);
+                setLastVendorUpload(null);
+                setVendorUploadError(null);
+              }}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            Vendor name
+            <input value={vendorUploadName} onChange={(event) => setVendorUploadName(event.target.value)} placeholder="From file name" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Vendor ID
+            <input value={vendorUploadID} onChange={(event) => setVendorUploadID(event.target.value)} placeholder="Generated" className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Document type
+            <select value={vendorUploadDocumentType} onChange={(event) => setVendorUploadDocumentType(event.target.value)} className={inputClass}>
+              <option value="assurance_document">Assurance</option>
+              <option value="soc2">SOC 2</option>
+              <option value="contract">Contract</option>
+              <option value="questionnaire">Questionnaire</option>
+              <option value="security_review">Security review</option>
+            </select>
+          </label>
+          <label className={labelClass}>
+            Risk
+            <select value={vendorUploadRiskLevel} onChange={(event) => setVendorUploadRiskLevel(event.target.value)} className={inputClass}>
+              <option value="">Not set</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+          <label className={labelClass}>
+            Website
+            <input value={vendorUploadWebsite} onChange={(event) => setVendorUploadWebsite(event.target.value)} placeholder="https://vendor.example" className={inputClass} />
+          </label>
+          <button
+            type="submit"
+            disabled={vendorUploadSaving || !vendorUploadFile}
+            className="primary-button inline-flex items-center justify-center gap-1.5 self-end px-3 py-1.5 text-[13px] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+            {vendorUploadSaving ? "Uploading" : "Upload vendor"}
+          </button>
+        </form>
+        {vendorUploadError && (
+          <div className="mt-3 text-[13px] font-medium text-red-700 dark:text-red-300">
+            {vendorUploadError}
+          </div>
+        )}
+        {lastVendorUpload && (
+          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+            Uploaded {lastVendorUpload.file_name}. {countLabel(lastVendorUpload.events.length, "event")} recorded.{" "}
+            {lastVendorUpload.chunk_count ? `${countLabel(lastVendorUpload.chunk_count, "chunk")} parsed.` : humanize(lastVendorUpload.parse_status || "parsed")}
+          </div>
+        )}
+      </Panel>
+
       <section className="surface-panel px-5 py-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_145px_145px_145px_170px_140px_140px_140px]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(0,1fr)_145px_145px_145px_170px_140px_140px_140px]">
           <label className={labelClass}>
             Search
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Vendor, owner, service" className={inputClass} />

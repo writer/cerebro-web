@@ -1875,6 +1875,29 @@ export type GRCPolicyLifecycleActionResponse = {
   generated_at: string;
 };
 
+export type GRCUploadEvent = {
+  event_id: string;
+  event_kind: string;
+  schema_ref: string;
+  record_id?: string;
+  record_urn?: string;
+};
+
+export type GRCUploadResponse = {
+  upload_id: string;
+  target: "policy" | "vendor" | string;
+  file_name: string;
+  content_type?: string;
+  reducto_file_id?: string;
+  reducto_parse_id?: string;
+  parse_status?: string;
+  text_preview?: string;
+  chunk_count?: number;
+  page_count?: number;
+  events: GRCUploadEvent[];
+  generated_at: string;
+};
+
 export type GRCPolicyVersionDiff = {
   policy_id?: string;
   policy_title?: string;
