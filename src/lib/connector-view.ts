@@ -1,4 +1,4 @@
-import type { ConnectorCatalogEntry } from "@/lib/connectors";
+import type { ConnectorCatalogEntry, ConnectorCatalogResourceFamily } from "@/lib/connectors";
 import {
   connectorDisplayMetadata,
   connectorDisplayName,
@@ -146,6 +146,130 @@ export function connectorCapabilityLabel(capability: string) {
     .filter(Boolean)
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+const connectorProjectionLabels: Record<string, string> = {
+  account: "Accounts",
+  alert: "Alerts",
+  api_key: "API keys",
+  app_entitlement: "App entitlements",
+  approval: "Approvals",
+  asset: "Assets",
+  audit_event: "Audit events",
+  cloud_account: "Cloud accounts",
+  cloud_resource: "Cloud resources",
+  control: "Controls",
+  credential: "Credentials",
+  data_table: "Data tables",
+  dataset: "Datasets",
+  deployment: "Deployments",
+  device: "Devices",
+  document: "Documents",
+  endpoint_device: "Endpoint devices",
+  finding: "Findings",
+  group_membership: "Group memberships",
+  identity_group: "Groups",
+  identity_user: "Users",
+  incident: "Incidents",
+  model: "Models",
+  package: "Packages",
+  policy: "Policies",
+  project: "Projects",
+  pull_request: "Pull requests",
+  repository: "Repositories",
+  secret: "Secrets",
+  service_account: "Service accounts",
+  ticket: "Tickets",
+  token: "Tokens",
+  user_session: "User sessions",
+  vulnerability: "Vulnerabilities",
+  workspace: "Workspaces",
+};
+
+export type ConnectorProjectedGraphItem = {
+  template: string;
+  label: string;
+  families: number;
+};
+
+export type ConnectorProjectionStats = {
+  resourceFamilies: number;
+  projectedFamilies: number;
+  projectionTemplates: number;
+  highValueFamilies: number;
+  coverageItems: number;
+};
+
+const positiveNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
+
+export function connectorProjectionTemplate(family: ConnectorCatalogResourceFamily) {
+  return family.projection_template?.trim() || family.projection?.template?.trim() || "";
+}
+
+export function connectorResourceFamilyEventKind(family: ConnectorCatalogResourceFamily) {
+  return family.event_kind?.trim() || family.event?.kind?.trim() || "";
+}
+
+export function connectorResourceFamilySchemaRef(family: ConnectorCatalogResourceFamily) {
+  return family.schema_ref?.trim() || family.event?.schema_ref?.trim() || "";
+}
+
+export function connectorProjectionLabel(template: string) {
+  const normalized = template.trim().toLowerCase();
+  if (!normalized) return "";
+  const label = connectorProjectionLabels[normalized];
+  if (label) return label;
+  return normalized
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function connectorProjectedGraphItems(
+  card: Pick<ConnectorCatalogEntry, "resource_families">,
+  limit = 5,
+): ConnectorProjectedGraphItem[] {
+  const itemsByTemplate = new Map<string, ConnectorProjectedGraphItem>();
+  (card.resource_families ?? []).forEach((family) => {
+    const template = connectorProjectionTemplate(family);
+    if (!template) return;
+    const key = template.toLowerCase();
+    const existing = itemsByTemplate.get(key);
+    if (existing) {
+      existing.families += 1;
+      return;
+    }
+    itemsByTemplate.set(key, { template, label: connectorProjectionLabel(template), families: 1 });
+  });
+  return [...itemsByTemplate.values()]
+    .sort((left, right) => right.families - left.families || left.label.localeCompare(right.label))
+    .slice(0, limit);
+}
+
+export function connectorProjectionStats(card: Pick<ConnectorCatalogEntry, "resource_families" | "integration_depth">): ConnectorProjectionStats {
+  const families = card.resource_families ?? [];
+  const templates = new Set<string>();
+  let projectedFamilies = 0;
+  let highValueFamilies = 0;
+  let coverageItems = 0;
+
+  families.forEach((family) => {
+    if (connectorProjectionTemplate(family)) {
+      projectedFamilies += 1;
+      templates.add(connectorProjectionTemplate(family).toLowerCase());
+    }
+    if (family.high_value) highValueFamilies += 1;
+    coverageItems += family.coverage?.length ?? 0;
+  });
+
+  return {
+    resourceFamilies: Math.max(families.length, positiveNumber(card.integration_depth?.resource_families)),
+    projectedFamilies: Math.max(projectedFamilies, positiveNumber(card.integration_depth?.projection_templates)),
+    projectionTemplates: Math.max(templates.size, positiveNumber(card.integration_depth?.projection_templates)),
+    highValueFamilies: Math.max(highValueFamilies, positiveNumber(card.integration_depth?.high_value_families)),
+    coverageItems: Math.max(coverageItems, positiveNumber(card.integration_depth?.coverage_dimensions)),
+  };
 }
 
 export function connectorCardSummary(card: ConnectorCard) {

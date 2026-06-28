@@ -28,7 +28,16 @@ import { withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { displayDate, humanize } from "@/lib/grc";
 import { formatDuration } from "@/lib/mission-control";
-import { connectorCapabilityLabel, connectorCapabilities } from "@/lib/connector-view";
+import {
+  connectorCapabilityLabel,
+  connectorCapabilities,
+  connectorProjectedGraphItems,
+  connectorProjectionLabel,
+  connectorProjectionStats,
+  connectorProjectionTemplate,
+  connectorResourceFamilyEventKind,
+  connectorResourceFamilySchemaRef,
+} from "@/lib/connector-view";
 import type {
   ConnectorCatalogEntry,
   ConnectorConnectionSummary,
@@ -157,6 +166,7 @@ function OperationsSummary({
   summary: ConnectorOperationsSummary;
   secretStoreCount: number;
 }) {
+  const projectionStats = connectorProjectionStats(connector);
   return (
     <div className="surface-panel grid overflow-hidden sm:grid-cols-2 xl:grid-cols-5">
       <SummaryTile
@@ -178,9 +188,9 @@ function OperationsSummary({
         icon={<Activity className="h-3.5 w-3.5" />}
       />
       <SummaryTile
-        label="Resource Types"
-        value={summary.resource_types ?? connector.emitted_kinds?.length ?? 0}
-        detail="Advertised emitted kinds"
+        label="Projected Graph"
+        value={projectionStats.projectedFamilies}
+        detail={projectionStats.projectionTemplates > 0 ? `${projectionStats.projectionTemplates} graph item types` : "No catalog projections"}
         icon={<Database className="h-3.5 w-3.5" />}
       />
       <SummaryTile
@@ -322,25 +332,49 @@ function ScopeListBlock({ title, items, mono = false }: { title: string; items: 
 
 function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
   const kinds = connector.emitted_kinds ?? [];
-  if (kinds.length === 0) return <EmptyBlock label="No emitted data kinds advertised." />;
+  const projectedItems = connectorProjectedGraphItems(connector, 12);
+  if (kinds.length === 0 && projectedItems.length === 0) return <EmptyBlock label="No emitted kinds or projected graph families advertised." />;
   return (
-    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-      {kinds.map((kind) => (
-        <div key={kind} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
-          <div className="font-mono text-[12px] text-[var(--text-primary)]">{kind}</div>
-          <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{connectorCapabilityLabel(kind.split(".")[0] || "data")} data</div>
+    <div className="space-y-4">
+      {projectedItems.length > 0 && (
+        <div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Projected graph items</div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {projectedItems.map((item) => (
+              <div key={item.template} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+                <div className="text-[13px] font-semibold text-[var(--text-primary)]">{item.label}</div>
+                <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{item.template}</div>
+                <div className="mt-1 text-[11px] text-[var(--text-muted)]">{item.families} resource {item.families === 1 ? "family" : "families"}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
+      )}
+      {kinds.length > 0 && (
+        <div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Emitted kinds</div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {kinds.map((kind) => (
+              <div key={kind} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+                <div className="font-mono text-[12px] text-[var(--text-primary)]">{kind}</div>
+                <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{connectorCapabilityLabel(kind.split(".")[0] || "data")} data</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntry }) {
   const families = connector.resource_families ?? [];
+  const projectionStats = connectorProjectionStats(connector);
+  const projectedGraphItems = connectorProjectedGraphItems(connector, 8);
   if (!connector.catalog_status && families.length === 0) return null;
   return (
     <Panel title="Catalog definition" action={<Badge value={connectorRuntimeSurfaceLabel(connector)} />}>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Readiness</div>
           <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{connectorReadinessStageLabel(connector.readiness_stage || connector.catalog_status)}</div>
@@ -352,6 +386,10 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Families</div>
           <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{families.length}</div>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Graph items</div>
+          <div className="mt-1 text-[13px] font-semibold text-[var(--text-primary)]">{projectionStats.projectionTemplates}</div>
         </div>
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Verification</div>
@@ -372,6 +410,26 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
           <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.catalog_source_path || connector.catalog_schema_version || "Not cataloged"}</div>
         </div>
       </div>
+      {projectedGraphItems.length > 0 && (
+        <div className="mt-4 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[12px] font-semibold text-[var(--text-primary)]">Projects to graph</div>
+              <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                {projectionStats.projectedFamilies} of {projectionStats.resourceFamilies} families have graph templates.
+              </div>
+            </div>
+            <Badge value={`${projectionStats.highValueFamilies} high value`} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {projectedGraphItems.map((item) => (
+              <span key={item.template} title={item.template} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {item.label}{item.families > 1 ? ` (${item.families})` : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {connector.missing_features && connector.missing_features.length > 0 && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
           <span className="font-semibold">Missing runtime features:</span> {connector.missing_features.join(", ")}
@@ -379,26 +437,37 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
       )}
       {families.length > 0 && (
         <div className="mt-4 grid gap-2 lg:grid-cols-2">
-          {families.map((family) => (
-            <div key={family.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">{family.label || humanize(family.id)}</div>
-                  <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{family.path || family.event_kind || family.id}</div>
+          {families.map((family) => {
+            const projectionTemplate = connectorProjectionTemplate(family);
+            const eventKind = connectorResourceFamilyEventKind(family);
+            const schemaRef = connectorResourceFamilySchemaRef(family);
+            const endpoint = [family.method, family.path].filter(Boolean).join(" ") || eventKind || family.id;
+            return (
+              <div key={family.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">{family.label || humanize(family.id)}</div>
+                    <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{endpoint}</div>
+                  </div>
+                  {family.high_value && <Badge value="high value" />}
                 </div>
-                {family.high_value && <Badge value="high_value" />}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {family.projection_template && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)]">{family.projection_template}</span>}
-                {family.event_kind && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{family.event_kind}</span>}
-              </div>
-              {family.coverage && family.coverage.length > 0 && (
-                <div className="mt-3 border-t border-[color:var(--border)] pt-2">
-                  <CoverageMetadataList items={family.coverage} compact showNotes />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {projectionTemplate && (
+                    <span title={projectionTemplate} className="rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)]">
+                      {connectorProjectionLabel(projectionTemplate)}
+                    </span>
+                  )}
+                  {eventKind && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{eventKind}</span>}
+                  {schemaRef && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{schemaRef}</span>}
                 </div>
-              )}
-            </div>
-          ))}
+                {family.coverage && family.coverage.length > 0 && (
+                  <div className="mt-3 border-t border-[color:var(--border)] pt-2">
+                    <CoverageMetadataList items={family.coverage} compact showNotes />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </Panel>
@@ -566,6 +635,8 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const meta = connectorDisplayMetadata(connector);
   const readyStores = credentialStores.filter((store) => store.available);
   const capabilityLabels = connectorCapabilities(connector, 4);
+  const projectedGraphItems = connectorProjectedGraphItems(connector, 4);
+  const projectionStats = connectorProjectionStats(connector);
   const catalogOnly = connectorIsCatalogOnly(connector);
   const setupAllowed = connectorSetupAllowed(connector);
 
@@ -574,6 +645,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
       { label: "Ready stores", value: String(readyStores.length) },
       { label: "Source", value: meta.category },
       { label: "Connections", value: String(connections.length) },
+      { label: "Projected", value: String(projectionStats.projectedFamilies) },
     ];
 
     return (
@@ -598,13 +670,18 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                         {connectorCapabilityLabel(capability)}
                       </span>
                     ))}
-                    {capabilityLabels.length === 0 && <Badge value="connector runtime" />}
+                    {projectedGraphItems.map((item) => (
+                      <span key={item.template} title={item.template} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                        {item.label}
+                      </span>
+                    ))}
+                    {capabilityLabels.length === 0 && projectedGraphItems.length === 0 && <Badge value="connector runtime" />}
                   </div>
                 </div>
               </div>
             </div>
             <div className="grid gap-3">
-              <div className="grid overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] text-center sm:grid-cols-3">
+              <div className="grid overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] text-center sm:grid-cols-4">
                 {setupStats.map((item) => (
                   <div key={item.label} className="border-t border-[color:var(--border)] px-3 py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:first:border-l-0">
                     <div className="text-[15px] font-semibold leading-5 text-[var(--text-primary)]">{item.value}</div>
@@ -679,6 +756,11 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                     {connectorCapabilityLabel(capability)}
                   </span>
                 ))}
+                {projectedGraphItems.map((item) => (
+                  <span key={item.template} title={item.template} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                    {item.label}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -716,6 +798,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               <div><span className="text-[var(--text-muted)]">Access</span><div>{connectorAccessStatusLabel(connector.access_status)}</div></div>
               <div><span className="text-[var(--text-muted)]">Stage</span><div>{connectorReadinessStageLabel(connector.readiness_stage)}</div></div>
               <div><span className="text-[var(--text-muted)]">Depth</span><div>{connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"}</div></div>
+              <div><span className="text-[var(--text-muted)]">Projected graph</span><div>{projectionStats.projectedFamilies} families</div></div>
               <div><span className="text-[var(--text-muted)]">Origin</span><div>{connectorDefinitionOriginLabel(connector.definition_origin)}</div></div>
               <div><span className="text-[var(--text-muted)]">Auth model</span><div>{humanize(connector.auth_model || "unknown")}</div></div>
             </div>
@@ -737,7 +820,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                 ? `${displayName} syncs are running successfully and current.`
                 : summary.status_reason || `${displayName} needs configuration or freshness review.`}
             </p>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
               <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                 <div className="text-xl font-semibold text-[var(--text-primary)]">{summary.total_connections ?? 0}</div>
                 <div className="text-[11px] text-[var(--text-muted)]">connections</div>
@@ -749,6 +832,10 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                 <div className="text-xl font-semibold text-[var(--text-primary)]">{summary.resource_types ?? connector.emitted_kinds?.length ?? 0}</div>
                 <div className="text-[11px] text-[var(--text-muted)]">resource types</div>
+              </div>
+              <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                <div className="text-xl font-semibold text-[var(--text-primary)]">{projectionStats.projectedFamilies}</div>
+                <div className="text-[11px] text-[var(--text-muted)]">projected families</div>
               </div>
             </div>
           </Panel>
@@ -763,6 +850,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
                 ["Access", connectorAccessStatusLabel(connector.access_status)],
                 ["Stage", connectorReadinessStageLabel(connector.readiness_stage)],
                 ["Depth", connector.integration_depth ? connectorIntegrationDepthLabel(connector) : "Depth unknown"],
+                ["Projected graph", `${projectionStats.projectedFamilies} families`],
                 ["Provider", meta.provider],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4 border-b border-[color:var(--border)] pb-2 last:border-0 last:pb-0">
@@ -817,7 +905,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
       {activeTab === "scope" && <ScopeView connector={connector} connections={connections} />}
 
       {activeTab === "data" && (
-        <Panel title="Emitted data" action={<Search className="h-4 w-4 text-[var(--text-muted)]" />}>
+        <Panel title="Data and graph" action={<Search className="h-4 w-4 text-[var(--text-muted)]" />}>
           <DataKinds connector={connector} />
         </Panel>
       )}
