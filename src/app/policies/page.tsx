@@ -226,7 +226,7 @@ const actionValueField = (action: GRCPolicyLifecycleAction) => {
     case "governance_gap.assign_owner":
       return "assigned_user_ids";
     case "governance_gap.link_policy":
-      return "policy_id";
+      return "target_policy_id";
     case "governance_gap.map_controls":
       return "control_ids";
     case "governance_gap.add_treatment":
@@ -245,6 +245,7 @@ const actionValueLabel = (action: GRCPolicyLifecycleAction) => {
   switch (actionValueField(action)) {
     case "assigned_user_ids":
       return "Owner";
+    case "target_policy_id":
     case "policy_id":
       return "Policy ID";
     case "control_ids":
@@ -589,6 +590,7 @@ export default function PoliciesPage() {
       if (valueField === "assigned_user_ids") body.assignees = splitActionValues(value);
       else if (valueField === "control_ids") body.control_ids = splitActionValues(value);
       else if (valueField === "evidence_urns") body.evidence_urns = splitActionValues(value);
+      else if (selectedAction.action === "governance_gap.link_policy" && valueField === "policy_id") body.attributes = { ...(body.attributes ?? {}), target_policy_id: value };
       else if (valueField === "policy_id") body.policy_id = value;
       else if (valueField) body.attributes = { ...(body.attributes ?? {}), [valueField]: value };
     }

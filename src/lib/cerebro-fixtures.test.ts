@@ -194,6 +194,7 @@ describe("cerebro fixture proxy responses", () => {
     ]));
     expect(payload.available_actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "governance_gap.attach_evidence", value_field: "evidence_urns" }),
+      expect.objectContaining({ id: "governance_gap.link_policy", value_field: "target_policy_id" }),
     ]));
     expect(payload.work_queue).toEqual(expect.arrayContaining([
       expect.objectContaining({ action: "Approve version" }),
