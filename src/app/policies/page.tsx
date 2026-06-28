@@ -2,7 +2,7 @@
 
 import { ArrowRight, Bell, CheckCircle2, Download, FileText, GitCompare, History, ListChecks, RefreshCw, Search, Send, ShieldCheck, Users, X, XCircle } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { TableColumn } from "@/components/grc/DataTable";
 import { WorklistTable } from "@/components/grc/DataTable";
@@ -250,9 +250,11 @@ export default function PoliciesPage() {
   const [selectedAction, setSelectedAction] = useState<GRCPolicyLifecycleAction | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionDate, setActionDate] = useState("");
+  const [actionIdempotencyKey, setActionIdempotencyKey] = useState("");
   const [lastActionStatus, setLastActionStatus] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const actionIdempotencyCounterRef = useRef(0);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedOwner = useDebouncedValue(owner.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
@@ -296,9 +298,11 @@ export default function PoliciesPage() {
   const generatedAt = data?.generated_at;
 
   const openAction = (action: GRCPolicyLifecycleAction) => {
+    actionIdempotencyCounterRef.current += 1;
     setSelectedAction(action);
     setActionReason(action.reason ?? "");
     setActionDate(dateInputValue(action.due_at));
+    setActionIdempotencyKey(`${action.id}:${globalThis.crypto?.randomUUID?.() ?? actionIdempotencyCounterRef.current}`);
     setLastActionStatus(null);
     setActionError(null);
   };
@@ -313,7 +317,7 @@ export default function PoliciesPage() {
       policy_version_id: selectedAction.policy_version_id,
       record_urn: selectedAction.record_urn,
       reason: actionReason.trim() || selectedAction.reason,
-      idempotency_key: `${selectedAction.id}:${Date.now()}`,
+      idempotency_key: actionIdempotencyKey || selectedAction.id,
       attributes: {
         source_surface: "cerebro-web",
         record_type: selectedAction.record_type ?? "",
@@ -326,6 +330,7 @@ export default function PoliciesPage() {
       const response = await recordAction(grcPath("/grc/policy-lifecycle/actions", { tenant_id: tenantID.trim() }), body);
       setLastActionStatus(`${humanize(response.action)} ${humanize(response.status)}`);
       setSelectedAction(null);
+      setActionIdempotencyKey("");
       await reload();
     } catch {
       return;
@@ -759,7 +764,11 @@ export default function PoliciesPage() {
         onReasonChange={setActionReason}
         onDateChange={setActionDate}
         onClose={() => {
-          if (!actionSaving) setSelectedAction(null);
+          if (!actionSaving) {
+            setSelectedAction(null);
+            setActionIdempotencyKey("");
+            setActionError(null);
+          }
         }}
         onSubmit={() => void submitSelectedAction()}
       />
