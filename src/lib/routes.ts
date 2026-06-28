@@ -73,6 +73,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["assets", "inventory", "resources", "scope", "tests", "vulnerabilities", "framework", ...supportedGRCFrameworkNames],
   },
   {
+    label: "Vendors",
+    href: "/vendors",
+    description: "Vendors, discoveries, owners, reviews, contracts, assurance records, and open risk.",
+    section: "Operator",
+    keywords: ["vendors", "third party", "vendor risk", "vendor discoveries", "contracts", "security review", "questionnaire", "assurance", "owner"],
+  },
+  {
     label: "Affected assets",
     href: "/impact",
     description: "Assets and relationships touched by a finding or entity.",

@@ -82,6 +82,7 @@ export const informationAreas: InformationArea[] = [
       { href: "/impact", label: "Affected assets", detail: "Impacted entities and risk paths." },
       { href: "/ask", label: "Ask", detail: "Ask investigation questions and review cited answers." },
       { href: "/inventory", label: "Inventory", detail: "Assets, owners, scope, vulnerabilities, and graph context." },
+      { href: "/vendors", label: "Vendors", detail: "Vendor discoveries, owners, reviews, contracts, assurance records, and open risk." },
     ],
     secondaryRoutes: [
       { href: "/trends", label: "Trends", detail: "Opened, closed, aged, and breached finding flow." },
