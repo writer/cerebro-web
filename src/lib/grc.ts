@@ -959,16 +959,76 @@ export type GRCVendor = {
   category?: string;
   website_url?: string;
   services_provided?: string;
+  source_status?: string;
+  lifecycle_state?: string;
+  lifecycle_reason?: string;
   security_owner_user_id?: string;
   business_owner_user_id?: string;
   owner?: string;
   inherent_risk_level?: string;
   residual_risk_level?: string;
   risk_level: string;
+  risk_score?: number;
+  risk_score_level?: string;
+  risk_score_source?: string;
+  risk_tier?: string;
+  review_cadence_days?: number;
+  score_factors?: GRCRiskScoreFactor[];
+  data_sensitivity?: string;
+  access_level?: string;
+  criticality?: string;
+  subprocessor?: string;
+  geography?: string;
+  system_dependency?: string;
+  risk_drivers?: string[];
+  dpa_status?: string;
+  baa_status?: string;
+  soc2_status?: string;
+  iso27001_status?: string;
+  security_review_status?: string;
+  privacy_review_status?: string;
+  document_status?: string;
   owner_state: "assigned" | "missing" | string;
   review_state: "current" | "due_soon" | "overdue" | "not_scheduled" | string;
   review_due_at?: string;
   last_review_completed_at?: string;
+  assessment_state?: string;
+  assessment_progress?: number;
+  open_assessments?: number;
+  completed_assessments?: number;
+  assessment_types?: string[];
+  questionnaire_state?: string;
+  questionnaire_progress?: number;
+  last_assessment_at?: string;
+  next_assessment_at?: string;
+  evidence_freshness_state?: string;
+  evidence_freshness?: GRCVendorFreshnessClock[];
+  monitoring_state?: string;
+  monitoring_signals?: GRCVendorMonitoringSignal[];
+  external_rating?: string;
+  external_rating_updated_at?: string;
+  last_material_change_at?: string;
+  spend_amount?: string;
+  spend_currency?: string;
+  contract_value?: string;
+  contract_currency?: string;
+  renewal_notice_at?: string;
+  renewal_state?: string;
+  primary_contact?: string;
+  business_unit?: string;
+  cost_center?: string;
+  exposure_level?: string;
+  exposure_reasons?: string[];
+  packet_state?: string;
+  packet_ready_items?: string[];
+  packet_missing_items?: string[];
+  remediation_state?: string;
+  remediation_due_at?: string;
+  open_remediation_items?: number;
+  overdue_remediation_items?: number;
+  offboarding_state?: string;
+  offboarding_due_at?: string;
+  data_deletion_state?: string;
   contract_start_at?: string;
   contract_renewal_at?: string;
   contract_termination_at?: string;
@@ -980,7 +1040,176 @@ export type GRCVendor = {
   critical_findings?: number;
   high_findings?: number;
   evidence_items?: number;
+  risk_queue_rank?: number;
+  queue_reasons?: string[];
+  next_actions?: GRCVendorAction[];
+  close_actions?: GRCVendorCloseAction[];
   attributes?: Record<string, string>;
+};
+
+export type GRCRiskScoreFactor = {
+  id: string;
+  label: string;
+  score: number;
+  weight: number;
+  reason?: string;
+};
+
+export type GRCVendorRiskScoring = {
+  risk_score?: number;
+  risk_score_level?: string;
+  risk_score_source?: string;
+  risk_tier?: string;
+  review_cadence_days?: number;
+  score_factors?: GRCRiskScoreFactor[];
+};
+
+export type GRCVendorFreshnessClock = {
+  id: string;
+  label: string;
+  source: string;
+  status: string;
+  observed_at?: string;
+  expires_at?: string;
+  age_days?: number;
+  stale_after_days?: number;
+  reason?: string;
+};
+
+export type GRCVendorMonitoringSignal = {
+  id: string;
+  label: string;
+  severity: string;
+  source?: string;
+  observed_at?: string;
+  reason?: string;
+};
+
+export type GRCVendorAssessmentPosture = {
+  assessment_state?: string;
+  assessment_progress?: number;
+  open_assessments?: number;
+  completed_assessments?: number;
+  assessment_types?: string[];
+  questionnaire_state?: string;
+  questionnaire_progress?: number;
+  last_assessment_at?: string;
+  next_assessment_at?: string;
+};
+
+export type GRCVendorMonitoringPosture = {
+  monitoring_state?: string;
+  monitoring_signals?: GRCVendorMonitoringSignal[];
+  external_rating?: string;
+  external_rating_updated_at?: string;
+  last_material_change_at?: string;
+};
+
+export type GRCVendorCommercialPosture = {
+  spend_amount?: string;
+  spend_currency?: string;
+  contract_value?: string;
+  contract_currency?: string;
+  renewal_notice_at?: string;
+  renewal_state?: string;
+  primary_contact?: string;
+  business_unit?: string;
+  cost_center?: string;
+};
+
+export type GRCVendorOperationalPosture = {
+  exposure_level?: string;
+  exposure_reasons?: string[];
+  packet_state?: string;
+  packet_ready_items?: string[];
+  packet_missing_items?: string[];
+  remediation_state?: string;
+  remediation_due_at?: string;
+  open_remediation_items?: number;
+  overdue_remediation_items?: number;
+  offboarding_state?: string;
+  offboarding_due_at?: string;
+  data_deletion_state?: string;
+};
+
+export type GRCVendorAction = {
+  id: string;
+  label: string;
+  reason?: string;
+  action_type?: string;
+  target_state?: string;
+  /** Backend queue priority. Higher numbers are handled first. */
+  priority?: number;
+};
+
+export type GRCVendorCloseAction = {
+  id: string;
+  label: string;
+  closes_when: string;
+  finding_key?: string;
+};
+
+export type GRCVendorPacketRisk = {
+  inherent_risk_level?: string;
+  residual_risk_level?: string;
+  risk_level: string;
+  data_sensitivity?: string;
+  access_level?: string;
+  criticality?: string;
+  subprocessor?: string;
+  geography?: string;
+  system_dependency?: string;
+  drivers?: string[];
+};
+
+export type GRCVendorObligation = {
+  id: string;
+  label: string;
+  status: string;
+  source?: string;
+  due_at?: string;
+  expires_at?: string;
+  reason?: string;
+};
+
+export type GRCVendorPacket = {
+  version: string;
+  vendor_urn: string;
+  lifecycle?: {
+    source_status?: string;
+    lifecycle_state: string;
+    lifecycle_reason?: string;
+  };
+  risk?: GRCVendorPacketRisk;
+  risk_score?: GRCVendorRiskScoring;
+  controls?: {
+    dpa_status?: string;
+    baa_status?: string;
+    soc2_status?: string;
+    iso27001_status?: string;
+    security_review_status?: string;
+    privacy_review_status?: string;
+    document_status?: string;
+  };
+  assessments?: GRCVendorAssessmentPosture;
+  monitoring?: GRCVendorMonitoringPosture;
+  commercial?: GRCVendorCommercialPosture;
+  operations?: GRCVendorOperationalPosture;
+  evidence_freshness?: GRCVendorFreshnessClock[];
+  review_history?: GRCVendorRelatedRecord[];
+  obligations?: GRCVendorObligation[];
+  owners?: GRCVendorRelatedRecord[];
+  contacts?: GRCVendorRelatedRecord[];
+  identifiers?: GRCVendorRelatedRecord[];
+  fourth_parties?: GRCVendorRelatedRecord[];
+  finding_counts?: {
+    open_findings?: number;
+    critical_findings?: number;
+    high_findings?: number;
+    evidence_items?: number;
+  };
+  next_actions?: GRCVendorAction[];
+  close_actions?: GRCVendorCloseAction[];
 };
 
 export type GRCVendorDiscovery = {
@@ -1010,6 +1239,17 @@ export type GRCVendorSummary = {
   review_overdue_vendors: number;
   review_due_soon_vendors: number;
   review_not_scheduled: number;
+  risk_queue_vendors?: number;
+  stale_evidence_vendors?: number;
+  restricted_vendors?: number;
+  critical_tier_vendors?: number;
+  assessment_due_vendors?: number;
+  monitoring_alert_vendors?: number;
+  renewal_due_vendors?: number;
+  packet_blocked_vendors?: number;
+  high_exposure_vendors?: number;
+  remediation_due_vendors?: number;
+  offboarding_due_vendors?: number;
   open_findings: number;
   critical_findings: number;
   high_findings: number;
@@ -1029,6 +1269,8 @@ export type GRCVendorDiscoveryDecision = {
   tenant_id: string;
   discovery_urn: string;
   source_id?: string;
+  decision_event_id?: string;
+  version?: number;
   decision: string;
   reason?: string;
   linked_vendor_urn?: string;
@@ -1036,6 +1278,21 @@ export type GRCVendorDiscoveryDecision = {
   attributes?: Record<string, string>;
   created_at: string;
   updated_at: string;
+};
+
+export type GRCVendorDiscoveryDecisionEvent = {
+  id: string;
+  tenant_id: string;
+  discovery_urn: string;
+  source_id?: string;
+  decision: string;
+  reason?: string;
+  linked_vendor_urn?: string;
+  updated_by?: string;
+  attributes?: Record<string, string>;
+  version: number;
+  supersedes_event_id?: string;
+  created_at: string;
 };
 
 export type GRCVendorRelatedRecord = {
@@ -1053,8 +1310,12 @@ export type GRCVendorRelationships = {
   security_reviews?: GRCVendorRelatedRecord[];
   security_questionnaires?: GRCVendorRelatedRecord[];
   assurance_documents?: GRCVendorRelatedRecord[];
+  assessments?: GRCVendorRelatedRecord[];
   owners?: GRCVendorRelatedRecord[];
   hosts?: GRCVendorRelatedRecord[];
+  aliases?: GRCVendorRelatedRecord[];
+  contacts?: GRCVendorRelatedRecord[];
+  fourth_parties?: GRCVendorRelatedRecord[];
 };
 
 export type GRCVendorsResponse = {
@@ -1066,6 +1327,7 @@ export type GRCVendorsResponse = {
 export type GRCVendorDetailResponse = {
   vendor: GRCVendor;
   relationships?: GRCVendorRelationships;
+  packet?: GRCVendorPacket;
   graph?: GRCGraph;
   findings?: GRCFinding[];
   evidence?: GRCEvidence[];
@@ -1076,6 +1338,7 @@ export type GRCVendorDiscoveriesResponse = {
   summary?: GRCVendorDiscoverySummary;
   discoveries: GRCVendorDiscovery[];
   decisions?: GRCVendorDiscoveryDecision[];
+  decision_events?: GRCVendorDiscoveryDecisionEvent[];
   generated_at: string;
 };
 
