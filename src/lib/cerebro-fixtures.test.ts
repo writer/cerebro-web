@@ -133,9 +133,13 @@ describe("cerebro fixture proxy responses", () => {
     const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle" });
     const payload = parseFixture(response!);
     expect(response?.status).toBe(200);
-    expect(payload.summary).toMatchObject({ policies: 4, pending_approvals: 2, lifecycle_events: 7 });
+    expect(payload.summary).toMatchObject({ policies: 4, pending_approvals: 2, lifecycle_events: 7, governance_gaps: 5 });
     expect(payload.templates).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "tpl-access-control" }),
+    ]));
+    expect(payload.governance_gaps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ subject: "document", subject_id: "retention-standard", reason: "Missing owner" }),
+      expect.objectContaining({ subject: "risk", subject_id: "risk-incident-escalation", reason: "No evidence" }),
     ]));
     expect(payload.work_queue).toEqual(expect.arrayContaining([
       expect.objectContaining({ action: "Approve version" }),

@@ -20,6 +20,7 @@ import type {
   GRCPolicyDocument,
   GRCPolicyDocumentWork,
   GRCPolicyException,
+  GRCPolicyGovernanceGap,
   GRCPolicyLifecycleMapping,
   GRCPolicyLifecyclePolicy,
   GRCPolicyLifecycleResponse,
@@ -120,6 +121,21 @@ const riskSearchText = (risk: GRCPolicyRiskRegisterItem) => [
   risk.source_document_title,
   ...(risk.policies ?? []).flatMap((policy) => [policy.id, policy.title]),
   ...(risk.controls ?? []).flatMap((control) => [control.framework, control.control_id, control.title]),
+].filter(Boolean).join("\n").toLowerCase();
+
+const governanceGapSearchText = (gap: GRCPolicyGovernanceGap) => [
+  gap.id,
+  gap.subject,
+  gap.subject_id,
+  gap.title,
+  gap.status,
+  gap.owner,
+  gap.severity,
+  gap.reason,
+  gap.action,
+  gap.policy_id,
+  gap.document_id,
+  gap.risk_id,
 ].filter(Boolean).join("\n").toLowerCase();
 
 const dateValue = (value?: string) => {
@@ -309,6 +325,7 @@ export default function PoliciesPage() {
   const policies = useMemo(() => data?.policies ?? [], [data?.policies]);
   const documents = useMemo(() => data?.documents ?? [], [data?.documents]);
   const riskRegister = useMemo(() => data?.risk_register ?? [], [data?.risk_register]);
+  const governanceGaps = useMemo(() => data?.governance_gaps ?? [], [data?.governance_gaps]);
   const filteredPolicies = useMemo(() => {
     const ownerFilter = normalized(debouncedOwner);
     const textFilter = normalized(debouncedQuery);
@@ -352,14 +369,26 @@ export default function PoliciesPage() {
     ),
     [data?.document_work_queue, visibleDocumentIDs, visiblePolicyIDs, visibleRiskIDs],
   );
+  const visibleGovernanceGaps = useMemo(() => {
+    const ownerFilter = normalized(debouncedOwner);
+    const textFilter = normalized(debouncedQuery);
+    return governanceGaps.filter((gap) => {
+      // Governance gaps use gap-level owner/search filters; lifecycle state filters target policy records.
+      const ownerText = normalized(gap.owner);
+      if (ownerFilter && !ownerText.includes(ownerFilter)) return false;
+      if (textFilter && !governanceGapSearchText(gap).includes(textFilter)) return false;
+      return true;
+    });
+  }, [debouncedOwner, debouncedQuery, governanceGaps]);
   const selectedPolicy = selectedPolicyFallback(policies, filteredPolicies, selectedPolicyID);
   const ownerOptions = useMemo(
     () => Array.from(new Set([
       ...policies.flatMap((policy) => [policy.owner, policy.reviewer]),
       ...documents.map((document) => document.owner),
       ...riskRegister.map((risk) => risk.owner),
+      ...governanceGaps.map((gap) => gap.owner),
     ].filter((value): value is string => Boolean(value)))).sort(),
-    [documents, policies, riskRegister],
+    [documents, governanceGaps, policies, riskRegister],
   );
   const filterState = useGRCFilterState([
     { key: "tenant_id", label: "Tenant", value: tenantID, setValue: setTenantID },
@@ -444,6 +473,26 @@ export default function PoliciesPage() {
     { key: "owner", label: "Owner", render: (_value, item) => <span className="text-slate-600">{item.owner || "Unassigned"}</span> },
     { key: "due_at", label: "Due", render: (_value, item) => <span className={dueClassName(item.due_at, generatedAt)}>{displayPolicyDate(item.due_at)}</span> },
   ], [generatedAt]);
+
+  const governanceGapColumns = useMemo<TableColumn<GRCPolicyGovernanceGap>[]>(() => [
+    { key: "severity", label: "Severity", render: (_value, gap) => <Badge value={gap.severity || "medium"} tone="severity" /> },
+    {
+      key: "title",
+      label: "Record",
+      render: (_value, gap) => (
+        <div className="min-w-[12rem]">
+          <div className="font-medium text-slate-900">{gap.title || gap.subject_id || "-"}</div>
+          <div className="mt-0.5 text-[12px] text-slate-500">
+            {humanize(gap.subject)} {gap.subject_id || gap.document_id || gap.risk_id || gap.policy_id || "-"}
+          </div>
+        </div>
+      ),
+    },
+    { key: "reason", label: "Gap", render: (_value, gap) => <span className="font-medium text-slate-800">{gap.reason}</span> },
+    { key: "action", label: "Action", render: (_value, gap) => <span className="text-slate-700">{gap.action}</span> },
+    { key: "owner", label: "Owner", render: (_value, gap) => <span className="text-slate-600">{gap.owner || "Unassigned"}</span> },
+    { key: "status", label: "State", render: (_value, gap) => <Badge value={gap.status || "open"} tone={statusIntent(gap.status)} /> },
+  ], []);
 
   const policyColumns = useMemo<TableColumn<GRCPolicyLifecyclePolicy>[]>(() => [
     {
@@ -681,10 +730,11 @@ export default function PoliciesPage() {
         <AppliedFilterChips filters={filterState.chips} onClearAll={filterState.clearAll} />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
         <MetricCard label="Policies" value={summary?.policies ?? 0} detail={`${summary?.templates ?? 0} templates`} state={metricState} />
         <MetricCard label="Documents" value={summary?.policy_documents ?? 0} detail={`${summary?.documents_due_for_review ?? 0} due for review`} intent={(summary?.documents_due_for_review ?? 0) > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Risks" value={summary?.risk_register_items ?? 0} detail={`${summary?.high_risks ?? 0} high`} intent={(summary?.high_risks ?? 0) > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Gaps" value={summary?.governance_gaps ?? 0} detail={`${summary?.policy_document_gaps ?? 0} document / ${summary?.risk_register_gaps ?? 0} risk`} intent={(summary?.governance_gaps ?? 0) > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Mappings" value={summary?.mapped_controls ?? 0} detail={`${summary?.evidence_items ?? 0} evidence items`} state={metricState} />
         <MetricCard label="Pending Approvals" value={summary?.pending_approvals ?? 0} detail={`${summary?.draft_versions ?? 0} drafts`} intent={(summary?.pending_approvals ?? 0) > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Attestations" value={`${summary?.attestation_coverage_pct ?? 0}%`} detail={`${summary?.overdue_attestations ?? 0} overdue`} intent={(summary?.overdue_attestations ?? 0) > 0 ? "danger" : "success"} state={metricState} />
@@ -762,6 +812,20 @@ export default function PoliciesPage() {
             getRowKey={(item) => item.id}
             refreshing={isRefreshing}
             action={<ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+          />
+
+          <WorklistTable
+            title="Governance gaps"
+            description={isRefreshing ? "Refreshing governance gaps..." : "Records missing owners, dates, mappings, treatment, or evidence."}
+            rows={visibleGovernanceGaps}
+            columns={governanceGapColumns}
+            emptyMessage="No governance gaps match the current filters."
+            searchPlaceholder="Search gaps"
+            filterKeys={["subject", "subject_id", "title", "status", "owner", "severity", "reason", "action", "policy_id", "document_id", "risk_id"]}
+            pageSize={8}
+            getRowKey={(gap) => gap.id}
+            refreshing={isRefreshing}
+            action={<ListChecks className="h-4 w-4 text-slate-400" aria-hidden="true" />}
           />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
