@@ -26,6 +26,30 @@ describe("proxy", () => {
     expect(response.status).toBe(413);
   });
 
+  it("allows GRC policy uploads up to the backend upload limit", () => {
+    const response = proxy(request("POST", "/api/cerebro/grc/policy-lifecycle/uploads", {
+      "content-length": String(10 * 1024 * 1024),
+      "content-type": "multipart/form-data; boundary=test",
+    }));
+    expect(response.status).toBe(200);
+  });
+
+  it("allows GRC vendor uploads up to the backend upload limit", () => {
+    const response = proxy(request("POST", "/api/cerebro/grc/vendors/uploads", {
+      "content-length": String(10 * 1024 * 1024),
+      "content-type": "multipart/form-data; boundary=test",
+    }));
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects GRC uploads above the backend upload limit", () => {
+    const response = proxy(request("POST", "/api/cerebro/grc/policy-lifecycle/uploads", {
+      "content-length": String(33 * 1024 * 1024),
+      "content-type": "multipart/form-data; boundary=test",
+    }));
+    expect(response.status).toBe(413);
+  });
+
   it("rejects oversized PUT requests to API routes", () => {
     const response = proxy(request("PUT", "/api/cerebro/grc/inventory/asset-reports", {
       "content-length": String(5 * 1024 * 1024),
