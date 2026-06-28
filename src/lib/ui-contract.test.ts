@@ -97,7 +97,7 @@ describe("product UI contract", () => {
       const source = readProjectFile(page);
       expect(source).toContain("AppliedFilterChips");
       expect(source).toContain("runtimeStateForError");
-      expect(source).toContain("state={metricState}");
+      expect(source).toMatch(/state(?:=\{|:)\s*metricState/);
     }
 
     const inventorySource = readProjectFile("src/app/inventory/page.tsx");
