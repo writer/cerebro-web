@@ -5,16 +5,17 @@ import { useMemo, useState } from "react";
 import { FileText, GitBranch, Link2, PackageCheck, RefreshCw, Search, ShieldCheck } from "lucide-react";
 
 import DataTable, { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
-import { AppliedFilterChips, ErrorBlock, LoadingBlock, PageHeader } from "@/components/grc/Primitives";
+import { AppliedFilterChips, ErrorBlock, LoadingBlock, PageHeader, ResultLimitNotice } from "@/components/grc/Primitives";
 import { evidencePacketMetrics, evidencePacketReadinessLabel, evidenceReviewState } from "@/lib/evidence-packets";
-import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
+import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCListMeta, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
 import { displayDate, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
+import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import { useQueryParamState } from "@/lib/query-params";
 import { metricDetailForState, metricValueForState, runtimeStateDescription, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
-type EvidenceResponse = { evidence: GRCEvidence[]; generated_at: string };
+type EvidenceResponse = { evidence: GRCEvidence[]; meta?: GRCListMeta; generated_at: string };
 type EvidenceStat = {
   detail?: string;
   intent?: "neutral" | "danger" | "warning" | "success";
@@ -52,14 +53,14 @@ export default function EvidencePage() {
       run_id: debouncedRunID,
       rule_id: debouncedRuleID,
       graph_root_urn: debouncedGraphRoot,
-      limit: 200,
+      limit: GRC_WORKLIST_LIMIT,
     }),
     [debouncedFindingID, debouncedGraphRoot, debouncedRuleID, debouncedRunID, debouncedTenantID],
   );
   const packagedPath = useMemo(
     () => grcPath("/grc/evidence-packets", {
       tenant_id: debouncedTenantID,
-      limit: 200,
+      limit: GRC_WORKLIST_LIMIT,
     }),
     [debouncedTenantID],
   );
@@ -178,8 +179,9 @@ export default function EvidencePage() {
     ["Rule", activeEvidence.rule_id || "—"],
     ["Created", displayDate(activeEvidence.created_at)],
   ] : [];
+  const totalEvidence = data?.meta?.total ?? evidence.length;
   const evidenceStats: EvidenceStat[] = [
-    { label: "Evidence items", value: evidence.length, detail: "in scope", state: metricState },
+    { label: "Evidence items", value: totalEvidence, detail: data?.meta?.truncated ? `${evidence.length} loaded` : "in scope", state: metricState },
     { label: "Events", value: events, detail: "linked events", state: metricState },
     { label: "Claims", value: claims, detail: "claim references", state: metricState },
     { label: "Graph roots", value: graphRoots, detail: "impact anchors", state: metricState },
@@ -247,7 +249,7 @@ export default function EvidencePage() {
           <div className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] p-5 xl:border-l xl:border-t-0">
             <EvidenceScopePanel
               activeEvidence={activeEvidence}
-              evidenceCount={evidence.length}
+              evidenceCount={totalEvidence}
               packageState={packagedMetricState}
               packagedError={packagedError}
             />
@@ -283,9 +285,11 @@ export default function EvidencePage() {
               rows={packagedData.evidence_requests ?? []}
               columns={requestColumns}
               emptyMessage="No packaged evidence requests are available."
-              searchPlaceholder="Search requests"
+              searchPlaceholder="Filter loaded requests"
               filterKeys={["id", "control_id", "title", "status", "quality", "review_status"]}
               pageSize={25}
+              resultLimit={GRC_WORKLIST_LIMIT}
+              resultNoun="requests"
               getRowKey={(item) => item.id}
               refreshing={packagedLoading}
             />
@@ -295,9 +299,11 @@ export default function EvidencePage() {
               rows={packagedData.controls ?? []}
               columns={controlColumns}
               emptyMessage="No packaged controls are available."
-              searchPlaceholder="Search controls"
+              searchPlaceholder="Filter loaded controls"
               filterKeys={["id", "framework_name", "title", "status", "evidence_quality", "mapped_rules"]}
               pageSize={25}
+              resultLimit={GRC_WORKLIST_LIMIT}
+              resultNoun="controls"
               getRowKey={(item) => item.id}
               refreshing={packagedLoading}
             />
@@ -307,9 +313,11 @@ export default function EvidencePage() {
               rows={packagedData.collection_sources ?? []}
               columns={sourceColumns}
               emptyMessage="No collection source records are available."
-              searchPlaceholder="Search sources"
+              searchPlaceholder="Filter loaded sources"
               filterKeys={["id", "runtime_id", "source_id", "tenant_id", "status"]}
               pageSize={25}
+              resultLimit={GRC_WORKLIST_LIMIT}
+              resultNoun="sources"
               getRowKey={(item) => item.id}
               refreshing={packagedLoading}
             />
@@ -319,9 +327,11 @@ export default function EvidencePage() {
               rows={packagedData.evidence_items ?? []}
               columns={itemColumns}
               emptyMessage="No evidence item records are available."
-              searchPlaceholder="Search evidence items"
+              searchPlaceholder="Filter loaded evidence items"
               filterKeys={["id", "finding_id", "rule_id", "run_id", "source_id", "runtime_id", "graph_root_urns"]}
               pageSize={25}
+              resultLimit={GRC_WORKLIST_LIMIT}
+              resultNoun="evidence items"
               getRowKey={(item) => item.id}
               refreshing={packagedLoading}
             />
@@ -331,9 +341,11 @@ export default function EvidencePage() {
               rows={packagedData.evidence_lineage ?? []}
               columns={lineageColumns}
               emptyMessage="No evidence lineage records are available."
-              searchPlaceholder="Search lineage"
+              searchPlaceholder="Filter loaded lineage"
               filterKeys={["id", "evidence_id", "finding_id", "rule_id", "source_id", "runtime_id", "graph_root_urns"]}
               pageSize={25}
+              resultLimit={GRC_WORKLIST_LIMIT}
+              resultNoun="lineage records"
               getRowKey={(item) => item.id}
               refreshing={packagedLoading}
             />
@@ -359,13 +371,23 @@ export default function EvidencePage() {
                 {isRefreshing && <div className="text-[12px] text-[var(--text-muted)]">Refreshing evidence...</div>}
               </div>
               <div className="p-4">
+                <ResultLimitNotice
+                  loaded={evidence.length}
+                  meta={data.meta}
+                  limit={GRC_WORKLIST_LIMIT}
+                  noun="evidence items"
+                  className="mb-3"
+                />
                 <DataTable
                   rows={evidence}
                   columns={evidenceColumns}
                   emptyMessage="No evidence matches this view."
-                  searchPlaceholder="Search evidence"
+                  searchPlaceholder="Filter loaded evidence"
                   filterKeys={["id", "finding_id", "finding_title", "run_id", "rule_id", "claim_ids", "event_ids", "graph_root_urns"]}
                   pageSize={50}
+                  resultMeta={data.meta}
+                  resultLimit={GRC_WORKLIST_LIMIT}
+                  resultNoun="evidence items"
                   getRowKey={(item) => item.id}
                   selectedRowKey={activeEvidenceID}
                   onRowClick={(item) => setSelectedEvidenceID(item.id)}

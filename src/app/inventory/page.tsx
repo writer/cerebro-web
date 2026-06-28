@@ -7,7 +7,7 @@ import { useApiKey, useCurrentUser } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { countLabel } from "@/lib/format";
 import AssetReportModal from "@/components/grc/AssetReportModal";
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ProgressCard, RiskBadge } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ProgressCard, ResultLimitNotice, RiskBadge } from "@/components/grc/Primitives";
 import {
   GRCInventoryAsset,
   GRCInventoryAssetReport,
@@ -22,6 +22,7 @@ import {
 } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { frameworkOptionLabel, inventoryAssetMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
+import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import {
   inventoryAccountability,
   inventoryAttr,
@@ -552,7 +553,7 @@ export default function InventoryPage() {
   const selectedSurface = inventoryRequestSurface(debouncedSurfaceFilter);
 
   const categoriesQuery = useGRCQuery<GRCInventoryCategoriesResponse>(
-    grcPath("/grc/inventory/categories", { tenant_id: debouncedTenantID, source_id: debouncedSourceID, surface: selectedSurface, limit: 200 }),
+    grcPath("/grc/inventory/categories", { tenant_id: debouncedTenantID, source_id: debouncedSourceID, surface: selectedSurface, limit: GRC_WORKLIST_LIMIT }),
   );
   const assetsQuery = useGRCQuery<GRCInventoryAssetsResponse>(
     grcPath("/grc/inventory/assets", {
@@ -564,11 +565,11 @@ export default function InventoryPage() {
       scope_state: debouncedScopeFilter,
       review_state: debouncedReviewFilter,
       accountability_state: debouncedAccountabilityFilter,
-      limit: 200,
+      limit: GRC_WORKLIST_LIMIT,
     }),
   );
   const scopeQuery = useGRCQuery<GRCResourceScopeResponse>(
-    scopeOpen ? grcPath("/grc/inventory/resource-scope", { tenant_id: debouncedTenantID, source_id: debouncedSourceID || "github", surface: selectedSurface, category_id: debouncedCategoryID, q: debouncedQuery, limit: 200 }) : null,
+    scopeOpen ? grcPath("/grc/inventory/resource-scope", { tenant_id: debouncedTenantID, source_id: debouncedSourceID || "github", surface: selectedSurface, category_id: debouncedCategoryID, q: debouncedQuery, limit: GRC_WORKLIST_LIMIT }) : null,
   );
 
   const surfaceIsAssets = selectedSurface === "asset";
@@ -807,7 +808,7 @@ export default function InventoryPage() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={exportAssets} className="secondary-button px-3 py-1.5 text-[13px]">
-              Export view
+              Export loaded CSV
             </button>
             {surfaceIsAssets && (
               <button type="button" onClick={() => setScopeOpen(true)} className="secondary-button px-3 py-1.5 text-[13px]">
@@ -907,6 +908,19 @@ export default function InventoryPage() {
           </div>
 
           {inventoryLoading && <LoadingBlock label="Loading inventory..." />}
+
+          {!inventoryError && (
+            <ResultLimitNotice
+              loaded={rawAssets.length}
+              limit={GRC_WORKLIST_LIMIT}
+              noun={recordNoun}
+            />
+          )}
+          {!inventoryError && hasClientFilters && (
+            <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
+              Framework and owner filters apply to loaded {recordNoun}.
+            </div>
+          )}
 
           {!inventoryError && selectedAssets.length > 0 && (
             <div className="surface-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">

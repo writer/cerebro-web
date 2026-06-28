@@ -16,7 +16,7 @@ const sensitivePatterns: Array<[RegExp, string]> = [
 ];
 
 export const reportRedactionMode = (metadata?: GRCReportMetadata): ReportRedactionMode =>
-  metadata?.redaction.default_mode === "internal" ? "internal" : "share_safe";
+  metadata?.redaction?.default_mode === "internal" ? "internal" : "share_safe";
 
 export const redactReportText = (value: string, mode: ReportRedactionMode) => {
   if (mode === "internal") return value;

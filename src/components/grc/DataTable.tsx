@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
 import { countLabel } from "@/lib/format";
+import type { GRCListMeta } from "@/lib/grc";
+import { grcLoadedRowsCopy } from "@/lib/grc-list";
 
 export type TableColumn<Row extends object = Record<string, unknown>> = {
   key: string;
@@ -82,6 +84,9 @@ export type DataTableProps<Row extends object = Record<string, unknown>> = {
   rowActions?: (row: Row) => ReactNode;
   selectedRowKey?: string | null;
   tableContainerClassName?: string;
+  resultLimit?: number;
+  resultMeta?: GRCListMeta;
+  resultNoun?: string;
 };
 
 const rowValue = <Row extends object>(row: Row, key: string) =>
@@ -91,7 +96,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   rows,
   columns,
   emptyMessage = "No rows available.",
-  searchPlaceholder = "Filter rows",
+  searchPlaceholder = "Filter loaded rows",
   filterKeys,
   pageSize = 10,
   getRowHref,
@@ -100,6 +105,9 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   rowActions,
   selectedRowKey,
   tableContainerClassName = "overflow-auto rounded-lg border border-[color:var(--border)] bg-[var(--surface)]",
+  resultLimit,
+  resultMeta,
+  resultNoun = "rows",
 }: DataTableProps<Row>) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -131,6 +139,14 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * pageSize;
   const visibleRows = filteredRows.slice(pageStart, pageStart + pageSize);
+  const resultCopy = grcLoadedRowsCopy({
+    loaded: rows?.length ?? 0,
+    limit: resultLimit,
+    meta: resultMeta,
+    noun: resultNoun,
+  });
+  const queryActive = query.trim().length > 0;
+  const filteredCopy = `Matched ${filteredRows.length.toLocaleString()} loaded ${resultNoun}`;
 
   if (!rows || rows.length === 0) {
     return (
@@ -153,8 +169,13 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
           className="w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)] sm:max-w-xs"
         />
         <div className="text-xs text-[var(--text-muted)]">
-          Showing {filteredRows.length === 0 ? 0 : pageStart + 1}-
-          {Math.min(pageStart + pageSize, filteredRows.length)} of {filteredRows.length}
+          {queryActive ? filteredCopy : resultCopy}
+          {totalPages > 1 && (
+            <span>
+              {" "}Rows {filteredRows.length === 0 ? 0 : pageStart + 1}-
+              {Math.min(pageStart + pageSize, filteredRows.length)}
+            </span>
+          )}
         </div>
       </div>
       {filteredRows.length === 0 ? (

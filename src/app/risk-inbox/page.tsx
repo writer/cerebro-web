@@ -3,23 +3,24 @@
 import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
-import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
+import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ResultLimitNotice, RiskBadge } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { countLabel } from "@/lib/format";
 import { filterRiskInboxFindings } from "@/lib/findings-filter";
 import { downloadFindingsCSV } from "@/lib/findings-export";
 import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
-import { GRCFinding } from "@/lib/grc";
+import { GRCFinding, GRCListMeta } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { GRC_FILTERED_EXPORT_LIMIT, GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import { useApiKey } from "@/components/providers";
 import { frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
-type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
+type FindingsResponse = { findings: GRCFinding[]; meta?: GRCListMeta; generated_at: string };
 
-const RISK_INBOX_LIST_LIMIT = 200;
-const RISK_INBOX_FILTERED_EXPORT_LIMIT = 500;
+const RISK_INBOX_LIST_LIMIT = GRC_WORKLIST_LIMIT;
+const RISK_INBOX_FILTERED_EXPORT_LIMIT = GRC_FILTERED_EXPORT_LIMIT;
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const selectClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
@@ -68,10 +69,12 @@ export default function RiskInboxPage() {
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
+  const loadedFindings = useMemo(() => data?.findings ?? [], [data?.findings]);
   const findings = useMemo(
-    () => filterRiskInboxFindings(data?.findings ?? [], { framework, owner, query }),
-    [data?.findings, framework, owner, query],
+    () => filterRiskInboxFindings(loadedFindings, { framework, owner, query }),
+    [framework, loadedFindings, owner, query],
   );
+  const hasLoadedRowFilters = Boolean(owner.trim() || query.trim());
   const usesClientFilteredExport = Boolean(owner.trim() || query.trim());
   const exportFindings = useCallback(async () => {
     setExportState("working");
@@ -216,14 +219,14 @@ export default function RiskInboxPage() {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-2.5 top-[11px] h-4 w-4 text-slate-400">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                 </svg>
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter findings..." className={`${inputClass} pl-8`} />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter loaded findings" className={`${inputClass} pl-8`} />
               </div>
             </label>
           </div>
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(e) => setTenantID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Runtime<input value={runtimeID} onChange={(e) => setRuntimeID(e.target.value)} placeholder="All" className={inputClass} /></label>
           <label className={labelClass}>Source<input value={sourceID} onChange={(e) => setSourceID(e.target.value)} placeholder="All" className={inputClass} /></label>
-          <label className={labelClass}>Owner<input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="All or unassigned" className={inputClass} /></label>
+          <label className={labelClass}>Owner<input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Loaded rows" className={inputClass} /></label>
           <label className={labelClass}>
             Framework
             <input value={framework} onChange={(e) => setFramework(e.target.value)} placeholder="DORA" list="risk-framework-options" className={inputClass} />
@@ -289,6 +292,18 @@ export default function RiskInboxPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-semibold text-slate-900">{countLabel(findings.length, "finding")}</h2>
           </div>
+          <ResultLimitNotice
+            loaded={loadedFindings.length}
+            meta={data?.meta}
+            limit={RISK_INBOX_LIST_LIMIT}
+            noun="findings"
+            className="mb-3"
+          />
+          {hasLoadedRowFilters && (
+            <div className="mb-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
+              Search and owner filters apply to loaded findings.
+            </div>
+          )}
           <FindingTable
             findings={findings}
             selectable

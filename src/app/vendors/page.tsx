@@ -21,7 +21,7 @@ import {
 import Link from "next/link";
 import { type FormEvent, useCallback, useMemo, useRef, useState } from "react";
 
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import {
   displayDate,
@@ -41,6 +41,7 @@ import {
   shortEntity,
 } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCFormMutation, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
+import { GRC_DETAIL_LIMIT, GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import { riskBadgeClassFor } from "@/lib/grc-status";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -1383,7 +1384,20 @@ function VendorRegisterCard({ onOpenVendor, vendor }: { onOpenVendor: (vendorURN
   );
 }
 
-function VendorRegisterSection({ assuranceItems, onOpenVendor, vendors }: { assuranceItems: number; onOpenVendor: (vendorURN: string) => void; vendors: GRCVendor[] }) {
+function VendorRegisterSection({
+  assuranceItems,
+  onOpenVendor,
+  summary,
+  vendors,
+}: {
+  assuranceItems: number;
+  onOpenVendor: (vendorURN: string) => void;
+  summary?: GRCVendorsResponse["summary"];
+  vendors: GRCVendor[];
+}) {
+  const meta = summary
+    ? { limit: GRC_WORKLIST_LIMIT, returned: vendors.length, total: summary.total_vendors, truncated: summary.total_vendors > vendors.length }
+    : undefined;
   return (
     <section className="surface-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
@@ -1394,6 +1408,9 @@ function VendorRegisterSection({ assuranceItems, onOpenVendor, vendors }: { assu
         <Link href="/inventory?entity_type=vendor" className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
           Open in inventory
         </Link>
+      </div>
+      <div className="border-b border-[color:var(--border)] px-4 py-3">
+        <ResultLimitNotice loaded={vendors.length} limit={GRC_WORKLIST_LIMIT} meta={meta} noun="vendors" />
       </div>
       {vendors.length === 0 ? (
         <div className="px-5 py-10 text-center text-[13px] text-[var(--text-muted)]">No vendors match these filters.</div>
@@ -1779,7 +1796,7 @@ export default function VendorsPage() {
       owner_state: debouncedOwnerState,
       lifecycle_state: debouncedLifecycleState,
       queue: debouncedQueueState,
-      limit: 200,
+      limit: GRC_WORKLIST_LIMIT,
     }),
   );
   const discoveriesQuery = useGRCQuery<GRCVendorDiscoveriesResponse>(
@@ -1787,12 +1804,12 @@ export default function VendorsPage() {
       tenant_id: debouncedTenantID,
       source_id: debouncedSourceID,
       q: debouncedQuery,
-      limit: 100,
+      limit: GRC_DETAIL_LIMIT,
     }),
   );
   const vendorDetailQuery = useGRCQuery<GRCVendorDetailResponse>(
     selectedVendorURN
-      ? grcPath(`/grc/vendors/${encodeURIComponent(selectedVendorURN)}`, { tenant_id: debouncedTenantID, limit: 100 })
+      ? grcPath(`/grc/vendors/${encodeURIComponent(selectedVendorURN)}`, { tenant_id: debouncedTenantID, limit: GRC_DETAIL_LIMIT })
       : null,
   );
   const { mutate: mutateDiscoveryDecision, saving: decisionSaving, error: decisionError } = useGRCMutation();
@@ -2388,34 +2405,42 @@ export default function VendorsPage() {
       {discoveriesQuery.loading && !discoveriesQuery.data ? (
         <LoadingBlock label="Loading vendor discoveries..." />
       ) : (
-        <DiscoveryQueue
-          bulkDraft={bulkDraft}
-          bulkSaving={bulkSaving}
-          createSaving={createSaving}
-          decisionDrafts={decisionDrafts}
-          decisionSaving={decisionSaving}
-          discoveries={discoveries}
-          duplicateMatchesByURN={duplicateMatchesByURN}
-          latestSync={latestSourceSync(discoverySources)}
-          onBulkAction={runBulkDiscoveryAction}
-          onBulkDraftChange={updateBulkDraft}
-          onClearSelection={clearDiscoverySelection}
-          onCreateVendor={createVendorFromDiscovery}
-          onDecision={setDiscoveryDecision}
-          onOpenVendor={openVendorDrawer}
-          onRefresh={() => { void discoveriesQuery.reload(); }}
-          onToggleDiscovery={toggleDiscoverySelection}
-          onToggleVisible={toggleVisibleDiscoveries}
-          onUpdateDraft={updateDecisionDraft}
-          selectedDiscoveryURNs={selectedDiscoveryURNs}
-          sourceCount={discoverySummary?.source_count ?? discoverySources.length}
-        />
+        <div className="space-y-3">
+          <ResultLimitNotice
+            loaded={discoveries.length}
+            limit={GRC_DETAIL_LIMIT}
+            meta={discoverySummary ? { limit: GRC_DETAIL_LIMIT, returned: discoveries.length, total: discoverySummary.total_discoveries, truncated: discoverySummary.total_discoveries > discoveries.length } : undefined}
+            noun="discoveries"
+          />
+          <DiscoveryQueue
+            bulkDraft={bulkDraft}
+            bulkSaving={bulkSaving}
+            createSaving={createSaving}
+            decisionDrafts={decisionDrafts}
+            decisionSaving={decisionSaving}
+            discoveries={discoveries}
+            duplicateMatchesByURN={duplicateMatchesByURN}
+            latestSync={latestSourceSync(discoverySources)}
+            onBulkAction={runBulkDiscoveryAction}
+            onBulkDraftChange={updateBulkDraft}
+            onClearSelection={clearDiscoverySelection}
+            onCreateVendor={createVendorFromDiscovery}
+            onDecision={setDiscoveryDecision}
+            onOpenVendor={openVendorDrawer}
+            onRefresh={() => { void discoveriesQuery.reload(); }}
+            onToggleDiscovery={toggleDiscoverySelection}
+            onToggleVisible={toggleVisibleDiscoveries}
+            onUpdateDraft={updateDecisionDraft}
+            selectedDiscoveryURNs={selectedDiscoveryURNs}
+            sourceCount={discoverySummary?.source_count ?? discoverySources.length}
+          />
+        </div>
       )}
 
       {vendorsQuery.loading && !vendorsQuery.data ? (
         <LoadingBlock label="Loading vendors..." />
       ) : (
-        <VendorRegisterSection assuranceItems={assuranceItems} onOpenVendor={openVendorDrawer} vendors={vendors} />
+        <VendorRegisterSection assuranceItems={assuranceItems} onOpenVendor={openVendorDrawer} summary={summary} vendors={vendors} />
       )}
     </main>
   );

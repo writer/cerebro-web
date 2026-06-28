@@ -46,6 +46,7 @@ import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
+const POLICY_LIFECYCLE_LIMIT = 300;
 
 const lifecycleStates = [
   { value: "", label: "All states" },
@@ -460,7 +461,7 @@ export default function PoliciesPage() {
   const { mutate: uploadPolicyDocument, saving: policyUploadSaving, error: policyUploadError, setError: setPolicyUploadError } =
     useGRCFormMutation<GRCUploadResponse>();
   const { data, error, loading, reload } = useGRCQuery<GRCPolicyLifecycleResponse>(
-    grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, rule_profile: activeRuleProfile, limit: 300 }),
+    grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, rule_profile: activeRuleProfile, limit: POLICY_LIFECYCLE_LIMIT }),
   );
   const isInitialLoading = loading && !data;
   const isRefreshing = loading && Boolean(data);
@@ -1036,9 +1037,11 @@ export default function PoliciesPage() {
             rows={visibleWorkQueue}
             columns={workColumns}
             emptyMessage="No policy work matches the current filters."
-            searchPlaceholder="Search work"
+            searchPlaceholder="Filter loaded work"
             filterKeys={["action", "policy", "type", "status", "owner", "due_at"]}
             pageSize={10}
+            resultLimit={POLICY_LIFECYCLE_LIMIT}
+            resultNoun="work items"
             getRowKey={(item) => item.id}
             refreshing={isRefreshing}
             rowActions={(item) => {
@@ -1082,9 +1085,11 @@ export default function PoliciesPage() {
             rows={visibleDocumentWorkQueue}
             columns={documentWorkColumns}
             emptyMessage="No document work matches the current filters."
-            searchPlaceholder="Search document work"
+            searchPlaceholder="Filter loaded document work"
             filterKeys={["action", "document", "type", "status", "owner", "due_at", "risk_id", "policy_id"]}
             pageSize={8}
+            resultLimit={POLICY_LIFECYCLE_LIMIT}
+            resultNoun="document work items"
             getRowKey={(item) => item.id}
             refreshing={isRefreshing}
             action={<ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />}
@@ -1096,9 +1101,11 @@ export default function PoliciesPage() {
             rows={visibleGovernanceGaps}
             columns={governanceGapColumns}
             emptyMessage="No governance gaps match the current filters."
-            searchPlaceholder="Search gaps"
+            searchPlaceholder="Filter loaded gaps"
             filterKeys={["subject", "subject_id", "title", "status", "owner", "severity", "reason", "action", "action_id", "rule_id", "gap_state", "due_at", "policy_id", "document_id", "risk_id"]}
             pageSize={8}
+            resultLimit={POLICY_LIFECYCLE_LIMIT}
+            resultNoun="gaps"
             getRowKey={(gap) => gap.id}
             refreshing={isRefreshing}
             rowActions={(gap) => {
@@ -1153,9 +1160,11 @@ export default function PoliciesPage() {
               rows={filteredPolicies}
               columns={policyColumns}
               emptyMessage="No policies match the current filters."
-              searchPlaceholder="Filter register"
+              searchPlaceholder="Filter loaded policies"
               filterKeys={["id", "title", "status", "owner", "reviewer", "latest_version", "approval_status", "controls"]}
               pageSize={12}
+              resultLimit={POLICY_LIFECYCLE_LIMIT}
+              resultNoun="policies"
               getRowKey={(policy) => policy.id}
               onRowClick={(policy) => setSelectedPolicyID(policy.id)}
               selectedRowKey={selectedPolicy?.id ?? null}
@@ -1188,9 +1197,11 @@ export default function PoliciesPage() {
               rows={filteredDocuments}
               columns={documentColumns}
               emptyMessage="No policy documents match the current filters."
-              searchPlaceholder="Search documents"
+              searchPlaceholder="Filter loaded documents"
               filterKeys={["id", "title", "document_type", "document_class", "status", "owner", "version", "policies", "risks", "controls"]}
               pageSize={8}
+              resultLimit={POLICY_LIFECYCLE_LIMIT}
+              resultNoun="documents"
               getRowKey={(document) => document.id || document.urn}
               getRowHref={(document) => document.source_url}
               action={<FileCheck2 className="h-4 w-4 text-slate-400" aria-hidden="true" />}
@@ -1201,9 +1212,11 @@ export default function PoliciesPage() {
               rows={filteredRiskRegister}
               columns={riskColumns}
               emptyMessage="No risk register records match the current filters."
-              searchPlaceholder="Search risks"
+              searchPlaceholder="Filter loaded risks"
               filterKeys={["id", "title", "status", "owner", "category", "residual_risk", "inherent_risk", "treatment", "source_document_title", "controls"]}
               pageSize={8}
+              resultLimit={POLICY_LIFECYCLE_LIMIT}
+              resultNoun="risks"
               getRowKey={(risk) => risk.id || risk.urn}
               action={<ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
@@ -1216,9 +1229,11 @@ export default function PoliciesPage() {
               rows={data.templates ?? []}
               columns={templateColumns}
               emptyMessage="No policy templates are available."
-              searchPlaceholder="Search templates"
+              searchPlaceholder="Filter loaded templates"
               filterKeys={["id", "title", "status", "category", "owner", "frameworks", "controls"]}
               pageSize={8}
+              resultLimit={POLICY_LIFECYCLE_LIMIT}
+              resultNoun="templates"
               getRowKey={(item) => item.id}
               action={<FileText className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
@@ -1228,9 +1243,11 @@ export default function PoliciesPage() {
               rows={data.reminders ?? []}
               columns={reminderColumns}
               emptyMessage="No reminders are available."
-              searchPlaceholder="Search reminders"
+              searchPlaceholder="Filter loaded reminders"
               filterKeys={["title", "status", "channel", "recipients", "escalated_to", "due_at"]}
               pageSize={8}
+              resultLimit={POLICY_LIFECYCLE_LIMIT}
+              resultNoun="reminders"
               getRowKey={(item) => item.id}
               action={<Bell className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
@@ -1243,9 +1260,11 @@ export default function PoliciesPage() {
               rows={data.reminder_plan ?? []}
               columns={reminderPlanColumns}
               emptyMessage="No reminder plan is available."
-              searchPlaceholder="Search reminder plan"
+              searchPlaceholder="Filter loaded reminder plan"
               filterKeys={["policy", "policy_id", "action", "owner", "recipients", "due_at", "escalate_at"]}
               pageSize={8}
+              resultLimit={POLICY_LIFECYCLE_LIMIT}
+              resultNoun="reminder plan rows"
               getRowKey={(item) => item.id}
               rowActions={(item) => {
                 const action = reminderPlanActionForItem(item);
@@ -1270,9 +1289,11 @@ export default function PoliciesPage() {
               rows={data.version_diffs ?? []}
               columns={versionDiffColumns}
               emptyMessage="No version diffs are available."
-              searchPlaceholder="Search diffs"
+              searchPlaceholder="Filter loaded diffs"
               filterKeys={["policy_title", "policy_id", "from_version", "to_version", "status", "change_summary", "diff_summary"]}
               pageSize={8}
+              resultLimit={POLICY_LIFECYCLE_LIMIT}
+              resultNoun="diffs"
               getRowKey={(item, index) => `${item.policy_id ?? "policy"}:${item.from_version_id ?? "from"}:${item.to_version_id ?? index}`}
               action={<GitCompare className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
@@ -1284,9 +1305,11 @@ export default function PoliciesPage() {
             rows={data.mappings ?? []}
             columns={mappingColumns}
             emptyMessage="No policy mappings are available."
-            searchPlaceholder="Search mappings"
+            searchPlaceholder="Filter loaded mappings"
             filterKeys={["policy_id", "policy_title", "source_type", "target", "controls", "evidence"]}
             pageSize={10}
+            resultLimit={POLICY_LIFECYCLE_LIMIT}
+            resultNoun="mappings"
             getRowKey={(item, index) => `${item.source_urn}:${item.target.urn}:${index}`}
             action={<ShieldCheck className="h-4 w-4 text-slate-400" aria-hidden="true" />}
           />
@@ -1297,9 +1320,11 @@ export default function PoliciesPage() {
             rows={data.events ?? []}
             columns={eventColumns}
             emptyMessage="No lifecycle events are available."
-            searchPlaceholder="Search events"
+            searchPlaceholder="Filter loaded events"
             filterKeys={["id", "policy_id", "record_type", "event_kind", "action", "status", "actor", "reason", "occurred_at"]}
             pageSize={10}
+            resultLimit={POLICY_LIFECYCLE_LIMIT}
+            resultNoun="events"
             getRowKey={(item) => item.id}
             action={<History className="h-4 w-4 text-slate-400" aria-hidden="true" />}
           />

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import {
   displayDate,
@@ -15,10 +15,12 @@ import {
   GRCControlPacketFinding,
 } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
+import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 const DEFAULT_CONTROL_PROFILE_ID = "soc2-security-core";
+const CONTROL_DETAIL_LIMIT = GRC_WORKLIST_LIMIT;
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
 
@@ -48,13 +50,13 @@ export default function ControlDetailPage() {
   const [exportLoading, setExportLoading] = useState(false);
   const selectedProfileID = profileID.trim() || DEFAULT_CONTROL_PROFILE_ID;
   const queryPath = controlID.trim()
-    ? grcPath("/grc/control-packets/detail", { tenant_id: tenantID, profile: selectedProfileID, framework, control: controlID, limit: 200 })
+    ? grcPath("/grc/control-packets/detail", { tenant_id: tenantID, profile: selectedProfileID, framework, control: controlID, limit: CONTROL_DETAIL_LIMIT })
     : null;
   const { data, error, loading, reload } = useGRCQuery<GRCControlEvidencePacketResponse>(queryPath);
   const control = data?.packet.controls[0];
   const runtimeState: RuntimeState = error ? runtimeStateForError(error) : loading && !data ? "loading" : "ready";
   const markdownPath = useMemo(
-    () => grcPath("/grc/control-packets/export", { tenant_id: tenantID, profile: selectedProfileID, framework, control: controlID, format: "markdown", limit: 200 }),
+    () => grcPath("/grc/control-packets/export", { tenant_id: tenantID, profile: selectedProfileID, framework, control: controlID, format: "markdown", limit: CONTROL_DETAIL_LIMIT }),
     [controlID, framework, selectedProfileID, tenantID],
   );
   const downloadMarkdown = async () => {
@@ -123,6 +125,18 @@ export default function ControlDetailPage() {
           </div>
 
           <Panel title={controlLabel(control)}>
+            <ResultLimitNotice
+              loaded={data.packet.controls.length}
+              limit={CONTROL_DETAIL_LIMIT}
+              meta={{
+                limit: CONTROL_DETAIL_LIMIT,
+                returned: data.packet.controls.length,
+                total: data.packet.summary.total,
+                truncated: data.packet.summary.total > data.packet.controls.length,
+              }}
+              noun="controls"
+              className="mb-5"
+            />
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
               <div>
                 <div className="flex flex-wrap items-center gap-2">

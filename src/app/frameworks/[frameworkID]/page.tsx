@@ -5,16 +5,20 @@ import { useParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import TrendsChart from "@/components/grc/LazyTrendsChart";
 import { useApiKey } from "@/components/providers";
-import type { GRCControl, GRCControlEvidencePacketResponse, GRCFinding, GRCFramework, GRCFrameworksResponse, GRCTrends } from "@/lib/grc";
+import type { GRCControl, GRCControlEvidencePacketResponse, GRCFinding, GRCFramework, GRCFrameworksResponse, GRCListMeta, GRCTrends } from "@/lib/grc";
 import { displayDate, humanize, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { frameworkMatchesRouteSegment, frameworkRouteSegment, isUpcomingGRCFramework, staticGRCFrameworkCatalog } from "@/lib/grc-frameworks";
+import { GRC_DETAIL_LIMIT, GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import { hasTrendActivity } from "@/lib/trends";
 
-type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
+type FindingsResponse = { findings: GRCFinding[]; meta?: GRCListMeta; generated_at: string };
+
+const FRAMEWORK_CONTROL_LIMIT = GRC_WORKLIST_LIMIT;
+const FRAMEWORK_FINDING_LIMIT = GRC_DETAIL_LIMIT;
 
 const readinessTotal = (framework?: GRCFramework) =>
   (framework?.readiness?.auditor_ready_controls ?? 0) +
@@ -153,8 +157,8 @@ export default function FrameworkDetailPage() {
   );
   const displayName = framework?.name || frameworkNameFromSegment(routeSegment);
   const isUpcoming = framework?.lifecycle === "upcoming" || isUpcomingGRCFramework(displayName);
-  const packetQuery = useGRCQuery<GRCControlEvidencePacketResponse>(framework && !isUpcoming ? grcPath("/grc/control-packets", { framework: framework.name, limit: 200 }) : null);
-  const findingsQuery = useGRCQuery<FindingsResponse>(framework && !isUpcoming ? grcPath("/grc/findings", { framework: framework.name, status: "open", limit: 100 }) : null);
+  const packetQuery = useGRCQuery<GRCControlEvidencePacketResponse>(framework && !isUpcoming ? grcPath("/grc/control-packets", { framework: framework.name, limit: FRAMEWORK_CONTROL_LIMIT }) : null);
+  const findingsQuery = useGRCQuery<FindingsResponse>(framework && !isUpcoming ? grcPath("/grc/findings", { framework: framework.name, status: "open", limit: FRAMEWORK_FINDING_LIMIT }) : null);
   const trendsQuery = useGRCQuery<GRCTrends>(framework && !isUpcoming ? grcPath("/grc/trends", { framework: framework.name, interval: "week", days: 90 }) : null);
   const { apiKey } = useApiKey();
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
@@ -256,6 +260,20 @@ export default function FrameworkDetailPage() {
             <Panel title="Controls and readiness">
               {packetQuery.error && <ErrorBlock error={packetQuery.error} onRetry={packetQuery.reload} />}
               {packetQuery.loading && !packetQuery.data && <LoadingBlock label="Loading controls..." />}
+              {!packetQuery.error && packetQuery.data && (
+                <ResultLimitNotice
+                  loaded={controls.length}
+                  limit={FRAMEWORK_CONTROL_LIMIT}
+                  meta={{
+                    limit: FRAMEWORK_CONTROL_LIMIT,
+                    returned: controls.length,
+                    total: packetQuery.data.packet.summary.total,
+                    truncated: packetQuery.data.packet.summary.total > controls.length,
+                  }}
+                  noun="controls"
+                  className="mb-3"
+                />
+              )}
               {!packetQuery.error && <ControlRows controls={controls} framework={framework.name} />}
             </Panel>
           )}
@@ -264,8 +282,17 @@ export default function FrameworkDetailPage() {
             <Panel title="Open framework findings">
               {findingsQuery.error && <ErrorBlock error={findingsQuery.error} onRetry={findingsQuery.reload} />}
               {findingsQuery.loading && !findingsQuery.data && <LoadingBlock label="Loading findings..." />}
+              {!findingsQuery.error && findingsQuery.data && (
+                <ResultLimitNotice
+                  loaded={findings.length}
+                  limit={FRAMEWORK_FINDING_LIMIT}
+                  meta={findingsQuery.data.meta}
+                  noun="findings"
+                  className="mb-3"
+                />
+              )}
               {!findingsQuery.error && findings.length === 0 && <div className="rounded-lg border border-dashed border-[color:var(--border-strong)] p-8 text-center text-[13px] text-[var(--text-muted)]">No open findings are currently mapped to this framework.</div>}
-              {findings.length > 0 && <FindingTable findings={findings.slice(0, 8)} />}
+              {findings.length > 0 && <FindingTable findings={findings} />}
             </Panel>
           )}
         </>

@@ -208,6 +208,14 @@ const edgeBucketsByNode = (edges: GraphEdgeModel[]) => {
   return buckets;
 };
 
+const fitGraphViewport = (instance: cytoscape.Core) => {
+  try {
+    if (!instance.destroyed()) instance.fit(undefined, 42);
+  } catch {
+    // Cytoscape can briefly lack a renderer during route transitions or headless tests.
+  }
+};
+
 const cytoscapeColors = () => {
   const root = document.documentElement;
   const css = getComputedStyle(root);
@@ -585,7 +593,7 @@ export default function GraphViewer({
         options.roots = instance.getElementById(model.root.urn);
       }
       instance.layout(options as unknown as cytoscape.LayoutOptions).run();
-      window.requestAnimationFrame(() => instance.fit(undefined, 42));
+      window.requestAnimationFrame(() => fitGraphViewport(instance));
     }
   }, [graphSignature, layoutMode, model.root?.urn, styledElements]);
 
@@ -606,7 +614,9 @@ export default function GraphViewer({
     );
   }
 
-  const fitGraph = () => cyRef.current?.fit(undefined, 42);
+  const fitGraph = () => {
+    if (cyRef.current) fitGraphViewport(cyRef.current);
+  };
 
   return (
     <div className="surface-panel overflow-hidden">
