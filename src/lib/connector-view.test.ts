@@ -6,9 +6,9 @@ import {
   connectorCapabilities,
   connectorCapabilityLabel,
   connectorPath,
-  connectorProjectedGraphItems,
-  connectorProjectionStats,
   connectorProjectionTemplate,
+  connectorResourceTypes,
+  connectorResourceTypeStats,
   connectorResourceFamilyEventKind,
   connectorResourceFamilySchemaRef,
   connectorPrimaryAction,
@@ -131,7 +131,7 @@ describe("connector view model", () => {
     }, 2)).toEqual(["Endpoint devices", "Findings"]);
   });
 
-  it("normalizes projected graph metadata from generated resource families", () => {
+  it("normalizes resource type metadata from generated catalog definitions", () => {
     const family = {
       id: "users",
       label: "Users",
@@ -145,7 +145,7 @@ describe("connector view model", () => {
     expect(connectorResourceFamilySchemaRef(family)).toBe("okta/users/v1");
   });
 
-  it("summarizes projected graph items without duplicate labels", () => {
+  it("summarizes resource types without duplicate labels", () => {
     const card = {
       source_id: "okta",
       name: "Okta",
@@ -157,15 +157,15 @@ describe("connector view model", () => {
       ],
     };
 
-    expect(connectorProjectedGraphItems(card)).toEqual([
-      { template: "identity_user", label: "Users", families: 2 },
-      { template: "identity_group", label: "Groups", families: 1 },
+    expect(connectorResourceTypes(card)).toEqual([
+      { template: "identity_user", label: "Users", resourceFamilies: 2 },
+      { template: "identity_group", label: "Groups", resourceFamilies: 1 },
     ]);
-    expect(connectorProjectionStats(card)).toEqual({
-      resourceFamilies: 4,
-      projectedFamilies: 3,
-      projectionTemplates: 3,
-      highValueFamilies: 2,
+    expect(connectorResourceTypeStats(card)).toEqual({
+      catalogResourceTypes: 4,
+      resourceTypes: 3,
+      distinctResourceTypes: 3,
+      highValueResourceTypes: 2,
       coverageItems: 3,
     });
   });

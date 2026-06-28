@@ -21,7 +21,7 @@ import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel } from "
 import { useApiKey } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { withQuery } from "@/lib/cerebro-data";
-import { connectorPath, connectorProjectedGraphItems, connectorProjectionStats } from "@/lib/connector-view";
+import { connectorPath, connectorResourceTypes, connectorResourceTypeStats } from "@/lib/connector-view";
 import {
   ConnectorCatalogEntry,
   ConnectorConnectedContext,
@@ -50,7 +50,7 @@ import {
 } from "@/lib/connectors";
 import { useGRCQuery } from "@/lib/grc-client";
 
-const entityLabels: Record<string, string> = {
+const resourceTypeLabels: Record<string, string> = {
   identity_user: "User identities",
   identity_group: "Groups",
   group_membership: "Group memberships",
@@ -125,9 +125,9 @@ function gateLabel(id: string) {
   return gateLabels[id] ?? humanize(id);
 }
 
-function entityLabel(family: ConnectorDefinitionResourceFamily) {
+function resourceTypeLabel(family: ConnectorDefinitionResourceFamily) {
   const template = family.projection?.template;
-  if (template && entityLabels[template]) return entityLabels[template];
+  if (template && resourceTypeLabels[template]) return resourceTypeLabels[template];
   return family.label || humanize(family.id);
 }
 
@@ -135,7 +135,7 @@ function isMapped(family: ConnectorDefinitionResourceFamily) {
   return Boolean(family.projection?.template);
 }
 
-function distinctEntityTypes(families: ConnectorDefinitionResourceFamily[]) {
+function distinctResourceTypes(families: ConnectorDefinitionResourceFamily[]) {
   return new Set(families.map((family) => family.projection?.template).filter(Boolean) as string[]);
 }
 
@@ -213,7 +213,7 @@ function SafetyRow({ ok, title, detail }: { ok?: boolean; title: string; detail:
 function ReadinessHero({ definition }: { definition?: ConnectorDefinition }) {
   const tone = readinessTone(definition);
   const families = definition?.resource_families ?? [];
-  const dataTypes = distinctEntityTypes(families).size || families.length;
+  const resourceTypeCount = distinctResourceTypes(families).size || families.length;
   const blocking = definition ? connectorDefinitionBlockingChecks(definition) : 0;
   return (
     <section className={`surface-panel overflow-hidden border-l-[4px] p-0 ${toneBorder(tone)}`}>
@@ -249,7 +249,7 @@ function ReadinessHero({ definition }: { definition?: ConnectorDefinition }) {
         <div className="border-t border-[color:var(--border)] bg-[var(--surface-muted)] p-5 lg:border-l lg:border-t-0">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Trust snapshot</div>
           <div className="mt-3 space-y-3">
-            <KeyStat label="Data types collected" value={definition ? dataTypes : "-"} />
+            <KeyStat label="Resource types collected" value={definition ? resourceTypeCount : "-"} />
             <KeyStat label="Access" value="Read-only" />
             <KeyStat label="Items to resolve" value={definition ? blocking : "-"} />
           </div>
@@ -317,15 +317,15 @@ function TrustLadder({ definition }: { definition?: ConnectorDefinition }) {
 
 function DataCoveragePanel({ definition }: { definition?: ConnectorDefinition }) {
   const families = definition?.resource_families ?? [];
-  const typeCount = distinctEntityTypes(families).size || families.length;
+  const typeCount = distinctResourceTypes(families).size || families.length;
   return (
     <Panel title="What this source collects" action={<Database className="h-4 w-4 text-[var(--primary)]" />}>
       {families.length === 0 ? (
-        <EmptyBlock label={definition ? "No data sets are defined for this source yet." : "Choose a source to see what it collects."} />
+        <EmptyBlock label={definition ? "No resource types are defined for this source yet." : "Choose a source to see what it collects."} />
       ) : (
         <>
           <p className="text-[13px] leading-6 text-[var(--text-muted)]">
-            Collects {typeCount} kind{typeCount === 1 ? "" : "s"} of data across {families.length} endpoint{families.length === 1 ? "" : "s"}, added to
+            Collects {typeCount} resource type{typeCount === 1 ? "" : "s"} across {families.length} endpoint{families.length === 1 ? "" : "s"}, added to
             your security graph for findings, evidence, and audit.
           </p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -338,8 +338,8 @@ function DataCoveragePanel({ definition }: { definition?: ConnectorDefinition })
                   <Badge value={family.default_enabled === false ? "Optional" : "On"} />
                 </div>
                 <div className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
-                  Appears as {entityLabel(family)}
-                  {isMapped(family) ? "." : " (stored, not yet mapped to graph entities)."}
+                  Appears as {resourceTypeLabel(family)}
+                  {isMapped(family) ? "." : " (stored, not yet mapped to resource types)."}
                 </div>
                 {family.coverage && family.coverage.length > 0 && (
                   <div className="mt-3 border-t border-[color:var(--border)] pt-2">
@@ -446,7 +446,7 @@ function RuntimeActivationPlanPanel({ plan }: { plan?: SourceCDKPromotionPlan })
         <div className="space-y-3">
           <p className="text-[13px] leading-6 text-[var(--text-muted)]">{plan.summary}</p>
           <div className="grid gap-2 md:grid-cols-3">
-            <KeyStat label="Runtime families" value={plan.metrics?.resource_families ?? 0} />
+            <KeyStat label="Runtime resource types" value={plan.metrics?.resource_families ?? 0} />
             <KeyStat label="Scope options" value={plan.metrics?.scope_options ?? 0} />
             <KeyStat label="Blocking checks" value={plan.metrics?.blocked_checks ?? blockers.length} />
           </div>
@@ -559,7 +559,7 @@ function SourcesQueue({
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{definition.display_name}</div>
                   <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                    {familyCount} data set{familyCount === 1 ? "" : "s"}
+                    {familyCount} resource type{familyCount === 1 ? "" : "s"}
                   </div>
                 </div>
                 <Badge value={stageLabel(definition.stage)} />
@@ -578,20 +578,20 @@ function CatalogSourcesPanel({ connectors, tenantID }: { connectors: ConnectorCa
   const rows = connectors
     .map((connector) => ({
       connector,
-      graphItems: connectorProjectedGraphItems(connector, 3),
-      stats: connectorProjectionStats(connector),
+      resourceTypes: connectorResourceTypes(connector, 3),
+      stats: connectorResourceTypeStats(connector),
     }))
-    .filter((row) => row.stats.resourceFamilies > 0 || row.stats.projectedFamilies > 0)
+    .filter((row) => row.stats.catalogResourceTypes > 0 || row.stats.resourceTypes > 0)
     .sort((left, right) =>
-      right.stats.projectedFamilies - left.stats.projectedFamilies ||
+      right.stats.resourceTypes - left.stats.resourceTypes ||
       connectorDisplayName(left.connector).localeCompare(connectorDisplayName(right.connector)),
     );
-  const projectedCount = rows.filter((row) => row.stats.projectedFamilies > 0).length;
+  const resourceTypeSourceCount = rows.filter((row) => row.stats.resourceTypes > 0).length;
 
   return (
-    <Panel title="Catalog sources" action={<Badge value={`${projectedCount} projected`} />}>
+    <Panel title="Catalog sources" action={<Badge value={`${resourceTypeSourceCount} with resource types`} />}>
       <div className="space-y-2">
-        {rows.slice(0, 8).map(({ connector, graphItems, stats }) => {
+        {rows.slice(0, 8).map(({ connector, resourceTypes, stats }) => {
           const setupAllowed = connectorSetupAllowed(connector);
           const href = connectorPath(connector.source_id, { tenant_id: tenantID, tab: setupAllowed ? "setup" : undefined });
           return (
@@ -600,17 +600,17 @@ function CatalogSourcesPanel({ connectors, tenantID }: { connectors: ConnectorCa
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{connectorDisplayName(connector)}</div>
                   <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                    {stats.projectedFamilies}/{Math.max(stats.resourceFamilies, stats.projectedFamilies)} projected families
+                    {stats.resourceTypes}/{Math.max(stats.catalogResourceTypes, stats.resourceTypes)} resource types
                   </div>
                 </div>
                 <Badge value={connectorRuntimeSurfaceLabel(connector)} />
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {graphItems.length > 0 ? graphItems.map((item) => (
+                {resourceTypes.length > 0 ? resourceTypes.map((item) => (
                   <span key={item.template} title={item.template} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
                     {item.label}
                   </span>
-                )) : <span className="text-[11px] text-[var(--text-muted)]">No graph template</span>}
+                )) : <span className="text-[11px] text-[var(--text-muted)]">No resource type mapping</span>}
               </div>
             </Link>
           );
@@ -620,7 +620,7 @@ function CatalogSourcesPanel({ connectors, tenantID }: { connectors: ConnectorCa
             Open {rows.length - 8} more
           </Link>
         )}
-        {rows.length === 0 && <EmptyBlock label="No catalog sources advertise graph families yet." />}
+        {rows.length === 0 && <EmptyBlock label="No catalog sources advertise resource types yet." />}
       </div>
     </Panel>
   );
