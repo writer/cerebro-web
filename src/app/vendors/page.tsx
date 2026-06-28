@@ -1086,6 +1086,7 @@ export default function VendorsPage() {
     await vendorsQuery.reload();
   }, [decisionDrafts, discoveriesQuery, mutateDiscoveryDecision, tenantID, vendorsQuery]);
   const createVendorFromDiscovery = useCallback(async (discovery: GRCVendorDiscovery) => {
+    setCreateMessage("");
     const response = await mutateCreateVendor("/grc/vendors", {
       tenant_id: tenantID.trim() || undefined,
       name: discovery.name || shortEntity(discovery.urn),
