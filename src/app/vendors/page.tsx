@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw, SearchCheck } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
@@ -10,6 +11,8 @@ import {
   GRCVendor,
   GRCVendorDiscoveriesResponse,
   GRCVendorDiscovery,
+  GRCVendorDiscoverySignal,
+  GRCVendorDiscoverySourceSummary,
   GRCVendorsResponse,
   humanize,
   shortEntity,
@@ -154,6 +157,125 @@ function DiscoveryStateBadge({ state }: { state?: string }) {
   return <span className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tone}`}>{humanize(normalized)}</span>;
 }
 
+const confidenceLabel = (score?: number) =>
+  typeof score === "number" && Number.isFinite(score) ? `${Math.round(score)}%` : "No score";
+
+const discoverySourceIDs = (discovery: GRCVendorDiscovery) =>
+  Array.from(new Set([
+    discovery.source_id,
+    ...(discovery.source_ids ?? []),
+    ...(discovery.signals ?? []).map((signal) => signal.source_id),
+  ].filter((value): value is string => Boolean(value))));
+
+const discoverySourceLabel = (source: Pick<GRCVendorDiscoverySourceSummary, "provider" | "source_id">) =>
+  source.provider || humanize(source.source_id);
+
+function DiscoverySignals({ signals }: { signals?: GRCVendorDiscoverySignal[] }) {
+  const visibleSignals = signals?.slice(0, 3) ?? [];
+  if (visibleSignals.length === 0) {
+    return <span className="text-[var(--text-muted)]">No source signals</span>;
+  }
+  return (
+    <div className="space-y-2">
+      {visibleSignals.map((signal) => (
+        <div key={signal.id} className="text-[12px]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-semibold text-[var(--text-primary)]">{signal.label}</span>
+            {signal.source_id && <Badge value={signal.source_id} />}
+            {typeof signal.confidence_score === "number" && (
+              <span className="text-[var(--text-muted)]">{confidenceLabel(signal.confidence_score)}</span>
+            )}
+          </div>
+          <div className="mt-1 text-[var(--text-muted)]">
+            {signal.reason || humanize(signal.entity_type)}
+          </div>
+          {signal.entity_urn && <div className="mt-1 font-mono text-[var(--text-muted)]">{shortEntity(signal.entity_urn)}</div>}
+        </div>
+      ))}
+      {(signals?.length ?? 0) > visibleSignals.length && (
+        <div className="text-[12px] text-[var(--text-muted)]">
+          +{(signals?.length ?? 0) - visibleSignals.length} more signals
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiscoverySourceSummary({
+  loading,
+  onRefresh,
+  onSelectSource,
+  selectedSourceID,
+  sources,
+  summary,
+}: {
+  loading: boolean;
+  onRefresh: () => void;
+  onSelectSource: (sourceID: string) => void;
+  selectedSourceID: string;
+  sources: GRCVendorDiscoverySourceSummary[];
+  summary?: GRCVendorDiscoveriesResponse["summary"];
+}) {
+  const total = summary?.total_discoveries ?? 0;
+  const pending = summary?.discovered ?? 0;
+  const linked = summary?.linked ?? 0;
+  const sourceCount = summary?.source_count ?? sources.length;
+  const signals = summary?.evidence_signals ?? sources.reduce((sum, source) => sum + source.total, 0);
+  return (
+    <section className="surface-panel px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)]">
+            <SearchCheck className="h-4 w-4" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Automatic discovery</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">
+              {loading ? "Loading source candidates." : `${countLabel(total, "candidate")} from ${countLabel(sourceCount, "source")}. ${countLabel(pending, "candidate")} need a decision, ${linked} linked, ${countLabel(signals, "source signal")}.`}
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={onRefresh} disabled={loading} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px] disabled:opacity-50">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+          Refresh
+        </button>
+      </div>
+      {sources.length > 0 && (
+        <div className="mt-4 divide-y divide-[color:var(--border)] border-y border-[color:var(--border)]">
+          {sources.map((source) => {
+            const selected = selectedSourceID === source.source_id;
+            return (
+              <button
+                key={source.source_id}
+                type="button"
+                onClick={() => onSelectSource(selected ? "" : source.source_id)}
+                className={`grid w-full gap-2 px-0 py-3 text-left transition md:grid-cols-[minmax(0,1.2fr)_110px_110px_minmax(0,1fr)] ${selected ? "text-[var(--primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+              >
+                <div className="min-w-0">
+                  <div className="font-semibold">{discoverySourceLabel(source)}</div>
+                  <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-muted)]">{source.runtime_id || source.source_id}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</div>
+                  <div className="mt-1"><Badge value={source.status || "unknown"} /></div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Candidates</div>
+                  <div className="mt-1 text-[13px] font-semibold">{source.total}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Last sync</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDate(source.last_synced_at)}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const selectLabel = (options: Array<{ value: string; label: string }>, value: string) =>
   options.find((item) => item.value === value)?.label ?? value;
 
@@ -202,12 +324,28 @@ export default function VendorsPage() {
   const vendors = useMemo(() => vendorsQuery.data?.vendors ?? [], [vendorsQuery.data?.vendors]);
   const summary = vendorsQuery.data?.summary;
   const discoveries = useMemo(() => discoveriesQuery.data?.discoveries ?? [], [discoveriesQuery.data?.discoveries]);
+  const discoverySummary = discoveriesQuery.data?.summary;
+  const discoverySources = useMemo(() => discoveriesQuery.data?.source_summaries ?? [], [discoveriesQuery.data?.source_summaries]);
   const error = vendorsQuery.error;
   const discoveryError = discoveriesQuery.error;
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : vendorsQuery.loading && !vendorsQuery.data ? "loading" : "ready";
   const riskWithOwnerGaps = useMemo(() => vendors.filter((vendor) => vendor.owner_state === "missing" && ["critical", "high"].includes(vendor.risk_level)).length, [vendors]);
   const assuranceItems = useMemo(() => vendors.reduce((sum, vendor) => sum + vendor.contract_count + vendor.security_review_count + vendor.questionnaire_count + vendor.assurance_document_count, 0), [vendors]);
+  const sourceFilterOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    discoverySources.forEach((source) => options.set(source.source_id, discoverySourceLabel(source)));
+    discoveries.forEach((discovery) => {
+      discoverySourceIDs(discovery).forEach((id) => options.set(id, options.get(id) ?? humanize(id)));
+    });
+    vendors.forEach((vendor) => {
+      if (vendor.source_id) options.set(vendor.source_id, options.get(vendor.source_id) ?? sourceLabel(vendor));
+    });
+    if (sourceID.trim() && !options.has(sourceID.trim())) {
+      options.set(sourceID.trim(), humanize(sourceID.trim()));
+    }
+    return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) => left.label.localeCompare(right.label));
+  }, [discoveries, discoverySources, sourceID, vendors]);
   const updateDecisionDraft = useCallback((urn: string, patch: Partial<DiscoveryDecisionDraft>) => {
     setDecisionDrafts((current) => ({
       ...current,
@@ -244,7 +382,7 @@ export default function VendorsPage() {
     { label: "Owner", value: ownerState ? selectLabel(ownerFilters, ownerState) : "", onClear: () => setOwnerState("") },
     { label: "Lifecycle", value: lifecycleState ? selectLabel(lifecycleFilters, lifecycleState) : "", onClear: () => setLifecycleState("") },
     { label: "Queue", value: queueState ? selectLabel(queueFilters, queueState) : "", onClear: () => setQueueState("") },
-    { label: "Source", value: sourceID, onClear: () => setSourceID("") },
+    { label: "Source", value: sourceID ? sourceFilterOptions.find((item) => item.value === sourceID)?.label ?? sourceID : "", onClear: () => setSourceID("") },
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
   ];
   const clearFilters = () => {
@@ -262,9 +400,10 @@ export default function VendorsPage() {
     <main className="space-y-6">
       <PageHeader
         title="Vendors"
-        description="Review vendors, owners, lifecycle state, evidence freshness, discovery decisions, and open risk."
+        description="Review vendors, owners, lifecycle state, evidence freshness, source discoveries, and open risk."
         action={
-          <button type="button" onClick={() => { void vendorsQuery.reload(); void discoveriesQuery.reload(); }} className="primary-button px-3 py-1.5 text-[13px]">
+          <button type="button" onClick={() => { void vendorsQuery.reload(); void discoveriesQuery.reload(); }} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             Refresh
           </button>
         }
@@ -336,7 +475,10 @@ export default function VendorsPage() {
           </label>
           <label className={labelClass}>
             Source
-            <input value={sourceID} onChange={(event) => setSourceID(event.target.value)} placeholder="All" className={inputClass} />
+            <select value={sourceID} onChange={(event) => setSourceID(event.target.value)} className={inputClass}>
+              <option value="">All sources</option>
+              {sourceFilterOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
           </label>
           <label className={labelClass}>
             Tenant
@@ -346,6 +488,15 @@ export default function VendorsPage() {
         <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </section>
 
+      <DiscoverySourceSummary
+        loading={discoveriesQuery.loading && !discoveriesQuery.data}
+        onRefresh={() => { void discoveriesQuery.reload(); }}
+        onSelectSource={setSourceID}
+        selectedSourceID={sourceID}
+        sources={discoverySources}
+        summary={discoverySummary}
+      />
+
       {discoveriesQuery.loading && !discoveriesQuery.data ? (
         <LoadingBlock label="Loading vendor discoveries..." />
       ) : (
@@ -353,11 +504,10 @@ export default function VendorsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
             <div>
               <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Discovery queue</h2>
-              <p className="mt-1 text-[12px] text-[var(--text-muted)]">{countLabel(discoveries.length, "candidate")} in this view.</p>
+              <p className="mt-1 text-[12px] text-[var(--text-muted)]">
+                {countLabel(discoveries.length, "candidate")} in this view. {countLabel(discoveries.reduce((sum, discovery) => sum + (discovery.signals?.length ?? 0), 0), "source signal")}.
+              </p>
             </div>
-            <button type="button" onClick={() => { void discoveriesQuery.reload(); }} className="secondary-button px-3 py-1.5 text-[13px]">
-              Refresh discoveries
-            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -365,8 +515,7 @@ export default function VendorsPage() {
                 <tr>
                   <th>Candidate</th>
                   <th>Decision</th>
-                  <th>Source status</th>
-                  <th>Category</th>
+                  <th>Evidence</th>
                   <th>Source</th>
                   <th>Linked vendor</th>
                   <th>Decision input</th>
@@ -380,16 +529,36 @@ export default function VendorsPage() {
                   return (
                     <tr key={discovery.urn}>
                       <td className="min-w-[16rem]">
-                        <div className="font-semibold text-[var(--text-primary)]">{discovery.name || shortEntity(discovery.urn)}</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-semibold text-[var(--text-primary)]">{discovery.name || shortEntity(discovery.urn)}</div>
+                          {typeof discovery.confidence_score === "number" && (
+                            <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-secondary)]">
+                              {confidenceLabel(discovery.confidence_score)}
+                            </span>
+                          )}
+                        </div>
                         <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.normalized_name || discovery.discovery_id || shortEntity(discovery.urn)}</div>
+                        {discovery.discovery_reason && <div className="mt-1 max-w-[24rem] text-[12px] leading-5 text-[var(--text-secondary)]">{discovery.discovery_reason}</div>}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {discovery.category && <Badge value={discovery.category} />}
+                          <Badge value={discovery.source_status || "discovered"} />
+                        </div>
                         {discovery.decision_reason && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.decision_reason}</div>}
                       </td>
                       <td><DiscoveryStateBadge state={discovery.decision_state} /></td>
-                      <td><Badge value={discovery.source_status || "discovered"} /></td>
-                      <td className="text-[12px] text-[var(--text-secondary)]">{discovery.category ? humanize(discovery.category) : "Not set"}</td>
-                      <td className="text-[12px] text-[var(--text-muted)]">
-                        <div>{discovery.provider || discovery.source_id || "Source not set"}</div>
+                      <td className="min-w-[18rem] text-[12px] text-[var(--text-secondary)]">
+                        <DiscoverySignals signals={discovery.signals} />
+                      </td>
+                      <td className="min-w-[12rem] text-[12px] text-[var(--text-muted)]">
+                        <div className="font-semibold text-[var(--text-primary)]">{discovery.provider || discovery.source_id || "Source not set"}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {discoverySourceIDs(discovery).map((id) => <Badge key={id} value={id} />)}
+                        </div>
                         <div className="mt-1 font-mono">{shortEntity(discovery.runtime_id)}</div>
+                        <div className="mt-2 text-[var(--text-muted)]">
+                          <div>First seen {displayDate(discovery.first_observed_at)}</div>
+                          <div>Last seen {displayDate(discovery.last_observed_at)}</div>
+                        </div>
                       </td>
                       <td className="text-[12px]">
                         {discovery.linked_vendor_urn ? (

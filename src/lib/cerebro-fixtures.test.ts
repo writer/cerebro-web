@@ -85,6 +85,49 @@ describe("cerebro fixture proxy responses", () => {
     });
   });
 
+  it("returns source-backed vendor discovery fixtures", () => {
+    withFixtureMode();
+    const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/vendor-discoveries" });
+    expect(response?.status).toBe(200);
+    expect(parseFixture(response!)).toMatchObject({
+      summary: { total_discoveries: 3, discovered: 2, linked: 1, source_count: 3, evidence_signals: 5 },
+      source_summaries: expect.arrayContaining([
+        expect.objectContaining({ source_id: "okta", provider: "Okta", total: 1, discovered: 1 }),
+        expect.objectContaining({ source_id: "github", provider: "GitHub", total: 2 }),
+        expect.objectContaining({ source_id: "aws", provider: "AWS", total: 1, linked: 1 }),
+      ]),
+      discoveries: expect.arrayContaining([
+        expect.objectContaining({
+          name: "Design Suite",
+          source_id: "okta",
+          confidence_score: 92,
+          signals: expect.arrayContaining([
+            expect.objectContaining({ source_id: "okta", label: "Okta application assignment" }),
+          ]),
+        }),
+      ]),
+    });
+
+    const oktaFiltered = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/vendor-discoveries",
+      searchParams: new URLSearchParams("source_id=okta"),
+    });
+    expect(parseFixture(oktaFiltered!)).toMatchObject({
+      summary: { total_discoveries: 1, source_count: 1 },
+      discoveries: [expect.objectContaining({ source_id: "okta" })],
+    });
+
+    const signalSearch = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/vendor-discoveries",
+      searchParams: new URLSearchParams("q=marketplace"),
+    });
+    expect(parseFixture(signalSearch!)).toMatchObject({
+      discoveries: [expect.objectContaining({ name: "Data Warehouse" })],
+    });
+  });
+
   it("returns policy lifecycle records in fixture mode", () => {
     withFixtureMode();
     const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle" });
