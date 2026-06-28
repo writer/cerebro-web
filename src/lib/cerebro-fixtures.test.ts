@@ -170,13 +170,30 @@ describe("cerebro fixture proxy responses", () => {
     const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle" });
     const payload = parseFixture(response!);
     expect(response?.status).toBe(200);
-    expect(payload.summary).toMatchObject({ policies: 4, pending_approvals: 2, lifecycle_events: 7, governance_gaps: 5 });
+    expect(payload.summary).toMatchObject({
+      policies: 4,
+      pending_approvals: 2,
+      lifecycle_events: 7,
+      governance_gaps: 5,
+      open_governance_gaps: 3,
+      in_progress_governance_gaps: 1,
+      acknowledged_governance_gaps: 1,
+    });
     expect(payload.templates).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "tpl-access-control" }),
     ]));
     expect(payload.governance_gaps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ subject: "document", subject_id: "retention-standard", reason: "Missing owner" }),
-      expect.objectContaining({ subject: "risk", subject_id: "risk-incident-escalation", reason: "No evidence" }),
+      expect.objectContaining({ subject: "document", subject_id: "retention-standard", reason: "Missing owner", gap_state: "acknowledged", rule_id: "document.owner" }),
+      expect.objectContaining({ subject: "risk", subject_id: "risk-incident-escalation", reason: "No evidence", gap_state: "in_progress", action_id: "governance_gap.attach_evidence" }),
+    ]));
+    expect(payload.governance_rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "document.owner", action_id: "governance_gap.assign_owner" }),
+    ]));
+    expect(payload.governance_gap_rollups.by_state).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "open", count: 3 }),
+    ]));
+    expect(payload.available_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "governance_gap.attach_evidence", value_field: "evidence_urns" }),
     ]));
     expect(payload.work_queue).toEqual(expect.arrayContaining([
       expect.objectContaining({ action: "Approve version" }),
