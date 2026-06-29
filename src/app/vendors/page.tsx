@@ -683,7 +683,7 @@ function CreateVendorModal({
               <input
                 value={draft.websiteURL}
                 onChange={(event) => onUpdateDraft({ websiteURL: event.target.value })}
-                placeholder="https://www.example.com/vendor"
+                placeholder="Enter vendor website"
                 className={`${inputClass} ${websiteInvalid ? "border-red-400" : ""}`}
                 aria-invalid={websiteInvalid}
               />
@@ -808,7 +808,7 @@ function VendorHealthStrip({
     <section className="surface-panel grid overflow-hidden sm:grid-cols-2 xl:grid-cols-4">
       <HealthStat label="Vendors" value={vendorCount} detail={`${activeCount.toLocaleString()} active`} state={vendorMetricState} intent="success" />
       <HealthStat label="Needs review" value={reviewValue} detail={reviewDetailCopy} state={discoveryMetricState} intent={needsReview > 0 ? "warning" : "success"} pendingDetail="Waiting for discovery data" />
-      <HealthStat label="Missing owner" value={missingOwner} detail="vendors without an owner" state={vendorMetricState} intent={missingOwner > 0 ? "warning" : "success"} />
+      <HealthStat label="Missing owner" value={missingOwner} detail={missingOwner === 1 ? "vendor without an owner" : "vendors without an owner"} state={vendorMetricState} intent={missingOwner > 0 ? "warning" : "success"} />
       <HealthStat label="High risk" value={highRisk} detail="critical or high vendors" state={vendorMetricState} intent={highRisk > 0 ? "danger" : "success"} />
     </section>
   );
@@ -946,7 +946,7 @@ function SuggestedVendorInputs({
       <input
         value={draft.linkedVendorURN}
         onChange={(event) => onUpdateDraft(discovery.urn, { linkedVendorURN: event.target.value })}
-        placeholder="Vendor URN"
+        placeholder="Search or paste vendor ID"
         className="control-input px-2 py-1 font-mono text-[12px]"
       />
       <input
@@ -1133,11 +1133,11 @@ function DiscoveryQueue({
             </label>
             <label className={`${labelClass} min-w-[14rem] flex-1`}>
               Link selected to vendor
-              <input value={bulkDraft.linkedVendorURN} onChange={(event) => onBulkDraftChange({ linkedVendorURN: event.target.value })} placeholder="Vendor URN" className={`${inputClass} font-mono`} />
+              <input value={bulkDraft.linkedVendorURN} onChange={(event) => onBulkDraftChange({ linkedVendorURN: event.target.value })} placeholder="Search or paste vendor ID" className={`${inputClass} font-mono`} />
             </label>
             <label className={`${labelClass} min-w-[12rem] flex-1`}>
               Decision note
-              <input value={bulkDraft.reason} onChange={(event) => onBulkDraftChange({ reason: event.target.value })} placeholder="Bulk triage" className={inputClass} />
+              <input value={bulkDraft.reason} onChange={(event) => onBulkDraftChange({ reason: event.target.value })} placeholder="Reason for this decision" className={inputClass} />
             </label>
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={busy} onClick={() => { void Promise.resolve(onBulkAction("create")).catch(() => undefined); }} className="primary-button px-3 py-1.5 text-[13px] disabled:opacity-50">
@@ -2023,7 +2023,7 @@ export default function VendorsPage() {
       discovery_urn: discovery.urn,
       source_id: discovery.source_id,
       decision: "approved",
-      reason: "Vendor created from discovery.",
+      reason: "Candidate approved and vendor record created.",
       linked_vendor_urn: response.vendor.urn,
     });
     setDecisionDrafts((current) => {
@@ -2057,7 +2057,7 @@ export default function VendorsPage() {
         for (const discovery of selectedDiscoveries) {
           await setDiscoveryDecision(discovery, "linked", {
             linkedVendorURN,
-            reason: bulkDraft.reason.trim() || "Linked from bulk triage.",
+            reason: bulkDraft.reason.trim() || "Candidate linked to existing vendor.",
           });
         }
         setCreateMessage(`${countLabel(selectedDiscoveries.length, "candidate")} linked.`);
@@ -2065,7 +2065,7 @@ export default function VendorsPage() {
         for (const discovery of selectedDiscoveries) {
           await setDiscoveryDecision(discovery, "ignored", {
             linkedVendorURN: "",
-            reason: bulkDraft.reason.trim() || "Dismissed from bulk triage.",
+            reason: bulkDraft.reason.trim() || "Candidate dismissed after review.",
           });
         }
         setCreateMessage(`${countLabel(selectedDiscoveries.length, "candidate")} dismissed.`);
@@ -2096,7 +2096,7 @@ export default function VendorsPage() {
       owner: action === "assign_owner" ? quickActionDraft.owner.trim() : undefined,
       lifecycle_state: action === "change_lifecycle" ? quickActionDraft.lifecycleState : undefined,
       review_state: action === "start_review" ? quickActionDraft.reviewState : undefined,
-      reason: action === "change_lifecycle" ? "Changed from vendor drawer." : undefined,
+      reason: action === "change_lifecycle" ? "Lifecycle changed from vendor review." : undefined,
     });
     setQuickActionMessage(`${response.vendor.name} updated.`);
     await Promise.all([vendorsQuery.reload(), vendorDetailQuery.reload()]);
@@ -2343,7 +2343,7 @@ export default function VendorsPage() {
           </label>
           <label className={labelClass}>
             Vendor ID
-            <input value={vendorUploadID} onChange={(event) => setVendorUploadID(event.target.value)} placeholder="Generated" className={inputClass} />
+            <input value={vendorUploadID} onChange={(event) => setVendorUploadID(event.target.value)} placeholder="Leave blank to assign" className={inputClass} />
           </label>
           <label className={labelClass}>
             Document type
@@ -2367,7 +2367,7 @@ export default function VendorsPage() {
           </label>
           <label className={labelClass}>
             Website
-            <input value={vendorUploadWebsite} onChange={(event) => setVendorUploadWebsite(event.target.value)} placeholder="https://www.example.com/vendor" className={inputClass} />
+            <input value={vendorUploadWebsite} onChange={(event) => setVendorUploadWebsite(event.target.value)} placeholder="Enter vendor website" className={inputClass} />
           </label>
           <button
             type="submit"

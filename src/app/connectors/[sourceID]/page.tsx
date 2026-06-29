@@ -185,7 +185,7 @@ function OperationsSummary({
       />
       <SummaryTile
         label="Last Activity"
-        value={<span className="text-[16px]">{summary.last_activity_at ? displayDate(summary.last_activity_at) : "None"}</span>}
+        value={<span className="text-[16px]">{summary.last_activity_at ? displayDate(summary.last_activity_at) : "Not observed"}</span>}
         detail={summary.sync_frequency_seconds ? `Every ${formatDuration(summary.sync_frequency_seconds)}` : "Sync cadence unavailable"}
         icon={<Activity className="h-3.5 w-3.5" />}
       />
@@ -336,7 +336,7 @@ function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
   const kinds = connector.emitted_kinds ?? [];
   const boundedKinds = grcBoundedRows({ rows: kinds, limit: CONNECTOR_DETAIL_KIND_LIMIT });
   const resourceTypes = connectorResourceTypes(connector, 12);
-  if (kinds.length === 0 && resourceTypes.length === 0) return <EmptyBlock label="No emitted kinds or resource types advertised." />;
+  if (kinds.length === 0 && resourceTypes.length === 0) return <EmptyBlock label="No emitted kinds or resource types configured." />;
   return (
     <div className="space-y-4">
       {resourceTypes.length > 0 && (
@@ -398,7 +398,7 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
         </div>
         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Verification</div>
-          <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.verification_endpoint || "Not advertised"}</div>
+          <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{connector.verification_endpoint || "No verification endpoint"}</div>
         </div>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -498,7 +498,7 @@ function CatalogSetupNotice({ connector }: { connector: ConnectorCatalogEntry })
           <p>
             {connector.access_reason
               ? "Connector metadata is visible, but setup is not enabled by this API."
-              : "This catalog definition is not currently advertised by the backend as a live setup target."}
+              : "This catalog definition is not enabled by the backend as a live setup target."}
           </p>
           <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Availability</div>
@@ -574,7 +574,7 @@ function ScopeView({ connector, connections }: { connector: ConnectorCatalogEntr
             <span key={capability} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[12px] font-semibold text-[var(--text-secondary)]">
               {connectorCapabilityLabel(capability)}
             </span>
-          )) : <span className="text-[13px] text-[var(--text-muted)]">No capability groups advertised.</span>}
+          )) : <span className="text-[13px] text-[var(--text-muted)]">No capability groups configured.</span>}
         </div>
       </Panel>
     </div>
@@ -862,9 +862,9 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
           <Panel title="Connection details">
             <div className="space-y-3 text-[13px]">
               {[
-                ["Last activity", summary.last_activity_at ? displayDate(summary.last_activity_at) : "None"],
+                ["Last activity", summary.last_activity_at ? displayDate(summary.last_activity_at) : "Not observed"],
                 ["Sync frequency", summary.sync_frequency_seconds ? `Every ${formatDuration(summary.sync_frequency_seconds)}` : "Deployment managed"],
-                ["Credential stores", readyStores.map((store) => store.label).join(", ") || "None advertised"],
+                ["Credential stores", readyStores.map((store) => store.label).join(", ") || "No ready credential store"],
                 ["Catalog", connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"],
                 ["Runtime", connectorRuntimeSurfaceLabel(connector)],
                 ["Access", connectorAccessStatusLabel(connector.access_status)],

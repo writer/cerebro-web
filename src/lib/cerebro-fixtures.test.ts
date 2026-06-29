@@ -301,6 +301,22 @@ describe("cerebro fixture proxy responses", () => {
     expect(payload.evidence_items).toHaveLength(2);
   });
 
+  it("filters control packet fixtures by framework query", () => {
+    withFixtureMode();
+    const response = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/control-packets",
+      searchParams: new URLSearchParams("framework=ISO%2027001"),
+    });
+    const payload = parseFixture(response!);
+
+    expect(response?.status).toBe(200);
+    expect(payload.packet).toMatchObject({ summary: { total: 1 } });
+    expect(payload.controls).toEqual([
+      expect.objectContaining({ framework_id: "iso27001", control_id: "A.5.15" }),
+    ]);
+  });
+
   it("returns asset detail fixtures for encoded URNs", () => {
     withFixtureMode();
     const urn = "urn:cerebro:demo-tenant:repository:public-demo";

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
-import { PageHeader, Panel } from "@/components/grc/Primitives";
+import { ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
 
 type CatalogSummary = {
   total: number;
@@ -53,12 +53,13 @@ export default function CodegenStatusPage() {
         if (apiKey) headers["X-API-Key"] = apiKey;
         const response = await fetch("/api/cerebro/codegen-status", { headers, cache: "no-store" });
         if (!response.ok) {
-          setError(`Failed to load codegen status (${response.status})`);
+          setError("Code generation status could not load.");
           return;
         }
         setStatus(await response.json());
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load");
+        void err;
+        setError("Code generation status could not load.");
       } finally {
         setLoading(false);
       }
@@ -73,8 +74,8 @@ export default function CodegenStatusPage() {
         description="Unified view of code generation health across all generators."
       />
 
-      {loading && <div className="text-[13px] text-slate-500">Loading codegen status...</div>}
-      {error && <div className="text-[13px] text-red-600">{error}</div>}
+      {loading && <LoadingBlock label="Loading code generation status..." />}
+      {error && <ErrorBlock error={error} recoveryDetail="Code generation status will appear when local generator metadata is reachable." />}
 
       {status?.catalog && (
         <Panel title="Connector Catalog">

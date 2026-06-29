@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import ResourceExplorer from "@/components/ResourceExplorer";
+import { ErrorBlock, LoadingBlock } from "@/components/grc/Primitives";
 import { tagSlug } from "@/lib/openapi";
 import { useOpenApi } from "@/lib/openapi-store";
 
@@ -29,10 +30,10 @@ export default function ResourcePage() {
   const schemaCount = operations.filter((op) => op.response?.schema).length;
 
   if (status === "loading" || status === "idle") {
-    return <div className="text-[13px] text-slate-500">Loading resource...</div>;
+    return <LoadingBlock label="Loading API resources..." />;
   }
   if (status === "error") {
-    return <div className="text-[13px] text-red-600">{error}</div>;
+    return <ErrorBlock error={error ?? "API resource metadata could not load."} recoveryDetail="API resources will appear when OpenAPI metadata is reachable." />;
   }
   if (!tag) {
     return (

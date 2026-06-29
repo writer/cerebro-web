@@ -51,6 +51,15 @@ export const grcLoadedRows = ({ loaded, limit, meta }: GRCLoadedRows) => ({
   truncated: Boolean(meta?.truncated ?? ((meta?.limit ?? limit ?? 0) > 0 && loaded >= (meta?.limit ?? limit ?? 0))),
 });
 
+const singularNoun = (noun: string) => {
+  if (noun.endsWith("ies")) return `${noun.slice(0, -3)}y`;
+  if (noun.endsWith("s") && !noun.endsWith("ss")) return noun.slice(0, -1);
+  return noun;
+};
+
+const nounForCount = (noun: string, count: number) =>
+  count === 1 ? singularNoun(noun) : noun;
+
 export const grcLoadedRowsCopy = ({
   loaded,
   limit,
@@ -61,12 +70,13 @@ export const grcLoadedRowsCopy = ({
   const loadedLabel = rows.loaded.toLocaleString();
   const totalLabel = typeof rows.total === "number" ? rows.total.toLocaleString() : "";
   if (totalLabel) {
+    const totalNoun = nounForCount(noun, rows.total ?? rows.loaded);
     return rows.truncated
-      ? `Showing ${loadedLabel} of ${totalLabel} ${noun}. Narrow filters or export the full file.`
-      : `Showing ${loadedLabel} of ${totalLabel} ${noun}.`;
+      ? `Showing ${loadedLabel} of ${totalLabel} ${totalNoun}. Narrow filters or export the full file.`
+      : `Showing ${loadedLabel} of ${totalLabel} ${totalNoun}.`;
   }
   if (rows.truncated) {
-    return `Showing first ${loadedLabel} ${noun}. Narrow filters or export the full file.`;
+    return `Showing first ${loadedLabel} ${nounForCount(noun, rows.loaded)}. Narrow filters or export the full file.`;
   }
-  return `Showing ${loadedLabel} ${noun}.`;
+  return `Showing ${loadedLabel} ${nounForCount(noun, rows.loaded)}.`;
 };

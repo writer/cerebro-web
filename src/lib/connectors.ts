@@ -1363,7 +1363,7 @@ export const connectionMethodsForConnector = (
             "Complete the CLI login in the browser or with a device code.",
             "Verify the caller identity, then store the profile/role reference in the selected secret store.",
           ],
-          disabledReason: availableEnvironmentStore ? undefined : "AWS SSO needs an environment-managed store advertised by the backend.",
+          disabledReason: availableEnvironmentStore ? undefined : "AWS SSO needs an environment-managed store enabled by the backend.",
         }]
       : []),
     {
@@ -1387,7 +1387,7 @@ export const connectionMethodsForConnector = (
         "Choose the project, environment, and connector path that deployment automation will read.",
         "Save only reference metadata; do not paste Infisical tokens into this page.",
       ],
-      disabledReason: availableEnvironmentStore ? undefined : "Infisical handoff needs an environment-managed store advertised by the backend.",
+      disabledReason: availableEnvironmentStore ? undefined : "Infisical handoff needs an environment-managed store enabled by the backend.",
     },
     {
       id: "external_reference",
@@ -1401,11 +1401,11 @@ export const connectionMethodsForConnector = (
       saveable: Boolean(availableReferenceStore),
       commands: [],
       steps: [
-        "Choose the store advertised by this deployment.",
+        "Choose the store enabled by this deployment.",
         "Create or rotate secret material outside the browser.",
         "Submit non-secret connection metadata and let the backend resolve the reference.",
       ],
-      disabledReason: availableReferenceStore ? undefined : "No reference-backed external store is advertised by this deployment.",
+      disabledReason: availableReferenceStore ? undefined : "No reference-backed external store is enabled by this deployment.",
     },
     {
       id: "encrypted_submission",
@@ -1881,7 +1881,7 @@ export const normalizeCredentialStores = (library?: ConnectorLibraryResponse | n
         ? detail || "Credential transport or vault is unavailable."
         : status === "needs_configuration"
           ? "Enable this store in the Cerebro backend configuration."
-          : "Not advertised by this deployment.";
+          : "Store is not enabled in this deployment.";
     return {
       ...catalog,
       label,

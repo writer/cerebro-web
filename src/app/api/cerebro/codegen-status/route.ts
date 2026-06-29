@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { authHeadersFor, buildCerebroUrl, fetchCerebro, proxyFetchError } from "@/lib/cerebro-proxy";
+import { isCerebroFixtureMode } from "@/lib/cerebro-fixtures";
 
 export async function GET(request: NextRequest) {
+  if (isCerebroFixtureMode()) {
+    return NextResponse.json(defaultCodegenStatus());
+  }
+
   let response: Response;
   try {
     response = await fetchCerebro(buildCerebroUrl("connector-catalog/analysis"), {
@@ -15,11 +20,7 @@ export async function GET(request: NextRequest) {
 
   if (!response.ok) {
     // Return a placeholder status when the backend endpoint is not available.
-    return NextResponse.json({
-      catalog: null,
-      projection_templates: null,
-      generators: defaultGenerators(),
-    });
+    return NextResponse.json(defaultCodegenStatus());
   }
 
   const analysis = await response.json();
@@ -46,6 +47,14 @@ export async function GET(request: NextRequest) {
     },
     generators: defaultGenerators(),
   });
+}
+
+function defaultCodegenStatus() {
+  return {
+    catalog: null,
+    projection_templates: null,
+    generators: defaultGenerators(),
+  };
 }
 
 function defaultGenerators() {

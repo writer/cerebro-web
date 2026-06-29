@@ -22,7 +22,7 @@ export const readinessOrder: SourceReadiness[] = ["bad", "needs_refresh", "poor"
 
 export const readinessLabels: Record<ReadinessFilter, string> = {
   all: "All",
-  bad: "Bad",
+  bad: "Failed",
   needs_refresh: "Needs refresh",
   poor: "Poor",
   healthy: "Healthy",

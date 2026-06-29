@@ -26,6 +26,8 @@ export default function RiskScoringSettingsPage() {
   const configQuery = useGRCQuery<RiskScoringConfigResponse>(configPath);
   const { mutate, saving, error: mutationError, setError } = useGRCMutation<RiskScoringConfigResponse>();
   const loaded = configQuery.data;
+  const configLoadFailed = Boolean(configQuery.error && !loaded);
+  const canWriteConfig = !configLoadFailed && !configQuery.loading;
 
   useEffect(() => {
     if (!loaded?.config) return;
@@ -100,18 +102,18 @@ export default function RiskScoringSettingsPage() {
               <RefreshCw className="h-3.5 w-3.5" />
               Reload
             </button>
-            <button type="button" className={buttonClass} onClick={reset} disabled={saving}>
+            <button type="button" className={buttonClass} onClick={reset} disabled={saving || !canWriteConfig}>
               <RotateCcw className="h-3.5 w-3.5" />
               Reset
             </button>
-            <button type="button" className={primaryButtonClass} onClick={save} disabled={saving}>
+            <button type="button" className={primaryButtonClass} onClick={save} disabled={saving || !canWriteConfig}>
               <Save className="h-3.5 w-3.5" />
               {saving ? "Saving..." : "Save config"}
             </button>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-slate-500">
-          <span className="rounded-md bg-slate-100 px-2 py-1">Persisted: {loaded?.persisted ? "yes" : "no"}</span>
+          <span className="rounded-md bg-slate-100 px-2 py-1">Persisted: {loaded ? loaded.persisted ? "yes" : "no" : "not loaded"}</span>
           <span className="rounded-md bg-slate-100 px-2 py-1">Model: {loaded?.config.model_version ?? DEFAULT_RISK_SCORING_CONFIG.model_version}</span>
         </div>
         {configQuery.loading && <div className="mt-3"><LoadingBlock label="Loading risk scoring config..." /></div>}

@@ -25,6 +25,9 @@ const readinessTotal = (framework?: GRCFramework) =>
   (framework?.readiness?.needs_enrichment_controls ?? 0) +
   (framework?.readiness?.placeholder_controls ?? 0);
 
+const countLabel = (count: number, singular: string, plural = `${singular}s`) =>
+  `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+
 const frameworkNameFromSegment = (segment: string) =>
   decodeURIComponent(segment).replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 
@@ -47,7 +50,7 @@ function GapActions({ framework, onExport, exportState }: { framework: GRCFramew
               <div className="flex flex-wrap items-center gap-2">
                 <Badge value={action.code} />
                 <span className="text-[12px] text-[var(--text-muted)]">Priority {action.priority}</span>
-                {action.count ? <span className="text-[12px] text-[var(--text-muted)]">{action.count} controls</span> : null}
+                {action.count ? <span className="text-[12px] text-[var(--text-muted)]">{countLabel(action.count, "control")}</span> : null}
               </div>
               <div className="mt-2 text-[13px] text-[var(--text-primary)]">{action.label}</div>
             </div>
@@ -188,7 +191,12 @@ export default function FrameworkDetailPage() {
   const readinessCount = readinessTotal(framework);
   const maturityScore = framework?.maturity?.score ?? 0;
   const evidenceGapCount = (framework?.readiness?.needs_enrichment_controls ?? 0) + (framework?.readiness?.placeholder_controls ?? 0);
-  const measuredControlCount = framework?.coverage?.selected_controls ?? 0;
+  const packetControlTotal = controlListMeta?.total ?? packetQuery.data?.packet?.summary?.total ?? controls.length;
+  const measuredControlCount = packetQuery.data ? packetControlTotal : framework?.coverage?.selected_controls ?? 0;
+  const measuredControlDetail = packetQuery.data
+    ? countLabel(controls.length, "loaded control")
+    : countLabel(framework?.control_count ?? 0, "catalog control");
+  const readinessDetail = countLabel(readinessCount, "readiness-scored control");
   const isLoadingFramework = frameworksQuery.loading && !frameworksQuery.data && !framework;
 
   if (!isLoadingFramework && !framework) {
@@ -226,8 +234,8 @@ export default function FrameworkDetailPage() {
         <>
           <div className="grid gap-4 md:grid-cols-4">
             <MetricCard label="Maturity" value={isUpcoming ? "N/A" : `${maturityScore}%`} detail={framework.maturity?.summary || "Not measured"} state={isLoadingFramework ? "loading" : "ready"} />
-            <MetricCard label="Measured controls" value={isUpcoming ? "N/A" : measuredControlCount} detail={`${framework.control_count} catalog controls`} state={isLoadingFramework ? "loading" : "ready"} />
-            <MetricCard label="Audit-ready" value={isUpcoming ? "N/A" : framework.readiness?.auditor_ready_controls ?? 0} detail={`${readinessCount} readiness-scored controls`} state={isLoadingFramework ? "loading" : "ready"} />
+            <MetricCard label="Measured controls" value={isUpcoming ? "N/A" : measuredControlCount} detail={measuredControlDetail} state={isLoadingFramework ? "loading" : "ready"} />
+            <MetricCard label="Audit-ready" value={isUpcoming ? "N/A" : framework.readiness?.auditor_ready_controls ?? 0} detail={readinessDetail} state={isLoadingFramework ? "loading" : "ready"} />
             <MetricCard label="Evidence gaps" value={isUpcoming ? "N/A" : evidenceGapCount} detail={isUpcoming ? "Planning only" : "Controls needing enrichment"} intent={evidenceGapCount > 0 ? "warning" : "success"} state={isLoadingFramework ? "loading" : "ready"} />
           </div>
 
