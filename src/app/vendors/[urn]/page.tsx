@@ -949,6 +949,66 @@ function ReviewWorkflowPanel({
   );
 }
 
+const moneyLabel = (amount?: string, currency?: string) => {
+  const trimmedAmount = amount?.trim();
+  if (!trimmedAmount) return "";
+  const trimmedCurrency = currency?.trim();
+  return trimmedCurrency ? `${trimmedCurrency} ${trimmedAmount}` : trimmedAmount;
+};
+
+function CommercialPanel({ commercial, vendor }: { commercial?: GRCVendorPacket["commercial"]; vendor: GRCVendor }) {
+  return (
+    <Panel title="Commercial">
+      <dl className="divide-y divide-[color:var(--border)]">
+        <DetailRow label="Spend" value={moneyLabel(commercial?.spend_amount ?? vendor.spend_amount, commercial?.spend_currency ?? vendor.spend_currency)} />
+        <DetailRow label="Contract value" value={moneyLabel(commercial?.contract_value ?? vendor.contract_value, commercial?.contract_currency ?? vendor.contract_currency)} />
+        <DetailRow label="Renewal" value={humanize(commercial?.renewal_state || vendor.renewal_state)} />
+        <DetailRow label="Renewal notice" value={displayDate(commercial?.renewal_notice_at || vendor.renewal_notice_at)} />
+        <DetailRow label="Contact" value={commercial?.primary_contact || vendor.primary_contact} />
+        <DetailRow label="Business unit" value={commercial?.business_unit || vendor.business_unit} />
+        <DetailRow label="Cost center" value={commercial?.cost_center || vendor.cost_center} />
+      </dl>
+    </Panel>
+  );
+}
+
+function VendorContextPanel({
+  exposureLevel,
+  packetControls,
+  packetOperations,
+  packetState,
+  remediationState,
+  vendor,
+  vendorLifecycle,
+}: {
+  exposureLevel: string;
+  packetControls?: GRCVendorPacket["controls"];
+  packetOperations?: GRCVendorPacket["operations"];
+  packetState: string;
+  remediationState: string;
+  vendor: GRCVendor;
+  vendorLifecycle: string;
+}) {
+  return (
+    <Panel title="Vendor context">
+      <dl className="divide-y divide-[color:var(--border)]">
+        <DetailRow label="Lifecycle" value={humanize(vendorLifecycle)} />
+        <DetailRow label="Source status" value={humanize(vendor.source_status || vendor.status)} />
+        <DetailRow label="Category" value={humanize(vendor.category)} />
+        <DetailRow label="Website" value={vendor.website_url} />
+        <DetailRow label="Services" value={vendor.services_provided} />
+        <DetailRow label="Packet" value={humanize(packetState)} />
+        <DetailRow label="Exposure" value={humanize(exposureLevel)} />
+        <DetailRow label="Remediation" value={humanize(remediationState)} />
+        <DetailRow label="Security review" value={humanize(packetControls?.security_review_status || vendor.security_review_status)} />
+        <DetailRow label="DPA" value={humanize(packetControls?.dpa_status || vendor.dpa_status)} />
+        <DetailRow label="SOC 2" value={humanize(packetControls?.soc2_status || vendor.soc2_status)} />
+        <DetailRow label="Data deletion" value={humanize(packetOperations?.data_deletion_state || vendor.data_deletion_state)} />
+      </dl>
+    </Panel>
+  );
+}
+
 function AskVendorPanel({ vendorName }: { vendorName: string }) {
   const [draft, setDraft] = useState("");
   const prompts = [
@@ -1004,6 +1064,7 @@ export default function VendorDetailPage() {
   const packetControls = packet?.controls;
   const packetAssessments = packet?.assessments;
   const packetMonitoring = packet?.monitoring;
+  const packetCommercial = packet?.commercial;
   const packetOperations = packet?.operations;
   const relationships = data?.relationships ?? {};
   const findings = data?.findings ?? EMPTY_FINDINGS;
@@ -1072,6 +1133,16 @@ export default function VendorDetailPage() {
               </div>
               <aside className="space-y-4">
                 <ReviewWorkflowPanel assessmentState={assessmentState} monitoringSignals={monitoringSignals} monitoringState={monitoringState} remediationState={remediationState} vendor={vendor} vendorLifecycle={vendorLifecycle} />
+                <CommercialPanel commercial={packetCommercial} vendor={vendor} />
+                <VendorContextPanel
+                  exposureLevel={exposureLevel}
+                  packetControls={packetControls}
+                  packetOperations={packetOperations}
+                  packetState={packetState}
+                  remediationState={remediationState}
+                  vendor={vendor}
+                  vendorLifecycle={vendorLifecycle}
+                />
                 <AskVendorPanel vendorName={pageTitle} />
               </aside>
             </div>
@@ -1224,6 +1295,7 @@ export default function VendorDetailPage() {
                     <DetailRow label="Runtime" value={shortEntity(vendor.runtime_id)} />
                   </dl>
                 </Panel>
+                <CommercialPanel commercial={packetCommercial} vendor={vendor} />
                 <Panel title="Control posture">
                   <dl className="divide-y divide-[color:var(--border)]">
                     <DetailRow label="Security review" value={humanize(packetControls?.security_review_status || vendor.security_review_status)} />
