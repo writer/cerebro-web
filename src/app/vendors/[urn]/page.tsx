@@ -403,41 +403,58 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
 
   const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const response = await mutation.mutate(`/grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`, {
-      tenant_id: tenantID || undefined,
-      title: newTitle,
-      source_filename: newFileName,
-      question_count: Number.parseInt(newQuestionCount, 10) || 12,
-    });
+    let response: GRCVendorQuestionnaireReviewResponse;
+    try {
+      response = await mutation.mutate(`/grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`, {
+        tenant_id: tenantID || undefined,
+        title: newTitle,
+        source_filename: newFileName,
+        question_count: Number.parseInt(newQuestionCount, 10) || 12,
+      });
+    } catch {
+      return;
+    }
     setSelectedReviewID(response.review.id);
     reloadReviews();
   };
 
   const processReview = async () => {
     if (!selectedReview) return;
-    await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/process`, { tenant_id: tenantID || undefined });
+    try {
+      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/process`, { tenant_id: tenantID || undefined });
+    } catch {
+      return;
+    }
     reloadReviews();
   };
 
   const submitAssignment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedReview) return;
-    await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/assignments`, {
-      tenant_id: tenantID || undefined,
-      owner: assignmentOwner,
-      reason: assignmentReason,
-      due_at: assignmentDue || undefined,
-    });
+    try {
+      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/assignments`, {
+        tenant_id: tenantID || undefined,
+        owner: assignmentOwner,
+        reason: assignmentReason,
+        due_at: assignmentDue || undefined,
+      });
+    } catch {
+      return;
+    }
     reloadReviews();
   };
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedReview || !commentBody.trim()) return;
-    await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/comments`, {
-      tenant_id: tenantID || undefined,
-      body: commentBody,
-    });
+    try {
+      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/comments`, {
+        tenant_id: tenantID || undefined,
+        body: commentBody,
+      });
+    } catch {
+      return;
+    }
     setCommentBody("");
     reloadReviews();
   };
@@ -446,12 +463,16 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
     event.preventDefault();
     const approver = approvalApprover.trim();
     if (!selectedReview || !approver) return;
-    await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/approvals`, {
-      tenant_id: tenantID || undefined,
-      approver,
-      state: approvalState,
-      reason: approvalReason,
-    });
+    try {
+      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/approvals`, {
+        tenant_id: tenantID || undefined,
+        approver,
+        state: approvalState,
+        reason: approvalReason,
+      });
+    } catch {
+      return;
+    }
     reloadReviews();
   };
 
