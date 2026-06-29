@@ -25,8 +25,8 @@ import {
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
 import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 
-const EMPTY_FINDINGS: GRCVendorDetailResponse["findings"] = [];
-const EMPTY_EVIDENCE: GRCVendorDetailResponse["evidence"] = [];
+const EMPTY_FINDINGS: NonNullable<GRCVendorDetailResponse["findings"]> = [];
+const EMPTY_EVIDENCE: NonNullable<GRCVendorDetailResponse["evidence"]> = [];
 
 function DetailRow({ label, value }: { label: string; value?: string }) {
   return (
