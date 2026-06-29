@@ -21,6 +21,7 @@ import {
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import DataTable, { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
 import { GRCUploadErrorActions, GRCUploadFileInput, GRCUploadHistoryList, GRCUploadProgress, GRCUploadReceipt } from "@/components/grc/GRCUpload";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
@@ -1002,54 +1003,6 @@ function DiscoveryEmptyState({
   );
 }
 
-function DiscoveryCandidateCard({
-  createSaving,
-  decisionSaving,
-  discovery,
-  duplicateMatches,
-  draft,
-  onCreateVendor,
-  onDecision,
-  onOpenVendor,
-  onUpdateDraft,
-}: {
-  createSaving: boolean;
-  decisionSaving: boolean;
-  discovery: GRCVendorDiscovery;
-  duplicateMatches: DuplicateMatch[];
-  draft: DiscoveryDecisionDraft;
-  onCreateVendor: (discovery: GRCVendorDiscovery) => Promise<void> | void;
-  onDecision: (discovery: GRCVendorDiscovery, decision: DiscoveryDecision) => Promise<void> | void;
-  onOpenVendor: (vendorURN: string) => void;
-  onUpdateDraft: (urn: string, patch: Partial<DiscoveryDecisionDraft>) => void;
-}) {
-  return (
-    <article className="rounded-md border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <DiscoveryCandidateTitle discovery={discovery} duplicateMatches={duplicateMatches} />
-        <DiscoveryStateBadge state={discovery.decision_state} />
-      </div>
-      <div className="mt-4 grid gap-4 text-[12px] sm:grid-cols-2">
-        <div>
-          <div className={labelClass}>Found in</div>
-          <div className="mt-2"><DiscoverySourceCell discovery={discovery} /></div>
-        </div>
-        <div>
-          <div className={labelClass}>Suggested vendor</div>
-          <div className="mt-2"><SuggestedVendorInputs discovery={discovery} duplicateMatches={duplicateMatches} draft={draft} onOpenVendor={onOpenVendor} onUpdateDraft={onUpdateDraft} /></div>
-        </div>
-      </div>
-      <div className="mt-4">
-        <div className={labelClass}>Evidence</div>
-        <div className="mt-2 text-[12px] text-[var(--text-secondary)]"><DiscoverySignals signals={discovery.signals} /></div>
-      </div>
-      <div className="mt-4 border-t border-[color:var(--border)] pt-3">
-        <DiscoveryActionButtons createSaving={createSaving} discovery={discovery} draft={draft} onCreateVendor={onCreateVendor} onDecision={onDecision} saving={decisionSaving} />
-      </div>
-    </article>
-  );
-}
-
 function DiscoveryQueue({
   bulkDraft,
   bulkSaving,
@@ -1098,6 +1051,72 @@ function DiscoveryQueue({
   const allVisibleSelected = reviewableDiscoveries.length > 0 && reviewableDiscoveries.every((discovery) => selectedDiscoveryURNs.has(discovery.urn));
   const selectedCount = reviewableDiscoveries.filter((discovery) => selectedDiscoveryURNs.has(discovery.urn)).length;
   const busy = bulkSaving || decisionSaving || createSaving;
+  const discoveryColumns = useMemo<TableColumn<GRCVendorDiscovery>[]>(() => [
+    {
+      key: "selected",
+      label: "",
+      render: (_value, discovery) => discoveryNeedsReview(discovery) ? (
+        <input
+          type="checkbox"
+          checked={selectedDiscoveryURNs.has(discovery.urn)}
+          onClick={(event) => event.stopPropagation()}
+          onChange={() => onToggleDiscovery(discovery.urn)}
+          className="h-4 w-4"
+          aria-label={`Select ${discovery.name || discovery.urn}`}
+        />
+      ) : null,
+    },
+    {
+      key: "candidate",
+      label: "Candidate",
+      render: (_value, discovery) => (
+        <div className="min-w-[17rem]">
+          <DiscoveryCandidateTitle discovery={discovery} duplicateMatches={duplicateMatchesByURN[discovery.urn] ?? []} />
+          <div className="mt-3 rounded-md bg-[var(--surface-muted)] p-2">
+            <DiscoverySourceCell discovery={discovery} />
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "signals",
+      label: "Evidence",
+      render: (_value, discovery) => (
+        <div className="min-w-[18rem] text-[12px] text-[var(--text-secondary)]">
+          <DiscoverySignals signals={discovery.signals} />
+        </div>
+      ),
+    },
+    {
+      key: "suggested_vendor",
+      label: "Suggested vendor",
+      render: (_value, discovery) => {
+        const draft = decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
+        return (
+          <div className="min-w-[16rem]">
+            <SuggestedVendorInputs
+              discovery={discovery}
+              duplicateMatches={duplicateMatchesByURN[discovery.urn] ?? []}
+              draft={draft}
+              onOpenVendor={onOpenVendor}
+              onUpdateDraft={onUpdateDraft}
+            />
+          </div>
+        );
+      },
+    },
+    {
+      key: "decision_state",
+      label: "State",
+      render: (_value, discovery) => (
+        <div className="min-w-[9rem]">
+          <DiscoveryStateBadge state={discovery.decision_state} />
+          <div className="mt-2 text-[12px] text-[var(--text-muted)]">Confidence {confidenceLabel(discovery.confidence_score)}</div>
+          {discovery.decision_updated_by && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.decision_updated_by}</div>}
+        </div>
+      ),
+    },
+  ], [decisionDrafts, duplicateMatchesByURN, onOpenVendor, onToggleDiscovery, onUpdateDraft, selectedDiscoveryURNs]);
   return (
     <section className="surface-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
@@ -1158,81 +1177,28 @@ function DiscoveryQueue({
       {discoveries.length === 0 ? (
         <DiscoveryEmptyState sourceCount={sourceCount} latestSync={latestSync} onRefresh={onRefresh} />
       ) : (
-        <>
-          <div className="space-y-3 p-4 md:hidden">
-            {discoveries.map((discovery) => (
-              <div key={discovery.urn} className="space-y-2">
-                {discoveryNeedsReview(discovery) && (
-                  <label className="inline-flex items-center gap-2 text-[12px] font-semibold text-[var(--text-secondary)]">
-                    <input type="checkbox" checked={selectedDiscoveryURNs.has(discovery.urn)} onChange={() => onToggleDiscovery(discovery.urn)} className="h-4 w-4" />
-                    Select candidate
-                  </label>
-                )}
-                <DiscoveryCandidateCard
-                  createSaving={createSaving}
-                  decisionSaving={decisionSaving}
-                  discovery={discovery}
-                  duplicateMatches={duplicateMatchesByURN[discovery.urn] ?? []}
-                  draft={decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" }}
-                  onCreateVendor={onCreateVendor}
-                  onDecision={onDecision}
-                  onOpenVendor={onOpenVendor}
-                  onUpdateDraft={onUpdateDraft}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="hidden overflow-x-auto md:block">
-            <table className="data-table min-w-[1040px]">
-              <thead>
-                <tr>
-                  <th className="w-10">Select</th>
-                  <th>Candidate</th>
-                  <th>Evidence</th>
-                  <th>Suggested vendor</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {discoveries.map((discovery) => {
-                  const draft = decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
-                  const duplicateMatches = duplicateMatchesByURN[discovery.urn] ?? [];
-                  return (
-                    <tr key={discovery.urn}>
-                      <td>
-                        {discoveryNeedsReview(discovery) ? (
-                          <input
-                            type="checkbox"
-                            checked={selectedDiscoveryURNs.has(discovery.urn)}
-                            onChange={() => onToggleDiscovery(discovery.urn)}
-                            className="h-4 w-4"
-                            aria-label={`Select ${discovery.name || discovery.urn}`}
-                          />
-                        ) : null}
-                      </td>
-                      <td className="min-w-[17rem]">
-                        <DiscoveryCandidateTitle discovery={discovery} duplicateMatches={duplicateMatches} />
-                        <div className="mt-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-2">
-                          <DiscoverySourceCell discovery={discovery} />
-                        </div>
-                      </td>
-                      <td className="min-w-[18rem] text-[12px] text-[var(--text-secondary)]"><DiscoverySignals signals={discovery.signals} /></td>
-                      <td className="min-w-[16rem]"><SuggestedVendorInputs discovery={discovery} duplicateMatches={duplicateMatches} draft={draft} onOpenVendor={onOpenVendor} onUpdateDraft={onUpdateDraft} /></td>
-                      <td className="min-w-[14rem]">
-                        <DiscoveryStateBadge state={discovery.decision_state} />
-                        <div className="mt-2 text-[12px] text-[var(--text-muted)]">Confidence {confidenceLabel(discovery.confidence_score)}</div>
-                        {discovery.decision_updated_by && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{discovery.decision_updated_by}</div>}
-                        <div className="mt-3">
-                          <DiscoveryActionButtons createSaving={createSaving} discovery={discovery} draft={draft} onCreateVendor={onCreateVendor} onDecision={onDecision} saving={decisionSaving} />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+        <div className="p-4">
+          <DataTable
+            rows={discoveries}
+            columns={discoveryColumns}
+            emptyMessage="No vendor candidates match these filters."
+            searchPlaceholder="Filter loaded candidates"
+            filterKeys={["urn", "name", "provider", "source_id", "decision_state", "signals", "website_url", "discovery_reason"]}
+            pageSize={10}
+            resultLimit={GRC_DETAIL_LIMIT}
+            resultNoun="discoveries"
+            getRowKey={(discovery) => discovery.urn}
+            tableContainerClassName="max-h-[36rem] overflow-auto"
+            rowActions={(discovery) => {
+              const draft = decisionDrafts[discovery.urn] ?? { reason: "", linkedVendorURN: "" };
+              return (
+                <div className="min-w-[13rem]">
+                  <DiscoveryActionButtons createSaving={createSaving} discovery={discovery} draft={draft} onCreateVendor={onCreateVendor} onDecision={onDecision} saving={decisionSaving} />
+                </div>
+              );
+            }}
+          />
+        </div>
       )}
     </section>
   );
@@ -1333,60 +1299,6 @@ function DuplicateQueue({
   );
 }
 
-function VendorRegisterCard({ onOpenVendor, vendor }: { onOpenVendor: (vendorURN: string) => void; vendor: GRCVendor }) {
-  const action = firstQueueAction(vendor);
-  const drivers = vendorRiskDrivers(vendor);
-  return (
-    <article className="rounded-md border border-[color:var(--border)] bg-[var(--surface-raised)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="text-left font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-            {vendor.name || shortEntity(vendor.urn)}
-          </button>
-          <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
-            {vendor.category && <span>{humanize(vendor.category)}</span>}
-            {vendor.status && <span>{humanize(vendor.status)}</span>}
-          </div>
-        </div>
-        <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
-      </div>
-      {action && <div className="mt-3 text-[12px] font-semibold text-[var(--text-primary)]">{action.label}</div>}
-      <div className="mt-3">
-        <RiskDriverList drivers={drivers} />
-      </div>
-      <div className="mt-4 grid gap-3 text-[12px] sm:grid-cols-2">
-        <div>
-          <div className={labelClass}>Owner</div>
-          <div className="mt-1 text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
-        </div>
-        <div>
-          <div className={labelClass}>Review</div>
-          <div className="mt-1"><Badge value={vendor.review_state} /></div>
-          <div className="mt-1 text-[var(--text-muted)]">{reviewDetail(vendor)}</div>
-        </div>
-        <div>
-          <div className={labelClass}>Evidence</div>
-          <div className="mt-1 text-[var(--text-muted)]">{freshnessLabel(vendor)}</div>
-          <div className="mt-1 text-[var(--text-muted)]">{packetDetail(vendor)}</div>
-        </div>
-        <div>
-          <div className={labelClass}>Source</div>
-          <div className="mt-1 text-[var(--text-muted)]">{sourceLabel(vendor)}</div>
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="primary-button inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px]">
-          <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
-          Review
-        </button>
-        <Link href={vendorDetailHref(vendor)} className="secondary-button inline-flex px-3 py-1.5 text-[12px]">
-          Full detail
-        </Link>
-      </div>
-    </article>
-  );
-}
-
 function VendorRegisterSection({
   assuranceItems,
   onOpenVendor,
@@ -1401,107 +1313,135 @@ function VendorRegisterSection({
   const meta = summary
     ? { limit: GRC_WORKLIST_LIMIT, returned: vendors.length, total: summary.total_vendors, truncated: summary.total_vendors > vendors.length }
     : undefined;
-  return (
-    <section className="surface-panel overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3">
-        <div>
-          <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Vendor register</h2>
-          <p className="mt-1 text-[12px] text-[var(--text-muted)]">{countLabel(vendors.length, "vendor")} in this view. {assuranceItems.toLocaleString()} linked GRC records.</p>
+  const vendorColumns = useMemo<TableColumn<GRCVendor>[]>(() => [
+    {
+      key: "name",
+      label: "Vendor",
+      render: (_value, vendor) => (
+        <div className="min-w-[18rem]">
+          <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="text-left font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+            {vendor.name || shortEntity(vendor.urn)}
+          </button>
+          <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
+            {vendor.category && <span>{humanize(vendor.category)}</span>}
+            {vendor.status && <span>{humanize(vendor.status)}</span>}
+            {vendor.services_provided && <span className="max-w-[18rem] truncate">{vendor.services_provided}</span>}
+          </div>
         </div>
+      ),
+    },
+    {
+      key: "next_action",
+      label: "Next action",
+      render: (_value, vendor) => {
+        const action = firstQueueAction(vendor);
+        const drivers = vendorRiskDrivers(vendor);
+        return (
+          <div className="min-w-[14rem] text-[12px] text-[var(--text-secondary)]">
+            {action && <div className="font-semibold text-[var(--text-primary)]">{action.label}</div>}
+            <div className={action ? "mt-2 flex flex-wrap gap-1.5" : "flex flex-wrap gap-1.5"}>
+              <RiskDriverList drivers={drivers} limit={3} />
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "owner",
+      label: "Owner",
+      render: (_value, vendor) => (
+        <div className="min-w-[12rem]">
+          <div className="text-[13px] font-medium text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
+          <div className="mt-1">{vendor.owner_state === "missing" ? <Badge value="missing" /> : <Badge value="assigned" />}</div>
+        </div>
+      ),
+    },
+    {
+      key: "review_state",
+      label: "Review",
+      render: (_value, vendor) => (
+        <div className="min-w-[10rem]">
+          <Badge value={vendor.review_state} />
+          <div className="mt-1 text-[12px] text-[var(--text-muted)]">{reviewDetail(vendor)}</div>
+        </div>
+      ),
+    },
+    {
+      key: "risk_level",
+      label: "Risk",
+      render: (_value, vendor) => (
+        <div className="min-w-[9rem]">
+          <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
+          <div className="mt-1 text-[12px] font-semibold text-[var(--text-primary)]">{riskScoreLabel(vendor)}</div>
+        </div>
+      ),
+    },
+    {
+      key: "evidence",
+      label: "Evidence",
+      render: (_value, vendor) => (
+        <div className="min-w-[13rem] text-[12px] text-[var(--text-muted)]">
+          <div>{freshnessLabel(vendor)}</div>
+          <div className="mt-1">{packetDetail(vendor)}</div>
+          <div className="mt-1">{vendor.evidence_items ?? 0} evidence items</div>
+        </div>
+      ),
+    },
+    {
+      key: "source_id",
+      label: "Source",
+      render: (_value, vendor) => (
+        <div className="min-w-[12rem] text-[12px] text-[var(--text-muted)]">
+          <div>{sourceLabel(vendor)}</div>
+          <div className="mt-1 font-mono">{shortEntity(vendor.runtime_id)}</div>
+        </div>
+      ),
+    },
+  ], [onOpenVendor]);
+  return (
+    <WorklistTable
+      title="Vendor register"
+      description={`${countLabel(vendors.length, "vendor")} in this view. ${assuranceItems.toLocaleString()} linked GRC records.`}
+      rows={vendors}
+      columns={vendorColumns}
+      emptyMessage="No vendors match these filters."
+      searchPlaceholder="Filter loaded vendors"
+      filterKeys={["urn", "name", "owner", "security_owner_user_id", "business_owner_user_id", "services_provided", "category", "provider", "source_id", "risk_level", "review_state", "owner_state", "lifecycle_state", "queue_reasons"]}
+      pageSize={12}
+      resultLimit={GRC_WORKLIST_LIMIT}
+      resultMeta={meta}
+      resultNoun="vendors"
+      getRowKey={(vendor) => vendor.urn}
+      onRowClick={(vendor) => onOpenVendor(vendor.urn)}
+      tableContainerClassName="max-h-[36rem] overflow-auto"
+      action={(
         <Link href="/inventory?entity_type=vendor" className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
           Open in inventory
         </Link>
-      </div>
-      <div className="border-b border-[color:var(--border)] px-4 py-3">
-        <ResultLimitNotice loaded={vendors.length} limit={GRC_WORKLIST_LIMIT} meta={meta} noun="vendors" />
-      </div>
-      {vendors.length === 0 ? (
-        <div className="px-5 py-10 text-center text-[13px] text-[var(--text-muted)]">No vendors match these filters.</div>
-      ) : (
-        <>
-          <div className="space-y-3 p-4 md:hidden">
-            {vendors.map((vendor) => <VendorRegisterCard key={vendor.urn} onOpenVendor={onOpenVendor} vendor={vendor} />)}
-          </div>
-          <div className="hidden overflow-x-auto md:block">
-            <table className="data-table min-w-[1080px]">
-              <thead>
-                <tr>
-                  <th>Vendor</th>
-                  <th>Next action</th>
-                  <th>Owner</th>
-                  <th>Review</th>
-                  <th>Risk</th>
-                  <th>Evidence</th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendors.map((vendor) => {
-                  const action = firstQueueAction(vendor);
-                  const drivers = vendorRiskDrivers(vendor);
-                  return (
-                    <tr key={vendor.urn}>
-                      <td className="min-w-[18rem]">
-                        <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="text-left font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-                          {vendor.name || shortEntity(vendor.urn)}
-                        </button>
-                        <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
-                          {vendor.category && <span>{humanize(vendor.category)}</span>}
-                          {vendor.status && <span>{humanize(vendor.status)}</span>}
-                          {vendor.services_provided && <span className="max-w-[18rem] truncate">{vendor.services_provided}</span>}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px]">
-                            <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
-                            Review
-                          </button>
-                          <Link href={vendorDetailHref(vendor)} className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-                            Full detail
-                          </Link>
-                        </div>
-                      </td>
-                      <td className="min-w-[14rem] text-[12px] text-[var(--text-secondary)]">
-                        {action ? (
-                          <div>
-                            <div className="font-semibold text-[var(--text-primary)]">{action.label}</div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              <RiskDriverList drivers={drivers} limit={3} />
-                            </div>
-                          </div>
-                        ) : (
-                          <RiskDriverList drivers={drivers} limit={3} />
-                        )}
-                      </td>
-                      <td className="min-w-[12rem]">
-                        <div className="text-[13px] font-medium text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
-                        <div className="mt-1">{vendor.owner_state === "missing" ? <Badge value="missing" /> : <Badge value="assigned" />}</div>
-                      </td>
-                      <td className="min-w-[10rem]">
-                        <Badge value={vendor.review_state} />
-                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">{reviewDetail(vendor)}</div>
-                      </td>
-                      <td className="min-w-[9rem]">
-                        <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
-                        <div className="mt-1 text-[12px] font-semibold text-[var(--text-primary)]">{riskScoreLabel(vendor)}</div>
-                      </td>
-                      <td className="min-w-[13rem] text-[12px] text-[var(--text-muted)]">
-                        <div>{freshnessLabel(vendor)}</div>
-                        <div className="mt-1">{packetDetail(vendor)}</div>
-                        <div className="mt-1">{vendor.evidence_items ?? 0} evidence items</div>
-                      </td>
-                      <td className="min-w-[12rem] text-[12px] text-[var(--text-muted)]">
-                        <div>{sourceLabel(vendor)}</div>
-                        <div className="mt-1 font-mono">{shortEntity(vendor.runtime_id)}</div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
       )}
-    </section>
+      rowActions={(vendor) => (
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenVendor(vendor.urn);
+            }}
+            className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px]"
+          >
+            <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
+            Review
+          </button>
+          <Link
+            href={vendorDetailHref(vendor)}
+            onClick={(event) => event.stopPropagation()}
+            className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]"
+          >
+            Full detail
+          </Link>
+        </div>
+      )}
+    />
   );
 }
 
