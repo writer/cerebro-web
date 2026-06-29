@@ -12,11 +12,17 @@ import {
   identityProviderLabel,
   identitySourceLabel,
   identityUsersPath,
+  normalizeIdentityOrganizationSort,
   normalizeIdentityOrganizationsResponse,
+  normalizeIdentityUserSort,
   normalizeIdentityUsersResponse,
+  sortIdentityOrganizations,
+  sortIdentityUsers,
   type IdentityOrganization,
+  type IdentityOrganizationSort,
   type IdentityOrganizationListResponse,
   type IdentityUser,
+  type IdentityUserSort,
   type IdentityUserListResponse,
 } from "@/lib/identity-directory";
 import { useQueryParamState } from "@/lib/query-params";
@@ -26,6 +32,7 @@ type IdentityTab = "orgs" | "users";
 
 const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
 const selectClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
+const sortSelectClass = "control-input h-8 min-w-[9rem] px-2 text-[12px]";
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
 
 const tabLabels: Record<IdentityTab, string> = {
@@ -56,6 +63,20 @@ const statusOptions = [
   { value: "inactive", label: "Inactive" },
   { value: "suspended", label: "Suspended" },
   { value: "disabled", label: "Disabled" },
+];
+
+const orgSortOptions: Array<{ value: IdentityOrganizationSort; label: string }> = [
+  { value: "name", label: "Name" },
+  { value: "users", label: "Most users" },
+  { value: "last_synced", label: "Newest sync" },
+  { value: "source", label: "Source" },
+];
+
+const userSortOptions: Array<{ value: IdentityUserSort; label: string }> = [
+  { value: "last_seen", label: "Last seen" },
+  { value: "name", label: "Name" },
+  { value: "status", label: "Status" },
+  { value: "source", label: "Source" },
 ];
 
 const optionLabel = (options: Array<{ value: string; label: string }>, value: string) =>
@@ -134,6 +155,27 @@ function TabButton({
       <span>{children}</span>
       <span className={`rounded bg-current/10 px-1.5 py-0.5 text-[11px] ${active ? "text-[var(--surface)]" : "text-[var(--text-muted)]"}`}>{count}</span>
     </button>
+  );
+}
+
+function SortControl<T extends string>({
+  ariaLabel,
+  onChange,
+  options,
+  value,
+}: {
+  ariaLabel: string;
+  onChange: (value: T) => void;
+  options: Array<{ value: T; label: string }>;
+  value: T;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-[12px] font-medium text-[var(--text-muted)]">
+      <span>Sort</span>
+      <select aria-label={ariaLabel} value={value} onChange={(event) => onChange(event.target.value as T)} className={sortSelectClass}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
   );
 }
 
@@ -257,7 +299,11 @@ export default function IdentityPage() {
   const [status, setStatus] = useQueryParamState("status");
   const [query, setQuery] = useQueryParamState("q");
   const [view, setView] = useQueryParamState("view", "orgs");
+  const [orgSortParam, setOrgSort] = useQueryParamState("org_sort", "name");
+  const [userSortParam, setUserSort] = useQueryParamState("user_sort", "last_seen");
   const activeTab: IdentityTab = view === "users" ? "users" : "orgs";
+  const orgSort = normalizeIdentityOrganizationSort(orgSortParam);
+  const userSort = normalizeIdentityUserSort(userSortParam);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedOrgID = useDebouncedValue(orgID.trim());
   const debouncedProvider = useDebouncedValue(provider.trim());
@@ -295,6 +341,8 @@ export default function IdentityPage() {
   );
   const organizations = boundedOrganizationRows.rows;
   const users = boundedUserRows.rows;
+  const sortedOrganizations = useMemo(() => sortIdentityOrganizations(organizations, orgSort), [organizations, orgSort]);
+  const sortedUsers = useMemo(() => sortIdentityUsers(users, userSort), [users, userSort]);
   const loading = (orgsQuery.loading && !orgsQuery.data) || (usersQuery.loading && !usersQuery.data);
   const error = orgsQuery.error || usersQuery.error;
   const runtimeState: RuntimeState = error ? runtimeStateForError(error) : loading ? "loading" : "ready";
@@ -395,10 +443,17 @@ export default function IdentityPage() {
       <Panel
         title={tabLabels[activeTab]}
         action={
-          <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-muted)]">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            {activeTab === "orgs" ? organizations.length : users.length} shown
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {activeTab === "orgs" ? (
+              <SortControl ariaLabel="Sort organizations" options={orgSortOptions} value={orgSort} onChange={(nextSort) => setOrgSort(nextSort)} />
+            ) : (
+              <SortControl ariaLabel="Sort users" options={userSortOptions} value={userSort} onChange={(nextSort) => setUserSort(nextSort)} />
+            )}
+            <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-muted)]">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {activeTab === "orgs" ? organizations.length : users.length} shown
+            </span>
+          </div>
         }
       >
         <ResultLimitNotice
@@ -408,7 +463,7 @@ export default function IdentityPage() {
           limit={GRC_WORKLIST_LIMIT}
           noun={activeTab === "orgs" ? "organizations" : "users"}
         />
-        {activeTab === "orgs" ? <OrganizationsTable organizations={organizations} onViewUsers={showOrgUsers} /> : <UsersTable users={users} />}
+        {activeTab === "orgs" ? <OrganizationsTable organizations={sortedOrganizations} onViewUsers={showOrgUsers} /> : <UsersTable users={sortedUsers} />}
       </Panel>
     </div>
   );

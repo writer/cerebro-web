@@ -63,6 +63,9 @@ export type IdentityDirectoryParams = {
   limit?: number;
 };
 
+export type IdentityOrganizationSort = "name" | "users" | "last_synced" | "source";
+export type IdentityUserSort = "last_seen" | "name" | "status" | "source";
+
 const defaultMeta: IdentityListMeta = {
   limit: 100,
   loaded: 0,
@@ -93,6 +96,36 @@ const cleanNumber = (value: unknown, fallback = 0) => {
 const cleanStringList = (value: unknown) => {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.map((item) => cleanString(item)).filter(Boolean)));
+};
+
+const textSortValue = (value?: string) => value?.trim().toLowerCase() ?? "";
+
+const timestampSortValue = (value?: string) => {
+  const parsed = Date.parse(value ?? "");
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const compareText = (left?: string, right?: string) => {
+  const normalizedLeft = textSortValue(left);
+  const normalizedRight = textSortValue(right);
+  if (normalizedLeft < normalizedRight) return -1;
+  if (normalizedLeft > normalizedRight) return 1;
+  return 0;
+};
+
+const compareRecent = (left?: string, right?: string) => timestampSortValue(right) - timestampSortValue(left);
+
+const organizationSorts: IdentityOrganizationSort[] = ["name", "users", "last_synced", "source"];
+const userSorts: IdentityUserSort[] = ["last_seen", "name", "status", "source"];
+
+export const normalizeIdentityOrganizationSort = (value?: string): IdentityOrganizationSort => {
+  const normalized = value?.trim() as IdentityOrganizationSort | undefined;
+  return normalized && organizationSorts.includes(normalized) ? normalized : "name";
+};
+
+export const normalizeIdentityUserSort = (value?: string): IdentityUserSort => {
+  const normalized = value?.trim() as IdentityUserSort | undefined;
+  return normalized && userSorts.includes(normalized) ? normalized : "last_seen";
 };
 
 const normalizeMeta = (value: unknown): IdentityListMeta => {
@@ -178,6 +211,46 @@ export const normalizeIdentityUsersResponse = (value: unknown): IdentityUserList
     users,
     meta: normalizeMeta(record?.meta),
   };
+};
+
+const organizationTieBreak = (left: IdentityOrganization, right: IdentityOrganization) =>
+  compareText(left.name, right.name) || compareText(left.org_id, right.org_id) || compareText(left.tenant_id, right.tenant_id);
+
+const userTieBreak = (left: IdentityUser, right: IdentityUser) =>
+  compareText(left.display_name, right.display_name) || compareText(left.email || left.subject || left.user_id, right.email || right.subject || right.user_id);
+
+export const sortIdentityOrganizations = (organizations: IdentityOrganization[], sort?: string) => {
+  const normalizedSort = normalizeIdentityOrganizationSort(sort);
+  return [...organizations].sort((left, right) => {
+    switch (normalizedSort) {
+      case "users":
+        return right.user_count - left.user_count || organizationTieBreak(left, right);
+      case "last_synced":
+        return compareRecent(left.last_synced_at || left.updated_at || left.created_at, right.last_synced_at || right.updated_at || right.created_at) || organizationTieBreak(left, right);
+      case "source":
+        return compareText(left.provider, right.provider) || compareText(left.source, right.source) || organizationTieBreak(left, right);
+      case "name":
+      default:
+        return organizationTieBreak(left, right);
+    }
+  });
+};
+
+export const sortIdentityUsers = (users: IdentityUser[], sort?: string) => {
+  const normalizedSort = normalizeIdentityUserSort(sort);
+  return [...users].sort((left, right) => {
+    switch (normalizedSort) {
+      case "name":
+        return userTieBreak(left, right);
+      case "status":
+        return compareText(left.status, right.status) || userTieBreak(left, right);
+      case "source":
+        return compareText(left.provider, right.provider) || compareText(left.source, right.source) || userTieBreak(left, right);
+      case "last_seen":
+      default:
+        return compareRecent(left.last_seen_at || left.last_synced_at || left.updated_at || left.created_at, right.last_seen_at || right.last_synced_at || right.updated_at || right.created_at) || userTieBreak(left, right);
+    }
+  });
 };
 
 const pathParams = ({ tenantID, orgID, provider, source, status, query, limit }: IdentityDirectoryParams) => ({
