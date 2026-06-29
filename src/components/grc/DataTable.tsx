@@ -201,10 +201,19 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
                 const href = getRowHref?.(row);
                 const key = getRowKey?.(row, pageStart + index) ?? String(rowValue(row, "id") ?? `${pageStart}-${index}`);
                 const selected = selectedRowKey !== undefined && selectedRowKey !== null && key === selectedRowKey;
+                const activateRow = () => onRowClick?.(row);
                 return (
                   <tr
                     key={key}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    onClick={onRowClick ? activateRow : undefined}
+                    onKeyDown={onRowClick ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        activateRow();
+                      }
+                    } : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    aria-selected={selected || undefined}
                     className={`border-b border-[color:var(--border)] hover:bg-[var(--surface-muted)] ${onRowClick ? "cursor-pointer" : ""} ${selected ? "bg-indigo-50/70 dark:bg-indigo-500/15" : ""}`}
                   >
                     {resolvedColumns.map((column) => (
@@ -276,6 +285,7 @@ export function WorklistTable<Row extends object = Record<string, unknown>>({
   action?: ReactNode;
   refreshing?: boolean;
 }) {
+  const { tableContainerClassName, ...restTableProps } = tableProps;
   return (
     <div className="surface-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-5 py-3.5">
@@ -291,7 +301,7 @@ export function WorklistTable<Row extends object = Record<string, unknown>>({
         </div>
       )}
       <div className="p-4">
-        <DataTable {...tableProps} tableContainerClassName="overflow-auto" />
+        <DataTable {...restTableProps} tableContainerClassName={tableContainerClassName ?? "overflow-auto"} />
       </div>
     </div>
   );

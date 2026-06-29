@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
+import { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice, RiskBadge, RiskBreakdown } from "@/components/grc/Primitives";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@/lib/grc";
 import { findingMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { GRC_PICKER_LIMIT, GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
+import { GRC_PICKER_LIMIT, GRC_WORKLIST_LIMIT, grcLoadedRowsCopy } from "@/lib/grc-list";
 import {
   redactReportGraph,
   redactReportIdentifier,
@@ -53,6 +54,53 @@ const CONTROL_PROFILE_OPTIONS = [
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 dark:border-white/10 dark:bg-white/5 dark:text-slate-100";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400";
 const buttonClass = "inline-flex items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-white px-3 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5";
+
+const findingPickerColumns: TableColumn<GRCFinding>[] = [
+  { key: "risk_score", label: "Risk", render: (_value, finding) => <RiskBadge score={finding.risk_score} /> },
+  { key: "severity", label: "Severity", render: (_value, finding) => <Badge value={finding.severity} tone="severity" /> },
+  {
+    key: "title",
+    label: "Finding",
+    render: (_value, finding) => (
+      <div className="min-w-[18rem]">
+        <div className="line-clamp-2 font-medium text-[var(--text-primary)]">{finding.title}</div>
+        <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-muted)]">{finding.id}</div>
+      </div>
+    ),
+  },
+  { key: "owner", label: "Owner", render: (_value, finding) => finding.owner || <span className="text-[var(--text-muted)]">Unassigned</span> },
+  { key: "entity", label: "Entity", render: (_value, finding) => <span className="font-mono text-[12px]">{shortEntity(finding.entity)}</span> },
+  {
+    key: "controls",
+    label: "Controls",
+    render: (_value, finding) => {
+      const controls = finding.controls ?? [];
+      if (controls.length === 0) return <span className="text-[var(--text-muted)]">Not mapped</span>;
+      return (
+        <div className="max-w-[14rem] truncate">
+          {controls.slice(0, 2).map((control) => `${control.framework_name} ${control.control_id}`).join(", ")}
+          {controls.length > 2 ? ` +${controls.length - 2}` : ""}
+        </div>
+      );
+    },
+  },
+  { key: "last_observed_at", label: "Last seen", render: (_value, finding) => <span className="text-[var(--text-muted)]">{displayDate(finding.last_observed_at)}</span> },
+];
+
+const findingPickerSearchKeys = [
+  "id",
+  "title",
+  "summary",
+  "owner",
+  "entity",
+  "runtime_id",
+  "source_id",
+  "rule_id",
+  "severity",
+  "status",
+  "sla_status",
+  "controls",
+];
 
 const statusCount = (packet: GRCControlEvidencePacketResponse | null | undefined, status: string) =>
   packet?.packet.summary.by_status?.[status] ?? 0;
@@ -406,37 +454,50 @@ function FindingPicker({
   onSelect: (id: string) => void;
   loading: boolean;
 }) {
-  const visible = findings.slice(0, 5);
+  const facets = useMemo(() => {
+    const severity = findings.reduce<Record<string, number>>((acc, finding) => {
+      const key = finding.severity?.toLowerCase() || "unknown";
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+    const unassigned = findings.filter((finding) => !finding.owner || finding.owner === "Unassigned").length;
+    const overdue = findings.filter((finding) => finding.sla_status?.toLowerCase().includes("overdue")).length;
+    const frameworks = new Set(
+      findings.flatMap((finding) => finding.controls?.map((control) => control.framework_name).filter(Boolean) ?? []),
+    ).size;
+    return [
+      ["Critical", severity.critical ?? 0],
+      ["High", severity.high ?? 0],
+      ["Overdue", overdue],
+      ["Unassigned", unassigned],
+      ["Frameworks", frameworks],
+    ] as const;
+  }, [findings]);
+  const scopeCopy = grcLoadedRowsCopy({ loaded: loadedCount, limit: FINDING_PICKER_LIMIT, meta, noun: "open findings" });
   if (loading && findings.length === 0) return null;
   return (
-    <Panel title="Finding selection">
-      <ResultLimitNotice loaded={loadedCount} limit={FINDING_PICKER_LIMIT} meta={meta} noun="findings" className="mb-3" />
-      <div className="grid gap-3 lg:grid-cols-5">
-        {visible.map((finding) => {
-          const active = finding.id === selectedFindingID;
-          return (
-            <button
-              key={finding.id}
-              type="button"
-              onClick={() => onSelect(finding.id)}
-              className={`rounded-lg border p-3 text-left transition ${active ? "border-indigo-400 bg-indigo-50 dark:border-indigo-300/60 dark:bg-indigo-500/10" : "border-[color:var(--border)] bg-white hover:border-[color:var(--border-strong)] dark:bg-white/5"}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <RiskBadge score={finding.risk_score} />
-                <Badge value={finding.severity} tone="severity" />
-              </div>
-              <div className="mt-2 line-clamp-2 text-[13px] font-semibold text-[var(--text-primary)]">{finding.title}</div>
-              <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{finding.id}</div>
-            </button>
-          );
-        })}
-        {findings.length === 0 && (
-          <div className="col-span-full rounded-lg border border-dashed border-[color:var(--border-strong)] p-6 text-center text-[13px] text-[var(--text-muted)]">
-            No open findings match the current filters.
-          </div>
-        )}
-      </div>
-    </Panel>
+    <WorklistTable
+      title="Open findings"
+      description={(
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>{scopeCopy}</span>
+          {facets.map(([label, value]) => (
+            <span key={label}>{label}: {value.toLocaleString()}</span>
+          ))}
+        </span>
+      )}
+      rows={findings}
+      columns={findingPickerColumns}
+      emptyMessage="No open findings match the current filters."
+      searchPlaceholder="Filter loaded finding rows"
+      filterKeys={findingPickerSearchKeys}
+      pageSize={12}
+      getRowKey={(finding) => finding.id}
+      selectedRowKey={selectedFindingID || null}
+      onRowClick={(finding) => onSelect(finding.id)}
+      resultNoun="findings"
+      tableContainerClassName="max-h-[34rem] overflow-auto"
+    />
   );
 }
 
