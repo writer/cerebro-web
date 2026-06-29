@@ -16,9 +16,10 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { extractRecords, withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { grcBoundedRows } from "@/lib/grc-list";
 import { displayDate, shortEntity } from "@/lib/grc";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 import {
@@ -73,6 +74,8 @@ type LibraryTab = "all" | "attention" | "connected" | "available" | "backlog";
 
 const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
+const CONNECTOR_RUNTIME_LIMIT = 500;
+const CONNECTOR_RENDER_LIMIT = 50;
 
 const libraryTabs: Array<{ id: LibraryTab; label: string; icon: ReactNode }> = [
   { id: "connected", label: "Connected", icon: <CheckCircle2 className="h-4 w-4" /> },
@@ -664,13 +667,16 @@ export default function ConnectorsPage() {
   const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
   const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: debouncedTenantID }));
 
-  const sourceRuntimes = useMemo(
-    () =>
-      extractRecords(libraryQuery.data, ["runtimes", "source_runtimes"])
+  const boundedSourceRuntimeRows = useMemo(
+    () => grcBoundedRows({
+      rows: extractRecords(libraryQuery.data, ["runtimes", "source_runtimes"])
         .map((runtime) => normalizeRuntime(runtime))
         .filter((runtime) => runtime.runtime_id && runtime.source_id),
+      limit: CONNECTOR_RUNTIME_LIMIT,
+    }),
     [libraryQuery.data],
   );
+  const sourceRuntimes = boundedSourceRuntimeRows.rows;
 
   const connectorView = useMemo(() => {
     const library = libraryQuery.data?.connectors ?? [];
@@ -714,6 +720,11 @@ export default function ConnectorsPage() {
     });
     return filterConnectorCards(scoped, sourceQuery, readinessFilter);
   }, [cards, debouncedSourceID, libraryTab, readinessFilter, sourceQuery]);
+  const boundedVisibleCards = useMemo(
+    () => grcBoundedRows({ rows: visibleCards, limit: CONNECTOR_RENDER_LIMIT, total: visibleCards.length }),
+    [visibleCards],
+  );
+  const renderedCards = boundedVisibleCards.rows;
   const connectedCards = cards.filter((card) => connectorRuntimeTotal(card) > 0);
   const requestableCards = cards.filter((card) => !connectorSetupAllowed(card) && Boolean(card.requestable));
   const customDefinitions = definitionsQuery.data?.definitions ?? [];
@@ -846,7 +857,7 @@ export default function ConnectorsPage() {
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
         <Panel
           title={currentView.title}
-          action={<span className="text-[12px] text-[var(--text-muted)]">{visibleCards.length} shown</span>}
+          action={<span className="text-[12px] text-[var(--text-muted)]">{renderedCards.length} shown</span>}
         >
           <div className="space-y-4">
             {libraryTab !== "attention" && (
@@ -860,9 +871,10 @@ export default function ConnectorsPage() {
               />
             )}
             <div className="space-y-3 md:hidden">
+              <ResultLimitNotice loaded={renderedCards.length} meta={boundedVisibleCards.meta} limit={CONNECTOR_RENDER_LIMIT} noun="sources" />
               <ConnectorResultList
                 libraryTab={libraryTab}
-                visibleCards={visibleCards}
+                visibleCards={renderedCards}
                 sourceRuntimes={sourceRuntimes}
                 tenantID={debouncedTenantID}
                 activeSourceID={debouncedSourceID}
@@ -885,9 +897,10 @@ export default function ConnectorsPage() {
                 tabCounts={tabCounts}
                 onTab={setLibraryTab}
               />
+              <ResultLimitNotice loaded={renderedCards.length} meta={boundedVisibleCards.meta} limit={CONNECTOR_RENDER_LIMIT} noun="sources" />
               <ConnectorResultList
                 libraryTab={libraryTab}
-                visibleCards={visibleCards}
+                visibleCards={renderedCards}
                 sourceRuntimes={sourceRuntimes}
                 tenantID={debouncedTenantID}
                 activeSourceID={debouncedSourceID}
