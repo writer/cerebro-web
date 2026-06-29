@@ -386,6 +386,7 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
   const [assignmentReason, setAssignmentReason] = useState("Attach missing answer evidence.");
   const [assignmentDue, setAssignmentDue] = useState("");
   const [commentBody, setCommentBody] = useState("");
+  const [approvalApprover, setApprovalApprover] = useState("");
   const [approvalState, setApprovalState] = useState("approved");
   const [approvalReason, setApprovalReason] = useState("Evidence accepted.");
   const reviewsQuery = useGRCQuery<GRCVendorQuestionnaireReviewsResponse>(
@@ -443,10 +444,11 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
 
   const submitApproval = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedReview) return;
+    const approver = approvalApprover.trim();
+    if (!selectedReview || !approver) return;
     await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/approvals`, {
       tenant_id: tenantID || undefined,
-      approver: "security@example.com",
+      approver,
       state: approvalState,
       reason: approvalReason,
     });
@@ -554,13 +556,14 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
 
                     <form onSubmit={submitApproval} className="space-y-2 rounded-md border border-[color:var(--border)] p-3">
                       <div className="text-[13px] font-semibold text-[var(--text-primary)]">Record decision</div>
+                      <input value={approvalApprover} onChange={(event) => setApprovalApprover(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Approver" placeholder="approver@example.com" />
                       <select value={approvalState} onChange={(event) => setApprovalState(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Approval state">
                         <option value="approved">Approved</option>
                         <option value="needs_followup">Needs follow-up</option>
                         <option value="rejected">Rejected</option>
                       </select>
                       <input value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Approval reason" />
-                      <button type="submit" disabled={mutation.saving} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
+                      <button type="submit" disabled={mutation.saving || !approvalApprover.trim()} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
                         <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                         Save decision
                       </button>
