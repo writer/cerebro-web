@@ -11,7 +11,7 @@ import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceIt
 import { displayDate, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
-import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
+import { GRC_WORKLIST_LIMIT, grcLoadedRows } from "@/lib/grc-list";
 import { useQueryParamState } from "@/lib/query-params";
 import { metricDetailForState, metricValueForState, runtimeStateDescription, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -179,9 +179,10 @@ export default function EvidencePage() {
     ["Rule", activeEvidence.rule_id || "—"],
     ["Created", displayDate(activeEvidence.created_at)],
   ] : [];
-  const totalEvidence = data?.meta?.total ?? evidence.length;
+  const evidenceRows = grcLoadedRows({ loaded: evidence.length, limit: GRC_WORKLIST_LIMIT, meta: data?.meta });
+  const totalEvidence = evidenceRows.total ?? evidenceRows.loaded;
   const evidenceStats: EvidenceStat[] = [
-    { label: "Evidence items", value: totalEvidence, detail: data?.meta?.truncated ? `${evidence.length} loaded` : "in scope", state: metricState },
+    { label: "Evidence items", value: totalEvidence, detail: evidenceRows.truncated ? `${evidenceRows.loaded.toLocaleString()} loaded` : "in scope", state: metricState },
     { label: "Events", value: events, detail: "linked events", state: metricState },
     { label: "Claims", value: claims, detail: "claim references", state: metricState },
     { label: "Graph roots", value: graphRoots, detail: "impact anchors", state: metricState },
@@ -250,6 +251,8 @@ export default function EvidencePage() {
             <EvidenceScopePanel
               activeEvidence={activeEvidence}
               evidenceCount={totalEvidence}
+              evidenceState={metricState}
+              loadedEvidenceCount={evidenceRows.loaded}
               packageState={packagedMetricState}
               packagedError={packagedError}
             />
@@ -475,21 +478,33 @@ export default function EvidencePage() {
 function EvidenceScopePanel({
   activeEvidence,
   evidenceCount,
+  evidenceState,
+  loadedEvidenceCount,
   packageState,
   packagedError,
 }: {
   activeEvidence: GRCEvidence | null;
   evidenceCount: number;
+  evidenceState: RuntimeState;
+  loadedEvidenceCount: number;
   packageState: RuntimeState;
   packagedError?: string | null;
 }) {
   const packageText = packageState === "ready" ? "Package records loaded" : packagedError ? "Package records unavailable" : runtimeStateDescription(packageState);
+  const evidenceValue = evidenceState === "ready"
+    ? evidenceCount.toLocaleString()
+    : metricValueForState({ state: evidenceState, value: evidenceCount });
+  const evidenceDetail = evidenceState === "ready"
+    ? "total evidence items"
+    : metricDetailForState({ state: evidenceState, detail: "total evidence items" });
+  const loadedDetail = `${loadedEvidenceCount.toLocaleString()} loaded in register`;
   return (
     <div className="space-y-4">
       <div>
         <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Current view</div>
-        <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{evidenceCount}</div>
-        <div className="mt-1 text-[13px] text-[var(--text-muted)]">evidence items</div>
+        <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{evidenceValue}</div>
+        <div className="mt-1 text-[13px] text-[var(--text-muted)]">{evidenceDetail}</div>
+        {evidenceState === "ready" && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{loadedDetail}</div>}
       </div>
       <div className="space-y-3 border-t border-[color:var(--border)] pt-4">
         <div className="flex items-start gap-2.5">
