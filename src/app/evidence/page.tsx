@@ -224,7 +224,12 @@ export default function EvidencePage() {
     { label: "Exports", value: packagedData?.export_artifacts?.length ?? 0, detail: "hashed artifacts", state: packagedMetricState },
   ];
   const activeFilterCount = Object.values(filterState.trimmedValues).filter(Boolean).length;
-  const scopeLabel = activeFilterCount === 0 ? "All evidence" : `${activeFilterCount} active ${activeFilterCount === 1 ? "filter" : "filters"}`;
+  const scopeLabel = activeFilterCount === 0
+    ? shouldLoadPackaged ? "All package records" : "All evidence"
+    : `${activeFilterCount} active ${activeFilterCount === 1 ? "filter" : "filters"}`;
+  const scopeDescription = shouldLoadPackaged
+    ? "Filter package requests, control posture, collection sources, evidence, and lineage by tenant or graph context."
+    : "Narrow the register by tenant, finding, run, rule, or graph root.";
   const refreshCurrentView = () => {
     void reload();
     if (shouldLoadPackaged) void reloadPackaged();
@@ -235,7 +240,7 @@ export default function EvidencePage() {
       <PageHeader
         contractId="evidence"
         title="Evidence"
-        description="Evidence linked to findings, rules, runs, claims, events, and graph roots."
+        description={shouldLoadPackaged ? "Package requests, review state, exports, lineage, and evidence completeness." : "Evidence linked to findings, rules, runs, claims, events, and graph roots."}
         action={
           <button type="button" onClick={refreshCurrentView} className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-[var(--primary-hover)]">
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -255,7 +260,7 @@ export default function EvidencePage() {
                 </div>
                 <h2 className="mt-2 text-[17px] font-semibold text-[var(--text-primary)]">{scopeLabel}</h2>
                 <p className="mt-1 text-[13px] text-[var(--text-muted)]">
-                  Narrow the register by tenant, finding, run, rule, or graph root.
+                  {scopeDescription}
                 </p>
               </div>
               {data?.generated_at && (
@@ -280,14 +285,15 @@ export default function EvidencePage() {
               evidenceState={metricState}
               loadedEvidenceCount={evidenceRows.loaded}
               packageLoaded={shouldLoadPackaged}
+              packageMode={shouldLoadPackaged}
+              packagePacketCount={packagedMetrics.packets}
+              packageRequestCount={packagedMetrics.requests}
               packageState={packagedMetricState}
               packagedError={packagedError}
             />
           </div>
         </div>
       </section>
-
-      <EvidenceMetricStrip blockedLabel="Evidence totals did not load." stats={evidenceStats} pendingLabel="Loading evidence totals..." />
 
       <EvidenceSectionSwitcher
         activeSection={activeSection}
@@ -296,6 +302,10 @@ export default function EvidencePage() {
         packageCount={packagedMetrics.requests}
         packageLoaded={Boolean(packagedData)}
       />
+
+      {activeSection === "register" && (
+        <EvidenceMetricStrip blockedLabel="Evidence totals did not load." stats={evidenceStats} pendingLabel="Loading evidence totals..." />
+      )}
 
       {activeSection === "package" && (
         <section className="space-y-4">
@@ -393,8 +403,8 @@ export default function EvidencePage() {
         </section>
       )}
 
-      {isInitialLoading && <LoadingBlock label="Loading evidence..." />}
-      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Evidence will appear when the API is reachable." />}
+      {activeSection === "register" && isInitialLoading && <LoadingBlock label="Loading evidence..." />}
+      {activeSection === "register" && error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Evidence will appear when the API is reachable." />}
 
       {activeSection === "register" && data && !error && (
         <section className="overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
@@ -559,6 +569,9 @@ function EvidenceScopePanel({
   evidenceState,
   loadedEvidenceCount,
   packageLoaded,
+  packageMode,
+  packagePacketCount,
+  packageRequestCount,
   packageState,
   packagedError,
 }: {
@@ -567,33 +580,43 @@ function EvidenceScopePanel({
   evidenceState: RuntimeState;
   loadedEvidenceCount: number;
   packageLoaded: boolean;
+  packageMode: boolean;
+  packagePacketCount: number;
+  packageRequestCount: number;
   packageState: RuntimeState;
   packagedError?: string | null;
 }) {
   const packageText = !packageLoaded ? "Open package workflow" : packageState === "ready" ? "Package records loaded" : packagedError ? "Package records unavailable" : runtimeStateDescription(packageState);
-  const evidenceValue = evidenceState === "ready"
-    ? evidenceCount.toLocaleString()
-    : metricValueForState({ state: evidenceState, value: evidenceCount });
-  const evidenceDetail = evidenceState === "ready"
-    ? "total evidence items"
-    : metricDetailForState({ state: evidenceState, detail: "total evidence items" });
-  const loadedDetail = `${loadedEvidenceCount.toLocaleString()} loaded in register`;
+  const currentState = packageMode ? packageState : evidenceState;
+  const currentValue = packageMode ? packageRequestCount : evidenceCount;
+  const currentLabel = packageMode ? "package requests" : "total evidence items";
+  const currentDetail = packageMode
+    ? `${packagePacketCount.toLocaleString()} packet records`
+    : `${loadedEvidenceCount.toLocaleString()} loaded in register`;
+  const evidenceValue = currentState === "ready"
+    ? currentValue.toLocaleString()
+    : metricValueForState({ state: currentState, value: currentValue });
+  const evidenceDetail = currentState === "ready"
+    ? currentLabel
+    : metricDetailForState({ state: currentState, detail: currentLabel });
   return (
     <div className="space-y-4">
       <div>
         <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Current view</div>
         <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{evidenceValue}</div>
         <div className="mt-1 text-[13px] text-[var(--text-muted)]">{evidenceDetail}</div>
-        {evidenceState === "ready" && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{loadedDetail}</div>}
+        {currentState === "ready" && <div className="mt-1 text-[12px] text-[var(--text-muted)]">{currentDetail}</div>}
       </div>
       <div className="space-y-3 border-t border-[color:var(--border)] pt-4">
-        <div className="flex items-start gap-2.5">
-          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-          <div>
-            <div className="text-[12px] font-medium text-[var(--text-primary)]">{activeEvidence ? shortEntity(activeEvidence.id) : "No item selected"}</div>
-            <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">detail pane</div>
+        {!packageMode && (
+          <div className="flex items-start gap-2.5">
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+            <div>
+              <div className="text-[12px] font-medium text-[var(--text-primary)]">{activeEvidence ? shortEntity(activeEvidence.id) : "No item selected"}</div>
+              <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">detail pane</div>
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex items-start gap-2.5">
           <PackageCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
           <div>
