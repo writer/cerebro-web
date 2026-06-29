@@ -20,6 +20,12 @@ describe("grc loaded row copy", () => {
       "Showing first 200 assets. Narrow filters or export the full file.",
     );
   });
+
+  it("uses singular nouns when the loaded total is one", () => {
+    expect(grcLoadedRowsCopy({ loaded: 1, meta: { limit: 100, returned: 1, total: 1, truncated: false }, noun: "findings" })).toBe(
+      "Showing 1 of 1 finding.",
+    );
+  });
 });
 
 describe("grc bounded rows", () => {

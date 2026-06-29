@@ -49,11 +49,11 @@ function FrameworkCard({ framework }: { framework: GRCFramework }) {
         </div>
         <div>
           <div className="font-medium text-[var(--text-primary)]">{framework.family_count}</div>
-          <div>Families</div>
+          <div>{framework.family_count === 1 ? "Family" : "Families"}</div>
         </div>
         <div>
           <div className="font-medium text-[var(--text-primary)]">{framework.control_count}</div>
-          <div>Catalog controls</div>
+          <div>{framework.control_count === 1 ? "Catalog control" : "Catalog controls"}</div>
         </div>
       </div>
       {gapActions.length > 0 && (

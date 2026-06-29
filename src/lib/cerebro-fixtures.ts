@@ -922,14 +922,18 @@ const frameworkCoverage = (rows: typeof controls) => ({
   mapped_rules: rows.reduce((total, control) => total + control.mapped_rules.length, 0),
 });
 
+const countLabel = (count: number, singular: string, plural = `${singular}s`) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
 const frameworkMaturity = (rows: typeof controls) => {
   const averageScore = rows.length === 0
     ? 0
     : Math.round(rows.reduce((total, control) => total + (control.evidence_score ?? 0), 0) / rows.length);
+  const openFindings = rows.reduce((total, control) => total + control.open_findings, 0);
   return {
     score: averageScore,
     status: averageScore >= 85 ? "audit_ready" : averageScore >= 70 ? "measured" : "needs_review",
-    summary: `${rows.length} measured controls with ${rows.reduce((total, control) => total + control.open_findings, 0)} open findings.`,
+    summary: `${countLabel(rows.length, "measured control")} with ${countLabel(openFindings, "open finding")}.`,
   };
 };
 
@@ -941,6 +945,19 @@ const frameworkGapActions = (rows: typeof controls) => {
     stale > 0 ? { code: "refresh_stale_evidence", label: "Refresh stale evidence", priority: 2, count: stale } : null,
     { code: "export_audit_packet", label: "Export current packet", priority: 3, count: rows.length },
   ].filter(Boolean);
+};
+
+const normalizeFrameworkQuery = (value: string) =>
+  value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+const controlsForFrameworkParam = (params?: URLSearchParams) => {
+  const framework = normalizeFrameworkQuery(params?.get("framework") ?? "");
+  if (!framework) return controls;
+  return controls.filter((control) =>
+    [control.framework_id, control.framework_name, control.framework_version]
+      .filter(Boolean)
+      .some((value) => normalizeFrameworkQuery(value ?? "") === framework),
+  );
 };
 
 const frameworkRecord = ({
@@ -977,14 +994,14 @@ const frameworksFixture = () => ({
       id: "soc2",
       name: "SOC 2",
       version: "2024",
-      description: "SOC 2 control coverage for the local fixture dataset.",
+      description: "SOC 2 control coverage, evidence gaps, and open findings.",
       rows: controls.filter((control) => control.framework_id === "soc2"),
     }),
     frameworkRecord({
       id: "iso27001",
       name: "ISO 27001",
       version: "2022",
-      description: "ISO 27001 control coverage for the local fixture dataset.",
+      description: "ISO 27001 control coverage, evidence gaps, and open findings.",
       rows: controls.filter((control) => control.framework_id === "iso27001"),
     }),
   ],
@@ -1119,7 +1136,7 @@ const controlArchetypesFixture = () => {
     id: `${control.framework_id}-${control.control_id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     family_id: slugField(control.owner_domain || control.framework_id),
     family_name: control.owner_domain || control.framework_name,
-    family_description: `${control.owner_domain || control.framework_name} controls in the local fixture dataset.`,
+    family_description: `${control.owner_domain || control.framework_name} controls prepared for local UI development.`,
     recommended: control.status !== "passing",
     control: {
       id: `${control.framework_id}:${control.control_id}`,
@@ -1570,73 +1587,80 @@ const auditPacketFixture = (findingID: string) => {
   };
 };
 
-const controlPacketFixture = () => ({
-  profile: { id: "fixture", name: "Fixture control profile", description: "Public placeholder profile for local UI development." },
-  packet: {
-    version: "fixture-1",
-    generated_at: generatedAt,
-    summary: { total: controls.length, by_status: { failing: 1, manual_review: 1, passing: 1 } },
-    controls: controls.map((control) => ({
-      control: {
-        framework_id: control.framework_id,
-        framework_name: control.framework_name,
-        framework_version: control.framework_version,
-        control_id: control.control_id,
-        title: control.title,
-        owner_domain: control.owner_domain,
-      },
-      status: control.status,
-      reasons: ["Fixture readiness signal"],
-      tags: ["fixture"],
-      mapped_rules: control.mapped_rules,
-      findings: (control.findings ?? []).map((finding) => ({
-        id: finding.id,
-        title: finding.title,
-        status: finding.status,
-        severity: finding.severity,
-        first_observed_at: finding.first_observed_at,
-        last_observed_at: finding.last_observed_at,
-      })),
-      evidence: {
-        summary: {
-          evidence_ids: evidence.map((item) => item.id),
-          evidence_expectation_ids: [`${control.control_id}-expectation`],
-          latest_evidence_at: generatedAt,
+const controlPacketFixture = (params?: URLSearchParams) => {
+  const rows = controlsForFrameworkParam(params);
+  const byStatus = rows.reduce<Record<string, number>>((counts, control) => {
+    counts[control.status] = (counts[control.status] ?? 0) + 1;
+    return counts;
+  }, {});
+  return {
+    profile: { id: "fixture", name: "Control evidence profile", description: "Control readiness profile for local UI development." },
+    packet: {
+      version: "fixture-1",
+      generated_at: generatedAt,
+      summary: { total: rows.length, by_status: byStatus },
+      controls: rows.map((control) => ({
+        control: {
+          framework_id: control.framework_id,
+          framework_name: control.framework_name,
+          framework_version: control.framework_version,
+          control_id: control.control_id,
+          title: control.title,
+          owner_domain: control.owner_domain,
         },
-        expectations: [{
-          id: `${control.control_id}-expectation`,
-          title: `${control.control_id} evidence`,
-          type: "automated",
-          required: true,
-          status: control.status === "passing" ? "ready" : "needs_review",
-          quality: control.evidence_quality,
-          evidence_ids: evidence.map((item) => item.id).slice(0, 1),
-        }],
-        items: evidence.map((item) => ({
-          id: item.id,
-          rule_id: item.rule_id,
-          status: "observed",
-          quality: control.evidence_quality,
-          source: item.runtime_id,
-          observed_at: item.created_at,
-        })).slice(0, 2),
-      },
-      audit_readiness: {
-        score: control.evidence_score ?? 75,
-        rating: control.status,
-        summary: "Fixture readiness summary.",
-        open_findings: control.open_findings,
-        evidence_items: control.evidence_items,
-        required_expectations: control.evidence_expectations,
-        missing_evidence: control.missing_evidence_items,
-        stale_evidence: control.stale_evidence_items,
-      },
-    })),
-  },
-  controls,
-  metadata: { generated_by: "cerebro-web-fixture", tenant_id: tenantID, generated_at: generatedAt },
-  generated_at: generatedAt,
-});
+        status: control.status,
+        reasons: ["Readiness signal"],
+        tags: ["readiness"],
+        mapped_rules: control.mapped_rules,
+        findings: (control.findings ?? []).map((finding) => ({
+          id: finding.id,
+          title: finding.title,
+          status: finding.status,
+          severity: finding.severity,
+          first_observed_at: finding.first_observed_at,
+          last_observed_at: finding.last_observed_at,
+        })),
+        evidence: {
+          summary: {
+            evidence_ids: evidence.map((item) => item.id),
+            evidence_expectation_ids: [`${control.control_id}-expectation`],
+            latest_evidence_at: generatedAt,
+          },
+          expectations: [{
+            id: `${control.control_id}-expectation`,
+            title: `${control.control_id} evidence`,
+            type: "automated",
+            required: true,
+            status: control.status === "passing" ? "ready" : "needs_review",
+            quality: control.evidence_quality,
+            evidence_ids: evidence.map((item) => item.id).slice(0, 1),
+          }],
+          items: evidence.map((item) => ({
+            id: item.id,
+            rule_id: item.rule_id,
+            status: "observed",
+            quality: control.evidence_quality,
+            source: item.runtime_id,
+            observed_at: item.created_at,
+          })).slice(0, 2),
+        },
+        audit_readiness: {
+          score: control.evidence_score ?? 75,
+          rating: control.status,
+          summary: "Evidence readiness summary.",
+          open_findings: control.open_findings,
+          evidence_items: control.evidence_items,
+          required_expectations: control.evidence_expectations,
+          missing_evidence: control.missing_evidence_items,
+          stale_evidence: control.stale_evidence_items,
+        },
+      })),
+    },
+    controls: rows,
+    metadata: { generated_by: "cerebro-web-fixture", tenant_id: tenantID, generated_at: generatedAt },
+    generated_at: generatedAt,
+  };
+};
 
 const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsResponse => {
   const evidenceItems = limitList(evidence, params);
@@ -3220,7 +3244,7 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedMethod !== "GET") {
     if (normalizedMethod === "POST" && normalizedPath === "grc/control-packets") {
-      return jsonFixture(controlPacketFixture());
+      return jsonFixture(controlPacketFixture(searchParams));
     }
     if (normalizedMethod === "POST" && normalizedPath === "grc/control-packets/export") {
       return textFixture("# Control Evidence Packet\n\nFixture control packet export.\n", "text/markdown; charset=utf-8");
@@ -3397,11 +3421,11 @@ export const cerebroFixtureResponseFor = ({
   }
 
   if (normalizedPath === "grc/control-packets") {
-    return jsonFixture(controlPacketFixture());
+    return jsonFixture(controlPacketFixture(searchParams));
   }
 
   if (normalizedPath === "grc/control-packets/detail") {
-    return jsonFixture(controlPacketFixture());
+    return jsonFixture(controlPacketFixture(searchParams));
   }
 
   if (normalizedPath === "grc/control-packets/export") {
