@@ -176,7 +176,7 @@ function ConnectorLibraryRow({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-[15px] font-semibold leading-5 text-[var(--text-primary)]">{displayName}</h3>
-              <Badge value={status} />
+              <Badge value={readinessLabels[status]} />
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
               <span>{meta.category}</span>
@@ -220,7 +220,7 @@ function ConnectorLibraryRow({
                   {connectorIntegrationDepthLabel(card)}
                 </span>
               )}
-              {capabilities.length === 0 && !meta.authBadge && !card.catalog_status && <span className="text-[12px] text-[var(--text-muted)]">No advertised capabilities</span>}
+              {capabilities.length === 0 && !meta.authBadge && !card.catalog_status && <span className="text-[12px] text-[var(--text-muted)]">No capabilities configured</span>}
             </div>
             {resourceTypes.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -251,7 +251,7 @@ function ConnectorLibraryRow({
       <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-6">
         <SourceSignal label="Connections" value={total} attention={total === 0} />
         <SourceSignal label="Healthy" value={`${healthy}/${Math.max(total, 1)}`} attention={total > 0 && healthy < total} />
-        <SourceSignal label="Resource types" value={resourceTypeStats.resourceTypes > 0 ? resourceTypeStats.resourceTypes : "None"} attention={resourceTypeStats.catalogResourceTypes > 0 && resourceTypeStats.resourceTypes === 0} />
+        <SourceSignal label="Resource types" value={resourceTypeStats.resourceTypes > 0 ? resourceTypeStats.resourceTypes : "0 mapped"} attention={resourceTypeStats.catalogResourceTypes > 0 && resourceTypeStats.resourceTypes === 0} />
         <SourceSignal label="Depth" value={card.integration_depth ? connectorIntegrationDepthLabel(card) : "Unknown"} />
         <SourceSignal label="Action" value={attention} attention={attention > 0} />
         <SourceSignal label="Last activity" value={latestActivity} />
@@ -333,7 +333,7 @@ function RuntimeIssueQueue({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">{displayName}</h3>
-                      <Badge value={sourceStatus} />
+                      <Badge value={readinessLabels[sourceStatus]} />
                     </div>
                     <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">{sourceAction}</p>
                     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -414,7 +414,7 @@ function AttentionNotice({
         <div>
           <div className="text-[13px] font-semibold">Some sources need attention</div>
           <div className="mt-0.5 text-[12px] leading-5">
-            {attentionCount} source{attentionCount === 1 ? "" : "s"} have {actionConnections} connection signal{actionConnections === 1 ? "" : "s"} to resolve.
+            {attentionCount} source{attentionCount === 1 ? " has" : "s have"} {actionConnections} connection signal{actionConnections === 1 ? "" : "s"} to resolve.
           </div>
         </div>
         <button type="button" onClick={onViewIssues} className="secondary-button bg-white/80 px-3 py-2 text-[12px] dark:bg-black/10">
@@ -448,7 +448,7 @@ function ReadinessMix({
                 : "border-[color:var(--border)] bg-[var(--surface)] hover:border-[color:var(--border-strong)]"
             }`}
           >
-            <Badge value={readiness} />
+            <Badge value={readinessLabels[readiness]} />
             <span className="text-[13px] font-semibold text-[var(--text-primary)]">{counts[readiness]}</span>
           </button>
         ))}
@@ -594,7 +594,7 @@ function CatalogResourceTypesPanel({ cards, tenantID }: { cards: ConnectorCard[]
             </div>
           );
         })}
-        {resourceTypeCards.length === 0 && <EmptyBlock label="No resource types advertised." />}
+        {resourceTypeCards.length === 0 && <EmptyBlock label="No resource types configured." />}
       </div>
     </Panel>
   );
@@ -753,7 +753,7 @@ export default function ConnectorsPage() {
     setReadinessFilter("all");
   };
   const viewCopy: Record<LibraryTab, { title: string; detail: string }> = {
-    all: { title: "All sources", detail: "Every advertised source, connected or not." },
+    all: { title: "All sources", detail: "Every source, connected or not." },
     attention: { title: "Sources needing attention", detail: "Fix failing, stale, or incomplete runtime signals first." },
     available: { title: "Available sources", detail: "Sources that are ready to connect." },
     backlog: { title: "Source backlog", detail: "Catalog-only and restricted sources that can be requested or promoted into setup." },
