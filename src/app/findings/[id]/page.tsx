@@ -8,12 +8,13 @@ import AskAboutLink from "@/components/ask/AskAboutLink";
 import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
 import { useApiKey } from "@/components/providers";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
+import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { aperioResponseActionCandidates, aperioResponseOwner } from "@/lib/aperio-response-actions";
 import { pluralize } from "@/lib/format";
 import { displayDate, GRCAuditPacket, GRCEntityImpact, humanize, shortEntity } from "@/lib/grc";
-import { grcEntityImpactPath, useGRCQuery } from "@/lib/grc-client";
+import { grcEntityImpactPath, grcPath, useGRCQuery } from "@/lib/grc-client";
+import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 
 type Tab = "overview" | "evidence" | "graph" | "timeline";
 type FindingActionKey = "assign" | "due" | "note" | "ticket" | "resolve" | "suppress";
@@ -22,6 +23,8 @@ const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
 const secondaryButtonClass = "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50";
 const primaryButtonClass = "rounded-md border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50";
+const FINDING_RESOURCE_URN_LIMIT = 50;
+const FINDING_SOURCE_COVERAGE_LIMIT = 24;
 
 const formatDateInput = (value?: string) => {
   if (!value) return "";
@@ -65,11 +68,13 @@ function KeyValueRow({ label, value, mono = false, href }: { label: string; valu
 }
 
 function ResourceURNsPanel({ urns }: { urns?: string[] }) {
-  if (!urns || urns.length === 0) return null;
+  const boundedURNs = grcBoundedRows({ rows: urns, limit: FINDING_RESOURCE_URN_LIMIT });
+  if (boundedURNs.rows.length === 0) return null;
   return (
-    <Panel title={`Resource URNs (${urns.length})`}>
+    <Panel title={`Resource URNs (${boundedURNs.meta.total?.toLocaleString() ?? boundedURNs.rows.length})`}>
       <div className="space-y-1.5">
-        {urns.map((urn) => (
+        <ResultLimitNotice loaded={boundedURNs.rows.length} meta={boundedURNs.meta} limit={FINDING_RESOURCE_URN_LIMIT} noun="resource URNs" />
+        {boundedURNs.rows.map((urn) => (
           <div key={urn} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
             <span className="truncate font-mono text-[12px] text-slate-700">{urn}</span>
             <Link href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="ml-2 shrink-0 text-[12px] font-medium text-indigo-600 hover:text-indigo-800">
@@ -115,6 +120,7 @@ function AuditContextPanel({ finding }: { finding: GRCAuditPacket["finding"] }) 
   const riskStatement = finding.risk_statement || firstAttribute(attributes, ["policy_risk_statement", "risk_statement"]);
   const remediationIntent = finding.remediation_intent || firstAttribute(attributes, ["policy_remediation_intent", "remediation_intent"]);
   const sourceCoverageRefs = finding.source_coverage_refs ?? [];
+  const boundedSourceCoverage = grcBoundedRows({ rows: sourceCoverageRefs, limit: FINDING_SOURCE_COVERAGE_LIMIT });
   const hasContext = evidenceType || assessmentMethods.length > 0 || auditorGuidance.length > 0 || riskStatement || remediationIntent || sourceCoverageRefs.length > 0;
 
   if (!hasContext) return null;
@@ -161,8 +167,9 @@ function AuditContextPanel({ finding }: { finding: GRCAuditPacket["finding"] }) 
         {sourceCoverageRefs.length > 0 && (
           <div>
             <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">Source coverage</div>
+            <ResultLimitNotice className="mb-3" loaded={boundedSourceCoverage.rows.length} meta={boundedSourceCoverage.meta} limit={FINDING_SOURCE_COVERAGE_LIMIT} noun="coverage records" />
             <div className="grid gap-2 md:grid-cols-2">
-              {sourceCoverageRefs.map((coverage, index) => (
+              {boundedSourceCoverage.rows.map((coverage, index) => (
                 <Link
                   key={`${coverage.source_id}-${coverage.dimension_id}-${index}`}
                   href={coverage.source_id ? `/connectors/${encodeURIComponent(coverage.source_id)}?tab=scope` : "/connectors"}
@@ -491,7 +498,7 @@ export default function FindingDetailPage() {
   const [suppressReason, setSuppressReason] = useState("");
 
   const { data, error, loading, reload } = useGRCQuery<GRCAuditPacket>(
-    findingID ? `/grc/audit-packets/${encodeURIComponent(findingID)}` : null,
+    findingID ? grcPath(`/grc/audit-packets/${encodeURIComponent(findingID)}`, { limit: GRC_DETAIL_LIMIT }) : null,
   );
 
   const entityURN = data?.finding?.entity;
@@ -500,8 +507,19 @@ export default function FindingDetailPage() {
   );
 
   const finding = data?.finding;
-  const controls = data?.controls ?? finding?.controls ?? [];
-  const evidence = data?.evidence ?? [];
+  const rawControls = data?.controls ?? finding?.controls;
+  const rawEvidence = data?.evidence;
+  const boundedControlRows = useMemo(
+    () => grcBoundedRows({ rows: rawControls, limit: GRC_DETAIL_LIMIT }),
+    [rawControls],
+  );
+  const boundedEvidenceRows = useMemo(
+    () => grcBoundedRows({ rows: rawEvidence, limit: GRC_DETAIL_LIMIT, total: finding?.evidence_count }),
+    [rawEvidence, finding?.evidence_count],
+  );
+  const controls = boundedControlRows.rows;
+  const evidence = boundedEvidenceRows.rows;
+  const evidenceTotal = boundedEvidenceRows.meta.total ?? evidence.length;
 
   const mutateFinding = async (key: FindingActionKey, path: string, method: "POST" | "PUT", body: Record<string, unknown>, success: string) => {
     setActionSaving(key);
@@ -684,7 +702,7 @@ export default function FindingDetailPage() {
             <MetricCard label="Risk Score" value={<RiskBadge score={finding.risk_score} />} detail={`L ${finding.likelihood_score ?? "\u2014"} / I ${finding.impact_score ?? "\u2014"} / C ${finding.confidence_score ?? "\u2014"}`} intent={(finding.risk_score ?? 0) >= 85 ? "danger" : "neutral"} />
             <MetricCard label="Severity" value={<div className="flex items-center gap-1.5"><SeverityDot severity={finding.severity} /><Badge value={finding.severity} tone="severity" /></div>} detail={finding.status} intent={finding.severity === "CRITICAL" ? "danger" : "neutral"} />
             <MetricCard label="Owner" value={finding.owner || "Unassigned"} detail={finding.sla_status} intent={!finding.owner || finding.owner === "Unassigned" ? "warning" : "success"} />
-            <MetricCard label="Evidence" value={evidence.length} detail={`${finding.evidence_count} total`} />
+            <MetricCard label="Evidence" value={evidence.length} detail={`${evidenceTotal.toLocaleString()} total`} />
             <MetricCard label="Controls" value={controls.length} detail={pluralize(controls.length, "mapped objective")} />
           </div>
 
@@ -710,7 +728,9 @@ export default function FindingDetailPage() {
                 <RiskBreakdown finding={finding} />
 
                 <Panel title="Mapped Controls">
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-3">
+                    {controls.length > 0 && <ResultLimitNotice loaded={controls.length} meta={boundedControlRows.meta} limit={GRC_DETAIL_LIMIT} noun="controls" />}
+                    <div className="flex flex-wrap gap-2">
                     {controls.length === 0 && <span className="text-[13px] text-slate-500">No controls mapped.</span>}
                     {controls.map((c) => (
                       <Link
@@ -721,6 +741,7 @@ export default function FindingDetailPage() {
                         {c.framework_name} {c.control_id}
                       </Link>
                     ))}
+                    </div>
                   </div>
                 </Panel>
 
@@ -777,42 +798,45 @@ export default function FindingDetailPage() {
           )}
 
           {tab === "evidence" && (
-            <div id="finding-evidence" className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-              <table className="w-full text-left text-[13px]">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/80">
-                    <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Evidence ID</th>
-                    <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Run / Rule</th>
-                    <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Events</th>
-                    <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Claims</th>
-                    <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Graph Roots</th>
-                    <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {evidence.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-50 transition hover:bg-slate-50/60">
-                      <td className="px-4 py-3 font-mono text-[12px] text-slate-600">{item.id}</td>
-                      <td className="px-4 py-3 text-[12px] text-slate-500">
-                        <div>{shortEntity(item.run_id)}</div>
-                        <div>{shortEntity(item.rule_id)}</div>
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-slate-600">{item.event_ids?.length ?? 0}</td>
-                      <td className="px-4 py-3 tabular-nums text-slate-600">{item.claim_ids?.length ?? 0}</td>
-                      <td className="px-4 py-3 text-[12px]">
-                        {(item.graph_root_urns ?? []).slice(0, 2).map((urn) => (
-                          <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="mr-2 text-indigo-600 hover:text-indigo-800">{shortEntity(urn)}</Link>
-                        ))}
-                        {!item.graph_root_urns?.length && <span className="text-slate-400">&mdash;</span>}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{displayDate(item.created_at)}</td>
+            <div id="finding-evidence" className="space-y-3">
+              <ResultLimitNotice loaded={evidence.length} meta={boundedEvidenceRows.meta} limit={GRC_DETAIL_LIMIT} noun="evidence items" />
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <table className="w-full text-left text-[13px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/80">
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Evidence ID</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Run / Rule</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Events</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Claims</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Graph Roots</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Created</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {evidence.length === 0 && (
-                <div className="flex items-center justify-center p-8 text-[13px] text-slate-500">No evidence attached.</div>
-              )}
+                  </thead>
+                  <tbody>
+                    {evidence.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-50 transition hover:bg-slate-50/60">
+                        <td className="px-4 py-3 font-mono text-[12px] text-slate-600">{item.id}</td>
+                        <td className="px-4 py-3 text-[12px] text-slate-500">
+                          <div>{shortEntity(item.run_id)}</div>
+                          <div>{shortEntity(item.rule_id)}</div>
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-slate-600">{item.event_ids?.length ?? 0}</td>
+                        <td className="px-4 py-3 tabular-nums text-slate-600">{item.claim_ids?.length ?? 0}</td>
+                        <td className="px-4 py-3 text-[12px]">
+                          {(item.graph_root_urns ?? []).slice(0, 2).map((urn) => (
+                            <Link key={urn} href={`/impact?root_urn=${encodeURIComponent(urn)}`} className="mr-2 text-indigo-600 hover:text-indigo-800">{shortEntity(urn)}</Link>
+                          ))}
+                          {!item.graph_root_urns?.length && <span className="text-slate-400">&mdash;</span>}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{displayDate(item.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {evidence.length === 0 && (
+                  <div className="flex items-center justify-center p-8 text-[13px] text-slate-500">No evidence attached.</div>
+                )}
+              </div>
             </div>
           )}
 

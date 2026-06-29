@@ -16,7 +16,7 @@ import {
 
 import { CoverageMetadata, CoverageMetadataList } from "@/components/connectors/CoverageMetadata";
 import ConnectorSetupForm from "@/components/connectors/ConnectorSetupForm";
-import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel } from "@/components/grc/Primitives";
+import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { useApiKey } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { withQuery } from "@/lib/cerebro-data";
@@ -48,6 +48,7 @@ import {
   sourceRuntimeSyncPath,
 } from "@/lib/connectors";
 import { useGRCQuery } from "@/lib/grc-client";
+import { GRC_DETAIL_LIMIT, GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { useQueryParamState } from "@/lib/query-params";
 
 const resourceTypeLabels: Record<string, string> = {
@@ -101,6 +102,11 @@ const gateLabels: Record<string, string> = {
   pilot_signoff: "Sign off on the pilot",
   certification_review: "Pass certification review",
 };
+
+const SOURCE_CDK_SOURCE_LIMIT = 75;
+const SOURCE_CDK_REVIEW_SCOPE_LIMIT = 24;
+const SOURCE_CDK_CHECK_LIMIT = 24;
+const SOURCE_CDK_BLOCKER_LIMIT = 24;
 
 function humanize(value?: string) {
   if (!value) return "";
@@ -317,6 +323,7 @@ function TrustLadder({ definition }: { definition?: ConnectorDefinition }) {
 
 function DataCoveragePanel({ definition }: { definition?: ConnectorDefinition }) {
   const families = definition?.resource_families ?? [];
+  const boundedFamilies = grcBoundedRows({ rows: families, limit: GRC_DETAIL_LIMIT });
   const typeCount = distinctResourceTypes(families).size || families.length;
   return (
     <Panel title="What this source collects" action={<Database className="h-4 w-4 text-[var(--primary)]" />}>
@@ -328,8 +335,9 @@ function DataCoveragePanel({ definition }: { definition?: ConnectorDefinition })
             Collects {typeCount} resource type{typeCount === 1 ? "" : "s"} across {families.length} endpoint{families.length === 1 ? "" : "s"}, added to
             your security graph for findings, evidence, and audit.
           </p>
+          <ResultLimitNotice className="mt-3" loaded={boundedFamilies.rows.length} meta={boundedFamilies.meta} limit={GRC_DETAIL_LIMIT} noun="resource families" />
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {families.map((family) => (
+            {boundedFamilies.rows.map((family) => (
               <div key={family.id} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 truncate text-[13px] font-semibold text-[var(--text-primary)]">
@@ -361,6 +369,7 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
   const referenceOnly = Boolean(auth?.requires_references) || (credFields.length > 0 && credFields.every((field) => field.reference_only));
   const stores = auth?.supported_store_ids ?? [];
   const reviewScopes = (definition?.scope_options ?? []).filter((scope) => scope.needs_user_review);
+  const boundedReviewScopes = grcBoundedRows({ rows: reviewScopes, limit: SOURCE_CDK_REVIEW_SCOPE_LIMIT });
   const ingestMode = definition?.ingest?.mode === "deposit" ? "deposit" : "pull";
   if (!definition) {
     return (
@@ -414,8 +423,9 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
         {reviewScopes.length > 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/25 dark:bg-amber-500/10">
             <div className="text-[12px] font-semibold text-[var(--text-primary)]">Review what you are granting</div>
+            <ResultLimitNotice className="mt-2" loaded={boundedReviewScopes.rows.length} meta={boundedReviewScopes.meta} limit={SOURCE_CDK_REVIEW_SCOPE_LIMIT} noun="review scopes" />
             <ul className="mt-2 space-y-1">
-              {reviewScopes.map((scope) => (
+              {boundedReviewScopes.rows.map((scope) => (
                 <li key={scope.id ?? scope.label} className="rounded-md bg-white/55 p-2 text-[12px] leading-5 text-[var(--text-secondary)] dark:bg-white/5">
                   <div>
                     <span className="font-semibold text-[var(--text-primary)]">{scope.label || humanize(scope.id ?? "")}</span>
@@ -438,6 +448,7 @@ function AccessSafetyPanel({ definition }: { definition?: ConnectorDefinition })
 function RuntimeActivationPlanPanel({ plan }: { plan?: SourceCDKPromotionPlan }) {
   const counts = sourceCDKPlanCategoryCounts(plan);
   const blockers = plan?.blockers ?? [];
+  const boundedBlockers = grcBoundedRows({ rows: blockers, limit: SOURCE_CDK_BLOCKER_LIMIT });
   return (
     <Panel title="Runtime activation plan" action={<Badge value={sourceCDKPlanStatusLabel(plan?.status)} />}>
       {!plan ? (
@@ -460,8 +471,9 @@ function RuntimeActivationPlanPanel({ plan }: { plan?: SourceCDKPromotionPlan })
           {blockers.length > 0 && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-500/25 dark:bg-red-500/10">
               <div className="text-[12px] font-semibold text-[var(--text-primary)]">Blocked by</div>
+              <ResultLimitNotice className="mt-2" loaded={boundedBlockers.rows.length} meta={boundedBlockers.meta} limit={SOURCE_CDK_BLOCKER_LIMIT} noun="blockers" />
               <div className="mt-2 flex flex-wrap gap-2">
-                {blockers.map((blocker) => <Badge key={blocker} value={blocker} />)}
+                {boundedBlockers.rows.map((blocker) => <Badge key={blocker} value={blocker} />)}
               </div>
             </div>
           )}
@@ -474,6 +486,7 @@ function RuntimeActivationPlanPanel({ plan }: { plan?: SourceCDKPromotionPlan })
 function ReadinessChecklist({ definition }: { definition?: ConnectorDefinition }) {
   const checks = definition?.validation?.checks ?? [];
   const open = checks.filter((check) => check.blocking || check.status === "blocked" || check.status === "warning");
+  const boundedOpen = grcBoundedRows({ rows: open, limit: SOURCE_CDK_CHECK_LIMIT });
   const confidenceSteps = [
     "Run a test pull and confirm the sample data looks right.",
     "Confirm only the data you intend is collected.",
@@ -482,7 +495,8 @@ function ReadinessChecklist({ definition }: { definition?: ConnectorDefinition }
   return (
     <Panel title="What's left before you can rely on it" action={definition ? <Badge value={`${open.length} open`} /> : undefined}>
       <div className="space-y-2">
-        {open.map((check) => {
+        {open.length > 0 && <ResultLimitNotice loaded={boundedOpen.rows.length} meta={boundedOpen.meta} limit={SOURCE_CDK_CHECK_LIMIT} noun="open checks" />}
+        {boundedOpen.rows.map((check) => {
           const blocking = check.blocking || check.status === "blocked";
           return (
             <div
@@ -539,10 +553,12 @@ function SourcesQueue({
   selectedID: string;
   tenantID: string;
 }) {
+  const boundedDefinitions = grcBoundedRows({ rows: definitions, limit: SOURCE_CDK_SOURCE_LIMIT });
   return (
-    <Panel title="Your sources" action={<Badge value={`${definitions.length}`} />}>
+    <Panel title="Your sources" action={<Badge value={`${boundedDefinitions.rows.length} shown`} />}>
       <div className="space-y-2">
-        {definitions.map((definition) => {
+        <ResultLimitNotice loaded={boundedDefinitions.rows.length} meta={boundedDefinitions.meta} limit={SOURCE_CDK_SOURCE_LIMIT} noun="sources" />
+        {boundedDefinitions.rows.map((definition) => {
           const definitionID = definition.id ?? "";
           const familyCount = definition.resource_families?.length ?? 0;
           return (
@@ -575,7 +591,8 @@ function SourcesQueue({
 }
 
 function CatalogSourcesPanel({ connectors, tenantID }: { connectors: ConnectorCatalogEntry[]; tenantID: string }) {
-  const rows = connectors
+  const boundedConnectors = grcBoundedRows({ rows: connectors, limit: GRC_WORKLIST_LIMIT });
+  const rows = boundedConnectors.rows
     .map((connector) => ({
       connector,
       resourceTypes: connectorResourceTypes(connector, 3),
@@ -591,6 +608,7 @@ function CatalogSourcesPanel({ connectors, tenantID }: { connectors: ConnectorCa
   return (
     <Panel title="Catalog sources" action={<Badge value={`${resourceTypeSourceCount} with resource types`} />}>
       <div className="space-y-2">
+        <ResultLimitNotice loaded={boundedConnectors.rows.length} meta={boundedConnectors.meta} limit={GRC_WORKLIST_LIMIT} noun="catalog sources" />
         {rows.slice(0, 8).map(({ connector, resourceTypes, stats }) => {
           const setupAllowed = connectorSetupAllowed(connector);
           const href = connectorPath(connector.source_id, { tenant_id: tenantID, tab: setupAllowed ? "setup" : undefined });
@@ -734,20 +752,22 @@ function SourceReadinessContent() {
   const scopedTenantID = tenantID.trim();
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: scopedTenantID }));
+  const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: scopedTenantID, limit: SOURCE_CDK_SOURCE_LIMIT }));
   const definitions = useMemo(() => definitionsQuery.data?.definitions ?? [], [definitionsQuery.data?.definitions]);
   const selectedDefinitionID = requestedDefinitionID || definitions[0]?.id || "";
-  const selectedDefinition = definitions.find((definition) => definition.id === selectedDefinitionID) ?? definitions[0];
+  const selectedListDefinition = definitions.find((definition) => definition.id === selectedDefinitionID) ?? definitions[0];
+  const planQuery = useGRCQuery<ConnectorDefinitionPlanResponse>(
+    selectedDefinitionID ? `/connector-definitions/${encodeURIComponent(selectedDefinitionID)}/promotion-plan` : null,
+  );
+  const planDefinition = planQuery.data?.plan?.definition;
+  const selectedDefinition = (planDefinition?.id && planDefinition.id === selectedDefinitionID ? planDefinition : undefined) ?? selectedListDefinition;
   useEffect(() => {
     const responseTenantID = definitionsQuery.data?.tenant_id?.trim() || selectedDefinition?.tenant_id?.trim() || "";
     if (!scopedTenantID && responseTenantID) {
       setTenantID(responseTenantID);
     }
   }, [definitionsQuery.data?.tenant_id, scopedTenantID, selectedDefinition?.tenant_id, setTenantID]);
-  const planQuery = useGRCQuery<ConnectorDefinitionPlanResponse>(
-    selectedDefinitionID ? `/connector-definitions/${encodeURIComponent(selectedDefinitionID)}/promotion-plan` : null,
-  );
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID }));
+  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID, limit: GRC_WORKLIST_LIMIT }));
   const detailQuery = useGRCQuery<ConnectorDetailResponse>(
     selectedDefinition?.source_id ? withQuery(`/connectors/${encodeURIComponent(selectedDefinition.source_id)}`, { tenant_id: scopedTenantID }) : null,
   );
