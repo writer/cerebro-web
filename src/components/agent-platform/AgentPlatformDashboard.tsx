@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { PageHeader, Panel } from "@/components/grc/Primitives";
@@ -8,12 +8,10 @@ import { useApiKey } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import {
   AGENT_PLATFORM_FALLBACK_CONTRACT,
-  agentPlatformCapabilitiesByDomain,
   agentPlatformDomainById,
   normalizeAgentPlatformContract,
   type AgentPlatformCapability,
   type AgentPlatformContract,
-  type AgentPlatformDomain,
   type AgentPlatformRuntimeEvent,
 } from "@/lib/agent-platform-contract";
 
@@ -25,6 +23,11 @@ type ContractState = {
   source: ContractSource;
   status?: number;
 };
+
+const CAPABILITY_LIMIT = 40;
+const EVENT_LIMIT = 40;
+const REQUIREMENT_LIMIT = 30;
+const INVARIANT_LIMIT = 30;
 
 const emptyContractState: ContractState = {
   contract: AGENT_PLATFORM_FALLBACK_CONTRACT,
@@ -64,73 +67,16 @@ function RiskPill({ risk }: { risk: string }) {
   );
 }
 
-function CapabilityCard({ capability }: { capability: AgentPlatformCapability }) {
-  return (
-    <article className="rounded-md border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-[13px] font-semibold text-slate-900">{capability.name}</h3>
-            <span className="font-mono text-[11px] text-slate-500">{capability.id}@{capability.version}</span>
-          </div>
-          <p className="mt-1 text-[12px] leading-5 text-slate-600">{capability.summary}</p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-1.5">
-          <RiskPill risk={capability.risk} />
-          <Pill tone={capability.defaultOn ? "success" : "neutral"}>{capability.defaultOn ? "default on" : "opt in"}</Pill>
-          <Pill tone={capability.eval.required ? "warning" : "neutral"}>eval {capability.eval.status || "unset"}</Pill>
-        </div>
-      </div>
-
-      <div className="mt-3 grid gap-3 text-[12px] md:grid-cols-3">
-        <FieldList label="Surfaces" values={capability.consoleSurfaces} />
-        <FieldList label="Scopes" values={capability.requiredScopes} mono />
-        <FieldList label="Runtime events" values={capability.runtimeEvents} mono />
-      </div>
-
-      <div className="mt-3 grid gap-3 text-[12px] md:grid-cols-2">
-        <FieldList label="Eval commands" values={capability.eval.localCommands} mono />
-        <FieldList label="Provenance" values={capability.provenance} mono />
-      </div>
-
-      {capability.connectorDependencies.length > 0 && (
-        <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Connector dependencies</div>
-          <div className="mt-2 grid gap-2">
-            {capability.connectorDependencies.map((dependency) => (
-              <div key={dependency.sourceId} className="rounded-md bg-white p-3 text-[12px] text-slate-600 ring-1 ring-slate-200">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-slate-900">{dependency.sourceId}</span>
-                  <Pill tone={dependency.tenantScoped ? "success" : "danger"}>{dependency.tenantScoped ? "tenant scoped" : "tenant scope missing"}</Pill>
-                  <Pill>{dependency.readiness}</Pill>
-                </div>
-                <p className="mt-2 leading-5">{dependency.purpose}</p>
-                <div className="mt-2 grid gap-2 md:grid-cols-2">
-                  <KeyValue label="Token owner" value={dependency.tokenOwner} />
-                  <KeyValue label="Credential store" value={dependency.credentialStore} />
-                  <KeyValue label="OAuth" value={dependency.oauthSurface} />
-                  <KeyValue label="MCP" value={dependency.mcpSurface} />
-                </div>
-                <FieldList label="Auth models" values={dependency.authModels} mono className="mt-2" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
-
 function FieldList({ className = "", label, mono = false, values }: { className?: string; label: string; mono?: boolean; values: readonly string[] }) {
   return (
     <div className={className}>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {values.length === 0 ? (
-          <span className="text-[12px] text-slate-400">None</span>
+          <span className="text-[12px] text-slate-400">No values</span>
         ) : (
-          values.map((value) => (
-            <span key={value} className={`max-w-full break-words rounded-md bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600 ring-1 ring-slate-200 ${mono ? "font-mono" : ""}`}>
+          values.map((value, index) => (
+            <span key={`${value}-${index}`} className={`max-w-full break-words rounded-md bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600 ring-1 ring-slate-200 ${mono ? "font-mono" : ""}`}>
               {value}
             </span>
           ))
@@ -140,37 +86,65 @@ function FieldList({ className = "", label, mono = false, values }: { className?
   );
 }
 
-function KeyValue({ label, value }: { label: string; value: string }) {
+const loadedCopy = (loaded: number, total: number, noun: string) =>
+  loaded >= total ? `Showing ${loaded.toLocaleString()} ${noun}.` : `Showing first ${loaded.toLocaleString()} of ${total.toLocaleString()} ${noun}.`;
+
+const operatorText = (value: string) =>
+  value
+    .replace(/\breplay fixtures\b/gi, "replay records")
+    .replace(/\bfixtures\b/gi, "records")
+    .replace(/\bfixture\b/gi, "record");
+
+function CapabilityTable({ capabilities, contract }: { capabilities: readonly AgentPlatformCapability[]; contract: AgentPlatformContract }) {
+  const visible = capabilities.slice(0, CAPABILITY_LIMIT);
+  if (capabilities.length === 0) {
+    return <div className="rounded-md border border-slate-200 bg-white p-4 text-[12px] text-slate-500">No agent capabilities returned.</div>;
+  }
   return (
     <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-0.5 break-words font-mono text-[11px] text-slate-700">{value || "unset"}</div>
+      <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+        {loadedCopy(visible.length, capabilities.length, "capabilities")}
+      </div>
+      <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+        <table className="w-full min-w-[920px] text-left text-[12px]">
+          <thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-2 font-semibold">Capability</th>
+              <th className="px-3 py-2 font-semibold">Domain</th>
+              <th className="px-3 py-2 font-semibold">Risk</th>
+              <th className="px-3 py-2 font-semibold">Default</th>
+              <th className="px-3 py-2 font-semibold">Eval</th>
+              <th className="px-3 py-2 font-semibold">Scopes</th>
+              <th className="px-3 py-2 font-semibold">Events</th>
+              <th className="px-3 py-2 font-semibold">Evidence fields</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {visible.map((capability) => {
+              const domain = agentPlatformDomainById(capability.domainId, contract);
+              return (
+                <tr key={capability.id} className="align-top">
+                  <td className="px-3 py-3">
+                    <div className="font-semibold text-slate-900">{capability.name}</div>
+                    <div className="mt-1 max-w-[22rem] text-slate-600">{operatorText(capability.summary)}</div>
+                    <div className="mt-1 font-mono text-[11px] text-slate-500">{capability.id}@{capability.version}</div>
+                  </td>
+                  <td className="px-3 py-3 text-slate-700">{domain?.name ?? capability.domainId}</td>
+                  <td className="px-3 py-3"><RiskPill risk={capability.risk} /></td>
+                  <td className="px-3 py-3"><Pill tone={capability.defaultOn ? "success" : "neutral"}>{capability.defaultOn ? "On by default" : "Opt in"}</Pill></td>
+                  <td className="px-3 py-3">
+                    <Pill tone={capability.eval.required ? "warning" : "neutral"}>{capability.eval.status || "Eval status missing"}</Pill>
+                  </td>
+                  <td className="px-3 py-3 text-slate-700">{capability.requiredScopes.length}</td>
+                  <td className="px-3 py-3 text-slate-700">{capability.runtimeEvents.length}</td>
+                  <td className="px-3 py-3 text-slate-700">{capability.provenance.length}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
-  );
-}
-
-function DomainSection({ capabilities, domain }: { capabilities: readonly AgentPlatformCapability[]; domain: AgentPlatformDomain }) {
-  return (
-    <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[14px] font-semibold text-slate-900">{domain.name}</h2>
-          <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-600">{domain.principle}</p>
-        </div>
-        <Pill>{domain.consoleSurface}</Pill>
-      </div>
-      <div className="mt-3 grid gap-3 text-[12px] md:grid-cols-2">
-        <FieldList label="Owns" values={domain.owns} />
-        <FieldList label="Must expose" values={domain.mustExpose} />
-      </div>
-      <div className="mt-4 grid gap-3">
-        {capabilities.length === 0 ? (
-          <div className="rounded-md border border-slate-200 bg-white p-3 text-[12px] text-slate-500">No capabilities registered for this domain.</div>
-        ) : (
-          capabilities.map((capability) => <CapabilityCard key={capability.id} capability={capability} />)
-        )}
-      </div>
-    </section>
   );
 }
 
@@ -206,7 +180,7 @@ export function AgentPlatformDashboard() {
         if (!response.ok) {
           setState({
             contract: AGENT_PLATFORM_FALLBACK_CONTRACT,
-            error: `Cerebro returned ${response.status}`,
+            error: "Contract API unavailable.",
             source: "fallback",
             status: response.status,
           });
@@ -222,7 +196,7 @@ export function AgentPlatformDashboard() {
         if (cancelled) return;
         setState({
           contract: AGENT_PLATFORM_FALLBACK_CONTRACT,
-          error: error.message,
+          error: error.message ? "Contract API unavailable." : "Contract API unavailable.",
           source: "fallback",
         });
       });
@@ -232,38 +206,41 @@ export function AgentPlatformDashboard() {
   }, [apiKey]);
 
   const contract = state.contract;
-  const capabilitiesByDomain = useMemo(() => agentPlatformCapabilitiesByDomain(contract), [contract]);
-  const defaultOnCapabilities = contract.capabilities.filter((capability) => capability.defaultOn).length;
   const connectorCapability = contract.capabilities.find((capability) => capability.id === "connector-oauth-mcp");
-  const liveStatus = state.source === "api" ? "Live API" : "Fallback contract";
+  const liveStatus = state.source === "api" ? "Live API" : "Stored contract";
+  const highRiskCapabilities = contract.capabilities.filter((capability) => capability.risk === "high").length;
+  const missingEvalCapabilities = contract.capabilities.filter((capability) => capability.eval.required && !capability.eval.status).length;
+  const visibleEvents = contract.runtimeEvents.slice(0, EVENT_LIMIT);
+  const visibleRequirements = contract.provenanceRequirements.slice(0, REQUIREMENT_LIMIT);
+  const visibleInvariants = contract.invariants.slice(0, INVARIANT_LIMIT);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Agent Platform"
-        description="Cerebro-native runtime contracts, capability governance, connector identity, eval coverage, replay semantics, and knowledge provenance."
+        description="Review agent runtime coverage, connector auth boundaries, capability gates, eval status, trace events, and required evidence fields."
       />
 
-      <Panel title="Platform Contract">
+      <Panel title="Agent contract status">
         {state.error && (
           <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-800">
-            Live contract unavailable. Showing the checked-in fallback snapshot. {state.error}
+            Live contract did not load. Showing the stored contract.
           </div>
         )}
         <div className="grid gap-3 md:grid-cols-5">
           <MiniStat label="Version" value={contract.version} />
           <MiniStat label="Source" value={liveStatus} />
-          <MiniStat label="Domains" value={contract.domains.length} />
+          <MiniStat label="High risk" value={highRiskCapabilities} />
           <MiniStat label="Capabilities" value={contract.capabilities.length} />
-          <MiniStat label="Default on" value={defaultOnCapabilities} />
+          <MiniStat label="Eval gaps" value={missingEvalCapabilities} />
         </div>
       </Panel>
 
-      <Panel title="Connector And OAuth Infrastructure">
+      <Panel title="Connector and OAuth controls">
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
           <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
             <div className="text-[13px] font-semibold text-slate-900">{connectorCapability?.name ?? "Connector boundary"}</div>
-            <p className="mt-1 text-[12px] leading-5 text-slate-600">{connectorCapability?.summary ?? "Connector infrastructure is declared by the platform contract."}</p>
+            <p className="mt-1 text-[12px] leading-5 text-slate-600">{connectorCapability?.summary ?? "Connector auth controls are stored in the agent contract."}</p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <FieldList label="Auth models" values={contract.connectorInfrastructure.authModels} mono />
               <FieldList label="Token boundaries" values={contract.connectorInfrastructure.tokenBoundaries} />
@@ -278,26 +255,28 @@ export function AgentPlatformDashboard() {
         </div>
       </Panel>
 
-      <Panel title="Capability Registry">
-        <div className="grid gap-4">
-          {contract.domains.map((domain) => (
-            <DomainSection key={domain.id} domain={domain} capabilities={capabilitiesByDomain.get(domain.id) ?? []} />
-          ))}
-        </div>
+      <Panel title="Agent capabilities">
+        <CapabilityTable capabilities={contract.capabilities} contract={contract} />
       </Panel>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Runtime Event Semantics">
+        <Panel title="Runtime events">
+          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+            {loadedCopy(visibleEvents.length, contract.runtimeEvents.length, "runtime events")}
+          </div>
           <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
-            {contract.runtimeEvents.map((event) => (
+            {visibleEvents.map((event) => (
               <RuntimeEventRow key={event.name} event={event} />
             ))}
           </div>
         </Panel>
 
-        <Panel title="Provenance Requirements">
+        <Panel title="Required evidence fields">
+          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+            {loadedCopy(visibleRequirements.length, contract.provenanceRequirements.length, "requirements")}
+          </div>
           <div className="grid gap-3">
-            {contract.provenanceRequirements.map((requirement) => {
+            {visibleRequirements.map((requirement) => {
               const domain = agentPlatformDomainById(requirement.domainId, contract);
               return (
                 <div key={requirement.surface} className="rounded-md border border-slate-200 bg-white p-4">
@@ -309,7 +288,7 @@ export function AgentPlatformDashboard() {
                     <div className="flex flex-wrap gap-1.5">
                       {requirement.citationRequired && <Pill tone="success">citations</Pill>}
                       {requirement.budgetRequired && <Pill tone="warning">budget</Pill>}
-                      {requirement.fallbackRequired && <Pill tone="warning">fallback</Pill>}
+                      {requirement.fallbackRequired && <Pill tone="warning">Stored contract</Pill>}
                     </div>
                   </div>
                   <FieldList className="mt-3" label="Required fields" values={requirement.requiredFields} mono />
@@ -320,9 +299,12 @@ export function AgentPlatformDashboard() {
         </Panel>
       </div>
 
-      <Panel title="Invariants">
+      <Panel title="Required checks">
+        <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+          {loadedCopy(visibleInvariants.length, contract.invariants.length, "checks")}
+        </div>
         <div className="divide-y divide-slate-200 rounded-md border border-slate-200">
-          {contract.invariants.map((invariant) => {
+          {visibleInvariants.map((invariant) => {
             const domain = agentPlatformDomainById(invariant.domainId, contract);
             return (
               <div key={invariant.id} className="grid gap-2 bg-white p-4 md:grid-cols-[8rem_1fr]">

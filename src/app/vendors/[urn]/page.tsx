@@ -5,7 +5,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
 import GraphViewer from "@/components/grc/LazyGraphViewer";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, SeverityDot } from "@/components/grc/Primitives";
+import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice, SeverityDot } from "@/components/grc/Primitives";
+import { countLabel } from "@/lib/format";
 import {
   displayDate,
   GRCRiskScoreFactor,
@@ -22,6 +23,10 @@ import {
   shortEntity,
 } from "@/lib/grc";
 import { grcPath, useGRCQuery } from "@/lib/grc-client";
+import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
+
+const EMPTY_FINDINGS: GRCVendorDetailResponse["findings"] = [];
+const EMPTY_EVIDENCE: GRCVendorDetailResponse["evidence"] = [];
 
 function DetailRow({ label, value }: { label: string; value?: string }) {
   return (
@@ -41,25 +46,29 @@ function RelationshipList({ items }: { items: GRCVendorRelatedRecord[] }) {
   if (items.length === 0) {
     return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No linked records.</div>;
   }
+  const boundedItems = grcBoundedRows({ rows: items, limit: GRC_DETAIL_LIMIT });
   return (
-    <div className="divide-y divide-[color:var(--border)]">
-      {items.map((item) => (
-        <div key={item.urn} className="py-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{item.label || shortEntity(item.urn)}</div>
-              <div className="mt-1 flex flex-wrap gap-2 text-[12px] text-[var(--text-muted)]">
-                <span>{humanize(item.entity_type)}</span>
-                {item.relation && <span>{humanize(item.relation)}</span>}
-                {item.source_id && <span>{item.source_id}</span>}
+    <div>
+      <ResultLimitNotice className="mb-2" loaded={boundedItems.rows.length} meta={boundedItems.meta} limit={GRC_DETAIL_LIMIT} noun="linked records" />
+      <div className="divide-y divide-[color:var(--border)]">
+        {boundedItems.rows.map((item) => (
+          <div key={item.urn} className="py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{item.label || shortEntity(item.urn)}</div>
+                <div className="mt-1 flex flex-wrap gap-2 text-[12px] text-[var(--text-muted)]">
+                  <span>{humanize(item.entity_type)}</span>
+                  {item.relation && <span>{humanize(item.relation)}</span>}
+                  {item.source_id && <span>{item.source_id}</span>}
+                </div>
               </div>
+              <Link href={`/inventory/${encodeURIComponent(item.urn)}`} className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+                Open
+              </Link>
             </div>
-            <Link href={`/inventory/${encodeURIComponent(item.urn)}`} className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-              Open
-            </Link>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -104,11 +113,14 @@ function CloseActionList({ actions }: { actions: GRCVendorCloseAction[] }) {
 
 function FreshnessList({ clocks }: { clocks: GRCVendorFreshnessClock[] }) {
   if (clocks.length === 0) {
-    return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No freshness clocks.</div>;
+    return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No evidence freshness checks.</div>;
   }
+  const boundedClocks = grcBoundedRows({ rows: clocks, limit: GRC_DETAIL_LIMIT });
   return (
-    <div className="divide-y divide-[color:var(--border)]">
-      {clocks.map((clock) => (
+    <div>
+      <ResultLimitNotice className="mb-2" loaded={boundedClocks.rows.length} meta={boundedClocks.meta} limit={GRC_DETAIL_LIMIT} noun="freshness checks" />
+      <div className="divide-y divide-[color:var(--border)]">
+      {boundedClocks.rows.map((clock) => (
         <div key={clock.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_120px]">
           <div>
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">{clock.label}</div>
@@ -122,17 +134,21 @@ function FreshnessList({ clocks }: { clocks: GRCVendorFreshnessClock[] }) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
 
 function ObligationList({ obligations }: { obligations: GRCVendorObligation[] }) {
   if (obligations.length === 0) {
-    return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No obligations in packet.</div>;
+    return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No vendor obligations in packet.</div>;
   }
+  const boundedObligations = grcBoundedRows({ rows: obligations, limit: GRC_DETAIL_LIMIT });
   return (
-    <div className="divide-y divide-[color:var(--border)]">
-      {obligations.map((obligation) => (
+    <div>
+      <ResultLimitNotice className="mb-2" loaded={boundedObligations.rows.length} meta={boundedObligations.meta} limit={GRC_DETAIL_LIMIT} noun="obligations" />
+      <div className="divide-y divide-[color:var(--border)]">
+      {boundedObligations.rows.map((obligation) => (
         <div key={obligation.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_120px]">
           <div>
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">{obligation.label}</div>
@@ -146,13 +162,14 @@ function ObligationList({ obligations }: { obligations: GRCVendorObligation[] })
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
 
 function ScoreFactorList({ factors }: { factors: GRCRiskScoreFactor[] }) {
   if (factors.length === 0) {
-    return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No score factors.</div>;
+    return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">Risk tier not scored.</div>;
   }
   return (
     <div className="divide-y divide-[color:var(--border)]">
@@ -160,7 +177,7 @@ function ScoreFactorList({ factors }: { factors: GRCRiskScoreFactor[] }) {
         <div key={factor.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_96px]">
           <div>
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">{factor.label}</div>
-            <div className="mt-1 text-[12px] text-[var(--text-muted)]">{factor.reason || "No source value"}</div>
+            <div className="mt-1 text-[12px] text-[var(--text-muted)]">{factor.reason || "Score input missing"}</div>
           </div>
           <div className="text-left md:text-right">
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">{factor.score}/100</div>
@@ -176,9 +193,12 @@ function MonitoringSignalList({ signals }: { signals: GRCVendorMonitoringSignal[
   if (signals.length === 0) {
     return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No active monitoring signals.</div>;
   }
+  const boundedSignals = grcBoundedRows({ rows: signals, limit: GRC_DETAIL_LIMIT });
   return (
-    <div className="divide-y divide-[color:var(--border)]">
-      {signals.map((signal) => (
+    <div>
+      <ResultLimitNotice className="mb-2" loaded={boundedSignals.rows.length} meta={boundedSignals.meta} limit={GRC_DETAIL_LIMIT} noun="monitoring signals" />
+      <div className="divide-y divide-[color:var(--border)]">
+      {boundedSignals.rows.map((signal) => (
         <div key={signal.id} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_120px]">
           <div>
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">{signal.label}</div>
@@ -190,6 +210,7 @@ function MonitoringSignalList({ signals }: { signals: GRCVendorMonitoringSignal[
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -230,8 +251,10 @@ export default function VendorDetailPage() {
   const packetCommercial = packet?.commercial;
   const packetOperations = packet?.operations;
   const relationships = data?.relationships ?? {};
-  const findings = data?.findings ?? [];
-  const evidence = data?.evidence ?? [];
+  const findings = data?.findings ?? EMPTY_FINDINGS;
+  const evidence = data?.evidence ?? EMPTY_EVIDENCE;
+  const boundedFindings = useMemo(() => grcBoundedRows({ rows: findings, limit: GRC_DETAIL_LIMIT }), [findings]);
+  const boundedEvidence = useMemo(() => grcBoundedRows({ rows: evidence, limit: GRC_DETAIL_LIMIT }), [evidence]);
   const actions = packetActions(packet, vendor);
   const closeActions = packetCloseActions(packet, vendor);
   const scoreFactors = packetRiskScore?.score_factors ?? vendor?.score_factors ?? [];
@@ -282,14 +305,14 @@ export default function VendorDetailPage() {
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
             <MetricCard label="Open risks" value={vendor.open_findings ?? findings.length} detail={`${vendor.critical_findings ?? 0} critical, ${vendor.high_findings ?? 0} high`} intent={(vendor.open_findings ?? 0) > 0 ? "warning" : "success"} />
-            <MetricCard label="Queue" value={actions.length} detail={`${vendor.queue_reasons?.length ?? 0} reasons`} intent={actions.length > 0 ? "warning" : "success"} />
-            <MetricCard label="Score" value={typeof riskScore === "number" ? `${riskScore}/100` : "—"} detail={riskTier ? humanize(riskTier) : "no tier"} intent={(riskScore ?? 0) >= 80 ? "danger" : (riskScore ?? 0) >= 60 ? "warning" : "neutral"} />
-            <MetricCard label="Lifecycle" value={humanize(vendorLifecycle)} detail={vendor.lifecycle_reason || vendor.source_status || "source state"} intent={["restricted", "conditionally_approved"].includes(vendorLifecycle) ? "warning" : "neutral"} />
-            <MetricCard label="Packet" value={humanize(packetState)} detail={`${packetMissingItems.length} missing`} intent={packetState === "blocked" ? "danger" : packetState === "needs_work" ? "warning" : "success"} />
-            <MetricCard label="Exposure" value={humanize(exposureLevel)} detail={`${exposureReasons.length} drivers`} intent={["critical", "high"].includes(exposureLevel) ? "warning" : "neutral"} />
+            <MetricCard label="Queue" value={actions.length} detail={countLabel(vendor.queue_reasons?.length ?? 0, "reason")} intent={actions.length > 0 ? "warning" : "success"} />
+            <MetricCard label="Score" value={typeof riskScore === "number" ? `${riskScore}/100` : "—"} detail={riskTier ? humanize(riskTier) : "Risk tier not scored"} intent={(riskScore ?? 0) >= 80 ? "danger" : (riskScore ?? 0) >= 60 ? "warning" : "neutral"} />
+            <MetricCard label="Lifecycle" value={humanize(vendorLifecycle)} detail={vendor.lifecycle_reason || vendor.source_status || "Source status not reported"} intent={["restricted", "conditionally_approved"].includes(vendorLifecycle) ? "warning" : "neutral"} />
+            <MetricCard label="Packet" value={humanize(packetState)} detail={countLabel(packetMissingItems.length, "missing item")} intent={packetState === "blocked" ? "danger" : packetState === "needs_work" ? "warning" : "success"} />
+            <MetricCard label="Exposure" value={humanize(exposureLevel)} detail={countLabel(exposureReasons.length, "driver")} intent={["critical", "high"].includes(exposureLevel) ? "warning" : "neutral"} />
             <MetricCard label="Remediation" value={humanize(remediationState)} detail={`${packetOperations?.open_remediation_items ?? vendor.open_remediation_items ?? 0} open`} intent={remediationState === "overdue" ? "danger" : remediationState === "due_soon" ? "warning" : "success"} />
             <MetricCard label="Assessment" value={humanize(assessmentState)} detail={`${packetAssessments?.assessment_progress ?? vendor.assessment_progress ?? 0}% complete`} intent={["overdue", "missing", "in_progress"].includes(assessmentState) ? "warning" : "neutral"} />
-            <MetricCard label="Monitoring" value={humanize(monitoringState)} detail={`${monitoringSignals.length} signals`} intent={["critical", "alert"].includes(monitoringState) ? "danger" : monitoringState === "watch" ? "warning" : "success"} />
+            <MetricCard label="Monitoring" value={humanize(monitoringState)} detail={countLabel(monitoringSignals.length, "signal")} intent={["critical", "alert"].includes(monitoringState) ? "danger" : monitoringState === "watch" ? "warning" : "success"} />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -366,43 +389,49 @@ export default function VendorDetailPage() {
                 {findings.length === 0 ? (
                   <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No open risks on this vendor.</div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="data-table">
-                      <thead><tr><th>Risk</th><th>Severity</th><th>Owner</th><th>Evidence</th><th>SLA</th></tr></thead>
-                      <tbody>
-                        {findings.map((finding) => (
-                          <tr key={finding.id}>
-                            <td><Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">{finding.title}</Link></td>
-                            <td><span className="inline-flex items-center gap-2"><SeverityDot severity={finding.severity} />{finding.severity}</span></td>
-                            <td>{finding.owner}</td>
-                            <td>{finding.evidence_count}</td>
-                            <td><Badge value={finding.sla_status || "current"} /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div>
+                    <ResultLimitNotice className="mb-3" loaded={boundedFindings.rows.length} meta={boundedFindings.meta} limit={GRC_DETAIL_LIMIT} noun="risks" />
+                    <div className="overflow-x-auto">
+                      <table className="data-table">
+                        <thead><tr><th>Risk</th><th>Severity</th><th>Owner</th><th>Evidence</th><th>SLA</th></tr></thead>
+                        <tbody>
+                          {boundedFindings.rows.map((finding) => (
+                            <tr key={finding.id}>
+                              <td><Link href={`/findings/${encodeURIComponent(finding.id)}`} className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">{finding.title}</Link></td>
+                              <td><span className="inline-flex items-center gap-2"><SeverityDot severity={finding.severity} />{finding.severity}</span></td>
+                              <td>{finding.owner}</td>
+                              <td>{finding.evidence_count}</td>
+                              <td><Badge value={finding.sla_status || "current"} /></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </Panel>
 
               <Panel title="Evidence">
                 {evidence.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No evidence records returned for this vendor.</div>
+                  <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No evidence linked to this vendor.</div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="data-table">
-                      <thead><tr><th>Evidence</th><th>Finding</th><th>Rule</th><th>Created</th></tr></thead>
-                      <tbody>
-                        {evidence.map((item) => (
-                          <tr key={item.id}>
-                            <td className="font-mono text-[12px]">{shortEntity(item.id)}</td>
-                            <td>{item.finding_title || shortEntity(item.finding_id)}</td>
-                            <td>{shortEntity(item.rule_id)}</td>
-                            <td>{displayDate(item.created_at)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div>
+                    <ResultLimitNotice className="mb-3" loaded={boundedEvidence.rows.length} meta={boundedEvidence.meta} limit={GRC_DETAIL_LIMIT} noun="evidence items" />
+                    <div className="overflow-x-auto">
+                      <table className="data-table">
+                        <thead><tr><th>Evidence</th><th>Finding</th><th>Rule</th><th>Created</th></tr></thead>
+                        <tbody>
+                          {boundedEvidence.rows.map((item) => (
+                            <tr key={item.id}>
+                              <td className="font-mono text-[12px]">{shortEntity(item.id)}</td>
+                              <td>{item.finding_title || shortEntity(item.finding_id)}</td>
+                              <td>{shortEntity(item.rule_id)}</td>
+                              <td>{displayDate(item.created_at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </Panel>

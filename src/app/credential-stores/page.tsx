@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { CheckCircle2, RefreshCw, Search } from "lucide-react";
 
-import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { withQuery } from "@/lib/cerebro-data";
 import {
   credentialStoreActionLabel,
@@ -19,6 +19,7 @@ import {
   type CredentialStoreOperational,
 } from "@/lib/credential-stores";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -37,7 +38,7 @@ function formatDate(value?: string) {
   }).format(date);
 }
 
-function compactList(values?: string[], fallback = "None") {
+function compactList(values?: string[], fallback = "No values") {
   const visible = (values ?? []).filter(Boolean);
   if (visible.length === 0) return fallback;
   if (visible.length <= 3) return visible.join(", ");
@@ -240,7 +241,9 @@ export default function CredentialStoresPage() {
     }),
     [allIssues, debouncedStoreQuery, visibleStoreIDs],
   );
-  const bindings = useMemo(() => flattenBindings(visibleStores).slice(0, 100), [visibleStores]);
+  const allBindings = useMemo(() => flattenBindings(visibleStores), [visibleStores]);
+  const boundedBindings = useMemo(() => grcBoundedRows({ rows: allBindings, limit: GRC_DETAIL_LIMIT }), [allBindings]);
+  const bindings = boundedBindings.rows;
   const totals = useMemo(() => credentialStoreUsageTotals(stores), [stores]);
   const loading = storesQuery.loading && !storesQuery.data;
   const runtimeState = runtimeStateForError(storesQuery.error);
@@ -274,7 +277,7 @@ export default function CredentialStoresPage() {
         <MetricCard label="Stores in use" value={totals.storesInUse} detail={`${totals.readyStores} ready`} intent={totals.storesInUse > 0 ? "success" : "neutral"} state={metricState} />
         <MetricCard label="Runtime bindings" value={totals.bindings} detail={`${totals.fieldReferences} field references`} intent={totals.bindings > 0 ? "success" : "neutral"} state={metricState} />
         <MetricCard label="Credential records" value={totals.credentials} detail={storesQuery.data?.credential_store_status || "unknown"} state={metricState} />
-        <MetricCard label="Open issues" value={totals.issues} detail={storesQuery.data?.runtime_store_status || "runtime store unknown"} intent={totals.issues > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Open issues" value={totals.issues} detail={totals.issues === 1 ? "issue needs action" : "issues need action"} intent={totals.issues > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
       <section className="surface-panel p-4">
@@ -317,6 +320,7 @@ export default function CredentialStoresPage() {
         title="Runtime Bindings"
         action={<span className="text-[12px] text-[var(--text-muted)]">{bindings.length} shown</span>}
       >
+        <ResultLimitNotice className="mb-3" loaded={bindings.length} meta={boundedBindings.meta} limit={GRC_DETAIL_LIMIT} noun="runtime bindings" />
         <BindingTable bindings={bindings} />
       </Panel>
 

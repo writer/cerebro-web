@@ -336,6 +336,194 @@ const connectors = [
   },
 ];
 
+const credentialStoresFixture = (params?: URLSearchParams) => {
+  const requestedTenantID = params?.get("tenant_id")?.trim() || tenantID;
+  const stores = [
+    {
+      store: {
+        id: "cerebro_vault",
+        label: "Managed credential vault",
+        provider: "Cerebro",
+        available: true,
+        default: true,
+        mode: "encrypted_submission",
+        status: "ready",
+        detail: "Encrypts connector credentials submitted from this console.",
+        description: "Use for sources that accept direct credential submission.",
+        reference_prefixes: [],
+        reference_placeholder: "",
+        native_resolution_available: true,
+      },
+      health: {
+        status: "in_use",
+        severity: "success",
+        detail: "Two source runtimes resolve credentials from the managed vault.",
+        next_action: "monitor_rotation",
+      },
+      usage: {
+        connections: 2,
+        credentials: 2,
+        bindings: 2,
+        field_references: 4,
+        issues: 0,
+        last_updated_at: generatedAt,
+      },
+      bindings: [
+        {
+          id: "vault-okta-binding",
+          credential_store_id: "cerebro_vault",
+          source_id: "okta",
+          source_name: "Okta",
+          runtime_id: "okta-directory-runtime",
+          tenant_id: requestedTenantID,
+          auth_method: "api_token",
+          resolver: "cerebro_vault",
+          credential_id: "cred-okta-directory",
+          credential_status: "ready",
+          connection_status: "healthy",
+          next_action: "monitor_rotation",
+          fields: ["api_token"],
+          field_count: 1,
+          reference_prefixes: [],
+          updated_at: generatedAt,
+          last_used_at: "2026-01-15T11:55:00.000Z",
+          last_validated_at: "2026-01-15T11:55:00.000Z",
+        },
+        {
+          id: "vault-github-binding",
+          credential_store_id: "cerebro_vault",
+          source_id: "github",
+          source_name: "GitHub",
+          runtime_id: "github-code-runtime",
+          tenant_id: requestedTenantID,
+          auth_method: "app_token",
+          resolver: "cerebro_vault",
+          credential_id: "cred-github-code",
+          credential_status: "ready",
+          connection_status: "needs_refresh",
+          next_action: "run_connector_preflight",
+          fields: ["app_id", "private_key", "installation_id"],
+          field_count: 3,
+          reference_prefixes: [],
+          updated_at: generatedAt,
+          last_used_at: "2026-01-15T09:30:00.000Z",
+          last_validated_at: "2026-01-15T09:30:00.000Z",
+        },
+      ],
+      issues: [],
+    },
+    {
+      store: {
+        id: "environment_managed",
+        label: "Environment-managed references",
+        provider: "Deployment",
+        available: true,
+        mode: "environment_managed",
+        status: "ready",
+        detail: "Resolves source credentials from deployment environment variables.",
+        description: "Use when credentials are supplied outside this console.",
+        reference_prefixes: ["env:"],
+        reference_field_template: "env:CEREBRO_SOURCE_<SOURCE>_<FIELD>",
+        reference_placeholder: "env:CEREBRO_SOURCE_AWS_ROLE_ARN",
+        native_resolution_available: true,
+        required_config: [
+          { env: "CEREBRO_SOURCE_AWS_ROLE_ARN", label: "AWS role ARN", required: true },
+        ],
+      },
+      health: {
+        status: "in_use",
+        severity: "success",
+        detail: "One runtime uses environment references.",
+        next_action: "run_source_check",
+      },
+      usage: {
+        connections: 1,
+        credentials: 0,
+        bindings: 1,
+        field_references: 2,
+        issues: 0,
+        last_updated_at: generatedAt,
+      },
+      bindings: [
+        {
+          id: "env-aws-binding",
+          credential_store_id: "environment_managed",
+          source_id: "aws",
+          source_name: "AWS",
+          runtime_id: "aws-inventory-runtime",
+          tenant_id: requestedTenantID,
+          auth_method: "role_assumption",
+          resolver: "environment",
+          credential_status: "reference_only",
+          connection_status: "healthy",
+          next_action: "run_source_check",
+          fields: ["role_arn", "external_id"],
+          field_count: 2,
+          reference_prefixes: ["env:"],
+          updated_at: generatedAt,
+          last_used_at: "2026-01-15T11:45:00.000Z",
+          last_validated_at: "2026-01-15T11:45:00.000Z",
+        },
+      ],
+      issues: [],
+    },
+    {
+      store: {
+        id: "external_reference",
+        label: "External secret references",
+        provider: "External resolver",
+        available: false,
+        mode: "reference",
+        status: "needs_configuration",
+        detail: "No resolver is configured for external secret references.",
+        description: "Use after a resolver is connected for externally managed secrets.",
+        reference_prefixes: ["secret:"],
+        reference_placeholder: "secret:path/to/connector",
+        native_resolution_available: false,
+        required_config: [
+          { env: "CEREBRO_SECRET_RESOLVER_URL", label: "Resolver URL", required: true },
+        ],
+        setup_steps: [
+          { id: "connect-resolver", label: "Connect resolver", description: "Add the resolver endpoint and run connector preflight." },
+        ],
+      },
+      health: {
+        status: "needs_configuration",
+        severity: "warning",
+        detail: "External references are blocked until a resolver is configured.",
+        next_action: "configure_store",
+      },
+      usage: {
+        connections: 0,
+        credentials: 0,
+        bindings: 0,
+        field_references: 0,
+        issues: 1,
+        last_updated_at: generatedAt,
+      },
+      bindings: [],
+      issues: [
+        {
+          id: "external-resolver-missing",
+          credential_store_id: "external_reference",
+          status: "warning",
+          severity: "warning",
+          detail: "External secret references cannot be resolved until the resolver endpoint is configured.",
+          next_action: "configure_store",
+        },
+      ],
+    },
+  ];
+  return {
+    generated_at: generatedAt,
+    tenant_id: requestedTenantID,
+    runtime_store_status: "ready",
+    credential_store_status: "ready",
+    stores,
+    issues: stores.flatMap((store) => store.issues),
+  };
+};
+
 const sourceSummaries = [
   { source_id: "okta", total: 1, healthy: 1, stale: 0, failed: 0 },
   { source_id: "github", total: 1, healthy: 0, stale: 1, failed: 0, cursor_pending: 1 },
@@ -458,8 +646,8 @@ const baseVendors: GRCVendor[] = [
     vendor_id: "core-sso",
     name: "Core SSO",
     source_id: "grc",
-    runtime_id: "demo-grc-runtime",
-    provider: "GRC fixture",
+    runtime_id: "grc-register-runtime",
+    provider: "GRC register",
     status: "active",
     category: "identity",
     website_url: "https://vendors.example.com/core-sso",
@@ -476,7 +664,7 @@ const baseVendors: GRCVendor[] = [
     risk_level: "high",
     risk_score: 86,
     risk_score_level: "high",
-    risk_score_source: "fixture",
+    risk_score_source: "vendor register",
     risk_tier: "tier_1",
     review_cadence_days: 90,
     data_sensitivity: "confidential",
@@ -551,15 +739,15 @@ const baseVendors: GRCVendor[] = [
     close_actions: [
       { id: "core-sso-close-review", label: "Review completed", closes_when: "security_review_current" },
     ],
-    attributes: { source_system: "fixture" },
+    attributes: { source_system: "grc_register" },
   },
   {
     urn: paymentsProcessorVendorURN,
     vendor_id: "payments-processor",
     name: "Payments Processor",
     source_id: "grc",
-    runtime_id: "demo-grc-runtime",
-    provider: "GRC fixture",
+    runtime_id: "grc-register-runtime",
+    provider: "GRC register",
     status: "active",
     category: "payments",
     website_url: "https://vendors.example.com/payments-processor",
@@ -574,7 +762,7 @@ const baseVendors: GRCVendor[] = [
     risk_level: "medium",
     risk_score: 54,
     risk_score_level: "medium",
-    risk_score_source: "fixture",
+    risk_score_source: "vendor register",
     risk_tier: "tier_2",
     review_cadence_days: 180,
     data_sensitivity: "restricted",
@@ -625,7 +813,7 @@ const baseVendors: GRCVendor[] = [
     queue_reasons: [],
     next_actions: [],
     close_actions: [],
-    attributes: { source_system: "fixture" },
+    attributes: { source_system: "grc_register" },
   },
 ];
 
@@ -3324,6 +3512,10 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "report-schedules") {
     return jsonFixture(reportSchedulesFixture());
+  }
+
+  if (normalizedPath === "credential-stores") {
+    return jsonFixture(credentialStoresFixture(searchParams));
   }
 
   if (normalizedPath === "grc/findings") {
