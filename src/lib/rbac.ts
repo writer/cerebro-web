@@ -263,7 +263,9 @@ export const permissionForCerebroProxyRequest = (
   if (normalizedPath === "grc/vendor-discoveries/sync") return "grc:inventory:write";
   if (normalizedPath === "grc/policy-lifecycle/actions") return "grc:policies:write";
   if (normalizedPath === "grc/policy-lifecycle/uploads") return "grc:policies:write";
+  if (normalizedPath.startsWith("grc/policy-lifecycle/uploads/") && normalizedPath.endsWith("/replay")) return "grc:policies:write";
   if (normalizedPath === "grc/vendors/uploads") return "grc:inventory:write";
+  if (normalizedPath.startsWith("grc/vendors/uploads/") && normalizedPath.endsWith("/replay")) return "grc:inventory:write";
   if (readOnlyPostPaths.has(normalizedPath)) return "cerebro:read";
   if (normalizedPath.startsWith("grc/control-packs/")) return "cerebro:read";
   if (matchesReportRunPath(normalizedPath)) return "reports:run";

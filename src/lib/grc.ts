@@ -1998,6 +1998,7 @@ export type GRCUploadEvent = {
   schema_ref: string;
   record_id?: string;
   record_urn?: string;
+  legacy_record_urn?: string;
 };
 
 export type GRCUploadStructuredField = {
@@ -2006,17 +2007,86 @@ export type GRCUploadStructuredField = {
   value?: string;
 };
 
+export type GRCUploadJobRef = {
+  id?: string;
+  status?: string;
+};
+
+export type GRCUploadParsedChunk = {
+  index?: number;
+  page?: number;
+  text_preview?: string;
+};
+
+export type GRCUploadParseArtifact = {
+  provider?: string;
+  provider_file_id?: string;
+  parse_id?: string;
+  status?: string;
+  text_preview?: string;
+  chunk_count?: number;
+  page_count?: number;
+  chunks?: GRCUploadParsedChunk[];
+};
+
+export type GRCUploadExtractedField = {
+  name?: string;
+  value?: string;
+  source?: string;
+  confidence?: number;
+  source_snippet?: string;
+  review_state?: string;
+};
+
+export type GRCUploadReviewItem = {
+  id?: string;
+  state?: string;
+  record_kind?: string;
+  record_id?: string;
+  field?: string;
+  value?: string;
+  reason?: string;
+  action?: string;
+  source_snippet?: string;
+};
+
+export type GRCUploadQualityCheck = {
+  id?: string;
+  status?: string;
+  message?: string;
+  action?: string;
+};
+
+export type GRCUploadEntityMatchHint = {
+  record_kind?: string;
+  record_id?: string;
+  match_key?: string;
+  strategy?: string;
+  candidate_state?: string;
+};
+
 export type GRCUploadResponse = {
   upload_id: string;
+  status?: string;
   target: "policy" | "vendor" | string;
   file_name: string;
   content_type?: string;
+  file_sha256?: string;
   reducto_file_id?: string;
   reducto_parse_id?: string;
   parse_status?: string;
   text_preview?: string;
   chunk_count?: number;
   page_count?: number;
+  review_state?: string;
+  quality_status?: string;
+  replayable?: boolean;
+  job?: GRCUploadJobRef;
+  parse_artifact?: GRCUploadParseArtifact;
+  extracted_fields?: GRCUploadExtractedField[];
+  review_items?: GRCUploadReviewItem[];
+  quality_checks?: GRCUploadQualityCheck[];
+  entity_match_hints?: GRCUploadEntityMatchHint[];
   structure_status?: string;
   structure_schema?: string;
   structured_summary?: string;
@@ -2025,6 +2095,16 @@ export type GRCUploadResponse = {
   projection_failures?: number;
   events: GRCUploadEvent[];
   generated_at: string;
+};
+
+export type GRCUploadReplayResponse = {
+  upload_id?: string;
+  status?: string;
+  events_found?: number;
+  events_projected?: number;
+  entities_projected?: number;
+  links_projected?: number;
+  projection_failures?: number;
 };
 
 export type GRCPolicyVersionDiff = {

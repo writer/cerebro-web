@@ -37,6 +37,7 @@ import type {
   GRCPolicyTemplate,
   GRCPolicyVersion,
   GRCPolicyVersionDiff,
+  GRCUploadReplayResponse,
   GRCUploadResponse,
 } from "@/lib/grc";
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
@@ -461,6 +462,7 @@ export default function PoliciesPage() {
   const [policyUploadReviewDue, setPolicyUploadReviewDue] = useState("");
   const [lastPolicyUpload, setLastPolicyUpload] = useState<GRCUploadResponse | null>(null);
   const [policyUploadHistory, setPolicyUploadHistory] = useState<GRCUploadResponse[]>([]);
+  const [policyReplayMessage, setPolicyReplayMessage] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const actionIdempotencyCounterRef = useRef(0);
@@ -474,6 +476,8 @@ export default function PoliciesPage() {
     useGRCMutation<GRCPolicyLifecycleActionResponse>();
   const { mutate: uploadPolicyDocument, saving: policyUploadSaving, error: policyUploadError, setError: setPolicyUploadError, cancel: cancelPolicyUpload } =
     useGRCFormMutation<GRCUploadResponse>();
+  const { mutate: replayPolicyUploadEvents, saving: policyReplaySaving, error: policyReplayError, setError: setPolicyReplayError } =
+    useGRCMutation<GRCUploadReplayResponse>();
   const { data, error, loading, reload } = useGRCQuery<GRCPolicyLifecycleResponse>(
     grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, rule_profile: activeRuleProfile, limit: POLICY_LIFECYCLE_LIMIT }),
   );
@@ -578,6 +582,27 @@ export default function PoliciesPage() {
       writeGRCUploadHistory(window.localStorage, policyUploadStorageKey, next);
       return next;
     });
+  };
+
+  const replayPolicyUpload = async (upload: GRCUploadResponse) => {
+    setPolicyReplayMessage("");
+    setPolicyReplayError(null);
+    try {
+      const response = await replayPolicyUploadEvents(
+        grcPath(`/grc/policy-lifecycle/uploads/${encodeURIComponent(upload.upload_id)}/replay`, { tenant_id: tenantID.trim() }),
+        {},
+      );
+      setPolicyReplayMessage(`${countLabel(response.events_projected ?? 0, "event")} replayed. ${countLabel((response.entities_projected ?? 0) + (response.links_projected ?? 0), "graph update")} projected.`);
+      setLastPolicyUpload((current) => current?.upload_id === upload.upload_id ? {
+        ...current,
+        status: response.status || current.status,
+        projection_status: response.status || current.projection_status,
+        projection_failures: response.projection_failures ?? current.projection_failures,
+      } : current);
+      await reload();
+    } catch {
+      return;
+    }
   };
 
   const openAction = (action: GRCPolicyLifecycleAction) => {
@@ -1005,12 +1030,16 @@ export default function PoliciesPage() {
               onAccepted={(file) => {
                 setPolicyUploadFile(file);
                 setPolicyUploadError(null);
+                setPolicyReplayError(null);
+                setPolicyReplayMessage("");
                 setLastPolicyUpload(null);
               }}
               onRejected={(message) => {
                 setPolicyUploadFile(null);
                 setLastPolicyUpload(null);
                 setPolicyUploadError(message);
+                setPolicyReplayError(null);
+                setPolicyReplayMessage("");
               }}
               onClear={() => {
                 setPolicyUploadFile(null);
@@ -1056,14 +1085,36 @@ export default function PoliciesPage() {
             upload={lastPolicyUpload}
             actions={(() => {
               const policyID = lastPolicyUpload.events.find((event) => event.event_kind === "grc.policy")?.record_id;
-              if (!policyID) return null;
               return (
-                <button type="button" onClick={() => setSelectedPolicyID(policyID)} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
-                  Open policy
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  {policyID && (
+                    <button type="button" onClick={() => setSelectedPolicyID(policyID)} className="inline-flex items-center rounded-md border border-[color:var(--border)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--text-primary)] transition hover:border-slate-300">
+                      Open policy
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={policyReplaySaving || lastPolicyUpload.replayable === false}
+                    onClick={() => replayPolicyUpload(lastPolicyUpload)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--text-primary)] transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${policyReplaySaving ? "animate-spin" : ""}`} aria-hidden="true" />
+                    {policyReplaySaving ? "Replaying" : "Replay events"}
+                  </button>
+                </div>
               );
             })()}
           />
+        )}
+        {policyReplayMessage && !policyReplaySaving && (
+          <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
+            {policyReplayMessage}
+          </div>
+        )}
+        {policyReplayError && !policyReplaySaving && (
+          <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-700">
+            {policyReplayError}
+          </div>
         )}
         <GRCUploadHistoryList uploads={policyUploadHistory} />
       </Panel>
