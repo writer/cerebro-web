@@ -1,5 +1,7 @@
 import { grcProductAreas, productAreaStatus, type GRCProductArea } from "@/lib/grc-product-areas";
 import type {
+  GRCEvidence,
+  GRCEvidencePacketsResponse,
   GRCVendor,
   GRCVendorActionRequest,
   GRCVendorCreateRequest,
@@ -264,7 +266,7 @@ const controls = [
   },
 ];
 
-const evidence = [
+const evidence: GRCEvidence[] = [
   {
     id: "demo-evidence-identity-mfa",
     runtime_id: "demo-okta-runtime",
@@ -1314,6 +1316,251 @@ const controlPacketFixture = () => ({
   metadata: { generated_by: "cerebro-web-fixture", tenant_id: tenantID, generated_at: generatedAt },
   generated_at: generatedAt,
 });
+
+const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsResponse => {
+  const evidenceItems = limitList(evidence, params);
+  const controlRows = controls.map((control, index) => ({
+    id: `fixture-control-${control.control_id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    framework_id: control.framework_id,
+    framework_name: control.framework_name,
+    framework_version: control.framework_version,
+    title: control.title,
+    owner_domain: control.owner_domain,
+    control_id: control.control_id,
+    status: control.status,
+    evidence_quality: control.evidence_quality,
+    evidence_score: control.evidence_score,
+    open_findings: control.open_findings,
+    critical_findings: control.critical_findings,
+    high_findings: control.high_findings,
+    evidence_items: control.evidence_items,
+    missing_evidence_items: control.missing_evidence_items,
+    stale_evidence_items: control.stale_evidence_items,
+    mapped_rules: control.mapped_rules,
+    evidence_request_ids: [`fixture-request-${index + 1}`],
+    evidence_packet_ids: [`fixture-packet-${index + 1}`],
+    finding_ids: control.findings.map((finding) => finding.id),
+  }));
+  const requests = controlRows.map((control, index) => {
+    const missing = control.missing_evidence_items > 0;
+    const stale = !missing && control.stale_evidence_items > 0;
+    return {
+      id: `fixture-request-${index + 1}`,
+      control_id: control.control_id,
+      framework_id: control.framework_id,
+      title: `${control.control_id} evidence`,
+      description: `Proof needed for ${control.title}.`,
+      type: "automated",
+      required: true,
+      status: missing ? "missing" : stale ? "stale" : "ready",
+      quality: control.evidence_quality ?? "ready",
+      freshness_sla: "30d",
+      assessment_methods: ["inspection"],
+      accepted_from: ["runtime", "upload"],
+      evidence_packet_ids: [`fixture-packet-${index + 1}`],
+      review_status: missing || stale ? "needs_review" : "accepted",
+      owner_domain: control.owner_domain,
+      due_at: missing ? "2026-01-22T12:00:00.000Z" : undefined,
+      control_test_ids: control.mapped_rules,
+    };
+  });
+  const packets = requests.map((request, index) => {
+    const item = evidenceItems[index % Math.max(1, evidenceItems.length)];
+    const status = request.status === "ready" ? "ready" : "needs_review";
+    return {
+      id: `fixture-packet-${index + 1}`,
+      request_id: request.id,
+      control_id: request.control_id,
+      framework_id: request.framework_id,
+      evidence_type: request.type,
+      status,
+      quality: request.quality,
+      reason: status === "ready" ? "Fixture runtime evidence is linked." : "Fixture evidence needs reviewer confirmation.",
+      source: item?.runtime_id ?? "fixture",
+      observed_at: item?.created_at ?? generatedAt,
+      expires_at: "2026-02-14T12:00:00.000Z",
+      manual: false,
+      citations: {
+        evidence_ids: item ? [item.id] : [],
+        rule_ids: item?.rule_id ? [item.rule_id] : [],
+        event_ids: item?.event_ids ?? [],
+        graph_root_urns: item?.graph_root_urns ?? [],
+        run_ids: item?.run_id ? [item.run_id] : [],
+      },
+      freshness: {
+        status: request.status === "stale" ? "stale" : "fresh",
+        sla: request.freshness_sla,
+        observed_at: item?.created_at ?? generatedAt,
+        expires_at: "2026-02-14T12:00:00.000Z",
+      },
+      review: {
+        id: `fixture-review-${index + 1}`,
+        subject_id: `fixture-packet-${index + 1}`,
+        status: request.review_status,
+        actor: request.review_status === "accepted" ? "auditor@example.com" : undefined,
+        updated_at: generatedAt,
+      },
+      export_artifact: { format: "markdown", path: `/grc/evidence-packets/fixture-packet-${index + 1}.md` },
+    };
+  });
+  const reviews = packets
+    .filter((packet) => packet.review?.status !== "accepted")
+    .map((packet) => packet.review!)
+    .filter(Boolean);
+  const sourceRows = connectors.slice(0, 3).map((connector) => ({
+    id: `fixture-source-${connector.source_id}`,
+    runtime_id: connector.runtime_id,
+    source_id: connector.source_id,
+    tenant_id: connector.tenant_id,
+    status: connector.status === "healthy" ? "collected" : "stale",
+    last_synced_at: connector.last_synced_at,
+    finding_count: findings.filter((finding) => finding.source_id === connector.source_id).length,
+    evidence_item_count: evidenceItems.filter((item) => item.runtime_id === connector.runtime_id).length,
+    control_count: controlRows.filter((control) => (control.mapped_rules ?? []).length > 0).length,
+  }));
+  const lineage = evidenceItems.map((item, index) => ({
+    id: `fixture-lineage-${index + 1}`,
+    evidence_id: item.id,
+    finding_id: item.finding_id,
+    runtime_id: item.runtime_id,
+    source_id: findings.find((finding) => finding.id === item.finding_id)?.source_id,
+    rule_id: item.rule_id,
+    run_ids: item.run_id ? [item.run_id] : [],
+    claim_ids: item.claim_ids ?? [],
+    event_ids: item.event_ids ?? [],
+    graph_root_urns: item.graph_root_urns ?? [],
+    evidence_request_ids: [requests[index % requests.length]?.id].filter(Boolean),
+    evidence_packet_ids: [packets[index % packets.length]?.id].filter(Boolean),
+    control_ids: [controlRows[index % controlRows.length]?.id].filter(Boolean),
+  }));
+  const sourceIDs = sourceRows.map((source) => source.source_id).filter((sourceID): sourceID is string => Boolean(sourceID));
+
+  return {
+    version: "fixture-1",
+    generated_at: generatedAt,
+    program: {
+      id: "fixture-evidence-program",
+      name: "Fixture evidence program",
+      profile_id: "fixture",
+      status: reviews.length > 0 ? "needs_attention" : "ready",
+      readiness_score: reviews.length > 0 ? 76 : 92,
+      framework_count: 2,
+      control_count: controlRows.length,
+      evidence_request_count: requests.length,
+      evidence_packet_count: packets.length,
+      collection_source_count: sourceRows.length,
+      evidence_item_count: evidenceItems.length,
+      resource_subject_count: assets.length,
+      lineage_count: lineage.length,
+      claim_record_count: 0,
+      evaluation_run_count: evidenceItems.length,
+      graph_path_count: evidenceItems.length,
+      open_review_count: reviews.length,
+    },
+    frameworks: [
+      { id: "soc2", name: "SOC 2", version: "2024", lifecycle: "active", status: "needs_attention", control_count: 2, passing_controls: 0, needs_attention_controls: 2, missing_evidence_count: 1, stale_evidence_count: 1, evidence_score: 70 },
+      { id: "iso27001", name: "ISO 27001", version: "2022", lifecycle: "active", status: "ready", control_count: 1, passing_controls: 1, needs_attention_controls: 0, missing_evidence_count: 0, stale_evidence_count: 0, evidence_score: 91 },
+    ],
+    controls: controlRows,
+    evidence_requests: requests,
+    evidence_packets: packets,
+    evidence_reviews: reviews,
+    activity: [
+      { id: "fixture-evidence-activity-1", subject_id: requests[0]?.id ?? "fixture-request-1", type: "request.updated", message: "Fixture evidence request updated.", created_at: generatedAt },
+    ],
+    assessment_scope: {
+      id: "fixture-evidence-scope",
+      report_type: "evidence_packet",
+      profile_id: "fixture",
+      profile_name: "Fixture evidence program",
+      generated_at: generatedAt,
+      source_ids: sourceIDs,
+      runtime_ids: sourceRows.map((source) => source.runtime_id),
+      control_count: controlRows.length,
+      finding_count: findings.length,
+      evidence_count: evidenceItems.length,
+      runtime_count: sourceRows.length,
+      exclusion_count: 0,
+      collection_policy: "fixture",
+      policy_applied_before_read: true,
+      filtered_before_graph_projection: true,
+      redaction_mode: "share_safe",
+    },
+    collection_sources: sourceRows,
+    evidence_items: evidenceItems.map((item) => ({
+      ...item,
+      source_id: findings.find((finding) => finding.id === item.finding_id)?.source_id,
+      run_ids: item.run_id ? [item.run_id] : [],
+      claim_ids: item.claim_ids ?? [],
+      last_observed_at: item.created_at,
+      observation_count: 1,
+    })),
+    resource_subjects: assets.map((asset) => ({
+      id: asset.urn,
+      urn: asset.urn,
+      kind: asset.entity_type,
+      evidence_ids: evidenceItems.filter((item) => item.graph_root_urns?.includes(asset.urn)).map((item) => item.id),
+      last_observed_at: generatedAt,
+    })),
+    evidence_lineage: lineage,
+    claim_records: [],
+    evaluation_runs: evidenceItems.map((item) => ({
+      id: item.run_id ?? `fixture-run-${item.id}`,
+      runtime_id: item.runtime_id,
+      source_id: findings.find((finding) => finding.id === item.finding_id)?.source_id,
+      rule_ids: item.rule_id ? [item.rule_id] : [],
+      evidence_ids: [item.id],
+      finding_ids: item.finding_id ? [item.finding_id] : [],
+    })),
+    graph_path_records: evidenceItems.map((item, index) => ({
+      id: `fixture-path-${index + 1}`,
+      evidence_id: item.id,
+      finding_id: item.finding_id,
+      from_urn: item.graph_root_urns?.[0],
+      relation: "HAS_EVIDENCE",
+      to_urn: item.id,
+      observed_at: item.created_at,
+    })),
+    exceptions_acceptances: [],
+    export_artifacts: [{
+      id: "fixture-export-1",
+      snapshot_id: "fixture-snapshot-1",
+      format: "markdown",
+      redaction: "share_safe",
+      path: "/grc/evidence-packets/export",
+      content_hash: "fixture-export-hash",
+      included: true,
+    }],
+    export: { id: "fixture-export", formats: ["markdown", "csv"], redaction: "share_safe", path: "/grc/evidence-packets/export" },
+    snapshot: {
+      id: "fixture-snapshot-1",
+      hash: "fixture-snapshot-hash",
+      generated_at: generatedAt,
+      control_count: controlRows.length,
+      evidence_request_count: requests.length,
+      evidence_packet_count: packets.length,
+      collection_source_count: sourceRows.length,
+      evidence_item_count: evidenceItems.length,
+      resource_subject_count: assets.length,
+      lineage_count: lineage.length,
+      claim_record_count: 0,
+      evaluation_run_count: evidenceItems.length,
+      graph_path_count: evidenceItems.length,
+      open_review_count: reviews.length,
+    },
+    metadata: {
+      readiness: { status: reviews.length > 0 ? "needs_attention" : "ready", score: reviews.length > 0 ? 76 : 92, summary: "Fixture packet uses local evidence rows." },
+      provenance: { report_type: "evidence_packet", profile_id: "fixture", profile_name: "Fixture evidence program", packet_version: "fixture-1", generated_at: generatedAt, control_count: controlRows.length, finding_count: findings.length, evidence_count: evidenceItems.length, runtime_count: sourceRows.length, source_ids: sourceIDs },
+      scope: {
+        source_ids: sourceIDs,
+        runtime_ids: sourceRows.map((source) => source.runtime_id),
+        exclusions: { total: 0, applied_to_incremental_fetch: true, filtered_before_graph_projection: true },
+        incremental_fetch: { status: "fixture", policy_applied_before_read: true, event_filtering_before_projection: true, summary: "Local fixture data is already bounded." },
+      },
+      redaction: { default_mode: "share_safe", available_modes: ["share_safe", "internal"], summary: "Fixture data contains no production identifiers." },
+    },
+  };
+};
 
 const policyLifecycleFixture = () => ({
   summary: {
@@ -2770,6 +3017,10 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "grc/evidence") {
     return jsonFixture({ evidence: limitList(evidence, searchParams), generated_at: generatedAt });
+  }
+
+  if (normalizedPath === "grc/evidence-packets") {
+    return jsonFixture(evidencePacketsFixture(searchParams));
   }
 
   if (normalizedPath === "grc/frameworks") {

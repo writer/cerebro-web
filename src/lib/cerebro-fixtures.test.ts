@@ -273,6 +273,34 @@ describe("cerebro fixture proxy responses", () => {
     expect(exportResponse?.body).toContain("policy.version");
   });
 
+  it("returns packaged evidence workflow fixtures", () => {
+    withFixtureMode();
+    const response = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/evidence-packets",
+      searchParams: new URLSearchParams("limit=2"),
+    });
+    const payload = parseFixture(response!);
+
+    expect(response?.status).toBe(200);
+    expect(payload).toMatchObject({
+      program: { id: "fixture-evidence-program", evidence_item_count: 2 },
+      evidence_requests: expect.arrayContaining([
+        expect.objectContaining({ id: "fixture-request-1", review_status: "needs_review" }),
+      ]),
+      controls: expect.arrayContaining([
+        expect.objectContaining({ id: "fixture-control-cc6-1", evidence_request_ids: ["fixture-request-1"] }),
+      ]),
+      collection_sources: expect.arrayContaining([
+        expect.objectContaining({ source_id: "okta", status: "collected" }),
+      ]),
+      evidence_lineage: expect.arrayContaining([
+        expect.objectContaining({ evidence_id: "demo-evidence-identity-mfa", evidence_packet_ids: ["fixture-packet-1"] }),
+      ]),
+    });
+    expect(payload.evidence_items).toHaveLength(2);
+  });
+
   it("returns asset detail fixtures for encoded URNs", () => {
     withFixtureMode();
     const urn = "urn:cerebro:demo-tenant:repository:public-demo";
