@@ -2171,8 +2171,10 @@ const connectorDefinitionFixture = () => ({
   runtime_store: "fixture",
   definitions: connectorLibraryFixture().connectors.map((connector) => ({
     id: connector.source_id,
+    tenant_id: tenantID,
     source_id: connector.source_id,
     display_name: connector.display_name,
+    runtime: "json_api",
     stage: "approved",
     version: 1,
     auth: { model: connector.auth_model ?? "none" },
@@ -2182,6 +2184,71 @@ const connectorDefinitionFixture = () => ({
     updated_at: generatedAt,
   })),
 });
+
+const connectorDefinitionPromotionPlanFixture = (definitionID: string) => {
+  const definition = connectorDefinitionFixture().definitions.find((item) => item.id === definitionID) ?? connectorDefinitionFixture().definitions[0];
+  const resourceFamilies = definition.resource_families ?? [];
+  const scopeOptions = definition.scope_options ?? [];
+  return {
+    generated_at: generatedAt,
+    plan: {
+      generated_at: generatedAt,
+      definition: { ...definition, tenant_id: definition.tenant_id ?? tenantID, runtime: "json_api" },
+      status: "ready",
+      summary: `${definition.display_name} is available in fixture mode and can be connected for runtime testing.`,
+      next_stage: "certified",
+      checklist: [
+        {
+          id: "definition.validation",
+          title: "Definition validation",
+          category: "definition",
+          status: "ready",
+          detail: `${resourceFamilies.length} resource families are mapped for fixture review.`,
+          action: "Review definition",
+        },
+        {
+          id: "runtime.connection",
+          title: "Runtime connection",
+          category: "runtime",
+          status: "ready",
+          detail: "Fixture connector metadata is available for setup.",
+          action: "Save runtime",
+        },
+        {
+          id: "scope.options",
+          title: "Scope options",
+          category: "scope",
+          status: scopeOptions.length > 0 ? "ready" : "warning",
+          detail: scopeOptions.length > 0 ? `${scopeOptions.length} scope options are available.` : "No scope options are defined.",
+          action: "Review scope",
+        },
+      ],
+      blockers: [],
+      warnings: scopeOptions.length > 0 ? [] : ["Scope options are not defined."],
+      metrics: {
+        resource_families: resourceFamilies.length,
+        config_fields: 0,
+        credential_fields: definition.auth?.model === "none" ? 0 : 1,
+        scope_options: scopeOptions.length,
+        generated_files: 0,
+        ready_checks: scopeOptions.length > 0 ? 3 : 2,
+        warning_checks: scopeOptions.length > 0 ? 0 : 1,
+        blocked_checks: 0,
+      },
+      scaffold: {
+        source_id: definition.source_id,
+        source_type: "fixture",
+        auth_model: definition.auth?.model ?? "none",
+        dry_run: true,
+        files: [],
+        next_steps: ["Save a runtime connection.", "Run one bounded sync.", "Review projected graph records."],
+      },
+      commands: [
+        `npm run dev:fixtures -- --source=${definition.source_id}`,
+      ],
+    },
+  };
+};
 
 const inventoryAssetDetailFixture = (params?: URLSearchParams) => {
   const urn = params?.get("urn") ? safeDecode(params.get("urn") ?? "") : adminURN;
@@ -2793,6 +2860,11 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "connector-definitions") {
     return jsonFixture(connectorDefinitionFixture());
+  }
+
+  const connectorDefinitionPlanMatch = /^connector-definitions\/([^/]+)\/promotion-plan$/.exec(normalizedPath);
+  if (connectorDefinitionPlanMatch) {
+    return jsonFixture(connectorDefinitionPromotionPlanFixture(safeDecode(connectorDefinitionPlanMatch[1])));
   }
 
   if (normalizedPath === "source-runtimes") {

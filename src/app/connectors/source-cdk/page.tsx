@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -49,6 +48,7 @@ import {
   sourceRuntimeSyncPath,
 } from "@/lib/connectors";
 import { useGRCQuery } from "@/lib/grc-client";
+import { useQueryParamState } from "@/lib/query-params";
 
 const resourceTypeLabels: Record<string, string> = {
   identity_user: "User identities",
@@ -685,7 +685,7 @@ function RuntimeActivationPanel({
           {connector ? (
             <ConnectorSetupForm
               connector={connector}
-              tenantID={tenantID || definition.tenant_id}
+              tenantID={tenantID || definition.tenant_id || ""}
               apiKey={apiKey}
               credentialStores={credentialStores}
               onConnected={onConnected}
@@ -729,27 +729,33 @@ function RuntimeActivationPanel({
 
 function SourceReadinessContent() {
   const { apiKey } = useApiKey();
-  const searchParams = useSearchParams();
-  const tenantID = searchParams.get("tenant_id") ?? "";
-  const requestedDefinitionID = searchParams.get("definition_id") ?? "";
+  const [tenantID, setTenantID] = useQueryParamState("tenant_id");
+  const [requestedDefinitionID] = useQueryParamState("definition_id");
+  const scopedTenantID = tenantID.trim();
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: tenantID }));
+  const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: scopedTenantID }));
   const definitions = useMemo(() => definitionsQuery.data?.definitions ?? [], [definitionsQuery.data?.definitions]);
   const selectedDefinitionID = requestedDefinitionID || definitions[0]?.id || "";
   const selectedDefinition = definitions.find((definition) => definition.id === selectedDefinitionID) ?? definitions[0];
+  useEffect(() => {
+    const responseTenantID = definitionsQuery.data?.tenant_id?.trim() || selectedDefinition?.tenant_id?.trim() || "";
+    if (!scopedTenantID && responseTenantID) {
+      setTenantID(responseTenantID);
+    }
+  }, [definitionsQuery.data?.tenant_id, scopedTenantID, selectedDefinition?.tenant_id, setTenantID]);
   const planQuery = useGRCQuery<ConnectorDefinitionPlanResponse>(
     selectedDefinitionID ? `/connector-definitions/${encodeURIComponent(selectedDefinitionID)}/promotion-plan` : null,
   );
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: tenantID }));
+  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID }));
   const detailQuery = useGRCQuery<ConnectorDetailResponse>(
-    selectedDefinition?.source_id ? withQuery(`/connectors/${encodeURIComponent(selectedDefinition.source_id)}`, { tenant_id: tenantID }) : null,
+    selectedDefinition?.source_id ? withQuery(`/connectors/${encodeURIComponent(selectedDefinition.source_id)}`, { tenant_id: scopedTenantID }) : null,
   );
   const plan = planQuery.data?.plan;
   const credentialStores = useMemo(() => normalizeCredentialStores(libraryQuery.data), [libraryQuery.data]);
   const catalogConnectors = libraryQuery.data?.connectors ?? [];
   const connector = detailQuery.data?.connector ?? libraryQuery.data?.connectors?.find((entry) => entry.source_id === selectedDefinition?.source_id);
-  const existingConnection = firstConnection(detailQuery.data?.connections, tenantID);
+  const existingConnection = firstConnection(detailQuery.data?.connections, scopedTenantID);
   const reloadActivation = async () => {
     await Promise.all([
       definitionsQuery.reload(),
@@ -787,7 +793,7 @@ function SourceReadinessContent() {
         action={
           <div className="flex flex-wrap gap-2">
             <Link
-              href={`/connectors${tenantID ? `?tenant_id=${encodeURIComponent(tenantID)}` : ""}`}
+              href={`/connectors${scopedTenantID ? `?tenant_id=${encodeURIComponent(scopedTenantID)}` : ""}`}
               className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -821,8 +827,8 @@ function SourceReadinessContent() {
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(260px,0.3fr)_minmax(0,0.7fr)]">
         <div className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
           <div className="space-y-5">
-            <SourcesQueue definitions={definitions} selectedID={selectedDefinitionID} tenantID={tenantID} />
-            <CatalogSourcesPanel connectors={catalogConnectors} tenantID={tenantID} />
+            <SourcesQueue definitions={definitions} selectedID={selectedDefinitionID} tenantID={scopedTenantID} />
+            <CatalogSourcesPanel connectors={catalogConnectors} tenantID={scopedTenantID} />
           </div>
         </div>
         <div className="space-y-5">
@@ -835,7 +841,7 @@ function SourceReadinessContent() {
             definition={selectedDefinition}
             connector={connector}
             credentialStores={credentialStores}
-            tenantID={tenantID}
+            tenantID={scopedTenantID}
             apiKey={apiKey}
             existingConnection={existingConnection}
             loading={detailQuery.loading || libraryQuery.loading}

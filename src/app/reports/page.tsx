@@ -7,7 +7,8 @@ import { useMemo, useState } from "react";
 
 import { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice, RiskBadge, RiskBreakdown } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge, RiskBreakdown } from "@/components/grc/Primitives";
+import { countLabel } from "@/lib/format";
 import {
   displayDate,
   GRCAuditPacket,
@@ -102,6 +103,36 @@ const findingPickerSearchKeys = [
   "controls",
 ];
 
+const controlPacketColumns: TableColumn<GRCControlPacketControl>[] = [
+  {
+    key: "control",
+    label: "Control",
+    render: (_value, control) => (
+      <div className="min-w-[16rem]">
+        <div className="font-mono text-[12px] font-semibold text-[var(--text-primary)]">{controlLabel(control)}</div>
+        <div className="mt-0.5 line-clamp-2 text-[12px] text-[var(--text-muted)]">{control.control.title || control.control.family_name || "Control objective"}</div>
+      </div>
+    ),
+  },
+  { key: "status", label: "Status", render: (_value, control) => <Badge value={control.status} /> },
+  { key: "readiness", label: "Readiness", render: (_value, control) => control.audit_readiness ? `${control.audit_readiness.score}/100` : "—" },
+  { key: "evidence", label: "Evidence", render: (_value, control) => evidenceItemCount(control).toLocaleString() },
+  { key: "findings", label: "Findings", render: (_value, control) => (control.findings?.length ?? 0).toLocaleString() },
+  { key: "mapped_rules", label: "Rules", render: (_value, control) => (control.mapped_rules?.length ?? 0).toLocaleString() },
+];
+
+const controlPacketSearchKeys = [
+  "selection_id",
+  "control",
+  "status",
+  "reasons",
+  "tags",
+  "mapped_rules",
+  "findings",
+  "evidence",
+  "audit_readiness",
+];
+
 const statusCount = (packet: GRCControlEvidencePacketResponse | null | undefined, status: string) =>
   packet?.packet.summary.by_status?.[status] ?? 0;
 
@@ -110,6 +141,9 @@ const evidenceItemCount = (control: GRCControlPacketControl) =>
 
 const controlLabel = (control: GRCControlPacketControl) =>
   `${control.control.framework_name} ${control.control.control_id}`;
+
+const controlPacketRowKey = (control: GRCControlPacketControl) =>
+  control.selection_id || `${control.control.framework_name}:${control.control.control_id}`;
 
 const modeFromState = (reportType: string, findingID: string, profileID: string, framework: string, controlID: string): ReportMode => {
   if (reportType === "control") return "control";
@@ -519,10 +553,20 @@ function ControlPacketView({
   upcomingFrameworkName?: string;
 }) {
   const controls = packet.packet.controls;
-  const visibleControls = controls.slice(0, 50);
+  const [selectedControlKey, setSelectedControlKey] = useState(() => controls[0] ? controlPacketRowKey(controls[0]) : "");
+  const selectedControl =
+    controls.find((control) => controlPacketRowKey(control) === selectedControlKey) ??
+    controls[0] ??
+    null;
   const evidenceCount = controls.reduce((sum, control) => sum + evidenceItemCount(control), 0);
   const readiness = packet.metadata?.readiness;
   const isUpcoming = Boolean(upcomingFrameworkName?.trim());
+  const scopeCopy = grcLoadedRowsCopy({
+    loaded: controls.length,
+    limit: GRC_WORKLIST_LIMIT,
+    meta: { limit: GRC_WORKLIST_LIMIT, returned: controls.length, total: packet.packet.summary.total, truncated: packet.packet.summary.total > controls.length },
+    noun: "controls",
+  });
   return (
     <>
       <div className="grid gap-4 md:grid-cols-4">
@@ -544,56 +588,89 @@ function ControlPacketView({
 
       <ScopePanel metadata={packet.metadata} redactionMode={redactionMode} />
 
-      <Panel title="Control Readiness">
-        <ResultLimitNotice
-          loaded={controls.length}
-          limit={GRC_WORKLIST_LIMIT}
-          meta={{ limit: GRC_WORKLIST_LIMIT, returned: controls.length, total: packet.packet.summary.total, truncated: packet.packet.summary.total > controls.length }}
-          noun="controls"
-          className="mb-3"
-        />
-        <div className="divide-y divide-slate-100 dark:divide-white/10">
-          {visibleControls.map((control) => (
-            <div key={`${control.control.framework_name}-${control.control.control_id}`} className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-mono text-[12px] font-semibold text-[var(--text-primary)]">{controlLabel(control)}</div>
-                  <Badge value={control.status} />
-                  {control.audit_readiness && <Badge value={control.audit_readiness.rating} />}
-                </div>
-                <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{control.control.title || control.control.family_name || "Control objective"}</div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{control.audit_readiness?.summary || control.reasons?.[0] || "No packet blocker reported."}</div>
-                {control.evidence.expectations && control.evidence.expectations.length > 0 && (
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {control.evidence.expectations.slice(0, 4).map((expectation) => (
-                      <div key={expectation.id} className="flex items-center justify-between gap-2 rounded-md bg-[var(--surface-muted)] px-3 py-2">
-                        <span className="truncate text-[12px] text-[var(--text-secondary)]">{expectation.title || expectation.id}</span>
-                        <Badge value={expectation.status} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2 text-[12px] text-[var(--text-muted)]">
-                <DetailRow label="Readiness" value={control.audit_readiness ? `${control.audit_readiness.score}/100` : "—"} />
-                <DetailRow label="Findings" value={String(control.findings?.length ?? 0)} />
-                <DetailRow label="Evidence" value={String(evidenceItemCount(control))} />
-                <DetailRow label="Mapped rules" value={String(control.mapped_rules?.length ?? 0)} />
-                <DetailRow label="Freshness" value={control.evidence.summary?.freshness_sla || "—"} />
-              </div>
-            </div>
-          ))}
-          {controls.length === 0 && isUpcoming && (
+      {controls.length === 0 ? (
+        <Panel title="Control Readiness">
+          {isUpcoming ? (
             <div className="py-8 text-center text-[13px] text-violet-700">
               {upcomingFrameworkName} is upcoming. It is discoverable for planning, but not yet available for measured control evidence packets.
             </div>
-          )}
-          {controls.length === 0 && !isUpcoming && (
+          ) : (
             <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">No controls match the selected packet filters.</div>
           )}
+        </Panel>
+      ) : (
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+          <WorklistTable
+            title="Control readiness"
+            description={scopeCopy}
+            rows={controls}
+            columns={controlPacketColumns}
+            emptyMessage="No controls match the selected packet filters."
+            searchPlaceholder="Filter loaded controls"
+            filterKeys={controlPacketSearchKeys}
+            pageSize={12}
+            resultLimit={GRC_WORKLIST_LIMIT}
+            resultMeta={{ limit: GRC_WORKLIST_LIMIT, returned: controls.length, total: packet.packet.summary.total, truncated: packet.packet.summary.total > controls.length }}
+            resultNoun="controls"
+            getRowKey={(control) => controlPacketRowKey(control)}
+            selectedRowKey={selectedControl ? controlPacketRowKey(selectedControl) : null}
+            onRowClick={(control) => setSelectedControlKey(controlPacketRowKey(control))}
+            tableContainerClassName="max-h-[34rem] overflow-auto"
+          />
+          <ControlReadinessDetail control={selectedControl} />
         </div>
-      </Panel>
+      )}
     </>
+  );
+}
+
+function ControlReadinessDetail({ control }: { control: GRCControlPacketControl | null }) {
+  if (!control) {
+    return (
+      <Panel title="Control detail">
+        <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">Select a control.</div>
+      </Panel>
+    );
+  }
+  const expectations = control.evidence.expectations ?? [];
+  const blockers = expectations.filter((expectation) => ["missing", "stale", "failed", "blocked"].includes(expectation.status.toLowerCase()));
+  return (
+    <Panel title="Control detail">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge value={control.status} />
+        {control.audit_readiness && <Badge value={control.audit_readiness.rating} />}
+      </div>
+      <h3 className="mt-3 font-mono text-[13px] font-semibold text-[var(--text-primary)]">{controlLabel(control)}</h3>
+      <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">
+        {control.control.title || control.control.family_name || "Control objective"}
+      </p>
+      <p className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">
+        {control.audit_readiness?.summary || control.reasons?.[0] || "No packet blocker reported."}
+      </p>
+      <dl className="mt-4 space-y-2">
+        <DetailRow label="Readiness" value={control.audit_readiness ? `${control.audit_readiness.score}/100` : "—"} />
+        <DetailRow label="Findings" value={String(control.findings?.length ?? 0)} />
+        <DetailRow label="Evidence" value={String(evidenceItemCount(control))} />
+        <DetailRow label="Mapped rules" value={String(control.mapped_rules?.length ?? 0)} />
+        <DetailRow label="Freshness" value={control.evidence.summary?.freshness_sla || "—"} />
+      </dl>
+      {blockers.length > 0 && (
+        <div className="mt-5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Blocked expectations</div>
+          <div className="mt-2 space-y-2">
+            {blockers.slice(0, 6).map((expectation) => (
+              <div key={expectation.id} className="flex items-center justify-between gap-2 rounded-md bg-[var(--surface-muted)] px-3 py-2">
+                <span className="truncate text-[12px] text-[var(--text-secondary)]">{expectation.title || expectation.id}</span>
+                <Badge value={expectation.status} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {expectations.length > 0 && blockers.length === 0 && (
+        <div className="mt-5 text-[12px] text-[var(--text-muted)]">{countLabel(expectations.length, "expectation")} reported.</div>
+      )}
+    </Panel>
   );
 }
 

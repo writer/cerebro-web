@@ -50,6 +50,14 @@ import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
 const POLICY_LIFECYCLE_LIMIT = 300;
+type PolicySection = "queues" | "register" | "records" | "history";
+
+const policySectionTabs: { id: PolicySection; label: string }[] = [
+  { id: "queues", label: "Work queues" },
+  { id: "register", label: "Policy register" },
+  { id: "records", label: "Documents and risks" },
+  { id: "history", label: "History" },
+];
 
 const lifecycleStates = [
   { value: "", label: "All states" },
@@ -439,6 +447,7 @@ export default function PoliciesPage() {
   const [ruleProfile, setRuleProfile] = useQueryParamState("rule_profile");
   const [query, setQuery] = useQueryParamState("q");
   const [selectedPolicyID, setSelectedPolicyID] = useState<string | null>(null);
+  const [policySection, setPolicySection] = useState<PolicySection>("queues");
   const [selectedAction, setSelectedAction] = useState<GRCPolicyLifecycleAction | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionDate, setActionDate] = useState("");
@@ -1083,7 +1092,32 @@ export default function PoliciesPage() {
 
       {data && (
         <>
-          <WorklistTable
+          <div className="surface-panel p-2">
+            <div className="grid gap-2 sm:grid-cols-4" role="tablist" aria-label="Policy lifecycle sections">
+              {policySectionTabs.map((tab) => {
+                const selected = policySection === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setPolicySection(tab.id)}
+                    aria-pressed={selected}
+                    className={`rounded-md px-3 py-2 text-[13px] font-semibold transition ${
+                      selected
+                        ? "bg-[var(--primary)] text-white"
+                        : "text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {policySection === "queues" && (
+            <>
+              <WorklistTable
             title="Policy work queue"
             description={isRefreshing ? "Refreshing policy records..." : "Drafts, approvals, reviews, attestations, and exceptions ordered by due date."}
             rows={visibleWorkQueue}
@@ -1117,21 +1151,24 @@ export default function PoliciesPage() {
                   )}
                   <button
                     type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (item.policy_id) setSelectedPolicyID(item.policy_id);
-                    }}
-                    title="Open policy"
-                    className="inline-flex items-center rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:border-indigo-200 hover:text-indigo-700"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (item.policy_id) {
+                          setSelectedPolicyID(item.policy_id);
+                          setPolicySection("register");
+                        }
+                      }}
+                      title="Open policy"
+                      className="inline-flex items-center rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:border-indigo-200 hover:text-indigo-700"
                   >
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 </div>
               );
             }}
-          />
+              />
 
-          <WorklistTable
+              <WorklistTable
             title="Document work queue"
             description={isRefreshing ? "Refreshing document records..." : "Draft documents, stale reviews, and open risk treatments ordered by due date."}
             rows={visibleDocumentWorkQueue}
@@ -1145,9 +1182,9 @@ export default function PoliciesPage() {
             getRowKey={(item) => item.id}
             refreshing={isRefreshing}
             action={<ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />}
-          />
+              />
 
-          <WorklistTable
+              <WorklistTable
             title="Governance gaps"
             description={isRefreshing ? "Refreshing governance gaps..." : "Records missing owners, dates, mappings, treatment, or evidence."}
             rows={visibleGovernanceGaps}
@@ -1198,14 +1235,17 @@ export default function PoliciesPage() {
               );
             }}
             action={<ListChecks className="h-4 w-4 text-slate-400" aria-hidden="true" />}
-          />
+              />
 
-          <GapRollupsPanel
-            rollups={data.governance_gap_rollups}
-            rules={data.governance_rules ?? []}
-          />
+              <GapRollupsPanel
+                rollups={data.governance_gap_rollups}
+                rules={data.governance_rules ?? []}
+              />
+            </>
+          )}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+          {policySection === "register" && (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
             <WorklistTable
               title="Policy register"
               description="Policy records with owner, version, approval, attestation, review, and mapping counts."
@@ -1240,9 +1280,12 @@ export default function PoliciesPage() {
               onAction={openAction}
               savingActionID={actionSaving ? selectedAction?.id : undefined}
             />
-          </div>
+            </div>
+          )}
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          {policySection === "records" && (
+            <>
+              <div className="grid gap-4 xl:grid-cols-2">
             <WorklistTable
               title="Document register"
               description="Policy documents with owner, class, state, review date, policies, and mapped controls."
@@ -1272,9 +1315,9 @@ export default function PoliciesPage() {
               getRowKey={(risk) => risk.id || risk.urn}
               action={<ClipboardList className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
-          </div>
+              </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-4 xl:grid-cols-2">
             <WorklistTable
               title="Template library"
               description="Published templates with owner, framework, and mapped control references."
@@ -1289,23 +1332,45 @@ export default function PoliciesPage() {
               getRowKey={(item) => item.id}
               action={<FileText className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
-            <WorklistTable
-              title="Reminders and escalations"
-              description="Attestation and review notices with recipients, channels, and escalation owners."
-              rows={data.reminders ?? []}
-              columns={reminderColumns}
-              emptyMessage="No reminders are available."
-              searchPlaceholder="Filter loaded reminders"
-              filterKeys={["title", "status", "channel", "recipients", "escalated_to", "due_at"]}
-              pageSize={8}
-              resultLimit={POLICY_LIFECYCLE_LIMIT}
-              resultNoun="reminders"
-              getRowKey={(item) => item.id}
-              action={<Bell className="h-4 w-4 text-slate-400" aria-hidden="true" />}
-            />
-          </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+                <WorklistTable
+                  title="Policy mappings"
+                  description="Evidence, controls, and targets linked through policy, version, template, and exception records."
+                  rows={data.mappings ?? []}
+                  columns={mappingColumns}
+                  emptyMessage="No policy mappings are available."
+                  searchPlaceholder="Filter loaded mappings"
+                  filterKeys={["policy_id", "policy_title", "source_type", "target", "controls", "evidence"]}
+                  pageSize={10}
+                  resultLimit={POLICY_LIFECYCLE_LIMIT}
+                  resultNoun="mappings"
+                  getRowKey={(item, index) => `${item.source_urn}:${item.target.urn}:${index}`}
+                  action={<ShieldCheck className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+                />
+              </div>
+            </>
+          )}
+
+          {policySection === "history" && (
+            <>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <WorklistTable
+                  title="Reminders and escalations"
+                  description="Attestation and review notices with recipients, channels, and escalation owners."
+                  rows={data.reminders ?? []}
+                  columns={reminderColumns}
+                  emptyMessage="No reminders are available."
+                  searchPlaceholder="Filter loaded reminders"
+                  filterKeys={["title", "status", "channel", "recipients", "escalated_to", "due_at"]}
+                  pageSize={8}
+                  resultLimit={POLICY_LIFECYCLE_LIMIT}
+                  resultNoun="reminders"
+                  getRowKey={(item) => item.id}
+                  action={<Bell className="h-4 w-4 text-slate-400" aria-hidden="true" />}
+                />
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
             <WorklistTable
               title="Reminder plan"
               description="Scheduled notices and escalation dates for pending reviews and attestations."
@@ -1349,24 +1414,9 @@ export default function PoliciesPage() {
               getRowKey={(item, index) => `${item.policy_id ?? "policy"}:${item.from_version_id ?? "from"}:${item.to_version_id ?? index}`}
               action={<GitCompare className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             />
-          </div>
+              </div>
 
-          <WorklistTable
-            title="Policy mappings"
-            description="Evidence, controls, and targets linked through policy, version, template, and exception records."
-            rows={data.mappings ?? []}
-            columns={mappingColumns}
-            emptyMessage="No policy mappings are available."
-            searchPlaceholder="Filter loaded mappings"
-            filterKeys={["policy_id", "policy_title", "source_type", "target", "controls", "evidence"]}
-            pageSize={10}
-            resultLimit={POLICY_LIFECYCLE_LIMIT}
-            resultNoun="mappings"
-            getRowKey={(item, index) => `${item.source_urn}:${item.target.urn}:${index}`}
-            action={<ShieldCheck className="h-4 w-4 text-slate-400" aria-hidden="true" />}
-          />
-
-          <WorklistTable
+              <WorklistTable
             title="Lifecycle events"
             description="Policy actions recorded from templates, drafts, approvals, attestations, reviews, exceptions, and reminders."
             rows={data.events ?? []}
@@ -1379,7 +1429,9 @@ export default function PoliciesPage() {
             resultNoun="events"
             getRowKey={(item) => item.id}
             action={<History className="h-4 w-4 text-slate-400" aria-hidden="true" />}
-          />
+              />
+            </>
+          )}
         </>
       )}
       <ActionModal
