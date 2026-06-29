@@ -22,7 +22,7 @@ import {
 } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { frameworkOptionLabel, inventoryAssetMatchesFrameworkSegment, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
-import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
+import { GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import {
   inventoryAccountability,
   inventoryAttr,
@@ -48,6 +48,7 @@ import { metricDetailForState, metricValueForState, runtimeStateForError, type R
 
 const inputClass = "control-input mt-1 w-full px-3 py-1.5 text-[13px]";
 const labelClass = "text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]";
+const INVENTORY_TABLE_PAGE_SIZE = 50;
 
 const reviewFilters: Array<{ value: InventoryReviewFilter; label: string }> = [
   { value: "all", label: "All review states" },
@@ -536,6 +537,7 @@ export default function InventoryPage() {
   const [reportSavingURN, setReportSavingURN] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [selectedAssetURNs, setSelectedAssetURNs] = useState<string[]>([]);
+  const [assetPage, setAssetPage] = useState(1);
   const [accountabilityAssets, setAccountabilityAssets] = useState<GRCInventoryAsset[] | null>(null);
   const [accountabilityDefaultState, setAccountabilityDefaultState] = useState<AccountabilityUpdateState>("known");
   const [accountabilitySaving, setAccountabilitySaving] = useState(false);
@@ -576,21 +578,33 @@ export default function InventoryPage() {
   const recordNoun = surfaceIsAssets ? "assets" : "records";
   const recordNounTitle = surfaceIsAssets ? "Assets" : "Records";
   const categories = useMemo(() => categoriesQuery.data?.categories ?? [], [categoriesQuery.data?.categories]);
+  const boundedAssetRows = useMemo(
+    () => grcBoundedRows({ rows: assetsQuery.data?.assets, limit: GRC_WORKLIST_LIMIT, total: assetsQuery.data?.summary?.total_assets }),
+    [assetsQuery.data?.assets, assetsQuery.data?.summary?.total_assets],
+  );
+  const loadedAssets = boundedAssetRows.rows;
+  const assetListMeta = assetsQuery.data ? boundedAssetRows.meta : undefined;
   const rawAssets = useMemo(() => (
-    assetsQuery.data?.assets ?? []
+    loadedAssets
   ).slice().sort((left, right) => (
     inventoryReviewSort(left, right) || left.label.localeCompare(right.label)
-  )), [assetsQuery.data?.assets]);
+  )), [loadedAssets]);
   const frameworkAssets = useMemo(() => rawAssets.filter((asset) => inventoryAssetMatchesFrameworkSegment(asset, debouncedFramework)), [debouncedFramework, rawAssets]);
   const assets = useMemo(() => frameworkAssets.filter((asset) =>
     inventoryMatchesOwnerFilter(asset, debouncedOwnerFilter) &&
     inventoryMatchesReviewFilter(asset, debouncedReviewFilter || "all") &&
     inventoryMatchesAccountabilityFilter(asset, debouncedAccountabilityFilter || "all"),
   ), [debouncedAccountabilityFilter, debouncedOwnerFilter, debouncedReviewFilter, frameworkAssets]);
+  const totalAssetPages = Math.max(1, Math.ceil(assets.length / INVENTORY_TABLE_PAGE_SIZE));
+  const currentAssetPage = Math.min(assetPage, totalAssetPages);
+  const assetPageStart = (currentAssetPage - 1) * INVENTORY_TABLE_PAGE_SIZE;
+  const visibleAssets = useMemo(() => assets.slice(assetPageStart, assetPageStart + INVENTORY_TABLE_PAGE_SIZE), [assetPageStart, assets]);
   const selectedAssetURNSet = useMemo(() => new Set(selectedAssetURNs), [selectedAssetURNs]);
   const selectableAssets = useMemo(() => assets.filter(isReviewableAsset), [assets]);
   const selectedAssets = useMemo(() => selectableAssets.filter((asset) => selectedAssetURNSet.has(asset.urn)), [selectableAssets, selectedAssetURNSet]);
-  const allVisibleSelected = selectableAssets.length > 0 && selectedAssets.length === selectableAssets.length;
+  const selectableVisibleAssets = useMemo(() => visibleAssets.filter(isReviewableAsset), [visibleAssets]);
+  const selectedVisibleAssets = useMemo(() => selectableVisibleAssets.filter((asset) => selectedAssetURNSet.has(asset.urn)), [selectableVisibleAssets, selectedAssetURNSet]);
+  const allVisibleSelected = selectableVisibleAssets.length > 0 && selectedVisibleAssets.length === selectableVisibleAssets.length;
   const summary = assetsQuery.data?.summary;
   const hasFrameworkFilter = debouncedFramework.length > 0;
   const selectedCategory = categories.find((category) => category.id === categoryID);
@@ -675,8 +689,11 @@ export default function InventoryPage() {
       : [...current, asset.urn]);
   }, []);
   const toggleAllVisible = useCallback(() => {
-    setSelectedAssetURNs(allVisibleSelected ? [] : selectableAssets.map((asset) => asset.urn));
-  }, [allVisibleSelected, selectableAssets]);
+    const visibleURNs = new Set(selectableVisibleAssets.map((asset) => asset.urn));
+    setSelectedAssetURNs((current) => allVisibleSelected
+      ? current.filter((urn) => !visibleURNs.has(urn))
+      : Array.from(new Set([...current, ...visibleURNs])));
+  }, [allVisibleSelected, selectableVisibleAssets]);
   const openAccountabilityModal = useCallback((targetAssets: GRCInventoryAsset[], defaultState: AccountabilityUpdateState = "known") => {
     if (targetAssets.length === 0) return;
     setAccountabilityAssets(targetAssets);
@@ -914,6 +931,7 @@ export default function InventoryPage() {
             <ResultLimitNotice
               loaded={rawAssets.length}
               limit={GRC_WORKLIST_LIMIT}
+              meta={assetListMeta}
               noun={recordNoun}
             />
           )}
@@ -947,9 +965,9 @@ export default function InventoryPage() {
                           <th className="w-10">
                             <input
                               type="checkbox"
-                              aria-label="Select all visible assets"
+                              aria-label="Select current page assets"
                               checked={allVisibleSelected}
-                              disabled={selectableAssets.length === 0}
+                              disabled={selectableVisibleAssets.length === 0}
                               onChange={toggleAllVisible}
                               className="h-4 w-4 rounded border-[color:var(--border)]"
                             />
@@ -964,7 +982,7 @@ export default function InventoryPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {assets.map((asset) => (
+                        {visibleAssets.map((asset) => (
                           <tr key={asset.urn} className={selectedAssetURNSet.has(asset.urn) ? "bg-[var(--surface-hover)]" : ""}>
                             <td>
                               <input
@@ -1038,6 +1056,32 @@ export default function InventoryPage() {
                       </tbody>
                     </table>
                     {assets.length === 0 && <div className="flex items-center justify-center p-8 text-[13px] text-[var(--text-muted)]">No {recordNoun} match this view.</div>}
+                    {assets.length > 0 && totalAssetPages > 1 && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--border)] px-4 py-3 text-[12px] text-[var(--text-muted)]">
+                        <span>
+                          Rows {assetPageStart + 1}-{Math.min(assetPageStart + INVENTORY_TABLE_PAGE_SIZE, assets.length)} of {assets.length.toLocaleString()} loaded {recordNoun}.
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAssetPage((page) => Math.max(1, page - 1))}
+                            disabled={currentAssetPage === 1}
+                            className="secondary-button px-2.5 py-1 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Previous
+                          </button>
+                          <span>Page {currentAssetPage} of {totalAssetPages}</span>
+                          <button
+                            type="button"
+                            onClick={() => setAssetPage((page) => Math.min(totalAssetPages, page + 1))}
+                            disabled={currentAssetPage === totalAssetPages}
+                            className="secondary-button px-2.5 py-1 text-[12px] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </main>

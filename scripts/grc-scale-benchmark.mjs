@@ -50,6 +50,20 @@ const routeSpecs = [
     filterText: "evidence 12",
   },
   {
+    route: "/controls",
+    label: "Controls",
+    readySelector: 'input[placeholder="Filter loaded controls"]',
+    filterSelector: 'input[placeholder="Filter loaded controls"]',
+    filterText: "control 12",
+  },
+  {
+    route: "/inventory",
+    label: "Inventory",
+    readySelector: "table.data-table",
+    filterSelector: 'input[placeholder="Search..."]',
+    filterText: "asset 12",
+  },
+  {
     route: "/policies",
     label: "Policies",
     readySelector: 'input[placeholder="Filter loaded work"]',
@@ -340,6 +354,22 @@ function createMockApi({ bounded, recordCount: count, stats }) {
       if (normalizedPath === "grc/control-packets") {
         return sendJSON(response, stats, normalizedPath, controlPacketsFixture(data, url.searchParams, bounded));
       }
+      if (normalizedPath === "grc/inventory/categories") {
+        const assets = filterInventoryAssets(data.inventoryAssets, url.searchParams, { includeCategory: false, includeQuery: false });
+        return sendJSON(response, stats, normalizedPath, {
+          categories: inventoryCategories(assets),
+          generated_at: generatedAt,
+        });
+      }
+      if (normalizedPath === "grc/inventory/assets") {
+        const allAssets = filterInventoryAssets(data.inventoryAssets, url.searchParams);
+        const assets = boundedList(allAssets, url.searchParams, bounded);
+        return sendJSON(response, stats, normalizedPath, {
+          assets,
+          summary: inventorySummary(allAssets),
+          generated_at: generatedAt,
+        });
+      }
       if (normalizedPath === "grc/frameworks") {
         return sendJSON(response, stats, normalizedPath, {
           version: "scale-v1",
@@ -367,7 +397,8 @@ function makeScaleData(count) {
   const governanceGaps = Array.from({ length: count }, (_, index) => makeGovernanceGap(index));
   const workQueue = Array.from({ length: count }, (_, index) => makePolicyWork(index));
   const documentWorkQueue = Array.from({ length: count }, (_, index) => makeDocumentWork(index));
-  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue };
+  const inventoryAssets = Array.from({ length: count }, (_, index) => makeInventoryAsset(index));
+  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue, inventoryAssets };
 }
 
 function makeVendor(index) {
@@ -556,6 +587,71 @@ function makePolicyDocument(index) {
   };
 }
 
+function makeInventoryAsset(index) {
+  const entityTypes = ["aws.ec2.instance", "aws.s3.bucket", "github.repository", "okta.application", "snowflake.database", "aws.iam.role"];
+  const entityType = entityTypes[index % entityTypes.length];
+  const riskLevels = ["critical", "high", "medium", "low"];
+  const riskLevel = riskLevels[index % riskLevels.length];
+  const ownerMissing = index % 7 === 0;
+  const scopedOut = index % 19 === 0;
+  const reportedIssue = index % 13 === 0;
+  const publicAsset = entityType === "aws.s3.bucket" || (entityType === "github.repository" && index % 3 === 0);
+  const owner = ownerMissing ? "" : `owner-${index % 40}@example.com`;
+  const accountabilityState = scopedOut ? "not_required" : ownerMissing ? "required_missing" : "known";
+  const reviewState = scopedOut ? "out_of_scope" : reportedIssue ? "reported_issue" : ownerMissing || publicAsset ? "needs_review" : "baseline";
+  return {
+    urn: `urn:cerebro:${tenantID}:${entityType}:asset-${index}`,
+    entity_type: entityType,
+    surface: "asset",
+    label: `Asset ${String(index).padStart(5, "0")}`,
+    source_id: `source-${index % 8}`,
+    runtime_id: `runtime-${index % 32}`,
+    risk_score: 30 + (index % 70),
+    risk_level: riskLevel,
+    risk_reasons: [publicAsset ? "public exposure" : "graph relationship"],
+    scope_state: scopedOut ? "out_of_scope" : "in_scope",
+    scope_reason: scopedOut ? "Support record" : undefined,
+    asset_report_count: reportedIssue ? 1 : 0,
+    latest_asset_report_status: reportedIssue ? "submitted" : undefined,
+    latest_asset_report_reason: reportedIssue ? "Reviewer reported an inventory issue" : undefined,
+    review_disposition: {
+      state: reviewState,
+      label: inventoryReviewLabel(reviewState),
+      detail: inventoryReviewDetail(reviewState),
+    },
+    accountability: {
+      state: accountabilityState,
+      label: accountabilityState === "known" ? "Owner known" : accountabilityState === "required_missing" ? "Owner required" : "Owner not required",
+      principal: owner || undefined,
+    },
+    attributes: {
+      owner,
+      provider: `Provider ${index % 8}`,
+      region: `us-east-${1 + (index % 2)}`,
+      account_id: `acct-${index % 12}`,
+      resource_id: `asset-${index}`,
+      resource_type: entityType,
+      public: publicAsset ? "true" : "false",
+      framework_refs: index % 2 === 0 ? "SOC 2,FedRAMP Rev. 5" : "SOC 2",
+      graph_size: String(recordCount),
+    },
+  };
+}
+
+function inventoryReviewLabel(state) {
+  if (state === "needs_review") return "Needs review";
+  if (state === "reported_issue") return "Reported issue";
+  if (state === "out_of_scope") return "Scoped out";
+  return "Baseline";
+}
+
+function inventoryReviewDetail(state) {
+  if (state === "needs_review") return "Asset needs an accountable owner or exposure review.";
+  if (state === "reported_issue") return "A reviewer reported this asset for triage.";
+  if (state === "out_of_scope") return "Excluded from current GRC review.";
+  return "No immediate GRC action required.";
+}
+
 function makeRisk(index) {
   return {
     id: `risk-${index}`,
@@ -721,7 +817,7 @@ function evidencePacketsFixture(data, searchParams, bounded) {
   const evidenceItems = boundedList(data.evidence, searchParams, bounded);
   const controls = evidenceItems.slice(0, 200).map((item, index) => ({
     id: `control-${index}`,
-    control_id: `CC${index % 9}.${index % 4}`,
+    control_id: `CC${Math.floor(index / 4)}.${index % 4}`,
     framework_name: "SOC 2",
     title: `Control ${index}`,
     status: index % 6 === 0 ? "missing" : "passing",
@@ -765,22 +861,31 @@ function evidencePacketsFixture(data, searchParams, bounded) {
 }
 
 function controlPacketsFixture(data, searchParams, bounded) {
-  const controls = boundedList(Array.from({ length: recordCount }, (_, index) => ({
+  const allControls = Array.from({ length: recordCount }, (_, index) => ({
     id: `control-${index}`,
     framework_name: "SOC 2",
     framework_id: "soc2",
     framework_version: "2024",
     family_id: `family-${index % 8}`,
     family_name: `Family ${index % 8}`,
-    control_id: `CC${index % 9}.${index % 4}`,
+    control_id: `CC${Math.floor(index / 4)}.${index % 4}`,
     title: `Control ${index}`,
+    owner_domain: `owner-${index % 24}@example.com`,
     status: index % 6 === 0 ? "failing" : "passing",
+    open_findings: index % 6 === 0 ? 1 + (index % 4) : index % 9 === 0 ? 1 : 0,
+    critical_findings: index % 24 === 0 ? 1 : 0,
+    high_findings: index % 12 === 0 ? 1 : 0,
     evidence_score: 72 + (index % 26),
     evidence_items: index % 9,
     missing_evidence_items: index % 6 === 0 ? 1 : 0,
     stale_evidence_items: index % 7 === 0 ? 1 : 0,
     evidence_expectations: 3,
-  })), searchParams, bounded);
+    evidence_quality: index % 7 === 0 ? "stale" : "ready",
+    audit_summary: "Synthetic control generated for scale benchmark.",
+    mapped_rules: [`rule-${index % 80}`],
+    reasons: index % 6 === 0 ? ["Missing evidence"] : [],
+  }));
+  const controls = boundedList(allControls, searchParams, bounded);
   const packetControls = controls.map((control, index) => ({
     control: {
       framework_id: control.framework_id,
@@ -820,12 +925,12 @@ function controlPacketsFixture(data, searchParams, bounded) {
       generated_at: generatedAt,
       summary: {
         selection_id: "baseline",
-        total: controls.length,
+        total: allControls.length,
         by_status: {
-          passing: controls.filter((control) => control.status === "passing").length,
-          failing: controls.filter((control) => control.status === "failing").length,
-          missing_evidence: controls.filter((control) => control.missing_evidence_items > 0).length,
-          stale_evidence: controls.filter((control) => control.stale_evidence_items > 0).length,
+          passing: allControls.filter((control) => control.status === "passing").length,
+          failing: allControls.filter((control) => control.status === "failing").length,
+          missing_evidence: allControls.filter((control) => control.missing_evidence_items > 0).length,
+          stale_evidence: allControls.filter((control) => control.stale_evidence_items > 0).length,
         },
       },
       controls: packetControls,
@@ -834,6 +939,92 @@ function controlPacketsFixture(data, searchParams, bounded) {
     metadata: reportMetadata("ready"),
     generated_at: generatedAt,
   };
+}
+
+function filterInventoryAssets(assets, searchParams, options = {}) {
+  const includeCategory = options.includeCategory ?? true;
+  const includeQuery = options.includeQuery ?? true;
+  const sourceID = searchParams.get("source_id")?.trim();
+  const surface = searchParams.get("surface")?.trim() || "asset";
+  const categoryID = includeCategory ? searchParams.get("category_id")?.trim() : "";
+  const query = includeQuery ? searchParams.get("q")?.trim().toLowerCase() : "";
+  const scopeState = searchParams.get("scope_state")?.trim();
+  const reviewState = searchParams.get("review_state")?.trim();
+  const accountabilityState = searchParams.get("accountability_state")?.trim();
+
+  return assets.filter((asset) => {
+    if (sourceID && asset.source_id !== sourceID) return false;
+    if (surface && surface !== "all" && asset.surface !== surface) return false;
+    if (categoryID && asset.entity_type !== categoryID && asset.attributes?.resource_type !== categoryID) return false;
+    if (scopeState && asset.scope_state !== scopeState) return false;
+    if (reviewState && asset.review_disposition?.state !== reviewState) return false;
+    if (accountabilityState && asset.accountability?.state !== accountabilityState) return false;
+    if (query) {
+      const haystack = [
+        asset.label,
+        asset.urn,
+        asset.entity_type,
+        asset.source_id,
+        asset.runtime_id,
+        ...Object.values(asset.attributes ?? {}),
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  });
+}
+
+function inventoryCategories(assets) {
+  const categories = new Map();
+  for (const asset of assets) {
+    const id = asset.entity_type;
+    const category = categories.get(id) ?? { id, label: humanize(id), surface: asset.surface, entity_types: [id], count: 0 };
+    category.count += 1;
+    categories.set(id, category);
+  }
+  return Array.from(categories.values()).sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+}
+
+function inventorySummary(assets) {
+  const total = assets.length;
+  const inScope = assets.filter((asset) => asset.scope_state !== "out_of_scope").length;
+  const outOfScope = total - inScope;
+  const highRisk = assets.filter((asset) => ["critical", "high"].includes(asset.risk_level)).length;
+  const needsReview = assets.filter((asset) => asset.review_disposition?.state === "needs_review").length;
+  const reportedIssue = assets.filter((asset) => asset.review_disposition?.state === "reported_issue").length;
+  const baseline = assets.filter((asset) => asset.review_disposition?.state === "baseline").length;
+  const ownerRequired = assets.filter((asset) => asset.accountability?.state === "required_missing").length;
+  const accountable = assets.filter((asset) => asset.accountability?.state === "known").length;
+  const publicAssets = assets.filter((asset) => (asset.attributes?.public || "").toLowerCase() === "true").length;
+  const surfaceCounts = {};
+  for (const asset of assets) {
+    const surface = asset.surface || "asset";
+    surfaceCounts[surface] = (surfaceCounts[surface] ?? 0) + 1;
+  }
+
+  return {
+    total_assets: total,
+    in_scope_assets: inScope,
+    out_of_scope_assets: outOfScope,
+    high_risk_assets: highRisk,
+    unassigned_assets: ownerRequired,
+    baseline_assets: baseline,
+    needs_review_assets: needsReview,
+    owner_required_assets: ownerRequired,
+    accountable_assets: accountable,
+    reported_issue_assets: reportedIssue,
+    org_groups: new Set(assets.map((asset) => asset.attributes?.account_id).filter(Boolean)).size,
+    public_assets: publicAssets,
+    scoped_coverage_pct: total ? Math.round((inScope / total) * 100) : 0,
+    assigned_coverage_pct: total ? Math.round((accountable / total) * 100) : 0,
+    surface_counts: surfaceCounts,
+  };
+}
+
+function humanize(value) {
+  return String(value || "")
+    .replace(/[_./-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function vendorDetail(vendor) {
