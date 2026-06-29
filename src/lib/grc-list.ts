@@ -11,6 +11,39 @@ export type GRCLoadedRows = {
   meta?: GRCListMeta;
 };
 
+const numericCount = (value: number | undefined) =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+
+export type GRCBoundedRowsInput<Row> = {
+  rows?: Row[] | null;
+  limit: number;
+  meta?: GRCListMeta;
+  total?: number;
+};
+
+export const grcBoundedRows = <Row>({
+  rows,
+  limit,
+  meta,
+  total,
+}: GRCBoundedRowsInput<Row>): { rows: Row[]; meta: GRCListMeta } => {
+  const sourceRows = rows ?? [];
+  const safeLimit = Math.max(0, Math.floor(limit));
+  const boundedRows = sourceRows.slice(0, safeLimit);
+  const totalCandidate = numericCount(meta?.total) ?? numericCount(total) ?? sourceRows.length;
+  const resolvedTotal = Math.max(totalCandidate, boundedRows.length);
+
+  return {
+    rows: boundedRows,
+    meta: {
+      limit: safeLimit,
+      returned: boundedRows.length,
+      total: resolvedTotal,
+      truncated: Boolean(meta?.truncated ?? (sourceRows.length > boundedRows.length || resolvedTotal > boundedRows.length)),
+    },
+  };
+};
+
 export const grcLoadedRows = ({ loaded, limit, meta }: GRCLoadedRows) => ({
   limit: meta?.limit ?? limit,
   loaded: meta?.returned ?? loaded,

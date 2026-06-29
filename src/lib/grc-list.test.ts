@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { grcLoadedRows, grcLoadedRowsCopy } from "./grc-list";
+import { grcBoundedRows, grcLoadedRows, grcLoadedRowsCopy } from "./grc-list";
 
 describe("grc loaded row copy", () => {
   it("uses response totals when the API returns list metadata", () => {
@@ -19,5 +19,50 @@ describe("grc loaded row copy", () => {
     expect(grcLoadedRowsCopy({ loaded: 200, limit: 200, noun: "assets" })).toBe(
       "Showing first 200 assets. Narrow filters or export the full file.",
     );
+  });
+});
+
+describe("grc bounded rows", () => {
+  it("caps rows to the requested limit and keeps response totals", () => {
+    const result = grcBoundedRows({
+      rows: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      limit: 2,
+      meta: { limit: 500, returned: 3, total: 42, truncated: true },
+    });
+
+    expect(result.rows).toEqual([{ id: "a" }, { id: "b" }]);
+    expect(result.meta).toEqual({
+      limit: 2,
+      returned: 2,
+      total: 42,
+      truncated: true,
+    });
+  });
+
+  it("marks rows truncated when the response exceeds the local cap", () => {
+    const result = grcBoundedRows({
+      rows: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      limit: 2,
+    });
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.meta).toEqual({
+      limit: 2,
+      returned: 2,
+      total: 3,
+      truncated: true,
+    });
+  });
+
+  it("handles missing rows", () => {
+    expect(grcBoundedRows({ rows: null, limit: 2 })).toEqual({
+      rows: [],
+      meta: {
+        limit: 2,
+        returned: 0,
+        total: 0,
+        truncated: false,
+      },
+    });
   });
 });
