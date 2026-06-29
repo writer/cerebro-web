@@ -71,8 +71,8 @@ describe("identity directory", () => {
   });
 
   it("builds backend paths and labels auth sources", () => {
-    expect(identityOrganizationsPath({ tenantID: "tenant-a", query: "okta", limit: 50 })).toBe("/identity/orgs?tenant_id=tenant-a&q=okta&limit=50");
-    expect(identityUsersPath({ tenantID: "tenant-a", orgID: "tenant-a", query: "person" })).toBe("/identity/users?tenant_id=tenant-a&org_id=tenant-a&q=person");
+    expect(identityOrganizationsPath({ tenantID: "tenant-a", provider: "okta", source: "mcp_oauth_client", status: "active", query: "okta", limit: 50 })).toBe("/identity/orgs?tenant_id=tenant-a&provider=okta&source=mcp_oauth_client&q=okta&limit=50");
+    expect(identityUsersPath({ tenantID: "tenant-a", orgID: "tenant-a", provider: "okta", source: "mcp_oauth", status: "active", query: "person" })).toBe("/identity/users?tenant_id=tenant-a&org_id=tenant-a&provider=okta&source=mcp_oauth&status=active&q=person");
     expect(identitySourceLabel("mcp_oauth_client")).toBe("OAuth client");
     expect(identityProviderLabel("okta")).toBe("Okta");
   });

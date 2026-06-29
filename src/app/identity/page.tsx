@@ -24,12 +24,41 @@ import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 type IdentityTab = "orgs" | "users";
 
 const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
+const selectClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
 
 const tabLabels: Record<IdentityTab, string> = {
   orgs: "Organizations",
   users: "Users",
 };
+
+const providerOptions = [
+  { value: "", label: "All providers" },
+  { value: "okta", label: "Okta" },
+  { value: "oidc", label: "OIDC" },
+];
+
+const sourceOptions = [
+  { value: "", label: "All sources" },
+  { value: "mcp_oauth", label: "OAuth" },
+  { value: "mcp_oauth_client", label: "OAuth client" },
+  { value: "mcp_oauth_entitlement", label: "OAuth entitlement" },
+  { value: "api_key", label: "API key" },
+  { value: "api_credential", label: "API credential" },
+  { value: "auth_config", label: "Auth config" },
+  { value: "identity_directory", label: "Directory" },
+];
+
+const statusOptions = [
+  { value: "", label: "All user statuses" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "suspended", label: "Suspended" },
+  { value: "disabled", label: "Disabled" },
+];
+
+const optionLabel = (options: Array<{ value: string; label: string }>, value: string) =>
+  options.find((option) => option.value === value)?.label ?? value;
 
 function isOAuthRecord(item: { provider?: string; source?: string }) {
   const provider = item.provider?.trim().toLowerCase();
@@ -104,7 +133,13 @@ function TabButton({
   );
 }
 
-function OrganizationsTable({ organizations }: { organizations: IdentityOrganization[] }) {
+function OrganizationsTable({
+  onViewUsers,
+  organizations,
+}: {
+  onViewUsers: (org: IdentityOrganization) => void;
+  organizations: IdentityOrganization[];
+}) {
   if (organizations.length === 0) {
     return <EmptyBlock label="No identity organizations match these filters." />;
   }
@@ -118,7 +153,8 @@ function OrganizationsTable({ organizations }: { organizations: IdentityOrganiza
             <th className="px-4 py-2">Tenant</th>
             <th className="px-4 py-2">Source</th>
             <th className="px-4 py-2 text-right">Users</th>
-            <th className="py-2 pl-4">Last synced</th>
+            <th className="px-4 py-2">Last synced</th>
+            <th className="py-2 pl-4 text-right">Action</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[color:var(--border)]">
@@ -141,7 +177,13 @@ function OrganizationsTable({ organizations }: { organizations: IdentityOrganiza
                 </div>
               </td>
               <td className="px-4 py-3 text-right font-semibold text-[var(--text-primary)]">{org.user_count}</td>
-              <td className="py-3 pl-4 text-[12px] text-[var(--text-secondary)]">{displayDate(org.last_synced_at || org.updated_at || org.created_at)}</td>
+              <td className="px-4 py-3 text-[12px] text-[var(--text-secondary)]">{displayDate(org.last_synced_at || org.updated_at || org.created_at)}</td>
+              <td className="py-3 pl-4 text-right">
+                <button type="button" onClick={() => onViewUsers(org)} className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px]">
+                  <UsersRound className="h-3.5 w-3.5" />
+                  View users
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -206,22 +248,33 @@ function UsersTable({ users }: { users: IdentityUser[] }) {
 export default function IdentityPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [orgID, setOrgID] = useQueryParamState("org_id");
+  const [provider, setProvider] = useQueryParamState("provider");
+  const [source, setSource] = useQueryParamState("source");
+  const [status, setStatus] = useQueryParamState("status");
   const [query, setQuery] = useQueryParamState("q");
   const [view, setView] = useQueryParamState("view", "orgs");
   const activeTab: IdentityTab = view === "users" ? "users" : "orgs";
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedOrgID = useDebouncedValue(orgID.trim());
+  const debouncedProvider = useDebouncedValue(provider.trim());
+  const debouncedSource = useDebouncedValue(source.trim());
+  const debouncedStatus = useDebouncedValue(status.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
 
   const orgsQuery = useGRCQuery<IdentityOrganizationListResponse>(identityOrganizationsPath({
     tenantID: debouncedTenantID,
     orgID: debouncedOrgID,
+    provider: debouncedProvider,
+    source: debouncedSource,
     query: debouncedQuery,
     limit: 500,
   }));
   const usersQuery = useGRCQuery<IdentityUserListResponse>(identityUsersPath({
     tenantID: debouncedTenantID,
     orgID: debouncedOrgID,
+    provider: debouncedProvider,
+    source: debouncedSource,
+    status: debouncedStatus,
     query: debouncedQuery,
     limit: 500,
   }));
@@ -239,12 +292,21 @@ export default function IdentityPage() {
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Organization", value: orgID, onClear: () => setOrgID("") },
+    { label: "Provider", value: provider ? identityProviderLabel(provider) : "", onClear: () => setProvider("") },
+    { label: "Source", value: source ? identitySourceLabel(source) : "", onClear: () => setSource("") },
+    { label: "User status", value: status ? optionLabel(statusOptions, status) : "", onClear: () => setStatus("") },
     { label: "Search", value: query, onClear: () => setQuery("") },
   ];
 
   const reload = () => {
     void orgsQuery.reload();
     void usersQuery.reload();
+  };
+
+  const showOrgUsers = (org: IdentityOrganization) => {
+    setTenantID(org.tenant_id);
+    setOrgID(org.org_id);
+    setView("users");
   };
 
   return (
@@ -269,9 +331,27 @@ export default function IdentityPage() {
       </div>
 
       <section className="surface-panel p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(160px,0.7fr)_minmax(160px,0.7fr)_minmax(240px,1.4fr)]">
+        <div className="grid gap-3 lg:grid-cols-3 xl:grid-cols-[minmax(150px,0.75fr)_minmax(150px,0.75fr)_minmax(150px,0.75fr)_minmax(160px,0.8fr)_minmax(150px,0.75fr)_minmax(240px,1.5fr)]">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
           <label className={labelClass}>Organization<input value={orgID} onChange={(event) => setOrgID(event.target.value)} placeholder="All organizations" className={inputClass} /></label>
+          <label className={labelClass}>
+            Provider
+            <select value={provider} onChange={(event) => setProvider(event.target.value)} className={selectClass}>
+              {providerOptions.map((option) => <option key={option.value || "all"} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Source
+            <select value={source} onChange={(event) => setSource(event.target.value)} className={selectClass}>
+              {sourceOptions.map((option) => <option key={option.value || "all"} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className={labelClass}>
+            User status
+            <select value={status} onChange={(event) => setStatus(event.target.value)} className={selectClass}>
+              {statusOptions.map((option) => <option key={option.value || "all"} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
           <label className={labelClass}>
             Search members
             <div className="relative mt-1">
@@ -285,7 +365,7 @@ export default function IdentityPage() {
             </div>
           </label>
         </div>
-        <AppliedFilterChips filters={filterChips} onClearAll={() => { setTenantID(""); setOrgID(""); setQuery(""); }} />
+        <AppliedFilterChips filters={filterChips} onClearAll={() => { setTenantID(""); setOrgID(""); setProvider(""); setSource(""); setStatus(""); setQuery(""); }} />
       </section>
 
       <div className="flex flex-wrap gap-2">
@@ -309,7 +389,7 @@ export default function IdentityPage() {
           </span>
         }
       >
-        {activeTab === "orgs" ? <OrganizationsTable organizations={organizations} /> : <UsersTable users={users} />}
+        {activeTab === "orgs" ? <OrganizationsTable organizations={organizations} onViewUsers={showOrgUsers} /> : <UsersTable users={users} />}
       </Panel>
     </div>
   );
