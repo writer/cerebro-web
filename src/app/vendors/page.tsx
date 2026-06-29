@@ -27,6 +27,7 @@ import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, PageHeader, Panel,
 import { countLabel } from "@/lib/format";
 import {
   displayDate,
+  GRCUploadReplayResponse,
   GRCUploadResponse,
   GRCVendor,
   GRCVendorActionResponse,
@@ -1708,6 +1709,7 @@ export default function VendorsPage() {
   const [vendorUploadWebsite, setVendorUploadWebsite] = useState("");
   const [lastVendorUpload, setLastVendorUpload] = useState<GRCUploadResponse | null>(null);
   const [vendorUploadHistory, setVendorUploadHistory] = useState<GRCUploadResponse[]>([]);
+  const [vendorReplayMessage, setVendorReplayMessage] = useState("");
   const vendorUploadFormRef = useRef<HTMLFormElement>(null);
   const vendorUploadInputRef = useRef<HTMLInputElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -1760,6 +1762,8 @@ export default function VendorsPage() {
   const { mutate: mutateDiscoveryDecision, saving: decisionSaving, error: decisionError } = useGRCMutation();
   const { mutate: uploadVendorDocument, saving: vendorUploadSaving, error: vendorUploadError, setError: setVendorUploadError, cancel: cancelVendorUpload } =
     useGRCFormMutation<GRCUploadResponse>();
+  const { mutate: replayVendorUploadEvents, saving: vendorReplaySaving, error: vendorReplayError, setError: setVendorReplayError } =
+    useGRCMutation<GRCUploadReplayResponse>();
   const {
     mutate: mutateCreateVendor,
     saving: createSaving,
@@ -1831,6 +1835,27 @@ export default function VendorsPage() {
       writeGRCUploadHistory(window.localStorage, vendorUploadStorageKey, next);
       return next;
     });
+  };
+
+  const replayVendorUpload = async (upload: GRCUploadResponse) => {
+    setVendorReplayMessage("");
+    setVendorReplayError(null);
+    try {
+      const response = await replayVendorUploadEvents(
+        grcPath(`/grc/vendors/uploads/${encodeURIComponent(upload.upload_id)}/replay`, { tenant_id: tenantID.trim() }),
+        {},
+      );
+      setVendorReplayMessage(`${countLabel(response.events_projected ?? 0, "event")} replayed. ${countLabel((response.entities_projected ?? 0) + (response.links_projected ?? 0), "graph update")} projected.`);
+      setLastVendorUpload((current) => current?.upload_id === upload.upload_id ? {
+        ...current,
+        status: response.status || current.status,
+        projection_status: response.status || current.projection_status,
+        projection_failures: response.projection_failures ?? current.projection_failures,
+      } : current);
+      await Promise.all([vendorsQuery.reload(), vendorDetailQuery.reload()]);
+    } catch {
+      return;
+    }
   };
 
   const openVendorDrawer = useCallback((vendorURN: string) => {
@@ -2234,12 +2259,16 @@ export default function VendorsPage() {
               onAccepted={(file) => {
                 setVendorUploadFile(file);
                 setVendorUploadError(null);
+                setVendorReplayError(null);
+                setVendorReplayMessage("");
                 setLastVendorUpload(null);
               }}
               onRejected={(message) => {
                 setVendorUploadFile(null);
                 setLastVendorUpload(null);
                 setVendorUploadError(message);
+                setVendorReplayError(null);
+                setVendorReplayMessage("");
               }}
               onClear={() => {
                 setVendorUploadFile(null);
@@ -2302,19 +2331,41 @@ export default function VendorsPage() {
             actions={(() => {
               const vendorRef = lastVendorUpload.events.find((event) => event.event_kind === "grc.vendor");
               const vendorURN = vendorRef?.record_urn || vendorRef?.record_id;
-              if (!vendorURN) return null;
               return (
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setSelectedVendorURN(vendorURN)} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
-                    Open vendor
+                  {vendorURN && (
+                    <>
+                      <button type="button" onClick={() => setSelectedVendorURN(vendorURN)} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
+                        Open vendor
+                      </button>
+                      <Link href={`/vendors/${encodeURIComponent(vendorURN)}`} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
+                        Open full detail
+                      </Link>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    disabled={vendorReplaySaving || lastVendorUpload.replayable === false}
+                    onClick={() => replayVendorUpload(lastVendorUpload)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${vendorReplaySaving ? "animate-spin" : ""}`} aria-hidden="true" />
+                    {vendorReplaySaving ? "Replaying" : "Replay events"}
                   </button>
-                  <Link href={`/vendors/${encodeURIComponent(vendorURN)}`} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
-                    Open full detail
-                  </Link>
                 </div>
               );
             })()}
           />
+        )}
+        {vendorReplayMessage && !vendorReplaySaving && (
+          <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
+            {vendorReplayMessage}
+          </div>
+        )}
+        {vendorReplayError && !vendorReplaySaving && (
+          <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-700">
+            {vendorReplayError}
+          </div>
         )}
         <GRCUploadHistoryList uploads={vendorUploadHistory} />
         </Panel>
