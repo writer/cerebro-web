@@ -9,6 +9,7 @@ import { cacheGRCMetadata } from "@/lib/grc-metadata-cache";
 const GRC_QUERY_CACHE_TTL_MS = 30_000;
 const GRC_QUERY_CACHE_MAX_ENTRIES = 200;
 const DEFAULT_GRC_QUERY_TIMEOUT_MS = 30_000;
+const DEFAULT_GRC_FORM_MUTATION_TIMEOUT_MS = 120_000;
 
 export const DASHBOARD_FINDING_LIMIT = 12;
 
@@ -18,6 +19,7 @@ const parsePositiveMs = (value: string | undefined, fallback: number) => {
 };
 
 export const GRC_QUERY_TIMEOUT_MS = parsePositiveMs(process.env.NEXT_PUBLIC_GRC_QUERY_TIMEOUT_MS, DEFAULT_GRC_QUERY_TIMEOUT_MS);
+export const GRC_FORM_MUTATION_TIMEOUT_MS = parsePositiveMs(process.env.NEXT_PUBLIC_GRC_FORM_MUTATION_TIMEOUT_MS, DEFAULT_GRC_FORM_MUTATION_TIMEOUT_MS);
 
 type CachedGRCResponse = {
   expiresAt: number;
@@ -233,33 +235,55 @@ export function useGRCMutation<T = unknown>() {
   return { mutate, saving, error, setError };
 }
 
-export function useGRCFormMutation<T = unknown>() {
+export function useGRCFormMutation<T = unknown>({ timeoutMs = GRC_FORM_MUTATION_TIMEOUT_MS } = {}) {
   const { apiKey } = useApiKey();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const cancel = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
 
   const mutate = useCallback(async (path: string, body: FormData, method = "POST") => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     setSaving(true);
     setError(null);
     try {
       const response = await fetchCerebro<T>(path, apiKey, {
         method,
         body,
+        signal: controller.signal,
       });
       if (!response.ok) {
         throw new Error(grcResponseErrorMessage(path, response.status, response.data));
       }
       return response.data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : grcResponseErrorMessage(path, 0, null);
+      const message = controller.signal.aborted
+        ? timedOut
+          ? `Upload timed out after ${durationLabel(timeoutMs)}.`
+          : "Upload canceled."
+        : err instanceof Error ? err.message : grcResponseErrorMessage(path, 0, null);
       setError(message);
       throw err;
     } finally {
+      window.clearTimeout(timeout);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setSaving(false);
     }
-  }, [apiKey]);
+  }, [apiKey, timeoutMs]);
 
-  return { mutate, saving, error, setError };
+  return { mutate, saving, error, setError, cancel };
 }
 
 export function useGRCQuery<T>(path: string | null) {

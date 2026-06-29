@@ -2000,6 +2000,12 @@ export type GRCUploadEvent = {
   record_urn?: string;
 };
 
+export type GRCUploadStructuredField = {
+  key?: string;
+  label?: string;
+  value?: string;
+};
+
 export type GRCUploadResponse = {
   upload_id: string;
   target: "policy" | "vendor" | string;
@@ -2011,6 +2017,12 @@ export type GRCUploadResponse = {
   text_preview?: string;
   chunk_count?: number;
   page_count?: number;
+  structure_status?: string;
+  structure_schema?: string;
+  structured_summary?: string;
+  structured_fields?: GRCUploadStructuredField[];
+  projection_status?: string;
+  projection_failures?: number;
   events: GRCUploadEvent[];
   generated_at: string;
 };

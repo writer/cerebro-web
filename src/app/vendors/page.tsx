@@ -19,8 +19,9 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { type FormEvent, useCallback, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { GRCUploadErrorActions, GRCUploadFileInput, GRCUploadHistoryList, GRCUploadProgress, GRCUploadReceipt } from "@/components/grc/GRCUpload";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import {
@@ -43,7 +44,8 @@ import {
 import { grcPath, useDebouncedValue, useGRCFormMutation, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { GRC_DETAIL_LIMIT, GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 import { riskBadgeClassFor } from "@/lib/grc-status";
-import { GRC_UPLOAD_FILE_HELP, grcUploadFileError } from "@/lib/grc-upload-limits";
+import { grcUploadHistoryKey, grcUploadHistoryWith, readGRCUploadHistory, writeGRCUploadHistory } from "@/lib/grc-upload-history";
+import { grcUploadFileError } from "@/lib/grc-upload-limits";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -1765,6 +1767,8 @@ export default function VendorsPage() {
   const [vendorUploadRiskLevel, setVendorUploadRiskLevel] = useState("");
   const [vendorUploadWebsite, setVendorUploadWebsite] = useState("");
   const [lastVendorUpload, setLastVendorUpload] = useState<GRCUploadResponse | null>(null);
+  const [vendorUploadHistory, setVendorUploadHistory] = useState<GRCUploadResponse[]>([]);
+  const vendorUploadFormRef = useRef<HTMLFormElement>(null);
   const vendorUploadInputRef = useRef<HTMLInputElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState<VendorCreateDraft>(() => defaultVendorCreateDraft());
@@ -1814,7 +1818,7 @@ export default function VendorsPage() {
       : null,
   );
   const { mutate: mutateDiscoveryDecision, saving: decisionSaving, error: decisionError } = useGRCMutation();
-  const { mutate: uploadVendorDocument, saving: vendorUploadSaving, error: vendorUploadError, setError: setVendorUploadError } =
+  const { mutate: uploadVendorDocument, saving: vendorUploadSaving, error: vendorUploadError, setError: setVendorUploadError, cancel: cancelVendorUpload } =
     useGRCFormMutation<GRCUploadResponse>();
   const {
     mutate: mutateCreateVendor,
@@ -1872,6 +1876,23 @@ export default function VendorsPage() {
       return Boolean((selectedHost && discoveryHost === selectedHost) || (selectedNameKey && discoveryNameKey === selectedNameKey));
     });
   }, [discoveries, selectedVendor?.name, selectedVendor?.website_url, selectedVendorURN]);
+  const vendorUploadStorageKey = useMemo(() => grcUploadHistoryKey("vendor", tenantID), [tenantID]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setVendorUploadHistory(readGRCUploadHistory(window.localStorage, vendorUploadStorageKey));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [vendorUploadStorageKey]);
+
+  const rememberVendorUpload = (upload: GRCUploadResponse) => {
+    setVendorUploadHistory((current) => {
+      const next = grcUploadHistoryWith(current, upload);
+      writeGRCUploadHistory(window.localStorage, vendorUploadStorageKey, next);
+      return next;
+    });
+  };
+
   const openVendorDrawer = useCallback((vendorURN: string) => {
     const vendor = vendors.find((item) => item.urn === vendorURN) ?? vendorDetailQuery.data?.vendor;
     setSelectedVendorURN(vendorURN);
@@ -2108,6 +2129,7 @@ export default function VendorsPage() {
         body,
       );
       setLastVendorUpload(response);
+      rememberVendorUpload(response);
       setVendorUploadFile(null);
       setVendorUploadName("");
       setVendorUploadID("");
@@ -2261,29 +2283,29 @@ export default function VendorsPage() {
           title="Upload vendor document"
           action={<Upload className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />}
         >
-        <form onSubmit={submitVendorUpload} className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,1fr)_auto]">
+        <form ref={vendorUploadFormRef} onSubmit={submitVendorUpload} className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,1fr)_auto]">
           <label className={labelClass}>
             File
-            <input
-              ref={vendorUploadInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                const fileError = grcUploadFileError(file);
-                setLastVendorUpload(null);
-                if (fileError) {
-                  setVendorUploadFile(null);
-                  event.currentTarget.value = "";
-                  setVendorUploadError(fileError);
-                  return;
-                }
+            <GRCUploadFileInput
+              file={vendorUploadFile}
+              inputClassName={inputClass}
+              inputRef={vendorUploadInputRef}
+              disabled={vendorUploadSaving}
+              onAccepted={(file) => {
                 setVendorUploadFile(file);
                 setVendorUploadError(null);
+                setLastVendorUpload(null);
               }}
-              className={inputClass}
+              onRejected={(message) => {
+                setVendorUploadFile(null);
+                setLastVendorUpload(null);
+                setVendorUploadError(message);
+              }}
+              onClear={() => {
+                setVendorUploadFile(null);
+                setVendorUploadError(null);
+              }}
             />
-            <span className="mt-1 block text-[12px] normal-case tracking-normal text-[var(--text-muted)]">{GRC_UPLOAD_FILE_HELP}</span>
           </label>
           <label className={labelClass}>
             Vendor name
@@ -2326,17 +2348,35 @@ export default function VendorsPage() {
             {vendorUploadSaving ? "Uploading" : "Upload vendor"}
           </button>
         </form>
-        {vendorUploadError && (
-          <div className="mt-3 text-[13px] font-medium text-red-700 dark:text-red-300">
-            {vendorUploadError}
-          </div>
+        {vendorUploadSaving && <GRCUploadProgress onCancel={cancelVendorUpload} />}
+        {vendorUploadError && !vendorUploadSaving && (
+          <GRCUploadErrorActions
+            error={vendorUploadError}
+            canRetry={Boolean(vendorUploadFile)}
+            onRetry={() => vendorUploadFormRef.current?.requestSubmit()}
+          />
         )}
         {lastVendorUpload && (
-          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-            Uploaded {lastVendorUpload.file_name}. {countLabel(lastVendorUpload.events.length, "event")} recorded.{" "}
-            {lastVendorUpload.chunk_count ? `${countLabel(lastVendorUpload.chunk_count, "chunk")} parsed.` : humanize(lastVendorUpload.parse_status || "parsed")}
-          </div>
+          <GRCUploadReceipt
+            upload={lastVendorUpload}
+            actions={(() => {
+              const vendorRef = lastVendorUpload.events.find((event) => event.event_kind === "grc.vendor");
+              const vendorURN = vendorRef?.record_urn || vendorRef?.record_id;
+              if (!vendorURN) return null;
+              return (
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setSelectedVendorURN(vendorURN)} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
+                    Open vendor
+                  </button>
+                  <Link href={`/vendors/${encodeURIComponent(vendorURN)}`} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
+                    Open full detail
+                  </Link>
+                </div>
+              );
+            })()}
+          />
         )}
+        <GRCUploadHistoryList uploads={vendorUploadHistory} />
         </Panel>
       </div>
 
