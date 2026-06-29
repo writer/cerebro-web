@@ -11,7 +11,7 @@ import { downloadFindingsCSV } from "@/lib/findings-export";
 import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
 import { GRCFinding, GRCListMeta } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
-import { GRC_FILTERED_EXPORT_LIMIT, GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
+import { GRC_FILTERED_EXPORT_LIMIT, GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { useApiKey } from "@/components/providers";
 import { frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
@@ -69,7 +69,12 @@ export default function RiskInboxPage() {
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
-  const loadedFindings = useMemo(() => data?.findings ?? [], [data?.findings]);
+  const boundedFindingRows = useMemo(
+    () => grcBoundedRows({ rows: data?.findings, limit: RISK_INBOX_LIST_LIMIT, meta: data?.meta }),
+    [data?.findings, data?.meta],
+  );
+  const loadedFindings = boundedFindingRows.rows;
+  const loadedFindingMeta = data ? boundedFindingRows.meta : undefined;
   const findings = useMemo(
     () => filterRiskInboxFindings(loadedFindings, { framework, owner, query }),
     [framework, loadedFindings, owner, query],
@@ -105,9 +110,9 @@ export default function RiskInboxPage() {
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
-      ...(data?.findings ?? []).flatMap((finding) => finding.controls?.map((control) => control.framework_name) ?? []).filter(Boolean),
+      ...loadedFindings.flatMap((finding) => finding.controls?.map((control) => control.framework_name) ?? []).filter(Boolean),
     ])),
-    [data?.findings],
+    [loadedFindings],
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const selectedUpcomingFramework = isUpcomingGRCFramework(framework);
@@ -294,7 +299,7 @@ export default function RiskInboxPage() {
           </div>
           <ResultLimitNotice
             loaded={loadedFindings.length}
-            meta={data?.meta}
+            meta={loadedFindingMeta}
             limit={RISK_INBOX_LIST_LIMIT}
             noun="findings"
             className="mb-3"

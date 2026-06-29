@@ -43,6 +43,13 @@ const routeSpecs = [
     filterText: "vendor 12",
   },
   {
+    route: "/risk-inbox",
+    label: "Risk Inbox",
+    readySelector: "table.data-table",
+    filterSelector: 'input[placeholder="Filter loaded findings"]',
+    filterText: "finding 12",
+  },
+  {
     route: "/evidence",
     label: "Evidence",
     readySelector: 'input[placeholder="Filter loaded evidence"]',
@@ -55,6 +62,11 @@ const routeSpecs = [
     readySelector: 'input[placeholder="Filter loaded controls"]',
     filterSelector: 'input[placeholder="Filter loaded controls"]',
     filterText: "control 12",
+  },
+  {
+    route: "/frameworks/soc2",
+    label: "Framework detail",
+    readySelector: "table",
   },
   {
     route: "/inventory",
@@ -216,7 +228,7 @@ async function benchmarkRoutes({ scenario, webBase }) {
       };
       results.push(routeResult);
       console.log(
-        `[grc-scale] ${scenario.name} ${spec.label}: usable ${usableMs}ms, dom ${domNodes}, filter ${filterMs ?? "n/a"}ms`,
+        `[grc-scale] ${scenario.name} ${spec.label}: usable ${usableMs}ms, dom ${domNodes}, filter ${formatDurationMs(filterMs)}`,
       );
     }
     return results;
@@ -248,7 +260,7 @@ function printSummary(results) {
     for (const route of result.routes) {
       const status = route.passed ? "pass" : result.name === "stress" && !failOnStress ? "advisory" : "fail";
       console.log(
-        `[grc-scale] ${result.name.padEnd(7)} ${status.padEnd(8)} ${route.label.padEnd(16)} usable=${route.usable_ms}ms dom=${route.dom_nodes} filter=${route.filter_ms ?? "n/a"}ms`,
+        `[grc-scale] ${result.name.padEnd(7)} ${status.padEnd(8)} ${route.label.padEnd(16)} usable=${route.usable_ms}ms dom=${route.dom_nodes} filter=${formatDurationMs(route.filter_ms)}`,
       );
       if (!route.passed && (result.name !== "stress" || failOnStress)) {
         failed.push(`${result.name} ${route.label}`);
@@ -275,6 +287,10 @@ function printSummary(results) {
   if (failed.length > 0) {
     throw new Error(`Scale thresholds failed: ${failed.join(", ")}`);
   }
+}
+
+function formatDurationMs(value) {
+  return typeof value === "number" ? `${value}ms` : "n/a";
 }
 
 function createMockApi({ bounded, recordCount: count, stats }) {
@@ -333,8 +349,10 @@ function createMockApi({ bounded, recordCount: count, stats }) {
         return sendJSON(response, stats, normalizedPath, evidencePacketsFixture(data, url.searchParams, bounded));
       }
       if (normalizedPath === "grc/findings") {
+        const findings = boundedList(data.findings, url.searchParams, bounded);
         return sendJSON(response, stats, normalizedPath, {
-          findings: boundedList(data.findings, url.searchParams, bounded),
+          findings,
+          meta: listMeta(findings, data.findings, url.searchParams, bounded),
           generated_at: generatedAt,
         });
       }
