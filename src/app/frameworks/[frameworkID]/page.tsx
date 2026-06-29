@@ -12,7 +12,7 @@ import type { GRCControl, GRCControlEvidencePacketResponse, GRCFinding, GRCFrame
 import { displayDate, humanize, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { frameworkMatchesRouteSegment, frameworkRouteSegment, isUpcomingGRCFramework, staticGRCFrameworkCatalog } from "@/lib/grc-frameworks";
-import { GRC_DETAIL_LIMIT, GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
+import { GRC_DETAIL_LIMIT, GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { hasTrendActivity } from "@/lib/trends";
 
 type FindingsResponse = { findings: GRCFinding[]; meta?: GRCListMeta; generated_at: string };
@@ -172,8 +172,19 @@ export default function FrameworkDetailPage() {
     );
     setExportState(result.ok ? "idle" : "failed");
   }, [apiKey, framework, isUpcoming]);
-  const controls = packetQuery.data?.controls ?? [];
-  const findings = useMemo(() => (findingsQuery.data?.findings ?? []).slice().sort(riskSort), [findingsQuery.data?.findings]);
+  const boundedControlRows = useMemo(
+    () => grcBoundedRows({ rows: packetQuery.data?.controls, limit: FRAMEWORK_CONTROL_LIMIT, total: packetQuery.data?.packet?.summary?.total }),
+    [packetQuery.data?.controls, packetQuery.data?.packet?.summary?.total],
+  );
+  const controls = boundedControlRows.rows;
+  const controlListMeta = packetQuery.data ? boundedControlRows.meta : undefined;
+  const boundedFindingRows = useMemo(
+    () => grcBoundedRows({ rows: findingsQuery.data?.findings, limit: FRAMEWORK_FINDING_LIMIT, meta: findingsQuery.data?.meta }),
+    [findingsQuery.data?.findings, findingsQuery.data?.meta],
+  );
+  const loadedFindings = boundedFindingRows.rows;
+  const findingListMeta = findingsQuery.data ? boundedFindingRows.meta : undefined;
+  const findings = useMemo(() => loadedFindings.slice().sort(riskSort), [loadedFindings]);
   const readinessCount = readinessTotal(framework);
   const maturityScore = framework?.maturity?.score ?? 0;
   const evidenceGapCount = (framework?.readiness?.needs_enrichment_controls ?? 0) + (framework?.readiness?.placeholder_controls ?? 0);
@@ -264,12 +275,7 @@ export default function FrameworkDetailPage() {
                 <ResultLimitNotice
                   loaded={controls.length}
                   limit={FRAMEWORK_CONTROL_LIMIT}
-                  meta={{
-                    limit: FRAMEWORK_CONTROL_LIMIT,
-                    returned: controls.length,
-                    total: packetQuery.data.packet.summary.total,
-                    truncated: packetQuery.data.packet.summary.total > controls.length,
-                  }}
+                  meta={controlListMeta}
                   noun="controls"
                   className="mb-3"
                 />
@@ -286,7 +292,7 @@ export default function FrameworkDetailPage() {
                 <ResultLimitNotice
                   loaded={findings.length}
                   limit={FRAMEWORK_FINDING_LIMIT}
-                  meta={findingsQuery.data.meta}
+                  meta={findingListMeta}
                   noun="findings"
                   className="mb-3"
                 />

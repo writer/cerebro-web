@@ -22,7 +22,7 @@ import {
 } from "@/lib/grc";
 import { findingMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { GRC_PICKER_LIMIT, GRC_WORKLIST_LIMIT, grcLoadedRowsCopy } from "@/lib/grc-list";
+import { GRC_PICKER_LIMIT, GRC_WORKLIST_LIMIT, grcBoundedRows, grcLoadedRowsCopy } from "@/lib/grc-list";
 import {
   redactReportGraph,
   redactReportIdentifier,
@@ -172,7 +172,12 @@ export default function ReportsPage() {
     [debouncedTenantID],
   );
   const findingsQuery = useGRCQuery<FindingsResponse>(findingsPath);
-  const loadedFindings = useMemo(() => findingsQuery.data?.findings ?? [], [findingsQuery.data?.findings]);
+  const boundedFindingRows = useMemo(
+    () => grcBoundedRows({ rows: findingsQuery.data?.findings, limit: FINDING_PICKER_LIMIT, meta: findingsQuery.data?.meta }),
+    [findingsQuery.data?.findings, findingsQuery.data?.meta],
+  );
+  const loadedFindings = boundedFindingRows.rows;
+  const loadedFindingMeta = findingsQuery.data ? boundedFindingRows.meta : undefined;
   const findings = useMemo(() => {
     const q = debouncedQuery.toLowerCase();
     return loadedFindings
@@ -204,13 +209,18 @@ export default function ReportsPage() {
       ? grcPath("/grc/control-packets", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID, limit: GRC_WORKLIST_LIMIT })
       : null,
   );
+  const boundedControlRows = useMemo(
+    () => grcBoundedRows({ rows: controlPacket.data?.controls, limit: GRC_WORKLIST_LIMIT, total: controlPacket.data?.packet?.summary?.total }),
+    [controlPacket.data?.controls, controlPacket.data?.packet?.summary?.total],
+  );
+  const loadedControlRows = boundedControlRows.rows;
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
-      ...(findingsQuery.data?.findings ?? []).flatMap((finding) => finding.controls?.map((control) => control.framework_name) ?? []).filter(Boolean),
-      ...(controlPacket.data?.controls ?? []).map((control) => control.framework_name).filter(Boolean),
+      ...loadedFindings.flatMap((finding) => finding.controls?.map((control) => control.framework_name) ?? []).filter(Boolean),
+      ...loadedControlRows.map((control) => control.framework_name).filter(Boolean),
     ])),
-    [controlPacket.data?.controls, findingsQuery.data?.findings],
+    [loadedControlRows, loadedFindings],
   );
   const metadata = reportMode === "control" ? controlPacket.data?.metadata : findingPacket.data?.metadata;
   const selectedUpcomingFramework = reportMode === "control" && isUpcomingGRCFramework(framework);
@@ -368,7 +378,7 @@ export default function ReportsPage() {
         <FindingPicker
           findings={findings}
           loadedCount={loadedFindings.length}
-          meta={findingsQuery.data?.meta}
+          meta={loadedFindingMeta}
           selectedFindingID={selectedFindingID}
           onSelect={setFindingID}
           loading={findingsQuery.loading}
@@ -552,7 +562,12 @@ function ControlPacketView({
   state: RuntimeState;
   upcomingFrameworkName?: string;
 }) {
-  const controls = packet.packet.controls;
+  const boundedPacketControls = useMemo(
+    () => grcBoundedRows({ rows: packet.packet.controls, limit: GRC_WORKLIST_LIMIT, total: packet.packet.summary.total }),
+    [packet.packet.controls, packet.packet.summary.total],
+  );
+  const controls = boundedPacketControls.rows;
+  const controlListMeta = boundedPacketControls.meta;
   const [selectedControlKey, setSelectedControlKey] = useState(() => controls[0] ? controlPacketRowKey(controls[0]) : "");
   const selectedControl =
     controls.find((control) => controlPacketRowKey(control) === selectedControlKey) ??
@@ -564,7 +579,7 @@ function ControlPacketView({
   const scopeCopy = grcLoadedRowsCopy({
     loaded: controls.length,
     limit: GRC_WORKLIST_LIMIT,
-    meta: { limit: GRC_WORKLIST_LIMIT, returned: controls.length, total: packet.packet.summary.total, truncated: packet.packet.summary.total > controls.length },
+    meta: controlListMeta,
     noun: "controls",
   });
   return (
@@ -610,7 +625,7 @@ function ControlPacketView({
             filterKeys={controlPacketSearchKeys}
             pageSize={12}
             resultLimit={GRC_WORKLIST_LIMIT}
-            resultMeta={{ limit: GRC_WORKLIST_LIMIT, returned: controls.length, total: packet.packet.summary.total, truncated: packet.packet.summary.total > controls.length }}
+            resultMeta={controlListMeta}
             resultNoun="controls"
             getRowKey={(control) => controlPacketRowKey(control)}
             selectedRowKey={selectedControl ? controlPacketRowKey(selectedControl) : null}
