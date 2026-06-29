@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { GRCFinding, GRCListMeta } from "@/lib/grc";
 
 import { API_BASE } from "@/lib/api";
+import { productErrorCopy } from "@/lib/cerebro-errors";
 import { humanize, riskLevelFromScore } from "@/lib/grc";
 import { grcLoadedRowsCopy } from "@/lib/grc-list";
 import { badgeClassFor, riskBadgeClassFor, severityDotClassFor } from "@/lib/grc-status";
@@ -392,17 +393,29 @@ export function ErrorBlock({
   recoveryDetail?: string;
 }) {
   const runtimeState = runtimeStateForError(error);
+  const visibleCopy = productErrorCopy(error, recoveryDetail ?? "This view could not load.");
 
   if (runtimeState === "unavailable" || runtimeState === "permission-denied") {
     return <RuntimeRecoveryBlock state={runtimeState} onRetry={onRetry} detail={recoveryDetail} />;
   }
 
   return (
-    <div className="flex items-center gap-2.5 rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-100">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-[13px] text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-100">
+      <div className="flex min-w-0 items-center gap-2.5">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
       </svg>
-      {error}
+        <span>{visibleCopy}</span>
+      </div>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-[12px] font-medium text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-50 dark:hover:bg-red-500/20"
+        >
+          Retry
+        </button>
+      )}
     </div>
   );
 }

@@ -59,6 +59,8 @@ export default function ReportSchedulesPage() {
 
   const fields = scheduleParameterFields(selectedDefinition);
   const intervalSeconds = intervalToSeconds(intervalValue, intervalUnit);
+  const listError = schedulesQuery.error || definitionsQuery.error;
+  const canCreateSchedule = definitions.length > 0 && !listError && !definitionsQuery.loading;
 
   const onSelectReport = (value: string) => {
     setReportID(value);
@@ -126,8 +128,6 @@ export default function ReportSchedulesPage() {
     void runsQuery.reload();
   };
 
-  const listError = schedulesQuery.error || definitionsQuery.error;
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -151,7 +151,7 @@ export default function ReportSchedulesPage() {
         <div className="grid gap-3 md:grid-cols-3">
           <label className={labelClass}>
             Report
-            <select value={selectedReportID} onChange={(event) => onSelectReport(event.target.value)} className={inputClass}>
+            <select value={selectedReportID} onChange={(event) => onSelectReport(event.target.value)} className={inputClass} disabled={!canCreateSchedule}>
               {definitions.length === 0 && <option value="">No reports available</option>}
               {definitions.map((definition) => (
                 <option key={definition.id} value={definition.id}>
@@ -212,7 +212,7 @@ export default function ReportSchedulesPage() {
           </label>
           <div className="flex items-center gap-3">
             <span className="text-[12px] text-[var(--text-muted)]">{describeInterval(intervalSeconds)}</span>
-            <button type="button" onClick={() => void submit()} disabled={saving} className={primaryButtonClass}>
+            <button type="button" onClick={() => void submit()} disabled={saving || !canCreateSchedule} className={primaryButtonClass}>
               <Plus className="h-3.5 w-3.5" />
               {saving ? "Saving..." : "Create schedule"}
             </button>
@@ -233,7 +233,9 @@ export default function ReportSchedulesPage() {
         {schedules.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-10 text-center">
             <CalendarClock className="h-6 w-6 text-[var(--text-muted)]" />
-            <div className="text-[13px] text-[var(--text-muted)]">No report schedules yet. Create one above.</div>
+            <div className="text-[13px] text-[var(--text-muted)]">
+              {canCreateSchedule ? "No report schedules yet. Create one above." : "Report definitions are not loaded."}
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">

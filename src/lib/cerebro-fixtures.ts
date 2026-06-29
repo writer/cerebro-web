@@ -1,5 +1,6 @@
 import { grcProductAreas, productAreaStatus, type GRCProductArea } from "@/lib/grc-product-areas";
 import type {
+  GRCControlArchetype,
   GRCEvidence,
   GRCEvidencePacketsResponse,
   GRCVendor,
@@ -902,26 +903,346 @@ const dashboardFixture = () => ({
   generated_at: generatedAt,
 });
 
+const controlFamilyCount = (rows: typeof controls) =>
+  new Set(rows.map((control) => control.owner_domain || control.framework_id)).size;
+
+const frameworkReadiness = (rows: typeof controls) => {
+  const auditorReady = rows.filter((control) => control.status === "passing").length;
+  const needsEnrichment = rows.filter((control) => control.missing_evidence_items > 0 || control.stale_evidence_items > 0).length;
+  return {
+    auditor_ready_controls: auditorReady,
+    needs_enrichment_controls: needsEnrichment,
+    placeholder_controls: 0,
+  };
+};
+
+const frameworkCoverage = (rows: typeof controls) => ({
+  selected_controls: rows.length,
+  mapped_controls: rows.filter((control) => control.mapped_rules.length > 0).length,
+  mapped_rules: rows.reduce((total, control) => total + control.mapped_rules.length, 0),
+});
+
+const frameworkMaturity = (rows: typeof controls) => {
+  const averageScore = rows.length === 0
+    ? 0
+    : Math.round(rows.reduce((total, control) => total + (control.evidence_score ?? 0), 0) / rows.length);
+  return {
+    score: averageScore,
+    status: averageScore >= 85 ? "audit_ready" : averageScore >= 70 ? "measured" : "needs_review",
+    summary: `${rows.length} measured controls with ${rows.reduce((total, control) => total + control.open_findings, 0)} open findings.`,
+  };
+};
+
+const frameworkGapActions = (rows: typeof controls) => {
+  const missing = rows.filter((control) => control.missing_evidence_items > 0).length;
+  const stale = rows.filter((control) => control.stale_evidence_items > 0).length;
+  return [
+    missing > 0 ? { code: "collect_missing_evidence", label: "Collect missing evidence", priority: 1, count: missing } : null,
+    stale > 0 ? { code: "refresh_stale_evidence", label: "Refresh stale evidence", priority: 2, count: stale } : null,
+    { code: "export_audit_packet", label: "Export current packet", priority: 3, count: rows.length },
+  ].filter(Boolean);
+};
+
+const frameworkRecord = ({
+  description,
+  id,
+  name,
+  rows,
+  version,
+}: {
+  description: string;
+  id: string;
+  name: string;
+  rows: typeof controls;
+  version: string;
+}) => ({
+  id,
+  name,
+  version,
+  lifecycle: "active",
+  description,
+  controls: rows,
+  family_count: controlFamilyCount(rows),
+  control_count: rows.length,
+  coverage: frameworkCoverage(rows),
+  readiness: frameworkReadiness(rows),
+  maturity: frameworkMaturity(rows),
+  gap_actions: frameworkGapActions(rows),
+});
+
 const frameworksFixture = () => ({
   version: "fixture-1",
   frameworks: [
-    {
+    frameworkRecord({
       id: "soc2",
       name: "SOC 2",
       version: "2024",
-      lifecycle: "active",
-      description: "Demo SOC 2 framework coverage for local fixture mode.",
-      controls: controls.filter((control) => control.framework_id === "soc2"),
-    },
-    {
+      description: "SOC 2 control coverage for the local fixture dataset.",
+      rows: controls.filter((control) => control.framework_id === "soc2"),
+    }),
+    frameworkRecord({
       id: "iso27001",
       name: "ISO 27001",
       version: "2022",
-      lifecycle: "active",
-      description: "Demo ISO 27001 framework coverage for local fixture mode.",
-      controls: controls.filter((control) => control.framework_id === "iso27001"),
+      description: "ISO 27001 control coverage for the local fixture dataset.",
+      rows: controls.filter((control) => control.framework_id === "iso27001"),
+    }),
+  ],
+  generated_at: generatedAt,
+});
+
+const reportDefinitionsFixture = () => ({
+  reports: [
+    {
+      id: "control-evidence-packet",
+      name: "Control evidence packet",
+      description: "Control readiness, evidence links, findings, and export metadata.",
+      parameters: [
+        { id: "tenant_id", description: "Tenant identifier" },
+        { id: "profile", description: "Control profile ID", required: true },
+        { id: "framework", description: "Framework filter" },
+      ],
+    },
+    {
+      id: "finding-audit-packet",
+      name: "Finding audit packet",
+      description: "Finding detail, linked evidence, graph context, and mapped controls.",
+      parameters: [
+        { id: "tenant_id", description: "Tenant identifier" },
+        { id: "finding_id", description: "Finding ID", required: true },
+      ],
     },
   ],
+  generated_at: generatedAt,
+});
+
+const reportSchedulesFixture = () => ({
+  schedules: [
+    {
+      id: "fixture-control-packet-daily",
+      tenant_id: tenantID,
+      report_id: "control-evidence-packet",
+      parameters: { profile: "soc2-security-core", framework: "SOC 2" },
+      interval_seconds: 86400,
+      enabled: true,
+      next_run_at: "2026-01-16T12:00:00.000Z",
+      last_run_at: "2026-01-15T12:00:00.000Z",
+      created_at: "2026-01-10T12:00:00.000Z",
+      updated_at: generatedAt,
+    },
+  ],
+  generated_at: generatedAt,
+});
+
+const customDashboardsFixture = () => ({
+  dashboards: [
+    {
+      id: "fixture-program-overview",
+      tenant_id: tenantID,
+      workspace_id: "fixture-workspace",
+      owner_user_id: "local-developer",
+      name: "Program overview",
+      description: "Findings, framework coverage, and connector health.",
+      visibility: "workspace",
+      schema_version: 1,
+      layout: { columns: 12 },
+      widgets: [
+        { id: "overview-summary", type: "summary_metrics", title: "Program summary", query: { endpoint: "/grc/dashboard", params: { limit: 100 } }, layout: { x: 0, y: 0, w: 12, h: 2 } },
+        { id: "overview-findings", type: "findings_table", title: "Open findings", query: { endpoint: "/grc/findings", params: { status: "open", limit: 10 } }, layout: { x: 0, y: 2, w: 8, h: 4 } },
+      ],
+      filters: {},
+      created_by: "local-developer",
+      updated_by: "local-developer",
+      created_at: "2026-01-12T12:00:00.000Z",
+      updated_at: generatedAt,
+    },
+  ],
+  generated_at: generatedAt,
+});
+
+const customDashboardDetailFixture = (dashboardID: string) => {
+  const dashboard = customDashboardsFixture().dashboards.find((item) => item.id === dashboardID) ?? customDashboardsFixture().dashboards[0];
+  return {
+    dashboard: {
+      ...dashboard,
+      id: dashboardID || dashboard.id,
+    },
+    generated_at: generatedAt,
+  };
+};
+
+const riskScoringConfigFixture = (params?: URLSearchParams) => ({
+  config: {
+    tenant_id: params?.get("tenant_id")?.trim() || "local",
+    thresholds: { critical: 85, high: 70, medium: 40 },
+    signals: {
+      epss_high: 0.7,
+      epss_elevated: 0.2,
+      cvss_critical: 9,
+      cvss_high: 7,
+      private_network_likelihood_cap: 35,
+    },
+    relation_weights: {
+      can_admin: 10,
+      can_assume: 8,
+      can_impersonate: 8,
+      can_perform: 8,
+      can_reach: 7,
+      acted_on: 5,
+      has_evidence: 5,
+      supports: 5,
+      assigned_to: 4,
+      member_of: 4,
+      runs_as: 4,
+      has_finding: 3,
+      has_identifier: 1,
+      has_classification: 1,
+      tagged_as: 1,
+      default: 2,
+    },
+    factor_weights: {
+      external_exposure: { likelihood: 35 },
+      critical_asset: { impact: 35 },
+      privileged_actor: { likelihood: 10, impact: 15 },
+      known_exploited: { likelihood: 35 },
+      epss_high: { likelihood: 25 },
+      limited_evidence: { confidence: -15 },
+    },
+    model_version: "likelihood-impact-v2",
+    updated_at: generatedAt,
+  },
+  persisted: false,
+});
+
+const controlArchetypesFixture = () => {
+  const archetypes: GRCControlArchetype[] = controls.map((control) => ({
+    id: `${control.framework_id}-${control.control_id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    family_id: slugField(control.owner_domain || control.framework_id),
+    family_name: control.owner_domain || control.framework_name,
+    family_description: `${control.owner_domain || control.framework_name} controls in the local fixture dataset.`,
+    recommended: control.status !== "passing",
+    control: {
+      id: `${control.framework_id}:${control.control_id}`,
+      framework_id: control.framework_id,
+      framework_name: control.framework_name,
+      framework_version: control.framework_version,
+      control_id: control.control_id,
+      title: control.title,
+      objective: control.title,
+      owner_domain: control.owner_domain,
+      freshness_sla: "30d",
+      evidence_expectations: [
+        {
+          id: `${control.control_id}-expectation`,
+          title: `${control.control_id} evidence`,
+          type: "automated",
+          required: true,
+          status: control.status === "passing" ? "ready" : "needs_review",
+          quality: control.evidence_quality,
+        },
+      ],
+    },
+  }));
+  return { version: "fixture-1", archetypes, generated_at: generatedAt };
+};
+
+const controlCoverageControls = (rows = controls) => rows.map((control) => ({
+  framework_id: control.framework_id,
+  framework_name: control.framework_name,
+  framework_version: control.framework_version,
+  family_id: slugField(control.owner_domain || control.framework_id),
+  family_name: control.owner_domain || control.framework_name,
+  control_id: control.control_id,
+  title: control.title,
+  owner_domain: control.owner_domain,
+  tags: [control.framework_id, slugField(control.owner_domain || "control")],
+  evidence_expectation_ids: [`${control.control_id}-expectation`],
+  audit_readiness: {
+    status: control.status,
+    score: control.evidence_score ?? 75,
+  },
+  coverage_status: control.mapped_rules.length > 0 ? "mapped" : "unmapped",
+  rule_count: control.mapped_rules.length,
+  mapped_rules: control.mapped_rules,
+  evidence_plan: {
+    expectations: [{
+      id: `${control.control_id}-expectation`,
+      title: `${control.control_id} evidence`,
+      type: "automated",
+      required: true,
+      status: control.status === "passing" ? "ready" : "needs_review",
+      quality: control.evidence_quality,
+    }],
+  },
+}));
+
+const controlPackSummary = (rows = controls) => ({
+  archetypes: rows.length,
+  controls: rows.length,
+  families: controlFamilyCount(rows),
+  mapped_controls: rows.filter((control) => control.mapped_rules.length > 0).length,
+  unmapped_controls: rows.filter((control) => control.mapped_rules.length === 0).length,
+  mapped_rules: rows.reduce((total, control) => total + control.mapped_rules.length, 0),
+  auditor_ready_controls: rows.filter((control) => control.status === "passing").length,
+  needs_enrichment_controls: rows.filter((control) => control.status !== "passing").length,
+  placeholder_controls: 0,
+});
+
+const controlProfilesFixture = () => ({
+  profiles: [
+    {
+      id: "soc2-security-core",
+      name: "SOC 2 security core",
+      description: "SOC 2 controls used by the fixture audit packet.",
+      summary: {
+        selected_controls: controls.filter((control) => control.framework_id === "soc2").length,
+        mapped_controls: controls.filter((control) => control.framework_id === "soc2" && control.mapped_rules.length > 0).length,
+        unmapped_controls: 0,
+        mapped_rules: controls.filter((control) => control.framework_id === "soc2").reduce((total, control) => total + control.mapped_rules.length, 0),
+        auditor_ready_controls: controls.filter((control) => control.framework_id === "soc2" && control.status === "passing").length,
+        needs_enrichment_controls: controls.filter((control) => control.framework_id === "soc2" && control.status !== "passing").length,
+        placeholder_controls: 0,
+      },
+      controls: controlCoverageControls(controls.filter((control) => control.framework_id === "soc2")),
+    },
+    {
+      id: "iso-technology-controls",
+      name: "ISO technology controls",
+      description: "ISO 27001 controls used by the fixture audit packet.",
+      summary: {
+        selected_controls: controls.filter((control) => control.framework_id === "iso27001").length,
+        mapped_controls: controls.filter((control) => control.framework_id === "iso27001" && control.mapped_rules.length > 0).length,
+        unmapped_controls: 0,
+        mapped_rules: controls.filter((control) => control.framework_id === "iso27001").reduce((total, control) => total + control.mapped_rules.length, 0),
+        auditor_ready_controls: controls.filter((control) => control.framework_id === "iso27001" && control.status === "passing").length,
+        needs_enrichment_controls: controls.filter((control) => control.framework_id === "iso27001" && control.status !== "passing").length,
+        placeholder_controls: 0,
+      },
+      controls: controlCoverageControls(controls.filter((control) => control.framework_id === "iso27001")),
+    },
+  ],
+  generated_at: generatedAt,
+});
+
+const controlPackPreviewFixture = () => ({
+  preview: {
+    version: "fixture-1",
+    coverage: {
+      id: "fixture-preview",
+      name: "Fixture control preview",
+      description: "Selected controls, mapped rules, and evidence expectations.",
+      summary: controlPackSummary(),
+      controls: controlCoverageControls(),
+      unmapped_controls: [],
+    },
+    summary: controlPackSummary(),
+    files: {
+      "extension.yaml": "id: fixture-control-pack\nname: Fixture control pack\n",
+      "controls.yaml": controls.map((control) => `- id: ${control.control_id}\n  title: ${control.title}`).join("\n"),
+      "profiles.yaml": "profiles:\n  - id: soc2-security-core\n    controls: 2\n",
+      "coverage.yaml": "coverage:\n  mapped_rules: 3\n  placeholder_controls: 0\n",
+    },
+  },
   generated_at: generatedAt,
 });
 
@@ -2901,8 +3222,14 @@ export const cerebroFixtureResponseFor = ({
     if (normalizedMethod === "POST" && normalizedPath === "grc/control-packets") {
       return jsonFixture(controlPacketFixture());
     }
+    if (normalizedMethod === "POST" && normalizedPath === "grc/control-packets/export") {
+      return textFixture("# Control Evidence Packet\n\nFixture control packet export.\n", "text/markdown; charset=utf-8");
+    }
     if (normalizedMethod === "POST" && normalizedPath === "grc/control-packs/preview") {
-      return jsonFixture({ controls, generated_at: generatedAt });
+      return jsonFixture(controlPackPreviewFixture());
+    }
+    if (normalizedPath === "grc/risk-scoring-config") {
+      return jsonFixture(riskScoringConfigFixture(searchParams));
     }
     if (normalizedMethod === "POST" && normalizedPath === "grc/ask") {
       return textFixture("event: done\ndata: {\"answer\":\"Fixture mode is enabled.\",\"trace_id\":\"fixture-trace\"}\n\n", "text/event-stream; charset=utf-8");
@@ -2946,6 +3273,15 @@ export const cerebroFixtureResponseFor = ({
     return jsonFixture(dashboardFixture());
   }
 
+  if (normalizedPath === "grc/dashboards") {
+    return jsonFixture(customDashboardsFixture());
+  }
+
+  const dashboardDetailMatch = /^grc\/dashboards\/([^/]+)(?:\/clone)?$/.exec(normalizedPath);
+  if (dashboardDetailMatch) {
+    return jsonFixture(customDashboardDetailFixture(safeDecode(dashboardDetailMatch[1])));
+  }
+
   if (normalizedPath === "grc/program-readiness") {
     return jsonFixture(programReadinessFixture());
   }
@@ -2956,6 +3292,14 @@ export const cerebroFixtureResponseFor = ({
 
   if (normalizedPath === "report-runs") {
     return jsonFixture({ runs: [], generated_at: generatedAt });
+  }
+
+  if (normalizedPath === "reports") {
+    return jsonFixture(reportDefinitionsFixture());
+  }
+
+  if (normalizedPath === "report-schedules") {
+    return jsonFixture(reportSchedulesFixture());
   }
 
   if (normalizedPath === "grc/findings") {
@@ -3007,6 +3351,18 @@ export const cerebroFixtureResponseFor = ({
     return jsonFixture({ controls: limitList(controls, searchParams), generated_at: generatedAt });
   }
 
+  if (normalizedPath === "grc/control-archetypes") {
+    return jsonFixture(controlArchetypesFixture());
+  }
+
+  if (normalizedPath === "grc/control-profiles") {
+    return jsonFixture(controlProfilesFixture());
+  }
+
+  if (normalizedPath === "grc/risk-scoring-config") {
+    return jsonFixture(riskScoringConfigFixture(searchParams));
+  }
+
   if (normalizedPath === "grc/policy-lifecycle") {
     return jsonFixture(policyLifecycleFixture());
   }
@@ -3041,6 +3397,10 @@ export const cerebroFixtureResponseFor = ({
   }
 
   if (normalizedPath === "grc/control-packets") {
+    return jsonFixture(controlPacketFixture());
+  }
+
+  if (normalizedPath === "grc/control-packets/detail") {
     return jsonFixture(controlPacketFixture());
   }
 
@@ -3123,7 +3483,90 @@ export const cerebroFixtureResponseFor = ({
   }
 
   if (normalizedPath === "openapi.yaml") {
-    return textFixture("openapi: 3.1.0\ninfo:\n  title: Cerebro Fixture API\n  version: fixture\npaths: {}\n", "application/yaml; charset=utf-8");
+    return textFixture(`openapi: 3.1.0
+info:
+  title: Cerebro Fixture API
+  version: fixture
+tags:
+  - name: GRC
+    description: Dashboard, controls, audit packets, evidence, and GRC finding views.
+  - name: Reports
+    description: Report definitions and durable report runs.
+  - name: Connectors
+    description: Connector library, runtime status, and credential transport metadata.
+paths:
+  /grc/dashboard:
+    get:
+      tags: [GRC]
+      summary: Program dashboard
+      responses:
+        "200":
+          description: Program dashboard payload.
+          content:
+            application/json:
+              schema:
+                type: object
+  /grc/findings:
+    get:
+      tags: [GRC]
+      summary: List findings
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Finding worklist.
+          content:
+            application/json:
+              schema:
+                type: object
+  /grc/evidence-packets:
+    get:
+      tags: [GRC]
+      summary: Evidence packet register
+      responses:
+        "200":
+          description: Evidence packet register.
+          content:
+            application/json:
+              schema:
+                type: object
+  /grc/control-packets:
+    get:
+      tags: [GRC]
+      summary: Control evidence packet
+      responses:
+        "200":
+          description: Control evidence packet.
+          content:
+            application/json:
+              schema:
+                type: object
+  /reports:
+    get:
+      tags: [Reports]
+      summary: List report definitions
+      responses:
+        "200":
+          description: Report definitions.
+          content:
+            application/json:
+              schema:
+                type: object
+  /connectors:
+    get:
+      tags: [Connectors]
+      summary: List available connectors and connection health
+      responses:
+        "200":
+          description: Connector library.
+          content:
+            application/json:
+              schema:
+                type: object
+`, "application/yaml; charset=utf-8");
   }
 
   return notFoundFixture(normalizedPath);

@@ -23,14 +23,14 @@ describe("grc client error copy", () => {
 });
 
 describe("grc client paths", () => {
-  it("keeps impact root URNs out of the proxy path segment", () => {
+  it("encodes impact root URNs inside the proxy path segment", () => {
     const path = grcEntityImpactPath("urn:cerebro:writer:github_code_repository:writer/cerebro", {
       tenant_id: "writer",
       limit: 50,
     });
 
     expect(path).toBe(
-      "/grc/entities/_/impact?root_urn=urn%3Acerebro%3Awriter%3Agithub_code_repository%3Awriter%2Fcerebro&tenant_id=writer&limit=50",
+      "/grc/entities/urn%3Acerebro%3Awriter%3Agithub_code_repository%3Awriter%2Fcerebro/impact?tenant_id=writer&limit=50",
     );
   });
 });
