@@ -56,6 +56,9 @@ export type IdentityUserListResponse = {
 export type IdentityDirectoryParams = {
   tenantID?: string;
   orgID?: string;
+  provider?: string;
+  source?: string;
+  status?: string;
   query?: string;
   limit?: number;
 };
@@ -177,15 +180,18 @@ export const normalizeIdentityUsersResponse = (value: unknown): IdentityUserList
   };
 };
 
-const pathParams = ({ tenantID, orgID, query, limit }: IdentityDirectoryParams) => ({
+const pathParams = ({ tenantID, orgID, provider, source, status, query, limit }: IdentityDirectoryParams) => ({
   tenant_id: tenantID?.trim() ?? "",
   org_id: orgID?.trim() ?? "",
+  provider: provider?.trim() ?? "",
+  source: source?.trim() ?? "",
+  status: status?.trim() ?? "",
   q: query?.trim() ?? "",
   limit: typeof limit === "number" && Number.isFinite(limit) ? Math.max(1, Math.round(limit)) : "",
 });
 
 export const identityOrganizationsPath = (params: IdentityDirectoryParams = {}) =>
-  withQuery("/identity/orgs", pathParams(params));
+  withQuery("/identity/orgs", { ...pathParams(params), status: "" });
 
 export const identityUsersPath = (params: IdentityDirectoryParams = {}) =>
   withQuery("/identity/users", pathParams(params));
