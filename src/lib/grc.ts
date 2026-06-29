@@ -1424,6 +1424,107 @@ export type GRCVendorDetailResponse = {
   generated_at: string;
 };
 
+export type GRCVendorQuestionnaireReviewSummary = {
+  total_reviews: number;
+  intake_reviews: number;
+  processing_reviews: number;
+  ready_reviews: number;
+  blocked_reviews: number;
+  approved_reviews: number;
+  missing_answers: number;
+  open_assignments: number;
+  pending_approvals: number;
+};
+
+export type GRCVendorQuestionnaireEvidenceMatch = {
+  id: string;
+  question_id: string;
+  source_label: string;
+  source_type?: string;
+  evidence_urn?: string;
+  control_id?: string;
+  match_state: string;
+  confidence_score?: number;
+  answer_text?: string;
+  observed_at?: string;
+};
+
+export type GRCVendorQuestionnaireAssignment = {
+  id: string;
+  question_id?: string;
+  owner: string;
+  status: string;
+  due_at?: string;
+  reason?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type GRCVendorQuestionnaireComment = {
+  id: string;
+  author: string;
+  body: string;
+  created_at: string;
+};
+
+export type GRCVendorQuestionnaireApproval = {
+  id: string;
+  approver: string;
+  state: string;
+  reason?: string;
+  created_at: string;
+};
+
+export type GRCVendorQuestionnaireTimelineEvent = {
+  id: string;
+  event_type: string;
+  actor?: string;
+  label: string;
+  detail?: string;
+  created_at: string;
+};
+
+export type GRCVendorQuestionnaireReview = {
+  id: string;
+  vendor_urn: string;
+  tenant_id?: string;
+  title: string;
+  source_filename?: string;
+  review_state: string;
+  upload_state?: string;
+  process_state?: string;
+  enrichment_state?: string;
+  decision_state?: string;
+  decision_recommendation?: string;
+  owner?: string;
+  due_at?: string;
+  created_at: string;
+  updated_at?: string;
+  processed_at?: string;
+  question_count: number;
+  answered_count: number;
+  missing_answer_count: number;
+  evidence_match_count: number;
+  risk_notes?: string[];
+  missing_answers?: string[];
+  evidence_matches?: GRCVendorQuestionnaireEvidenceMatch[];
+  assignments?: GRCVendorQuestionnaireAssignment[];
+  comments?: GRCVendorQuestionnaireComment[];
+  approvals?: GRCVendorQuestionnaireApproval[];
+  timeline?: GRCVendorQuestionnaireTimelineEvent[];
+};
+
+export type GRCVendorQuestionnaireReviewsResponse = {
+  reviews: GRCVendorQuestionnaireReview[];
+  summary?: GRCVendorQuestionnaireReviewSummary;
+  generated_at: string;
+};
+
+export type GRCVendorQuestionnaireReviewResponse = {
+  review: GRCVendorQuestionnaireReview;
+  generated_at: string;
+};
+
 export type GRCVendorDiscoveriesResponse = {
   summary?: GRCVendorDiscoverySummary;
   meta?: GRCListMeta;
