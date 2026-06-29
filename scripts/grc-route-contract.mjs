@@ -6,6 +6,7 @@ export function grcBrowserRouteContracts({ adminURN }) {
     { route: "/frameworks", pageId: "frameworks", heading: "Frameworks" },
     { route: "/controls/builder", pageId: "control-builder", heading: "Control Builder" },
     { route: "/evidence", pageId: "evidence", heading: "Evidence" },
+    { route: "/vendors", pageId: "vendors", heading: "Vendors" },
     { route: "/connectors", pageId: "connectors", heading: "Connectors" },
     { route: `/impact?root_urn=${encodeURIComponent(adminURN)}`, pageId: "impact-map", heading: "Impact Map" },
     { route: "/reports", pageId: "reports", heading: "Reports" },

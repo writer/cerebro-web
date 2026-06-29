@@ -41,7 +41,7 @@
 
 - Build Cerebro screens like status and evidence surfaces, not product taxonomy explainers. The first viewport should show what Cerebro knows: risks, controls, evidence, owners, affected assets, sources, reports, and recent changes.
 - Do not make users choose or learn a "persona", "lens", "mode", "decision frame", or other internal product construct before they get value. These terms should not appear in end-user UI unless a user-created object explicitly uses that name.
-- Prefer Vanta-style information architecture: concrete counts, pass/fail status, missing evidence, stale sources, owners, due dates, affected assets, and direct drilldowns.
+- Prefer information architecture built around concrete counts, pass/fail status, missing evidence, stale sources, owners, due dates, affected assets, and direct drilldowns.
 - Navigation labels should be stable information areas such as Home, Risks, Controls, Evidence, Inventory, Affected assets, Graph, Reports, and Sources. The page content should carry the value before navigation does.
 - Ask surfaces should offer concrete information-retrieval questions, for example "Which risks have no owner?", "Which controls are failing?", "Which evidence is missing or stale?", and "What changed since last week?"
 - Avoid abstract copy such as "material exposure", "executive agenda", "blast radius", "workbench", "focused entry points", and repeated Cerebro-branded explanations. Use the user's nouns and the graph facts instead.
@@ -53,6 +53,7 @@
 - Before choosing a layout for a graph-backed page, inspect the existing API contract, fixtures, query limits, or available graph metadata to understand likely cardinality, record shape, and drilldown paths. Do not invent a small sample shape and then design around it.
 - Default high-volume pages to bounded worklists: server-side filters, explicit request limits, search over loaded rows, sortable tables, result-count copy, and clear export paths. Use card grids only for small summary sets, repeated dashboards, or genuinely visual objects.
 - For list pages, show the operator what is loaded versus what exists when metadata is available. Copy should say concrete states such as "Showing first N findings", "Showing N of M controls", or "Export loaded CSV"; avoid implying the page contains the full graph when it does not.
+- Do not load every related collection for a page just because it is nearby in the workflow. Split register, triage, upload, export, and detail work into active sections so the first screen requests and renders the smallest useful graph slice.
 - Use progressive disclosure for graph records: first show totals, health states, top blockers, owner gaps, freshness, severity, or readiness; then provide row detail, side panels, linked detail pages, packet exports, and graph-neighborhood views.
 - Large graph neighborhoods should be summarized and filtered before visualization. Cap rendered nodes and edges, show hidden/filtered counts, support search and type/risk filters, and link to inventory, evidence, impact, and ask flows for the selected node.
 - Filters must map to graph facts users recognize: tenant, source, runtime, framework, control, owner, severity, status, SLA, asset class, freshness, evidence type, and graph root. Prefer concrete nouns over internal pipeline terms.

@@ -50,6 +50,20 @@ import { grcUploadHistoryKey, grcUploadHistoryWith, readGRCUploadHistory, writeG
 import { grcUploadFileError } from "@/lib/grc-upload-limits";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
+import {
+  boundedVendorDiscoveries,
+  boundedVendorRows,
+  discoveryNeedsReviewState,
+  vendorAssuranceItemCount,
+  vendorFirstQueueAction as firstQueueAction,
+  vendorFreshnessLabel as freshnessLabel,
+  vendorOwnerLabel as ownerLabel,
+  vendorPacketDetail as packetDetail,
+  vendorReviewDetail as reviewDetail,
+  vendorRiskDrivers,
+  vendorRiskScoreLabel as riskScoreLabel,
+  vendorSourceLabel as sourceLabel,
+} from "@/lib/vendors";
 
 const inputClass = "control-input mt-1 w-full px-3 py-1.5 text-[13px]";
 const labelClass = "text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]";
@@ -136,6 +150,17 @@ type VendorQuickActionDraft = {
   lifecycleState: string;
   reviewState: string;
 };
+
+type VendorSection = "register" | "discoveries" | "uploads";
+
+const vendorSections: Array<{ id: VendorSection; label: string }> = [
+  { id: "register", label: "Vendor register" },
+  { id: "discoveries", label: "Discovery queue" },
+  { id: "uploads", label: "Uploads" },
+];
+
+const vendorSectionFromParam = (value: string): VendorSection =>
+  vendorSections.some((section) => section.id === value) ? value as VendorSection : "register";
 
 const defaultVendorCreateDraft = (): VendorCreateDraft => ({
   name: "",
@@ -316,20 +341,6 @@ const duplicateMatchesForDraft = (
     websiteURL: draft.websiteURL,
   });
 
-const vendorRiskDrivers = (vendor: GRCVendor) => {
-  const drivers = [
-    ...(vendor.risk_drivers ?? []),
-    ...(vendor.exposure_reasons ?? []),
-    ...(vendor.queue_reasons ?? []).map(humanize),
-  ];
-  if (vendor.owner_state === "missing") drivers.push("No owner");
-  if (["stale", "expired"].includes(vendor.evidence_freshness_state ?? "")) drivers.push("Stale evidence");
-  if (["critical", "high"].includes(vendor.risk_level)) drivers.push(`${humanize(vendor.risk_level)} risk`);
-  if (vendor.access_level === "privileged") drivers.push("Privileged access");
-  if (vendor.open_findings && vendor.open_findings > 0) drivers.push(`${vendor.open_findings} open risks`);
-  return Array.from(new Set(drivers.filter(Boolean))).slice(0, 6);
-};
-
 const formatSyncLag = (seconds?: number) => {
   if (typeof seconds !== "number" || !Number.isFinite(seconds)) return "Lag not reported";
   if (seconds < 60) return `${Math.round(seconds)}s lag`;
@@ -407,44 +418,8 @@ function DuplicateMatchList({
   );
 }
 
-const reviewDetail = (vendor: GRCVendor) => {
-  if (vendor.review_due_at) {
-    return `Due ${displayDate(vendor.review_due_at)}`;
-  }
-  if (vendor.last_review_completed_at) {
-    return `Last done ${displayDate(vendor.last_review_completed_at)}`;
-  }
-  return "No due date";
-};
-
-const ownerLabel = (vendor: GRCVendor) => {
-  if (vendor.owner) return vendor.owner;
-  if (vendor.security_owner_user_id) return vendor.security_owner_user_id;
-  if (vendor.business_owner_user_id) return vendor.business_owner_user_id;
-  return "Owner missing";
-};
-
-const sourceLabel = (vendor: GRCVendor) =>
-  vendor.provider || vendor.source_id || vendor.attributes?.source_system || "Source not set";
-
 const vendorDetailHref = (vendor: GRCVendor) =>
   `/vendors/${encodeURIComponent(vendor.urn)}`;
-
-const firstQueueAction = (vendor: GRCVendor) =>
-  vendor.next_actions?.slice().sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0];
-
-const freshnessLabel = (vendor: GRCVendor) =>
-  vendor.evidence_freshness_state ? humanize(vendor.evidence_freshness_state) : "Not measured";
-
-const riskScoreLabel = (vendor: GRCVendor) =>
-  typeof vendor.risk_score === "number" ? `${vendor.risk_score}/100` : "Not scored";
-
-const packetDetail = (vendor: GRCVendor) => {
-  const missing = vendor.packet_missing_items?.length ?? 0;
-  if (missing > 0) return `${missing} missing`;
-  const ready = vendor.packet_ready_items?.length ?? 0;
-  return ready > 0 ? `${ready} ready` : "No packet items";
-};
 
 function DiscoveryStateBadge({ state }: { state?: string }) {
   const normalized = state?.trim().toLowerCase() || "discovered";
@@ -758,10 +733,8 @@ function CreateVendorModal({
 const selectLabel = (options: Array<{ value: string; label: string }>, value: string) =>
   options.find((item) => item.value === value)?.label ?? value;
 
-const reviewStates = new Set(["discovered", "pending", "needs_review"]);
-
 const discoveryNeedsReview = (discovery: GRCVendorDiscovery) =>
-  reviewStates.has((discovery.decision_state || "discovered").toLowerCase());
+  discoveryNeedsReviewState(discovery);
 
 const discoveryHandledLabel = (discovery: GRCVendorDiscovery) => {
   const state = (discovery.decision_state || "").toLowerCase();
@@ -785,7 +758,7 @@ function HealthStat({
   label: string;
   pendingDetail?: string;
   state: RuntimeState;
-  value: number;
+  value: number | string;
 }) {
   const accents = {
     danger: "border-l-red-500",
@@ -793,8 +766,9 @@ function HealthStat({
     success: "border-l-emerald-500",
     warning: "border-l-amber-500",
   };
-  const displayValue = state === "loading" ? "..." : state === "ready" ? value.toLocaleString() : "Unavailable";
-  const displayDetail = state === "ready" ? detail : pendingDetail;
+  const formattedValue = typeof value === "number" ? value.toLocaleString() : value;
+  const displayValue = state === "loading" ? "..." : state === "ready" || state === "empty" ? formattedValue : "Unavailable";
+  const displayDetail = state === "ready" || state === "empty" ? detail : pendingDetail;
   const accentIntent = state === "ready" ? intent : "neutral";
   return (
     <div className={`border-l-[3px] ${accents[accentIntent]} px-4 py-3`}>
@@ -807,6 +781,7 @@ function HealthStat({
 
 function VendorHealthStrip({
   discoveries,
+  discoveriesLoaded,
   discoveryMetricState,
   discoverySummary,
   summary,
@@ -814,6 +789,7 @@ function VendorHealthStrip({
   vendors,
 }: {
   discoveries: GRCVendorDiscovery[];
+  discoveriesLoaded: boolean;
   discoveryMetricState: RuntimeState;
   discoverySummary?: GRCVendorDiscoveriesResponse["summary"];
   summary?: GRCVendorsResponse["summary"];
@@ -825,11 +801,13 @@ function VendorHealthStrip({
   const needsReview = discoverySummary?.discovered ?? discoveries.filter(discoveryNeedsReview).length;
   const missingOwner = summary?.owner_missing_vendors ?? vendors.filter((vendor) => vendor.owner_state === "missing").length;
   const highRisk = summary?.high_risk_vendors ?? vendors.filter((vendor) => ["critical", "high"].includes(vendor.risk_level)).length;
+  const reviewValue = discoveriesLoaded ? needsReview : "Open queue";
+  const reviewDetailCopy = discoveriesLoaded ? "discovery candidates" : "Load candidates when triaging discoveries";
 
   return (
     <section className="surface-panel grid overflow-hidden sm:grid-cols-2 xl:grid-cols-4">
       <HealthStat label="Vendors" value={vendorCount} detail={`${activeCount.toLocaleString()} active`} state={vendorMetricState} intent="success" />
-      <HealthStat label="Needs review" value={needsReview} detail="discovery candidates" state={discoveryMetricState} intent={needsReview > 0 ? "warning" : "success"} pendingDetail="Waiting for discovery data" />
+      <HealthStat label="Needs review" value={reviewValue} detail={reviewDetailCopy} state={discoveryMetricState} intent={needsReview > 0 ? "warning" : "success"} pendingDetail="Waiting for discovery data" />
       <HealthStat label="Missing owner" value={missingOwner} detail="vendors without an owner" state={vendorMetricState} intent={missingOwner > 0 ? "warning" : "success"} />
       <HealthStat label="High risk" value={highRisk} detail="critical or high vendors" state={vendorMetricState} intent={highRisk > 0 ? "danger" : "success"} />
     </section>
@@ -1302,18 +1280,15 @@ function DuplicateQueue({
 
 function VendorRegisterSection({
   assuranceItems,
+  meta,
   onOpenVendor,
-  summary,
   vendors,
 }: {
   assuranceItems: number;
+  meta?: GRCVendorsResponse["meta"];
   onOpenVendor: (vendorURN: string) => void;
-  summary?: GRCVendorsResponse["summary"];
   vendors: GRCVendor[];
 }) {
-  const meta = summary
-    ? { limit: GRC_WORKLIST_LIMIT, returned: vendors.length, total: summary.total_vendors, truncated: summary.total_vendors > vendors.length }
-    : undefined;
   const vendorColumns = useMemo<TableColumn<GRCVendor>[]>(() => [
     {
       key: "name",
@@ -1446,6 +1421,50 @@ function VendorRegisterSection({
   );
 }
 
+function VendorSectionSwitcher({
+  activeSection,
+  discoveriesLoaded,
+  discoveryCount,
+  onChange,
+  uploadCount,
+  vendorCount,
+}: {
+  activeSection: VendorSection;
+  discoveriesLoaded: boolean;
+  discoveryCount: number;
+  onChange: (section: VendorSection) => void;
+  uploadCount: number;
+  vendorCount: number;
+}) {
+  const detailBySection: Record<VendorSection, string> = {
+    register: countLabel(vendorCount, "loaded vendor"),
+    discoveries: discoveriesLoaded ? countLabel(discoveryCount, "loaded candidate") : "Load candidates",
+    uploads: uploadCount > 0 ? countLabel(uploadCount, "recent upload") : "Add documents",
+  };
+  return (
+    <section className="border-b border-[color:var(--border)] pb-2">
+      <div role="tablist" aria-label="Vendor work areas" className="flex flex-wrap gap-1.5">
+        {vendorSections.map((section) => {
+          const selected = activeSection === section.id;
+          return (
+            <button
+              key={section.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => onChange(section.id)}
+              className={`rounded-md border px-3 py-2 text-left text-[13px] transition ${selected ? "border-[color:var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-primary)]" : "border-transparent text-[var(--text-secondary)] hover:border-[color:var(--border)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"}`}
+            >
+              <span className="block font-semibold">{section.label}</span>
+              <span className="mt-0.5 block text-[11px] text-[var(--text-muted)]">{detailBySection[section.id]}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function DetailField({ label, value }: { label: string; value?: string | number }) {
   return (
     <div className="grid grid-cols-[116px_minmax(0,1fr)] gap-3 border-t border-[color:var(--border)] py-2 text-[12px]">
@@ -1472,6 +1491,7 @@ function VendorDetailDrawer({
   detailError,
   detailLoading,
   linkedDiscoveries,
+  linkedDiscoveriesLoaded,
   onClose,
   onOpenUpload,
   onQuickAction,
@@ -1486,6 +1506,7 @@ function VendorDetailDrawer({
   detailError: string | null;
   detailLoading: boolean;
   linkedDiscoveries: GRCVendorDiscovery[];
+  linkedDiscoveriesLoaded: boolean;
   onClose: () => void;
   onOpenUpload: (vendor: GRCVendor) => void;
   onQuickAction: (action: "assign_owner" | "change_lifecycle" | "start_review") => Promise<void> | void;
@@ -1592,7 +1613,9 @@ function VendorDetailDrawer({
                 <GitMerge className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
                 Linked discoveries
               </div>
-              {linkedDiscoveries.length === 0 ? (
+              {!linkedDiscoveriesLoaded ? (
+                <div className="text-[13px] text-[var(--text-muted)]">Open the discovery queue to load candidate links.</div>
+              ) : linkedDiscoveries.length === 0 ? (
                 <div className="text-[13px] text-[var(--text-muted)]">No linked discoveries.</div>
               ) : (
                 <div className="space-y-2">
@@ -1700,6 +1723,7 @@ export default function VendorsPage() {
   const [ownerState, setOwnerState] = useQueryParamState("owner_state");
   const [lifecycleState, setLifecycleState] = useQueryParamState("lifecycle_state");
   const [queueState, setQueueState] = useQueryParamState("queue");
+  const [sectionParam, setSectionParam] = useQueryParamState("view");
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, DiscoveryDecisionDraft>>({});
   const [vendorUploadFile, setVendorUploadFile] = useState<File | null>(null);
   const [vendorUploadName, setVendorUploadName] = useState("");
@@ -1732,6 +1756,14 @@ export default function VendorsPage() {
   const debouncedOwnerState = useDebouncedValue(ownerState.trim());
   const debouncedLifecycleState = useDebouncedValue(lifecycleState.trim());
   const debouncedQueueState = useDebouncedValue(queueState.trim());
+  const activeSection = vendorSectionFromParam(sectionParam);
+  const shouldLoadDiscoveries = activeSection === "discoveries";
+  const setActiveSection = useCallback((section: VendorSection) => {
+    if (section !== "discoveries") {
+      setSelectedDiscoveryURNs(new Set());
+    }
+    setSectionParam(section === "register" ? "" : section);
+  }, [setSectionParam]);
 
   const vendorsQuery = useGRCQuery<GRCVendorsResponse>(
     grcPath("/grc/vendors", {
@@ -1747,12 +1779,12 @@ export default function VendorsPage() {
     }),
   );
   const discoveriesQuery = useGRCQuery<GRCVendorDiscoveriesResponse>(
-    grcPath("/grc/vendor-discoveries", {
+    shouldLoadDiscoveries ? grcPath("/grc/vendor-discoveries", {
       tenant_id: debouncedTenantID,
       source_id: debouncedSourceID,
       q: debouncedQuery,
       limit: GRC_DETAIL_LIMIT,
-    }),
+    }) : null,
   );
   const vendorDetailQuery = useGRCQuery<GRCVendorDetailResponse>(
     selectedVendorURN
@@ -1773,16 +1805,22 @@ export default function VendorsPage() {
   const { mutate: mutateDiscoverySync, saving: syncSaving, error: syncError } = useGRCMutation<GRCVendorDiscoverySyncResponse>();
   const { mutate: mutateVendorAction, saving: quickActionSaving, error: quickActionError } = useGRCMutation<GRCVendorActionResponse>();
 
-  const vendors = useMemo(() => vendorsQuery.data?.vendors ?? [], [vendorsQuery.data?.vendors]);
+  const vendorRows = useMemo(() => boundedVendorRows(vendorsQuery.data, GRC_WORKLIST_LIMIT), [vendorsQuery.data]);
+  const vendors = vendorRows.vendors;
+  const vendorMeta = vendorRows.meta;
   const summary = vendorsQuery.data?.summary;
-  const discoveries = useMemo(() => discoveriesQuery.data?.discoveries ?? [], [discoveriesQuery.data?.discoveries]);
+  const discoveryRows = useMemo(() => boundedVendorDiscoveries(discoveriesQuery.data, GRC_DETAIL_LIMIT), [discoveriesQuery.data]);
+  const discoveries = discoveryRows.discoveries;
+  const discoveryMeta = discoveryRows.meta;
   const discoverySummary = discoveriesQuery.data?.summary;
   const discoverySources = useMemo(() => discoveriesQuery.data?.source_summaries ?? [], [discoveriesQuery.data?.source_summaries]);
   const error = vendorsQuery.error;
   const discoveryError = discoveriesQuery.error;
   const vendorMetricState: RuntimeState = error ? runtimeStateForError(error) : vendorsQuery.loading && !vendorsQuery.data ? "loading" : "ready";
-  const discoveryMetricState: RuntimeState = discoveryError ? runtimeStateForError(discoveryError) : discoveriesQuery.loading && !discoveriesQuery.data ? "loading" : "ready";
-  const assuranceItems = useMemo(() => vendors.reduce((sum, vendor) => sum + vendor.contract_count + vendor.security_review_count + vendor.questionnaire_count + vendor.assurance_document_count, 0), [vendors]);
+  const discoveryMetricState: RuntimeState = !shouldLoadDiscoveries
+    ? "empty"
+    : discoveryError ? runtimeStateForError(discoveryError) : discoveriesQuery.loading && !discoveriesQuery.data ? "loading" : "ready";
+  const assuranceItems = useMemo(() => vendors.reduce((sum, vendor) => sum + vendorAssuranceItemCount(vendor), 0), [vendors]);
   const sourceFilterOptions = useMemo(() => {
     const options = new Map<string, string>();
     discoverySources.forEach((source) => options.set(source.source_id, discoverySourceLabel(source)));
@@ -1901,11 +1939,12 @@ export default function VendorsPage() {
     });
   }, [discoveries]);
   const openUploadForVendor = useCallback((vendor: GRCVendor) => {
+    setActiveSection("uploads");
     setVendorUploadName(vendor.name || "");
     setVendorUploadID(vendor.vendor_id || shortEntity(vendor.urn));
     setVendorUploadWebsite(vendor.website_url || "");
-    uploadPanelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, []);
+    window.setTimeout(() => uploadPanelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 0);
+  }, [setActiveSection]);
   const updateCreateDraft = useCallback((patch: Partial<VendorCreateDraft>) => {
     setCreateDraft((current) => ({ ...current, ...patch }));
   }, []);
@@ -1926,8 +1965,10 @@ export default function VendorsPage() {
     setCreateDraft(defaultVendorCreateDraft());
     setCreateMessage(`${response.vendor.name} saved.`);
     setCreatedVendor(response.vendor);
-    await Promise.all([vendorsQuery.reload(), discoveriesQuery.reload()]);
-  }, [discoveriesQuery, mutateCreateVendor, tenantID, vendorsQuery]);
+    const reloads = [vendorsQuery.reload()];
+    if (shouldLoadDiscoveries) reloads.push(discoveriesQuery.reload());
+    await Promise.all(reloads);
+  }, [discoveriesQuery, mutateCreateVendor, shouldLoadDiscoveries, tenantID, vendorsQuery]);
   const updateDecisionDraft = useCallback((urn: string, patch: Partial<DiscoveryDecisionDraft>) => {
     setDecisionDrafts((current) => ({
       ...current,
@@ -2134,11 +2175,19 @@ export default function VendorsPage() {
   return (
     <main className="space-y-6">
       <PageHeader
+        contractId="vendors"
         title="Vendors"
         description="Review vendors, owners, lifecycle state, evidence freshness, source discoveries, and open risk."
         action={
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => { void vendorsQuery.reload(); void discoveriesQuery.reload(); }} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+            <button
+              type="button"
+              onClick={() => {
+                void vendorsQuery.reload();
+                if (shouldLoadDiscoveries) void discoveriesQuery.reload();
+              }}
+              className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]"
+            >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
               Refresh
             </button>
@@ -2168,6 +2217,7 @@ export default function VendorsPage() {
         detailError={vendorDetailQuery.error}
         detailLoading={vendorDetailQuery.loading}
         linkedDiscoveries={linkedDiscoveriesForSelectedVendor}
+        linkedDiscoveriesLoaded={Boolean(discoveriesQuery.data)}
         onClose={closeVendorDrawer}
         onOpenUpload={openUploadForVendor}
         onQuickAction={runVendorQuickAction}
@@ -2183,7 +2233,7 @@ export default function VendorsPage() {
           recoveryDetail="Vendor records appear when the API is reachable."
         />
       )}
-      {discoveryError && (
+      {shouldLoadDiscoveries && discoveryError && (
         <ErrorBlock
           error={discoveryError}
           onRetry={() => { void discoveriesQuery.reload(); }}
@@ -2236,6 +2286,7 @@ export default function VendorsPage() {
 
       <VendorHealthStrip
         discoveries={discoveries}
+        discoveriesLoaded={shouldLoadDiscoveries}
         discoveryMetricState={discoveryMetricState}
         discoverySummary={discoverySummary}
         summary={summary}
@@ -2243,6 +2294,16 @@ export default function VendorsPage() {
         vendors={vendors}
       />
 
+      <VendorSectionSwitcher
+        activeSection={activeSection}
+        discoveriesLoaded={Boolean(discoveriesQuery.data)}
+        discoveryCount={discoveries.length}
+        onChange={setActiveSection}
+        uploadCount={vendorUploadHistory.length}
+        vendorCount={vendors.length}
+      />
+
+      {activeSection === "uploads" && (
       <div ref={uploadPanelRef}>
         <Panel
           title="Upload vendor document"
@@ -2370,7 +2431,9 @@ export default function VendorsPage() {
         <GRCUploadHistoryList uploads={vendorUploadHistory} />
         </Panel>
       </div>
+      )}
 
+      {activeSection !== "uploads" && (
       <section className="surface-panel p-4">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
           <label className={labelClass}>
@@ -2432,66 +2495,71 @@ export default function VendorsPage() {
         </details>
         <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </section>
+      )}
 
-      <DiscoverySourceSummary
-        loading={discoveriesQuery.loading && !discoveriesQuery.data}
-        onRefresh={() => { void discoveriesQuery.reload(); }}
-        onRunSource={(runSourceID) => { void runDiscoverySync(runSourceID).catch(() => undefined); }}
-        onSelectSource={setSourceID}
-        runSaving={syncSaving}
-        selectedSourceID={sourceID}
-        sources={discoverySources}
-        summary={discoverySummary}
-      />
-
-      <DuplicateQueue
-        decisionSaving={decisionSaving}
-        discoveries={discoveries}
-        duplicateMatchesByURN={duplicateMatchesByURN}
-        onDecision={setDiscoveryDecision}
-        onOpenVendor={openVendorDrawer}
-      />
-
-      {discoveriesQuery.loading && !discoveriesQuery.data ? (
-        <LoadingBlock label="Loading vendor discoveries..." />
-      ) : (
-        <div className="space-y-3">
-          <ResultLimitNotice
-            loaded={discoveries.length}
-            limit={GRC_DETAIL_LIMIT}
-            meta={discoverySummary ? { limit: GRC_DETAIL_LIMIT, returned: discoveries.length, total: discoverySummary.total_discoveries, truncated: discoverySummary.total_discoveries > discoveries.length } : undefined}
-            noun="discoveries"
+      {activeSection === "discoveries" && (
+        <>
+          <DiscoverySourceSummary
+            loading={discoveriesQuery.loading && !discoveriesQuery.data}
+            onRefresh={() => { void discoveriesQuery.reload(); }}
+            onRunSource={(runSourceID) => { void runDiscoverySync(runSourceID).catch(() => undefined); }}
+            onSelectSource={setSourceID}
+            runSaving={syncSaving}
+            selectedSourceID={sourceID}
+            sources={discoverySources}
+            summary={discoverySummary}
           />
-          <DiscoveryQueue
-            bulkDraft={bulkDraft}
-            bulkSaving={bulkSaving}
-            createSaving={createSaving}
-            decisionDrafts={decisionDrafts}
+
+          <DuplicateQueue
             decisionSaving={decisionSaving}
             discoveries={discoveries}
             duplicateMatchesByURN={duplicateMatchesByURN}
-            latestSync={latestSourceSync(discoverySources)}
-            onBulkAction={runBulkDiscoveryAction}
-            onBulkDraftChange={updateBulkDraft}
-            onClearSelection={clearDiscoverySelection}
-            onCreateVendor={createVendorFromDiscovery}
             onDecision={setDiscoveryDecision}
             onOpenVendor={openVendorDrawer}
-            onRefresh={() => { void discoveriesQuery.reload(); }}
-            onToggleDiscovery={toggleDiscoverySelection}
-            onToggleVisible={toggleVisibleDiscoveries}
-            onUpdateDraft={updateDecisionDraft}
-            selectedDiscoveryURNs={selectedDiscoveryURNs}
-            sourceCount={discoverySummary?.source_count ?? discoverySources.length}
           />
-        </div>
+
+          {discoveriesQuery.loading && !discoveriesQuery.data ? (
+            <LoadingBlock label="Loading vendor discoveries..." />
+          ) : (
+            <div className="space-y-3">
+              <ResultLimitNotice
+                loaded={discoveries.length}
+                limit={GRC_DETAIL_LIMIT}
+                meta={discoveryMeta}
+                noun="discoveries"
+              />
+              <DiscoveryQueue
+                bulkDraft={bulkDraft}
+                bulkSaving={bulkSaving}
+                createSaving={createSaving}
+                decisionDrafts={decisionDrafts}
+                decisionSaving={decisionSaving}
+                discoveries={discoveries}
+                duplicateMatchesByURN={duplicateMatchesByURN}
+                latestSync={latestSourceSync(discoverySources)}
+                onBulkAction={runBulkDiscoveryAction}
+                onBulkDraftChange={updateBulkDraft}
+                onClearSelection={clearDiscoverySelection}
+                onCreateVendor={createVendorFromDiscovery}
+                onDecision={setDiscoveryDecision}
+                onOpenVendor={openVendorDrawer}
+                onRefresh={() => { void discoveriesQuery.reload(); }}
+                onToggleDiscovery={toggleDiscoverySelection}
+                onToggleVisible={toggleVisibleDiscoveries}
+                onUpdateDraft={updateDecisionDraft}
+                selectedDiscoveryURNs={selectedDiscoveryURNs}
+                sourceCount={discoverySummary?.source_count ?? discoverySources.length}
+              />
+            </div>
+          )}
+        </>
       )}
 
-      {vendorsQuery.loading && !vendorsQuery.data ? (
+      {activeSection === "register" && (vendorsQuery.loading && !vendorsQuery.data ? (
         <LoadingBlock label="Loading vendors..." />
       ) : (
-        <VendorRegisterSection assuranceItems={assuranceItems} onOpenVendor={openVendorDrawer} summary={summary} vendors={vendors} />
-      )}
+        <VendorRegisterSection assuranceItems={assuranceItems} meta={vendorMeta} onOpenVendor={openVendorDrawer} vendors={vendors} />
+      ))}
     </main>
   );
 }
