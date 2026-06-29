@@ -21,6 +21,7 @@ const retainArtifacts = argSet.has("--artifacts") || process.env.CEREBRO_GRC_SCA
 const defaultRecordCount = quick ? 600 : 3000;
 const recordCount = positiveInteger(process.env.CEREBRO_GRC_SCALE_RECORDS, defaultRecordCount);
 const tenantID = "scale-tenant";
+const impactRootURN = `urn:cerebro:${tenantID}:service:service-root`;
 const generatedAt = "2026-06-28T12:00:00.000Z";
 const routeTimeoutMs = positiveInteger(process.env.CEREBRO_GRC_SCALE_ROUTE_TIMEOUT_MS, quick ? 30_000 : 60_000);
 const webReadyTimeoutMs = positiveInteger(process.env.CEREBRO_GRC_SCALE_WEB_READY_MS, 90_000);
@@ -73,6 +74,13 @@ const routeSpecs = [
     label: "Inventory",
     readySelector: "table.data-table",
     filterSelector: 'input[placeholder="Search..."]',
+    filterText: "asset 12",
+  },
+  {
+    route: `/impact?root_urn=${encodeURIComponent(impactRootURN)}`,
+    label: "Impact Map",
+    readySelector: 'input[placeholder="Search graph"]',
+    filterSelector: 'input[placeholder="Search graph"]',
     filterText: "asset 12",
   },
   {
@@ -387,6 +395,9 @@ function createMockApi({ bounded, recordCount: count, stats }) {
           summary: inventorySummary(allAssets),
           generated_at: generatedAt,
         });
+      }
+      if (normalizedPath === "grc/entities/_/impact") {
+        return sendJSON(response, stats, normalizedPath, entityImpactFixture(data, url.searchParams, bounded));
       }
       if (normalizedPath === "grc/frameworks") {
         return sendJSON(response, stats, normalizedPath, {
@@ -1036,6 +1047,58 @@ function inventorySummary(assets) {
     scoped_coverage_pct: total ? Math.round((inScope / total) * 100) : 0,
     assigned_coverage_pct: total ? Math.round((accountable / total) * 100) : 0,
     surface_counts: surfaceCounts,
+  };
+}
+
+function entityImpactFixture(data, searchParams, bounded) {
+  const rootURN = searchParams.get("root_urn")?.trim() || impactRootURN;
+  const allNeighbors = Array.from({ length: recordCount }, (_, index) => ({
+    urn: `urn:cerebro:${tenantID}:asset:asset-${index}`,
+    entity_type: ["service", "repository", "identity_user", "storage_bucket", "vendor"][index % 5],
+    label: `Impact asset ${String(index).padStart(5, "0")}`,
+    attributes: {
+      risk_score: String(30 + (index % 70)),
+      source_id: `source-${index % 8}`,
+      runtime_id: `runtime-${index % 32}`,
+    },
+  }));
+  const allRelations = allNeighbors.flatMap((node, index) => {
+    const direct = {
+      from_urn: rootURN,
+      relation: index % 3 === 0 ? "depends_on" : "affects",
+      to_urn: node.urn,
+      attributes: { risk_score: String(40 + (index % 60)) },
+    };
+    if (index === 0) return [direct];
+    return [
+      direct,
+      {
+        from_urn: allNeighbors[index - 1].urn,
+        relation: "related_to",
+        to_urn: node.urn,
+        attributes: { risk_score: String(20 + (index % 60)) },
+      },
+    ];
+  });
+  const limit = positiveInteger(searchParams.get("limit"), 75);
+  const neighbors = bounded ? allNeighbors.slice(0, limit) : allNeighbors;
+  const visibleURNs = new Set([rootURN, ...neighbors.map((node) => node.urn)]);
+  const relations = (bounded ? allRelations.filter((relation) => visibleURNs.has(relation.from_urn) && visibleURNs.has(relation.to_urn)).slice(0, limit * 2) : allRelations);
+  const findings = boundedList(data.findings, new URLSearchParams({ limit: String(Math.min(limit, 100)) }), bounded);
+  return {
+    entity_urn: rootURN,
+    graph: {
+      root: {
+        urn: rootURN,
+        entity_type: "service",
+        label: "Impact root",
+        attributes: { risk_score: "88", source_id: "source-root", runtime_id: "runtime-root" },
+      },
+      neighbors,
+      relations,
+    },
+    findings,
+    generated_at: generatedAt,
   };
 }
 

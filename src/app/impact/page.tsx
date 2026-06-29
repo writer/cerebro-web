@@ -7,8 +7,9 @@ import AskAboutLink from "@/components/ask/AskAboutLink";
 import FindingTable from "@/components/grc/FindingTable";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, RiskBadge } from "@/components/grc/Primitives";
-import { averageRiskScore, GRCEntityImpact, GRCFinding, riskSort, shortEntity } from "@/lib/grc";
+import { averageRiskScore, GRCEntityImpact, GRCFinding, GRCGraph, riskSort, shortEntity } from "@/lib/grc";
 import { grcEntityImpactPath, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { useQueryParamState } from "@/lib/query-params";
 import { metricValueForState, runtimeStateForError } from "@/lib/runtime-state";
 
@@ -16,6 +17,22 @@ type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
+const IMPACT_FINDING_LIMIT = GRC_DETAIL_LIMIT;
+const IMPACT_GRAPH_NEIGHBOR_LIMIT = 120;
+const IMPACT_GRAPH_RELATION_LIMIT = 240;
+
+const boundImpactGraph = (graph?: GRCGraph): GRCGraph | undefined => {
+  if (!graph) return undefined;
+  const neighbors = (graph.neighbors ?? []).slice(0, IMPACT_GRAPH_NEIGHBOR_LIMIT);
+  const visibleURNs = new Set([
+    graph.root?.urn,
+    ...neighbors.map((node) => node.urn),
+  ].filter(Boolean) as string[]);
+  const relations = (graph.relations ?? [])
+    .filter((relation) => visibleURNs.has(relation.from_urn) && visibleURNs.has(relation.to_urn))
+    .slice(0, IMPACT_GRAPH_RELATION_LIMIT);
+  return { ...graph, neighbors, relations };
+};
 
 export default function ImpactPage() {
   const [tenantID, setTenantID] = useState("");
@@ -35,9 +52,14 @@ export default function ImpactPage() {
     [debouncedLimit, debouncedTenantID, selectedRoot],
   );
   const { data, error, loading, reload } = useGRCQuery<GRCEntityImpact>(path);
-  const findings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
-  const nodeCount = (data?.graph?.neighbors?.length ?? 0) + (data?.graph?.root ? 1 : 0);
-  const relationCount = data?.graph?.relations?.length ?? 0;
+  const boundedImpactFindings = useMemo(
+    () => grcBoundedRows({ rows: data?.findings, limit: IMPACT_FINDING_LIMIT }),
+    [data?.findings],
+  );
+  const findings = useMemo(() => boundedImpactFindings.rows.slice().sort(riskSort), [boundedImpactFindings.rows]);
+  const graph = useMemo(() => boundImpactGraph(data?.graph), [data?.graph]);
+  const nodeCount = (graph?.neighbors?.length ?? 0) + (graph?.root ? 1 : 0);
+  const relationCount = graph?.relations?.length ?? 0;
   const loadError = fallbackFindings.error || error;
   const runtimeState = runtimeStateForError(loadError);
   const apiUnavailable = runtimeState === "unavailable";
@@ -117,7 +139,7 @@ export default function ImpactPage() {
             title="Relationships"
             action={selectedRoot ? <Link href={`/evidence?graph_root_urn=${encodeURIComponent(selectedRoot)}`} className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800">Evidence for root</Link> : undefined}
           >
-            <GraphViewer graph={data.graph} />
+            <GraphViewer graph={graph} />
           </Panel>
           <Panel title="Related Findings">
             <FindingTable findings={findings} empty="No findings directly attached to this entity." />
