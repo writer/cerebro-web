@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
-import FindingTable from "@/components/grc/FindingTable";
+import { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
 import { useApiKey } from "@/components/providers";
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ResultLimitNotice } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
@@ -27,7 +27,6 @@ const CONTROL_PROFILE_OPTIONS = [
   "nist-csf-20-core",
   "privacy-ai-governance",
 ];
-const INITIAL_CONTROL_RENDER_LIMIT = 50;
 const WORK_QUEUE_LIMIT = 12;
 const inputClass = "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-slate-500";
@@ -102,8 +101,7 @@ export default function ControlsPage() {
   const [profileID, setProfileID] = useQueryParamState("profile");
   const [framework, setFramework] = useQueryParamState("framework");
   const [controlID, setControlID] = useQueryParamState("control");
-  const [showAllControls, setShowAllControls] = useState(false);
-  const [expandedControlKey, setExpandedControlKey] = useState<string | null>(null);
+  const [selectedControlKey, setSelectedControlKey] = useState<string | null>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const selectedProfileID = profileID.trim() || DEFAULT_CONTROL_PROFILE_ID;
   const { data, error, loading, reload } = useGRCQuery<GRCControlEvidencePacketResponse>(
@@ -142,8 +140,8 @@ export default function ControlsPage() {
   }, [controlID, data?.controls, framework]);
   const { controls, critical, failing, missingEvidence, openFindings } = controlView;
   const selectedUpcomingFramework = isUpcomingGRCFramework(framework);
-  const visibleControls = showAllControls ? controls : controls.slice(0, INITIAL_CONTROL_RENDER_LIMIT);
-  const hiddenControlCount = controls.length - visibleControls.length;
+  const selectedControl = controls.find((control) => controlKey(control) === selectedControlKey) ?? controls[0] ?? null;
+  const selectedRegisterKey = selectedControl ? controlKey(selectedControl) : null;
   const queueControls = useMemo(
     () => controls.slice().sort((left, right) => {
       const leftRank = workQueueRank(left);
@@ -169,7 +167,7 @@ export default function ControlsPage() {
     { key: "framework", label: "Framework", value: framework, setValue: setFramework },
     { key: "control", label: "Control", value: controlID, setValue: setControlID },
   ]);
-  const auditPacketHref = (control: GRCControl) => {
+  const auditPacketHref = useCallback((control: GRCControl) => {
     const params = new URLSearchParams({
       profile: selectedProfileID,
       framework: control.framework_name,
@@ -177,8 +175,8 @@ export default function ControlsPage() {
     });
     if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
     return `/reports?${params.toString()}`;
-  };
-  const controlDetailHref = (control: GRCControl) => {
+  }, [selectedProfileID, tenantID]);
+  const controlDetailHref = useCallback((control: GRCControl) => {
     const params = new URLSearchParams({
       profile: selectedProfileID,
       framework: control.framework_name,
@@ -186,7 +184,70 @@ export default function ControlsPage() {
     });
     if (tenantID.trim()) params.set("tenant_id", tenantID.trim());
     return `/controls/detail?${params.toString()}`;
-  };
+  }, [selectedProfileID, tenantID]);
+  const controlRegisterColumns = useMemo<TableColumn<GRCControl>[]>(() => [
+    {
+      key: "control_id",
+      label: "Control",
+      render: (_value, control) => (
+        <div className="min-w-[16rem]">
+          <Link href={controlDetailHref(control)} className="font-mono text-[12px] font-semibold text-[var(--text-primary)] hover:text-[var(--primary)]">
+            {control.framework_name} {control.control_id}
+          </Link>
+          <div className="mt-0.5 line-clamp-2 text-[12px] text-[var(--text-muted)]">{control.title || control.family_name || "Control objective"}</div>
+        </div>
+      ),
+    },
+    { key: "status", label: "Status", render: (_value, control) => <Badge value={control.status} /> },
+    { key: "owner_domain", label: "Owner", render: (_value, control) => controlOwner(control) },
+    {
+      key: "evidence_items",
+      label: "Evidence",
+      render: (_value, control) => {
+        const progress = evidenceProgress(control);
+        return (
+          <div className="w-32">
+            <div className="flex items-center justify-between text-[12px] text-[var(--text-muted)]">
+              <span>{progress.current}/{progress.expected || progress.current}</span>
+              <span>{progress.percent}%</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+              <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.max(0, Math.min(100, progress.percent))}%` }} />
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "open_findings",
+      label: "Findings",
+      render: (_value, control) => (
+        <div className="text-[12px] text-[var(--text-secondary)]">
+          <div>{control.open_findings} open</div>
+          <div className="text-[var(--text-muted)]">{control.critical_findings} critical</div>
+        </div>
+      ),
+    },
+    { key: "evidence_quality", label: "Request", render: (_value, control) => <Badge value={evidenceRequestState(control)} /> },
+    {
+      key: "due_at",
+      label: "Due",
+      render: (_value, control) => {
+        const dueAt = earliestDueAt(control.findings);
+        return (
+          <div className="space-y-1">
+            <Badge value={dueState(dueAt)} />
+            <div className="text-[12px] text-[var(--text-muted)]">{dueAt ? displayDate(dueAt) : "No date"}</div>
+          </div>
+        );
+      },
+    },
+    { key: "recommendation", label: "Action", render: (_value, control) => <span className="text-[12px] text-[var(--text-secondary)]">{controlRecommendation(control)}</span> },
+  ], [controlDetailHref]);
+  const rawControlCount = data?.controls?.length ?? 0;
+  const controlListMeta = data && controls.length === rawControlCount
+    ? { limit: GRC_WORKLIST_LIMIT, returned: rawControlCount, total: data.packet.summary.total, truncated: data.packet.summary.total > rawControlCount }
+    : undefined;
   const packetParams = new URLSearchParams({ profile: selectedProfileID });
   if (tenantID.trim()) packetParams.set("tenant_id", tenantID.trim());
   if (framework.trim()) packetParams.set("framework", framework.trim());
@@ -321,86 +382,172 @@ export default function ControlsPage() {
       {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Controls will appear when the API is reachable." />}
 
       {data && !error && (
-        <div className="space-y-3">
-          <ResultLimitNotice
-            loaded={data.controls?.length ?? controls.length}
-            limit={GRC_WORKLIST_LIMIT}
-            noun="controls"
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <WorklistTable
+            title="Control register"
+            description={isRefreshing ? "Refreshing controls..." : "Select a row to inspect mapped findings and evidence gaps."}
+            rows={controls}
+            columns={controlRegisterColumns}
+            emptyMessage={selectedUpcomingFramework ? `${framework.trim()} is upcoming. It is not included in measured control evidence packets yet.` : "No controls match the current filters."}
+            searchPlaceholder="Filter loaded controls"
+            filterKeys={["framework_name", "control_id", "title", "family_name", "status", "owner_domain", "audit_summary", "reasons", "mapped_rules"]}
+            pageSize={25}
+            getRowKey={(control) => controlKey(control)}
+            selectedRowKey={selectedRegisterKey}
+            onRowClick={(control) => setSelectedControlKey(controlKey(control))}
+            resultLimit={GRC_WORKLIST_LIMIT}
+            resultMeta={controlListMeta}
+            resultNoun="controls"
+            tableContainerClassName="max-h-[38rem] overflow-auto"
+            action={<Link href={packetHref} className="rounded-md border border-slate-200 px-3 py-1.5 text-[12px] font-medium text-indigo-600 transition hover:border-indigo-200 hover:bg-indigo-50">Export packet</Link>}
           />
-          {visibleControls.map((control) => {
-            const key = `${control.framework_name}-${control.control_id}`;
-            const autoExpand = controls.length <= 3;
-            const show = autoExpand || expandedControlKey === key;
-            return (
-              <div key={key} className="rounded-lg border border-slate-200 bg-white">
-                <div className="flex items-center justify-between px-5 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <h3 className="text-[13px] font-semibold text-slate-900">{control.framework_name} {control.control_id}</h3>
-                      {(control.title || control.family_name) && <div className="mt-0.5 text-[12px] text-slate-500">{control.title || control.family_name}</div>}
-                    </div>
-                    <Badge value={control.status} />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-slate-500">
-                      {countLabel(control.open_findings, "finding")} &middot; {control.evidence_items} evidence &middot; {control.missing_evidence_items ?? 0} missing
-                      {typeof control.evidence_score === "number" ? ` · ${control.evidence_score} score` : ""}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedControlKey(show ? null : key)}
-                      className="rounded-md px-2 py-1 text-[12px] font-medium text-indigo-600 transition hover:bg-indigo-50"
-                    >
-                      {show ? "Hide" : "Show"}
-                    </button>
-                    <Link href={auditPacketHref(control)} className="rounded-md px-2 py-1 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50">
-                      Audit packet
-                    </Link>
-                    <Link href={controlDetailHref(control)} className="rounded-md px-2 py-1 text-[12px] font-medium text-indigo-600 transition hover:bg-indigo-50">
-                      Detail
-                    </Link>
-                  </div>
-                </div>
-                {show && (
-                  <div className="border-t border-slate-100 p-5">
-                    {(control.audit_summary || (control.reasons && control.reasons.length > 0)) && (
-                      <div className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
-                        {control.audit_summary || control.reasons?.[0]}
-                      </div>
-                    )}
-                    <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px] text-slate-500">
-                      {control.evidence_quality && <Badge value={control.evidence_quality} />}
-                      <span>{control.evidence_expectations ?? 0} expectations</span>
-                      <span>{control.stale_evidence_items ?? 0} stale</span>
-                      <span>{control.mapped_rules?.length ?? 0} mapped rules</span>
-                    </div>
-                    <FindingTable findings={(control.findings ?? []).slice().sort(riskSort)} empty="No findings mapped to this control." />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {hiddenControlCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAllControls(true)}
-              className="w-full rounded-lg border border-slate-200 bg-white py-3 text-[13px] font-medium text-indigo-600 transition hover:bg-slate-50"
-            >
-              Show {hiddenControlCount} more controls
-            </button>
-          )}
-          {controls.length === 0 && selectedUpcomingFramework && (
-            <div className="flex items-center justify-center rounded-lg border border-dashed border-violet-200 bg-violet-50/60 p-8 text-center text-[13px] text-violet-700">
-              {framework.trim()} is upcoming. It is discoverable for planning, but not yet included in measured compliance posture or audit packets.
-            </div>
-          )}
-          {controls.length === 0 && !selectedUpcomingFramework && (
-            <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-300 p-8 text-[13px] text-slate-500">
-              No controls match the current filters.
-            </div>
-          )}
+          <ControlDetailPanel
+            control={selectedControl}
+            auditPacketHref={selectedControl ? auditPacketHref(selectedControl) : ""}
+            controlDetailHref={selectedControl ? controlDetailHref(selectedControl) : ""}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+function ControlDetailPanel({
+  auditPacketHref,
+  control,
+  controlDetailHref,
+}: {
+  auditPacketHref: string;
+  control: GRCControl | null;
+  controlDetailHref: string;
+}) {
+  if (!control) {
+    return (
+      <aside className="surface-panel p-5">
+        <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">Control details</h2>
+        <p className="mt-2 text-[13px] leading-5 text-[var(--text-muted)]">
+          Select a control to inspect evidence gaps, mapped findings, and the next action.
+        </p>
+      </aside>
+    );
+  }
+
+  const dueAt = earliestDueAt(control.findings);
+  const findings = (control.findings ?? []).slice().sort(riskSort);
+  const visibleFindings = findings.slice(0, 5);
+  const hiddenFindingCount = findings.length - visibleFindings.length;
+  const progress = evidenceProgress(control);
+  const auditContext = control.audit_summary || control.reasons?.[0] || "No audit summary returned.";
+
+  return (
+    <aside className="surface-panel overflow-hidden xl:sticky xl:top-6 xl:self-start">
+      <div className="border-b border-[color:var(--border)] px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-mono text-[13px] font-semibold text-[var(--text-primary)]">
+              {control.framework_name} {control.control_id}
+            </h2>
+            <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--text-muted)]">
+              {control.title || control.family_name || "Control objective"}
+            </p>
+          </div>
+          <Badge value={control.status} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href={controlDetailHref} className="rounded-md border border-[color:var(--border)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--primary)] transition hover:border-[color:var(--border-strong)]">
+            Detail
+          </Link>
+          <Link href={auditPacketHref} className="rounded-md border border-[color:var(--border)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]">
+            Packet
+          </Link>
+        </div>
+      </div>
+
+      <div className="space-y-5 p-5">
+        <section>
+          <div className="flex items-center justify-between text-[12px]">
+            <h3 className="font-semibold text-[var(--text-primary)]">Evidence</h3>
+            <span className="text-[var(--text-muted)]">{progress.percent}% complete</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+            <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.max(0, Math.min(100, progress.percent))}%` }} />
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
+            <div>
+              <dt className="text-[var(--text-muted)]">Evidence</dt>
+              <dd className="font-medium text-[var(--text-primary)]">{countLabel(control.evidence_items, "item")}</dd>
+            </div>
+            <div>
+              <dt className="text-[var(--text-muted)]">Missing</dt>
+              <dd className="font-medium text-[var(--text-primary)]">{countLabel(control.missing_evidence_items ?? 0, "item")}</dd>
+            </div>
+            <div>
+              <dt className="text-[var(--text-muted)]">Stale</dt>
+              <dd className="font-medium text-[var(--text-primary)]">{countLabel(control.stale_evidence_items ?? 0, "item")}</dd>
+            </div>
+            <div>
+              <dt className="text-[var(--text-muted)]">Score</dt>
+              <dd className="font-medium text-[var(--text-primary)]">{typeof control.evidence_score === "number" ? control.evidence_score : "Not scored"}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="border-t border-[color:var(--border)] pt-4">
+          <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Next action</h3>
+          <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">{controlRecommendation(control)}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge value={evidenceRequestState(control)} />
+            <Badge value={dueState(dueAt)} />
+            <span className="rounded-full border border-[color:var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+              {dueAt ? displayDate(dueAt) : "No due date"}
+            </span>
+          </div>
+        </section>
+
+        <section className="border-t border-[color:var(--border)] pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Mapped findings</h3>
+            <span className="text-[11px] text-[var(--text-muted)]">{findings.length.toLocaleString()} total</span>
+          </div>
+          {visibleFindings.length > 0 ? (
+            <div className="mt-3 space-y-3">
+              {visibleFindings.map((finding) => (
+                <div key={finding.id} className="border-t border-[color:var(--border)] pt-3 first:border-t-0 first:pt-0">
+                  <div className="flex items-center gap-2">
+                    <RiskBadge score={finding.risk_score} />
+                    <Badge value={finding.severity} tone="severity" />
+                  </div>
+                  <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="mt-1 line-clamp-2 text-[12px] font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">
+                    {finding.title}
+                  </Link>
+                  <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{finding.id}</div>
+                </div>
+              ))}
+              {hiddenFindingCount > 0 && (
+                <p className="text-[12px] text-[var(--text-muted)]">
+                  {hiddenFindingCount.toLocaleString()} more mapped findings in the detail view.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="mt-2 text-[13px] text-[var(--text-muted)]">No findings mapped to this control.</p>
+          )}
+        </section>
+
+        <section className="border-t border-[color:var(--border)] pt-4">
+          <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Audit context</h3>
+          <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">{auditContext}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {control.evidence_quality && <Badge value={control.evidence_quality} />}
+            <span className="rounded-full border border-[color:var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+              {countLabel(control.evidence_expectations ?? 0, "expectation")}
+            </span>
+            <span className="rounded-full border border-[color:var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+              {countLabel(control.mapped_rules?.length ?? 0, "mapped rule")}
+            </span>
+          </div>
+        </section>
+      </div>
+    </aside>
   );
 }
