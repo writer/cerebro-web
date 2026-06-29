@@ -44,6 +44,13 @@ const routeSpecs = [
     filterText: "vendor 12",
   },
   {
+    route: "/connectors?tab=attention",
+    label: "Connectors",
+    readySelector: 'a[href*="/connectors/source-"]',
+    filterSelector: 'input[placeholder="Provider, source, capability"]:visible',
+    filterText: "source 12",
+  },
+  {
     route: "/risk-inbox",
     label: "Risk Inbox",
     readySelector: "table.data-table",
@@ -316,6 +323,26 @@ function createMockApi({ bounded, recordCount: count, stats }) {
       if (normalizedPath === "user/preferences") {
         return sendJSON(response, stats, normalizedPath, { tenant_id: tenantID, user_id: "scale-benchmark", preferences: {}, generated_at: generatedAt });
       }
+      if (normalizedPath === "connectors") {
+        return sendJSON(response, stats, normalizedPath, {
+          connectors: data.connectors,
+          runtimes: data.connectorRuntimes,
+          source_runtimes: data.connectorRuntimes,
+          tenant_id: tenantID,
+          runtime_store: "scale",
+          credential_transport: { available: true, algorithm: "sealed_box" },
+          credential_vault: { available: true, detail: "benchmark vault" },
+          generated_at: generatedAt,
+        });
+      }
+      if (normalizedPath === "connector-definitions") {
+        return sendJSON(response, stats, normalizedPath, {
+          definitions: [],
+          tenant_id: tenantID,
+          runtime_store: "scale",
+          generated_at: generatedAt,
+        });
+      }
       if (normalizedPath === "grc/vendors") {
         const vendors = boundedList(data.vendors, url.searchParams, bounded);
         return sendJSON(response, stats, normalizedPath, {
@@ -427,7 +454,9 @@ function makeScaleData(count) {
   const workQueue = Array.from({ length: count }, (_, index) => makePolicyWork(index));
   const documentWorkQueue = Array.from({ length: count }, (_, index) => makeDocumentWork(index));
   const inventoryAssets = Array.from({ length: count }, (_, index) => makeInventoryAsset(index));
-  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue, inventoryAssets };
+  const connectors = Array.from({ length: count }, (_, index) => makeConnector(index));
+  const connectorRuntimes = Array.from({ length: count }, (_, index) => makeConnectorRuntime(index));
+  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue, inventoryAssets, connectors, connectorRuntimes };
 }
 
 function makeVendor(index) {
@@ -664,6 +693,76 @@ function makeInventoryAsset(index) {
       framework_refs: index % 2 === 0 ? "SOC 2,FedRAMP Rev. 5" : "SOC 2",
       graph_size: String(recordCount),
     },
+  };
+}
+
+function makeConnector(index) {
+  const status = index % 5 === 0 ? "degraded" : index % 7 === 0 ? "needs_attention" : "connected";
+  return {
+    source_id: `source-${index}`,
+    name: `Source ${String(index).padStart(5, "0")}`,
+    display_name: `Source ${String(index).padStart(5, "0")}`,
+    description: "Synthetic connector generated for scale benchmark.",
+    status,
+    catalog_status: "catalog_ready",
+    auth_model: "api_key",
+    runtime_executable: true,
+    setup_allowed: true,
+    access_status: "available",
+    readiness_stage: "setup_enabled",
+    configured_runtimes: 1,
+    healthy_runtimes: status === "connected" ? 1 : 0,
+    needs_attention_runtimes: status === "connected" ? 0 : 1,
+    emitted_kinds: ["asset", "identity", "finding"],
+    catalog_categories: ["cloud", "identity"],
+    resource_families: [
+      {
+        id: `resource-family-${index}`,
+        label: `Resource family ${index % 20}`,
+        projection: { template: `scale.resource.${index % 20}` },
+      },
+    ],
+    integration_depth: {
+      resource_types: 1 + (index % 6),
+      coverage_dimensions: 2 + (index % 4),
+      high_value_families: index % 3,
+    },
+  };
+}
+
+function makeConnectorRuntime(index) {
+  const degraded = index % 5 === 0;
+  const stale = index % 7 === 0;
+  return {
+    id: `runtime-${index}`,
+    runtime_id: `runtime-${index}`,
+    source_id: `source-${index}`,
+    tenant_id: tenantID,
+    family: "default",
+    status: degraded ? "degraded" : stale ? "stale" : "healthy",
+    health: degraded ? "degraded" : stale ? "stale" : "healthy",
+    last_activity_at: isoDay(-1 * (index % 10)),
+    cursor_pending: stale,
+    checkpoint_cursor_present: !stale,
+    watermark_lag_seconds: stale ? 86_400 + index : 300,
+    schedule_context_configured: index % 11 !== 0,
+    latest_graph_run: {
+      id: `graph-run-${index}`,
+      status: degraded ? "failed" : "succeeded",
+      finished_at: isoDay(-1 * (index % 5)),
+      error: degraded ? "Synthetic graph projection failure" : undefined,
+      graph_nodes_after: 1000 + index,
+      graph_links_after: 2000 + index,
+    },
+    latest_finding_evaluation: {
+      id: `finding-eval-${index}`,
+      runtime_id: `runtime-${index}`,
+      status: degraded ? "failed" : "succeeded",
+      finished_at: isoDay(-1 * (index % 5)),
+      error: degraded ? "Synthetic finding evaluation failure" : undefined,
+      findings_emitted: index % 9,
+    },
+    config: {},
   };
 }
 
