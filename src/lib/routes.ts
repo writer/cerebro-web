@@ -125,6 +125,13 @@ export const operatorNavLinks: NavigationEntry[] = [
 
 const commandOnlyNavLinks: NavigationEntry[] = [
   {
+    label: "Members",
+    href: "/identity",
+    description: "Organizations, users, auth providers, roles, and login history.",
+    section: "Advanced",
+    keywords: ["members", "identity", "users", "organizations", "orgs", "okta", "oauth", "roles", "groups", "settings"],
+  },
+  {
     label: "Report schedules",
     href: "/reports/schedules",
     description: "Schedule reports on a fixed interval and review recent scheduled runs.",
@@ -185,6 +192,7 @@ routeLabels["/"] = "Home";
 routeLabels["/ask"] = "Ask";
 routeLabels["/evidence"] = "Evidence";
 routeLabels["/findings"] = "Finding detail";
+routeLabels["/identity"] = "Members";
 routeLabels["/connectors/builder"] = "Connector builder";
 routeLabels["/developer/agent-platform"] = "Agent platform";
 routeLabels["/developer/audit-log"] = "Audit log";
