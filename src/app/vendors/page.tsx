@@ -42,6 +42,7 @@ import {
 } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCFormMutation, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { riskBadgeClassFor } from "@/lib/grc-status";
+import { GRC_UPLOAD_FILE_HELP, grcUploadFileError } from "@/lib/grc-upload-limits";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -2063,6 +2064,15 @@ export default function VendorsPage() {
       setVendorUploadError("Select a vendor document.");
       return;
     }
+    const fileError = grcUploadFileError(vendorUploadFile);
+    if (fileError) {
+      setVendorUploadError(fileError);
+      setVendorUploadFile(null);
+      if (vendorUploadInputRef.current) {
+        vendorUploadInputRef.current.value = "";
+      }
+      return;
+    }
     const vendorName = vendorUploadName.trim() || vendorUploadFile.name.replace(/\.[^.]+$/, "");
     const body = new FormData();
     body.set("file", vendorUploadFile);
@@ -2242,12 +2252,21 @@ export default function VendorsPage() {
               type="file"
               accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
               onChange={(event) => {
-                setVendorUploadFile(event.target.files?.[0] ?? null);
+                const file = event.target.files?.[0] ?? null;
+                const fileError = grcUploadFileError(file);
                 setLastVendorUpload(null);
+                if (fileError) {
+                  setVendorUploadFile(null);
+                  event.currentTarget.value = "";
+                  setVendorUploadError(fileError);
+                  return;
+                }
+                setVendorUploadFile(file);
                 setVendorUploadError(null);
               }}
               className={inputClass}
             />
+            <span className="mt-1 block text-[12px] normal-case tracking-normal text-[var(--text-muted)]">{GRC_UPLOAD_FILE_HELP}</span>
           </label>
           <label className={labelClass}>
             Vendor name

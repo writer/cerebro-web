@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { GRC_UPLOAD_MAX_BYTES, GRC_UPLOAD_MAX_LABEL } from "./lib/grc-upload-limits";
+
 const MAX_API_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
-const MAX_GRC_UPLOAD_BODY_BYTES = 32 * 1024 * 1024; // 32 MB
 
 const GRC_UPLOAD_PATHS = new Set([
   "/api/cerebro/grc/policy-lifecycle/uploads",
@@ -34,14 +35,14 @@ function maxBodyBytesForRequest(request: NextRequest) {
     GRC_UPLOAD_PATHS.has(request.nextUrl.pathname) &&
     (request.headers.get("content-type") ?? "").toLowerCase().includes("multipart/form-data")
   ) {
-    return MAX_GRC_UPLOAD_BODY_BYTES;
+    return GRC_UPLOAD_MAX_BYTES;
   }
   return MAX_API_BODY_BYTES;
 }
 
 function bodyTooLargeMessage(maxBytes: number) {
-  if (maxBytes === MAX_GRC_UPLOAD_BODY_BYTES) {
-    return "Upload is larger than 32 MB.";
+  if (maxBytes === GRC_UPLOAD_MAX_BYTES) {
+    return `Upload is larger than ${GRC_UPLOAD_MAX_LABEL}.`;
   }
   return "Request body is larger than 2 MB.";
 }
