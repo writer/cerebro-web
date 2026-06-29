@@ -10,7 +10,7 @@ import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
-import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
+import { GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { controlMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
@@ -122,12 +122,18 @@ export default function ControlsPage() {
   const isRefreshing = loading && Boolean(data);
   const runtimeState = runtimeStateForError(error);
   const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
+  const boundedControlRows = useMemo(
+    () => grcBoundedRows({ rows: data?.controls, limit: GRC_WORKLIST_LIMIT, total: data?.packet?.summary?.total }),
+    [data?.controls, data?.packet?.summary?.total],
+  );
+  const loadedControls = boundedControlRows.rows;
+  const loadedControlMeta = data ? boundedControlRows.meta : undefined;
   const controlView = useMemo(() => {
     const fw = framework.trim().toLowerCase();
     const cf = controlID.trim().toLowerCase();
     const visible: GRCControl[] = [];
     let failing = 0, openFindings = 0, critical = 0, missingEvidence = 0;
-    (data?.controls ?? []).forEach((c) => {
+    loadedControls.forEach((c) => {
       if (fw && !controlMatchesFrameworkSegment(c, framework)) return;
       if (cf && !c.control_id.toLowerCase().includes(cf)) return;
       visible.push(c);
@@ -137,7 +143,7 @@ export default function ControlsPage() {
       missingEvidence += c.missing_evidence_items ?? 0;
     });
     return { controls: visible, critical, failing, missingEvidence, openFindings };
-  }, [controlID, data?.controls, framework]);
+  }, [controlID, framework, loadedControls]);
   const { controls, critical, failing, missingEvidence, openFindings } = controlView;
   const selectedUpcomingFramework = isUpcomingGRCFramework(framework);
   const selectedControl = controls.find((control) => controlKey(control) === selectedControlKey) ?? controls[0] ?? null;
@@ -157,9 +163,9 @@ export default function ControlsPage() {
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
-      ...(data?.controls ?? []).map((control) => control.framework_name).filter(Boolean),
+      ...loadedControls.map((control) => control.framework_name).filter(Boolean),
     ])),
-    [data?.controls],
+    [loadedControls],
   );
   const filterState = useGRCFilterState([
     { key: "tenant_id", label: "Tenant", value: tenantID, setValue: setTenantID },
@@ -244,9 +250,9 @@ export default function ControlsPage() {
     },
     { key: "recommendation", label: "Action", render: (_value, control) => <span className="text-[12px] text-[var(--text-secondary)]">{controlRecommendation(control)}</span> },
   ], [controlDetailHref]);
-  const rawControlCount = data?.controls?.length ?? 0;
+  const rawControlCount = loadedControls.length;
   const controlListMeta = data && controls.length === rawControlCount
-    ? { limit: GRC_WORKLIST_LIMIT, returned: rawControlCount, total: data.packet.summary.total, truncated: data.packet.summary.total > rawControlCount }
+    ? loadedControlMeta
     : undefined;
   const packetParams = new URLSearchParams({ profile: selectedProfileID });
   if (tenantID.trim()) packetParams.set("tenant_id", tenantID.trim());
