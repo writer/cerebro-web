@@ -683,7 +683,7 @@ function CreateVendorModal({
               <input
                 value={draft.websiteURL}
                 onChange={(event) => onUpdateDraft({ websiteURL: event.target.value })}
-                placeholder="https://vendor.company.com"
+                placeholder="Enter vendor website"
                 className={`${inputClass} ${websiteInvalid ? "border-red-400" : ""}`}
                 aria-invalid={websiteInvalid}
               />
@@ -2367,7 +2367,7 @@ export default function VendorsPage() {
           </label>
           <label className={labelClass}>
             Website
-            <input value={vendorUploadWebsite} onChange={(event) => setVendorUploadWebsite(event.target.value)} placeholder="https://vendor.company.com" className={inputClass} />
+            <input value={vendorUploadWebsite} onChange={(event) => setVendorUploadWebsite(event.target.value)} placeholder="Enter vendor website" className={inputClass} />
           </label>
           <button
             type="submit"
