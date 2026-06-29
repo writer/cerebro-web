@@ -618,6 +618,7 @@ export default function InventoryPage() {
   const inventoryError = categoriesQuery.error || assetsQuery.error;
   const runtimeState = runtimeStateForError(inventoryError);
   const inventoryLoading = categoriesQuery.loading || assetsQuery.loading;
+  const hasInventoryData = Boolean(assetsQuery.data);
   const metricState: RuntimeState = inventoryError ? runtimeState : inventoryLoading && !assetsQuery.data ? "loading" : "ready";
   const hasAssetData = assets.length > 0;
   const scopedCoverage = hasAssetData ? `${hasClientFilters ? Math.round(((assets.length - outOfScopeCount) / assets.length) * 100) : summary?.scoped_coverage_pct ?? 100}%` : "No data";
@@ -909,14 +910,14 @@ export default function InventoryPage() {
 
           {inventoryLoading && <LoadingBlock label="Loading inventory..." />}
 
-          {!inventoryError && (
+          {!inventoryError && hasInventoryData && (
             <ResultLimitNotice
               loaded={rawAssets.length}
               limit={GRC_WORKLIST_LIMIT}
               noun={recordNoun}
             />
           )}
-          {!inventoryError && hasClientFilters && (
+          {!inventoryError && hasInventoryData && hasClientFilters && (
             <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
               Framework and owner filters apply to loaded {recordNoun}.
             </div>

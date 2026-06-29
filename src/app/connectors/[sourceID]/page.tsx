@@ -844,7 +844,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
               {[
                 ["Last activity", summary.last_activity_at ? displayDate(summary.last_activity_at) : "None"],
                 ["Sync frequency", summary.sync_frequency_seconds ? `Every ${formatDuration(summary.sync_frequency_seconds)}` : "Deployment managed"],
-                ["Secret stores", readyStores.map((store) => store.label).join(", ") || "None advertised"],
+                ["Credential stores", readyStores.map((store) => store.label).join(", ") || "None advertised"],
                 ["Catalog", connector.catalog_status ? connectorCatalogStatusLabel(connector.catalog_status) : "Compiled source"],
                 ["Runtime", connectorRuntimeSurfaceLabel(connector)],
                 ["Access", connectorAccessStatusLabel(connector.access_status)],
