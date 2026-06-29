@@ -46,3 +46,15 @@
 - Ask surfaces should offer concrete information-retrieval questions, for example "Which risks have no owner?", "Which controls are failing?", "Which evidence is missing or stale?", and "What changed since last week?"
 - Avoid abstract copy such as "material exposure", "executive agenda", "blast radius", "workbench", "focused entry points", and repeated Cerebro-branded explanations. Use the user's nouns and the graph facts instead.
 - When changing the first screen, verify desktop and mobile screenshots for clipped text, overlap, empty-shell loading captures, console overlays, and accidental reintroduction of internal taxonomy language.
+
+## Graph-Scale UI Design
+
+- Assume Cerebro pages sit on a large security and compliance graph. Findings, evidence, controls, assets, vendors, policies, sources, events, claims, runs, and graph paths can reach thousands of records; never design these surfaces as if all items fit on one screen.
+- Before choosing a layout for a graph-backed page, inspect the existing API contract, fixtures, query limits, or available graph metadata to understand likely cardinality, record shape, and drilldown paths. Do not invent a small sample shape and then design around it.
+- Default high-volume pages to bounded worklists: server-side filters, explicit request limits, search over loaded rows, sortable tables, result-count copy, and clear export paths. Use card grids only for small summary sets, repeated dashboards, or genuinely visual objects.
+- For list pages, show the operator what is loaded versus what exists when metadata is available. Copy should say concrete states such as "Showing first N findings", "Showing N of M controls", or "Export loaded CSV"; avoid implying the page contains the full graph when it does not.
+- Use progressive disclosure for graph records: first show totals, health states, top blockers, owner gaps, freshness, severity, or readiness; then provide row detail, side panels, linked detail pages, packet exports, and graph-neighborhood views.
+- Large graph neighborhoods should be summarized and filtered before visualization. Cap rendered nodes and edges, show hidden/filtered counts, support search and type/risk filters, and link to inventory, evidence, impact, and ask flows for the selected node.
+- Filters must map to graph facts users recognize: tenant, source, runtime, framework, control, owner, severity, status, SLA, asset class, freshness, evidence type, and graph root. Prefer concrete nouns over internal pipeline terms.
+- Empty, loading, partial, and permission-denied states must be useful at scale. A loading state should not render dozens of placeholder boxes; a partial state should explain the loaded scope, cap, missing source, or retry action.
+- Keep public PR metadata high level when graph scale informed the design. Do not include concrete graph counts, resource labels, URNs, tenant details, source identifiers, or environment observations in public titles, bodies, comments, screenshots, or check summaries.
