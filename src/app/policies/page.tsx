@@ -41,6 +41,7 @@ import type {
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCFormMutation, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
+import { GRC_UPLOAD_FILE_HELP, grcUploadFileError } from "@/lib/grc-upload-limits";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -612,6 +613,15 @@ export default function PoliciesPage() {
       setPolicyUploadError("Select a policy document.");
       return;
     }
+    const fileError = grcUploadFileError(policyUploadFile);
+    if (fileError) {
+      setPolicyUploadError(fileError);
+      setPolicyUploadFile(null);
+      if (policyUploadInputRef.current) {
+        policyUploadInputRef.current.value = "";
+      }
+      return;
+    }
     const title = policyUploadTitle.trim() || policyUploadFile.name.replace(/\.[^.]+$/, "");
     const body = new FormData();
     body.set("file", policyUploadFile);
@@ -962,12 +972,21 @@ export default function PoliciesPage() {
               type="file"
               accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
               onChange={(event) => {
-                setPolicyUploadFile(event.target.files?.[0] ?? null);
+                const file = event.target.files?.[0] ?? null;
+                const fileError = grcUploadFileError(file);
                 setLastPolicyUpload(null);
+                if (fileError) {
+                  setPolicyUploadFile(null);
+                  event.currentTarget.value = "";
+                  setPolicyUploadError(fileError);
+                  return;
+                }
+                setPolicyUploadFile(file);
                 setPolicyUploadError(null);
               }}
               className={inputClass}
             />
+            <span className="mt-1 block text-[12px] normal-case tracking-normal text-slate-500">{GRC_UPLOAD_FILE_HELP}</span>
           </label>
           <label className={labelClass}>
             Policy name
