@@ -3,11 +3,12 @@
 import { ArrowRight, Bell, CheckCircle2, ClipboardList, Download, FileCheck2, FileText, GitCompare, History, ListChecks, RefreshCw, Search, Send, ShieldCheck, Upload, Users, X, XCircle } from "lucide-react";
 import Link from "next/link";
 import type { FormEvent } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { TableColumn } from "@/components/grc/DataTable";
 import { WorklistTable } from "@/components/grc/DataTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { GRCUploadErrorActions, GRCUploadFileInput, GRCUploadHistoryList, GRCUploadProgress, GRCUploadReceipt } from "@/components/grc/GRCUpload";
 import { useApiKey } from "@/components/providers";
 import { countLabel } from "@/lib/format";
 import type {
@@ -41,7 +42,8 @@ import type {
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCFormMutation, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
-import { GRC_UPLOAD_FILE_HELP, grcUploadFileError } from "@/lib/grc-upload-limits";
+import { grcUploadFileError } from "@/lib/grc-upload-limits";
+import { grcUploadHistoryKey, grcUploadHistoryWith, readGRCUploadHistory, writeGRCUploadHistory } from "@/lib/grc-upload-history";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
@@ -449,9 +451,11 @@ export default function PoliciesPage() {
   const [policyUploadOwner, setPolicyUploadOwner] = useState("");
   const [policyUploadReviewDue, setPolicyUploadReviewDue] = useState("");
   const [lastPolicyUpload, setLastPolicyUpload] = useState<GRCUploadResponse | null>(null);
+  const [policyUploadHistory, setPolicyUploadHistory] = useState<GRCUploadResponse[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const actionIdempotencyCounterRef = useRef(0);
+  const policyUploadFormRef = useRef<HTMLFormElement>(null);
   const policyUploadInputRef = useRef<HTMLInputElement>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedOwner = useDebouncedValue(owner.trim());
@@ -459,7 +463,7 @@ export default function PoliciesPage() {
   const activeRuleProfile = normalized(ruleProfile) === "strict" ? "strict" : "baseline";
   const { mutate: recordAction, saving: actionSaving, error: actionError, setError: setActionError } =
     useGRCMutation<GRCPolicyLifecycleActionResponse>();
-  const { mutate: uploadPolicyDocument, saving: policyUploadSaving, error: policyUploadError, setError: setPolicyUploadError } =
+  const { mutate: uploadPolicyDocument, saving: policyUploadSaving, error: policyUploadError, setError: setPolicyUploadError, cancel: cancelPolicyUpload } =
     useGRCFormMutation<GRCUploadResponse>();
   const { data, error, loading, reload } = useGRCQuery<GRCPolicyLifecycleResponse>(
     grcPath("/grc/policy-lifecycle", { tenant_id: debouncedTenantID, rule_profile: activeRuleProfile, limit: POLICY_LIFECYCLE_LIMIT }),
@@ -550,6 +554,22 @@ export default function PoliciesPage() {
   const summary = data?.summary;
   const generatedAt = data?.generated_at;
   const activeGapCount = (summary?.open_governance_gaps ?? 0) + (summary?.in_progress_governance_gaps ?? 0) + (summary?.acknowledged_governance_gaps ?? 0) + (summary?.snoozed_governance_gaps ?? 0);
+  const policyUploadStorageKey = useMemo(() => grcUploadHistoryKey("policy", tenantID), [tenantID]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPolicyUploadHistory(readGRCUploadHistory(window.localStorage, policyUploadStorageKey));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [policyUploadStorageKey]);
+
+  const rememberPolicyUpload = (upload: GRCUploadResponse) => {
+    setPolicyUploadHistory((current) => {
+      const next = grcUploadHistoryWith(current, upload);
+      writeGRCUploadHistory(window.localStorage, policyUploadStorageKey, next);
+      return next;
+    });
+  };
 
   const openAction = (action: GRCPolicyLifecycleAction) => {
     actionIdempotencyCounterRef.current += 1;
@@ -640,6 +660,7 @@ export default function PoliciesPage() {
         body,
       );
       setLastPolicyUpload(response);
+      rememberPolicyUpload(response);
       setPolicyUploadFile(null);
       setPolicyUploadTitle("");
       setPolicyUploadID("");
@@ -964,29 +985,29 @@ export default function PoliciesPage() {
         title="Upload policy document"
         action={<Upload className="h-4 w-4 text-slate-400" aria-hidden="true" />}
       >
-        <form onSubmit={submitPolicyUpload} className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,0.8fr)_minmax(0,0.75fr)_auto]">
+        <form ref={policyUploadFormRef} onSubmit={submitPolicyUpload} className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,0.8fr)_minmax(0,0.75fr)_auto]">
           <label className={labelClass}>
             File
-            <input
-              ref={policyUploadInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                const fileError = grcUploadFileError(file);
-                setLastPolicyUpload(null);
-                if (fileError) {
-                  setPolicyUploadFile(null);
-                  event.currentTarget.value = "";
-                  setPolicyUploadError(fileError);
-                  return;
-                }
+            <GRCUploadFileInput
+              file={policyUploadFile}
+              inputClassName={inputClass}
+              inputRef={policyUploadInputRef}
+              disabled={policyUploadSaving}
+              onAccepted={(file) => {
                 setPolicyUploadFile(file);
                 setPolicyUploadError(null);
+                setLastPolicyUpload(null);
               }}
-              className={inputClass}
+              onRejected={(message) => {
+                setPolicyUploadFile(null);
+                setLastPolicyUpload(null);
+                setPolicyUploadError(message);
+              }}
+              onClear={() => {
+                setPolicyUploadFile(null);
+                setPolicyUploadError(null);
+              }}
             />
-            <span className="mt-1 block text-[12px] normal-case tracking-normal text-slate-500">{GRC_UPLOAD_FILE_HELP}</span>
           </label>
           <label className={labelClass}>
             Policy name
@@ -1013,17 +1034,29 @@ export default function PoliciesPage() {
             {policyUploadSaving ? "Uploading" : "Upload policy"}
           </button>
         </form>
-        {policyUploadError && (
-          <div className="mt-3 text-[13px] font-medium text-red-700">
-            {policyUploadError}
-          </div>
+        {policyUploadSaving && <GRCUploadProgress onCancel={cancelPolicyUpload} />}
+        {policyUploadError && !policyUploadSaving && (
+          <GRCUploadErrorActions
+            error={policyUploadError}
+            canRetry={Boolean(policyUploadFile)}
+            onRetry={() => policyUploadFormRef.current?.requestSubmit()}
+          />
         )}
         {lastPolicyUpload && (
-          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-800">
-            Uploaded {lastPolicyUpload.file_name}. {countLabel(lastPolicyUpload.events.length, "event")} recorded.{" "}
-            {lastPolicyUpload.chunk_count ? `${countLabel(lastPolicyUpload.chunk_count, "chunk")} parsed.` : humanize(lastPolicyUpload.parse_status || "parsed")}
-          </div>
+          <GRCUploadReceipt
+            upload={lastPolicyUpload}
+            actions={(() => {
+              const policyID = lastPolicyUpload.events.find((event) => event.event_kind === "grc.policy")?.record_id;
+              if (!policyID) return null;
+              return (
+                <button type="button" onClick={() => setSelectedPolicyID(policyID)} className="inline-flex items-center rounded-md border border-emerald-300 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 transition hover:border-emerald-400 hover:text-emerald-950">
+                  Open policy
+                </button>
+              );
+            })()}
+          />
         )}
+        <GRCUploadHistoryList uploads={policyUploadHistory} />
       </Panel>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
