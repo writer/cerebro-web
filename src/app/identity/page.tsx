@@ -3,9 +3,10 @@
 import { useMemo, type ReactNode } from "react";
 import { Building2, RefreshCw, Search, ShieldCheck, UsersRound } from "lucide-react";
 
-import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { displayDate } from "@/lib/grc";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import {
   identityOrganizationsPath,
   identityProviderLabel,
@@ -59,6 +60,9 @@ const statusOptions = [
 
 const optionLabel = (options: Array<{ value: string; label: string }>, value: string) =>
   options.find((option) => option.value === value)?.label ?? value;
+
+const identityMetaTotal = (meta: { configured: number; loaded: number; persisted: number }) =>
+  Math.max(meta.loaded, meta.configured + meta.persisted);
 
 function isOAuthRecord(item: { provider?: string; source?: string }) {
   const provider = item.provider?.trim().toLowerCase();
@@ -267,7 +271,7 @@ export default function IdentityPage() {
     provider: debouncedProvider,
     source: debouncedSource,
     query: debouncedQuery,
-    limit: 500,
+    limit: GRC_WORKLIST_LIMIT,
   }));
   const usersQuery = useGRCQuery<IdentityUserListResponse>(identityUsersPath({
     tenantID: debouncedTenantID,
@@ -276,13 +280,21 @@ export default function IdentityPage() {
     source: debouncedSource,
     status: debouncedStatus,
     query: debouncedQuery,
-    limit: 500,
+    limit: GRC_WORKLIST_LIMIT,
   }));
 
   const orgsResponse = useMemo(() => normalizeIdentityOrganizationsResponse(orgsQuery.data), [orgsQuery.data]);
   const usersResponse = useMemo(() => normalizeIdentityUsersResponse(usersQuery.data), [usersQuery.data]);
-  const organizations = orgsResponse.organizations;
-  const users = usersResponse.users;
+  const boundedOrganizationRows = useMemo(
+    () => grcBoundedRows({ rows: orgsResponse.organizations, limit: GRC_WORKLIST_LIMIT, total: identityMetaTotal(orgsResponse.meta) }),
+    [orgsResponse.meta, orgsResponse.organizations],
+  );
+  const boundedUserRows = useMemo(
+    () => grcBoundedRows({ rows: usersResponse.users, limit: GRC_WORKLIST_LIMIT, total: identityMetaTotal(usersResponse.meta) }),
+    [usersResponse.meta, usersResponse.users],
+  );
+  const organizations = boundedOrganizationRows.rows;
+  const users = boundedUserRows.rows;
   const loading = (orgsQuery.loading && !orgsQuery.data) || (usersQuery.loading && !usersQuery.data);
   const error = orgsQuery.error || usersQuery.error;
   const runtimeState: RuntimeState = error ? runtimeStateForError(error) : loading ? "loading" : "ready";
@@ -385,10 +397,17 @@ export default function IdentityPage() {
         action={
           <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-muted)]">
             <ShieldCheck className="h-3.5 w-3.5" />
-            {activeTab === "orgs" ? orgsResponse.meta.loaded : usersResponse.meta.loaded} loaded
+            {activeTab === "orgs" ? organizations.length : users.length} shown
           </span>
         }
       >
+        <ResultLimitNotice
+          className="mb-3"
+          loaded={activeTab === "orgs" ? organizations.length : users.length}
+          meta={activeTab === "orgs" ? boundedOrganizationRows.meta : boundedUserRows.meta}
+          limit={GRC_WORKLIST_LIMIT}
+          noun={activeTab === "orgs" ? "organizations" : "users"}
+        />
         {activeTab === "orgs" ? <OrganizationsTable organizations={organizations} onViewUsers={showOrgUsers} /> : <UsersTable users={users} />}
       </Panel>
     </div>
