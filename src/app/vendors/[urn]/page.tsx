@@ -711,6 +711,7 @@ function ConsoleStatCard({
 function VendorHero({
   actions,
   assessmentProgress,
+  exposureDriverCount,
   exposureLevel,
   onOpenReview,
   onRefresh,
@@ -723,6 +724,7 @@ function VendorHero({
 }: {
   actions: GRCVendorAction[];
   assessmentProgress: number;
+  exposureDriverCount: number;
   exposureLevel: string;
   onOpenReview: () => void;
   onRefresh: () => void;
@@ -784,7 +786,7 @@ function VendorHero({
         <ConsoleStatCard label="Open risks" value={vendor.open_findings ?? 0} detail={`${vendor.high_findings ?? 0} high`} tone={(vendor.open_findings ?? 0) > 0 ? "danger" : "neutral"} />
         <ConsoleStatCard label="Assessment progress" value={`${assessmentProgress}%`} detail="complete" progress={assessmentProgress} tone="primary" />
         <ConsoleStatCard label="Pending actions" value={actions.length} detail={actions.length ? "Requires attention" : "No pending actions"} tone={actions.length ? "warning" : "neutral"} />
-        <ConsoleStatCard label="Exposure" value={humanize(exposureLevel)} detail={`${(vendor.exposure_reasons ?? []).length} drivers`} tone={["critical", "high"].includes(exposureLevel) ? "danger" : "neutral"} />
+        <ConsoleStatCard label="Exposure" value={humanize(exposureLevel)} detail={`${exposureDriverCount} driver${exposureDriverCount === 1 ? "" : "s"}`} tone={["critical", "high"].includes(exposureLevel) ? "danger" : "neutral"} />
       </div>
     </div>
   );
@@ -1115,6 +1117,7 @@ export default function VendorDetailPage() {
           <VendorHero
             actions={actions}
             assessmentProgress={assessmentProgress}
+            exposureDriverCount={exposureReasons.length}
             exposureLevel={exposureLevel}
             onOpenReview={() => setActiveTab("questionnaire")}
             onRefresh={() => { void detailQuery.reload(); }}

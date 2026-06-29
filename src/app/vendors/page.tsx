@@ -1299,7 +1299,7 @@ function VendorRegisterSection({
             {vendor.name || shortEntity(vendor.urn)}
           </button>
           <div className="mt-1 max-w-[22rem] truncate text-[12px] text-[var(--text-muted)]">
-            {vendor.services_provided || vendor.category || sourceLabel(vendor)}
+            {[vendor.services_provided || (vendor.category ? humanize(vendor.category) : ""), sourceLabel(vendor)].filter(Boolean).join(" | ")}
           </div>
         </div>
       ),
@@ -1309,10 +1309,11 @@ function VendorRegisterSection({
       label: "Status",
       render: (_value, vendor) => {
         const action = firstQueueAction(vendor);
+        const drivers = vendorRiskDrivers(vendor);
         return (
           <div className="min-w-[10rem]">
             <Badge value={vendor.lifecycle_state || vendor.status || "unknown"} />
-            <div className="mt-1 text-[12px] text-[var(--text-muted)]">{action?.label || "No queued action"}</div>
+            <div className="mt-1 text-[12px] text-[var(--text-muted)]">{action?.label || drivers[0] || "No queued action"}</div>
           </div>
         );
       },
@@ -1353,6 +1354,7 @@ function VendorRegisterSection({
       render: (_value, vendor) => (
         <div className="min-w-[11rem] text-[12px] text-[var(--text-muted)]">
           <div className="font-medium text-[var(--text-secondary)]">{freshnessLabel(vendor)}</div>
+          <div className="mt-1">{packetDetail(vendor)}</div>
           <div className="mt-1">{vendor.evidence_items ?? 0} evidence items</div>
         </div>
       ),
