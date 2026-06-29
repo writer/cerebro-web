@@ -1294,41 +1294,47 @@ function VendorRegisterSection({
       key: "name",
       label: "Vendor",
       render: (_value, vendor) => (
-        <div className="min-w-[18rem]">
-          <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="text-left font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
+        <div className="min-w-[16rem]">
+          <button type="button" onClick={() => onOpenVendor(vendor.urn)} className="block max-w-[20rem] truncate text-left text-[13px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
             {vendor.name || shortEntity(vendor.urn)}
           </button>
-          <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] text-[var(--text-muted)]">
-            {vendor.category && <span>{humanize(vendor.category)}</span>}
-            {vendor.status && <span>{humanize(vendor.status)}</span>}
-            {vendor.services_provided && <span className="max-w-[18rem] truncate">{vendor.services_provided}</span>}
+          <div className="mt-1 max-w-[22rem] truncate text-[12px] text-[var(--text-muted)]">
+            {[vendor.services_provided || (vendor.category ? humanize(vendor.category) : ""), sourceLabel(vendor)].filter(Boolean).join(" | ")}
           </div>
         </div>
       ),
     },
     {
-      key: "next_action",
-      label: "Next action",
+      key: "lifecycle_state",
+      label: "Status",
       render: (_value, vendor) => {
         const action = firstQueueAction(vendor);
         const drivers = vendorRiskDrivers(vendor);
         return (
-          <div className="min-w-[14rem] text-[12px] text-[var(--text-secondary)]">
-            {action && <div className="font-semibold text-[var(--text-primary)]">{action.label}</div>}
-            <div className={action ? "mt-2 flex flex-wrap gap-1.5" : "flex flex-wrap gap-1.5"}>
-              <RiskDriverList drivers={drivers} limit={3} />
-            </div>
+          <div className="min-w-[10rem]">
+            <Badge value={vendor.lifecycle_state || vendor.status || "unknown"} />
+            <div className="mt-1 text-[12px] text-[var(--text-muted)]">{action?.label || drivers[0] || "No queued action"}</div>
           </div>
         );
       },
     },
     {
+      key: "risk_level",
+      label: "Risk",
+      render: (_value, vendor) => (
+        <div className="min-w-[8rem]">
+          <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
+          <div className="mt-1 text-[12px] text-[var(--text-muted)]">{riskScoreLabel(vendor)}</div>
+        </div>
+      ),
+    },
+    {
       key: "owner",
       label: "Owner",
       render: (_value, vendor) => (
-        <div className="min-w-[12rem]">
-          <div className="text-[13px] font-medium text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
-          <div className="mt-1">{vendor.owner_state === "missing" ? <Badge value="missing" /> : <Badge value="assigned" />}</div>
+        <div className="min-w-[10rem]">
+          <div className="max-w-[12rem] truncate text-[13px] font-medium text-[var(--text-primary)]">{ownerLabel(vendor)}</div>
+          <div className="mt-1 text-[12px] text-[var(--text-muted)]">{vendor.owner_state === "missing" ? "Missing owner" : "Assigned"}</div>
         </div>
       ),
     },
@@ -1343,45 +1349,34 @@ function VendorRegisterSection({
       ),
     },
     {
-      key: "risk_level",
-      label: "Risk",
-      render: (_value, vendor) => (
-        <div className="min-w-[9rem]">
-          <VendorRiskBadge level={vendor.risk_score_level || vendor.risk_level} />
-          <div className="mt-1 text-[12px] font-semibold text-[var(--text-primary)]">{riskScoreLabel(vendor)}</div>
-        </div>
-      ),
-    },
-    {
       key: "evidence",
       label: "Evidence",
       render: (_value, vendor) => (
-        <div className="min-w-[13rem] text-[12px] text-[var(--text-muted)]">
-          <div>{freshnessLabel(vendor)}</div>
+        <div className="min-w-[11rem] text-[12px] text-[var(--text-muted)]">
+          <div className="font-medium text-[var(--text-secondary)]">{freshnessLabel(vendor)}</div>
           <div className="mt-1">{packetDetail(vendor)}</div>
           <div className="mt-1">{vendor.evidence_items ?? 0} evidence items</div>
         </div>
       ),
     },
     {
-      key: "source_id",
-      label: "Source",
+      key: "open_findings",
+      label: "Open risk",
       render: (_value, vendor) => (
-        <div className="min-w-[12rem] text-[12px] text-[var(--text-muted)]">
-          <div>{sourceLabel(vendor)}</div>
-          <div className="mt-1 font-mono">{shortEntity(vendor.runtime_id)}</div>
+        <div className="min-w-[7rem] text-[13px] font-semibold text-[var(--text-primary)]">
+          {(vendor.open_findings ?? 0).toLocaleString()}
         </div>
       ),
     },
   ], [onOpenVendor]);
   return (
     <WorklistTable
-      title="Vendor register"
-      description={`${countLabel(vendors.length, "vendor")} in this view. ${assuranceItems.toLocaleString()} linked GRC records.`}
+      title="Vendor status"
+      description={`${countLabel(vendors.length, "vendor")} in this view. ${assuranceItems.toLocaleString()} linked records.`}
       rows={vendors}
       columns={vendorColumns}
       emptyMessage="No vendors match these filters."
-      searchPlaceholder="Filter loaded vendors"
+      searchPlaceholder="Search loaded vendors"
       filterKeys={["urn", "name", "owner", "security_owner_user_id", "business_owner_user_id", "services_provided", "category", "provider", "source_id", "risk_level", "review_state", "owner_state", "lifecycle_state", "queue_reasons"]}
       pageSize={12}
       resultLimit={GRC_WORKLIST_LIMIT}
@@ -1392,11 +1387,11 @@ function VendorRegisterSection({
       tableContainerClassName="max-h-[36rem] overflow-auto"
       action={(
         <Link href="/inventory?entity_type=vendor" className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">
-          Open in inventory
+          Inventory
         </Link>
       )}
       rowActions={(vendor) => (
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={(event) => {
@@ -1406,7 +1401,7 @@ function VendorRegisterSection({
             className="secondary-button inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px]"
           >
             <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />
-            Review
+            Open
           </button>
           <Link
             href={vendorDetailHref(vendor)}
@@ -2173,11 +2168,11 @@ export default function VendorsPage() {
   };
 
   return (
-    <main className="space-y-6">
+    <main className="flex flex-col gap-6">
       <PageHeader
         contractId="vendors"
         title="Vendors"
-        description="Review vendors, owners, lifecycle state, evidence freshness, source discoveries, and open risk."
+        description="Vendor status, review ownership, and evidence readiness."
         action={
           <div className="flex flex-wrap gap-2">
             <button
