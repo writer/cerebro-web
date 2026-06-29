@@ -2,152 +2,219 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { CheckCircle2, RefreshCw, Search, ShieldAlert, ShieldCheck } from "lucide-react";
+import { CheckCircle2, RefreshCw, Search } from "lucide-react";
 
 import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { withQuery } from "@/lib/cerebro-data";
+import {
+  credentialStoreActionLabel,
+  credentialStoreIssueMatchesQuery,
+  credentialStoreMatchesQuery,
+  credentialStoreModeLabel,
+  credentialStoreResolverLabel,
+  credentialStoreUsageTotals,
+  type CredentialStoreBinding,
+  type CredentialStoreIssue,
+  type CredentialStoreListResponse,
+  type CredentialStoreOperational,
+} from "@/lib/credential-stores";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { normalizeCredentialStores, type ConnectorCredentialStoreMode, type ConnectorLibraryResponse, type NormalizedCredentialStore } from "@/lib/connectors";
 import { useQueryParamState } from "@/lib/query-params";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
 
-function storeModeLabel(mode: ConnectorCredentialStoreMode) {
-  if (mode === "encrypted_submission") return "Encrypted submission";
-  if (mode === "environment_managed") return "Environment managed";
-  return "Reference";
+function formatDate(value?: string) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
-function storeResolverLabel(store: NormalizedCredentialStore) {
-  if (store.mode === "encrypted_submission") return "Sealed vault";
-  if (store.nativeResolutionAvailable) return "Server resolver";
-  if (store.mode === "environment_managed") return "Runtime environment";
-  return "Environment projection";
+function compactList(values?: string[], fallback = "None") {
+  const visible = (values ?? []).filter(Boolean);
+  if (visible.length === 0) return fallback;
+  if (visible.length <= 3) return visible.join(", ");
+  return `${visible.slice(0, 3).join(", ")} +${visible.length - 3}`;
 }
 
-function storeMatchesQuery(store: NormalizedCredentialStore, query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  return [
-    store.id,
-    store.label,
-    store.shortLabel,
-    store.provider,
-    store.description,
-    store.detail,
-    store.disabledReason,
-    store.mode,
-    store.status,
-    store.referenceNamespaceTemplate,
-    store.referenceFieldTemplate,
-    store.referencePlaceholder,
-    ...store.referencePrefixes,
-  ]
-    .filter(Boolean)
-    .some((value) => String(value).toLowerCase().includes(normalized));
+function storePrimaryAction(store: CredentialStoreOperational) {
+  const issueAction = store.issues?.find((issue) => issue.next_action)?.next_action;
+  return credentialStoreActionLabel(issueAction || store.health.next_action);
 }
 
-function CredentialStoreCard({ store }: { store: NormalizedCredentialStore }) {
-  const referenceTemplate = store.referenceFieldTemplate || store.referencePlaceholder;
-  const setupSteps = store.setupSteps.slice(0, 4);
-  const requiredConfig = store.requiredConfig.slice(0, 6);
-  const status = store.available ? (store.default ? "default" : "ready") : "not_configured";
+function flattenBindings(stores: CredentialStoreOperational[]) {
+  return stores.flatMap((store) => (store.bindings ?? []).map((binding) => ({
+    ...binding,
+    credential_store_label: store.store.label,
+  })));
+}
+
+function StoreTable({ stores }: { stores: CredentialStoreOperational[] }) {
+  if (stores.length === 0) return <EmptyBlock label="No credential stores match these filters." />;
 
   return (
-    <article className={`surface-panel border-l-[3px] ${store.available ? "border-l-emerald-500" : "border-l-amber-500"} p-4`}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex h-10 min-w-12 shrink-0 items-center justify-center rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-2 text-[11px] font-semibold text-[var(--text-secondary)]">
-            {store.shortLabel}
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-[15px] font-semibold leading-5 text-[var(--text-primary)]">{store.label}</h2>
-              <Badge value={status} />
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
-              <span>{store.provider}</span>
-              <span aria-hidden="true">·</span>
-              <span>{storeModeLabel(store.mode)}</span>
-              <span aria-hidden="true">·</span>
-              <span>{storeResolverLabel(store)}</span>
-            </div>
-            <p className="mt-2 max-w-3xl text-[13px] leading-5 text-[var(--text-secondary)]">
-              {store.description}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <span className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold ${
-            store.available
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-100"
-              : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-100"
-          }`}>
-            {store.available ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
-            {store.available ? store.detail : store.disabledReason}
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
-        <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Accepted prefixes</div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {store.referencePrefixes.length > 0 ? store.referencePrefixes.map((prefix) => (
-              <code key={prefix} className="rounded bg-[var(--surface)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--text-secondary)]">{prefix}</code>
-            )) : <span className="text-[12px] text-[var(--text-muted)]">Submitted directly</span>}
-          </div>
-        </div>
-        <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Namespace</div>
-          <div className="mt-2 break-all font-mono text-[11px] text-[var(--text-secondary)]">
-            {store.referenceNamespaceTemplate || (store.mode === "encrypted_submission" ? "Cerebro vault" : "Not advertised")}
-          </div>
-        </div>
-        <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Reference format</div>
-          <div className="mt-2 break-all font-mono text-[11px] text-[var(--text-secondary)]">
-            {referenceTemplate || "Not required"}
-          </div>
-        </div>
-      </div>
-
-      {(requiredConfig.length > 0 || setupSteps.length > 0) && (
-        <details className="mt-4 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2">
-          <summary className="cursor-pointer text-[12px] font-semibold text-[var(--text-secondary)]">Backend setup</summary>
-          <div className="mt-3 grid gap-4 lg:grid-cols-2">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Required config</div>
-              <div className="mt-2 grid gap-2">
-                {requiredConfig.length > 0 ? requiredConfig.map((field) => (
-                  <div key={field.env || field.label} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="text-[12px] font-semibold text-[var(--text-primary)]">{field.label || field.env}</div>
-                      {field.env && <code className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">{field.env}</code>}
+    <div className="overflow-auto">
+      <table className="w-full min-w-[980px] text-left text-[12px]">
+        <thead className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+          <tr>
+            <th className="px-3 py-2 font-semibold">Store</th>
+            <th className="px-3 py-2 font-semibold">Status</th>
+            <th className="px-3 py-2 font-semibold">Use</th>
+            <th className="px-3 py-2 font-semibold">Reference contract</th>
+            <th className="px-3 py-2 font-semibold">Backend config</th>
+            <th className="px-3 py-2 font-semibold">Action</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[color:var(--border)]">
+          {stores.map((item) => {
+            const requiredConfig = item.store.required_config ?? [];
+            const prefixes = item.store.reference_prefixes ?? [];
+            return (
+              <tr key={item.store.id} className="align-top">
+                <td className="px-3 py-3">
+                  <div className="font-semibold text-[var(--text-primary)]">{item.store.label}</div>
+                  <div className="mt-1 text-[11px] text-[var(--text-muted)]">{item.store.provider} / {credentialStoreModeLabel(item.store.mode)}</div>
+                  <div className="mt-1 max-w-[22rem] text-[11px] leading-4 text-[var(--text-secondary)]">{item.store.description}</div>
+                </td>
+                <td className="px-3 py-3">
+                  <Badge value={item.health.status} />
+                  <div className="mt-1 max-w-[14rem] text-[11px] leading-4 text-[var(--text-muted)]">{item.health.detail || item.store.detail || "No status detail"}</div>
+                </td>
+                <td className="px-3 py-3 text-[var(--text-secondary)]">
+                  <div>{item.usage.connections} connections</div>
+                  <div>{item.usage.credentials} credentials</div>
+                  <div>{item.usage.field_references} field references</div>
+                  {item.usage.issues > 0 && <div className="mt-1 font-semibold text-amber-700 dark:text-amber-200">{item.usage.issues} issues</div>}
+                </td>
+                <td className="px-3 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {prefixes.length > 0 ? prefixes.map((prefix) => (
+                      <code key={prefix} className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">{prefix}</code>
+                    )) : <span className="text-[11px] text-[var(--text-muted)]">Direct submission</span>}
+                  </div>
+                  <div className="mt-2 max-w-[18rem] break-all font-mono text-[11px] text-[var(--text-muted)]">
+                    {item.store.reference_field_template || item.store.reference_placeholder || "No reference required"}
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  {requiredConfig.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {requiredConfig.slice(0, 4).map((field) => (
+                        <code key={field.env || field.label} className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
+                          {field.env || field.label}
+                        </code>
+                      ))}
+                      {requiredConfig.length > 4 && <span className="text-[11px] text-[var(--text-muted)]">+{requiredConfig.length - 4}</span>}
                     </div>
-                    {field.description && <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{field.description}</div>}
-                  </div>
-                )) : <div className="text-[12px] text-[var(--text-muted)]">No backend config fields advertised.</div>}
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Setup steps</div>
-              <div className="mt-2 grid gap-2">
-                {setupSteps.length > 0 ? setupSteps.map((step, index) => (
-                  <div key={step.id || step.label || index} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] p-3">
-                    <div className="text-[12px] font-semibold text-[var(--text-primary)]">{step.label}</div>
-                    {step.description && <div className="mt-1 text-[11px] leading-4 text-[var(--text-muted)]">{step.description}</div>}
-                    {step.command && <code className="mt-2 block overflow-x-auto rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{step.command}</code>}
-                  </div>
-                )) : <div className="text-[12px] text-[var(--text-muted)]">No setup steps advertised.</div>}
-              </div>
-            </div>
-          </div>
-        </details>
-      )}
-    </article>
+                  ) : (
+                    <span className="text-[11px] text-[var(--text-muted)]">No required backend config</span>
+                  )}
+                </td>
+                <td className="px-3 py-3 text-[var(--text-secondary)]">{storePrimaryAction(item)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function IssueTable({ issues }: { issues: CredentialStoreIssue[] }) {
+  if (issues.length === 0) return <EmptyBlock label="No credential store issues for these filters." />;
+
+  return (
+    <div className="overflow-auto">
+      <table className="w-full min-w-[860px] text-left text-[12px]">
+        <thead className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+          <tr>
+            <th className="px-3 py-2 font-semibold">Issue</th>
+            <th className="px-3 py-2 font-semibold">Store</th>
+            <th className="px-3 py-2 font-semibold">Runtime</th>
+            <th className="px-3 py-2 font-semibold">Credential</th>
+            <th className="px-3 py-2 font-semibold">Action</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[color:var(--border)]">
+          {issues.map((issue) => (
+            <tr key={issue.id} className="align-top">
+              <td className="px-3 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge value={issue.status} tone={issue.severity === "error" ? "severity" : "status"} />
+                  {issue.field && <code className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">{issue.field}</code>}
+                </div>
+                <div className="mt-1 max-w-[28rem] text-[12px] leading-5 text-[var(--text-secondary)]">{issue.detail}</div>
+              </td>
+              <td className="px-3 py-3 text-[var(--text-secondary)]">{issue.credential_store_id || "Unassigned"}</td>
+              <td className="px-3 py-3">
+                <div className="font-mono text-[11px] text-[var(--text-secondary)]">{issue.runtime_id || "No runtime"}</div>
+                {issue.source_id && <div className="mt-1 text-[11px] text-[var(--text-muted)]">{issue.source_id}</div>}
+              </td>
+              <td className="px-3 py-3 font-mono text-[11px] text-[var(--text-secondary)]">{issue.credential_id || "No credential"}</td>
+              <td className="px-3 py-3 text-[var(--text-secondary)]">{credentialStoreActionLabel(issue.next_action)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BindingTable({ bindings }: { bindings: Array<CredentialStoreBinding & { credential_store_label?: string }> }) {
+  if (bindings.length === 0) return <EmptyBlock label="No runtime bindings for these filters." />;
+
+  return (
+    <div className="overflow-auto">
+      <table className="w-full min-w-[980px] text-left text-[12px]">
+        <thead className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+          <tr>
+            <th className="px-3 py-2 font-semibold">Source runtime</th>
+            <th className="px-3 py-2 font-semibold">Store</th>
+            <th className="px-3 py-2 font-semibold">Fields</th>
+            <th className="px-3 py-2 font-semibold">Resolver</th>
+            <th className="px-3 py-2 font-semibold">Credential</th>
+            <th className="px-3 py-2 font-semibold">Validation</th>
+            <th className="px-3 py-2 font-semibold">Action</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[color:var(--border)]">
+          {bindings.map((binding) => (
+            <tr key={binding.id} className="align-top">
+              <td className="px-3 py-3">
+                <div className="font-semibold text-[var(--text-primary)]">{binding.source_name || binding.source_id || "Unknown source"}</div>
+                <div className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">{binding.runtime_id || "No runtime"}</div>
+                {binding.tenant_id && <div className="mt-1 text-[11px] text-[var(--text-muted)]">{binding.tenant_id}</div>}
+              </td>
+              <td className="px-3 py-3">
+                <div className="text-[var(--text-secondary)]">{binding.credential_store_label || binding.credential_store_id}</div>
+                <div className="mt-1 text-[11px] text-[var(--text-muted)]">{binding.auth_method || "Unknown auth"}</div>
+              </td>
+              <td className="px-3 py-3">
+                <div className="text-[var(--text-secondary)]">{compactList(binding.fields, "No fields")}</div>
+                <div className="mt-1 text-[11px] text-[var(--text-muted)]">{compactList(binding.reference_prefixes, "No references")}</div>
+              </td>
+              <td className="px-3 py-3 text-[var(--text-secondary)]">{credentialStoreResolverLabel(binding.resolver)}</td>
+              <td className="px-3 py-3">
+                <div className="font-mono text-[11px] text-[var(--text-secondary)]">{binding.credential_id || "Reference only"}</div>
+                {binding.credential_status && <div className="mt-1"><Badge value={binding.credential_status} /></div>}
+              </td>
+              <td className="px-3 py-3 text-[var(--text-secondary)]">
+                <div>{formatDate(binding.last_validated_at)}</div>
+                {binding.last_used_at && <div className="mt-1 text-[11px] text-[var(--text-muted)]">Used {formatDate(binding.last_used_at)}</div>}
+              </td>
+              <td className="px-3 py-3 text-[var(--text-secondary)]">{credentialStoreActionLabel(binding.next_action)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -155,17 +222,29 @@ export default function CredentialStoresPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [storeQuery, setStoreQuery] = useQueryParamState("q");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
+  const debouncedStoreQuery = useDebouncedValue(storeQuery.trim());
 
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
-  const stores = useMemo(() => normalizeCredentialStores(libraryQuery.data), [libraryQuery.data]);
-  const visibleStores = useMemo(() => stores.filter((store) => storeMatchesQuery(store, storeQuery)), [storeQuery, stores]);
-  const readyStores = stores.filter((store) => store.available);
-  const defaultStore = stores.find((store) => store.default);
-  const nativeResolverCount = stores.filter((store) => store.nativeResolutionAvailable).length;
-  const setupCount = stores.length - readyStores.length;
-  const loading = libraryQuery.loading && !libraryQuery.data;
-  const runtimeState = runtimeStateForError(libraryQuery.error);
-  const metricState: RuntimeState = libraryQuery.error ? runtimeState : loading ? "loading" : "ready";
+  const path = withQuery("/credential-stores", { tenant_id: debouncedTenantID, limit: 1000 });
+  const storesQuery = useGRCQuery<CredentialStoreListResponse>(path);
+  const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
+  const allIssues = useMemo(() => storesQuery.data?.issues ?? [], [storesQuery.data?.issues]);
+  const visibleStores = useMemo(
+    () => stores.filter((store) => credentialStoreMatchesQuery(store, debouncedStoreQuery)),
+    [debouncedStoreQuery, stores],
+  );
+  const visibleStoreIDs = useMemo(() => new Set(visibleStores.map((store) => store.store.id)), [visibleStores]);
+  const issues = useMemo(
+    () => allIssues.filter((issue) => {
+      if (!credentialStoreIssueMatchesQuery(issue, debouncedStoreQuery)) return false;
+      return !issue.credential_store_id || visibleStoreIDs.has(issue.credential_store_id);
+    }),
+    [allIssues, debouncedStoreQuery, visibleStoreIDs],
+  );
+  const bindings = useMemo(() => flattenBindings(visibleStores).slice(0, 100), [visibleStores]);
+  const totals = useMemo(() => credentialStoreUsageTotals(stores), [stores]);
+  const loading = storesQuery.loading && !storesQuery.data;
+  const runtimeState = runtimeStateForError(storesQuery.error);
+  const metricState: RuntimeState = storesQuery.error ? runtimeState : loading ? "loading" : "ready";
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Search", value: storeQuery, onClear: () => setStoreQuery("") },
@@ -176,14 +255,14 @@ export default function CredentialStoresPage() {
       <PageHeader
         contractId="credential-stores"
         title="Credential stores"
-        description="Check store readiness, default routing, accepted reference formats, and backend setup requirements."
+        description="Review store readiness, runtime bindings, credential records, and backend setup issues."
         action={
           <div className="flex flex-wrap gap-2">
             <Link href={`/connectors${debouncedTenantID ? `?tenant_id=${encodeURIComponent(debouncedTenantID)}&tab=available` : "?tab=available"}`} className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
               <CheckCircle2 className="h-4 w-4" />
-              Add source
+              Connect source
             </Link>
-            <button type="button" onClick={() => void libraryQuery.reload()} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
+            <button type="button" onClick={() => void storesQuery.reload()} className="primary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
               <RefreshCw className="h-4 w-4" />
               Refresh
             </button>
@@ -192,23 +271,23 @@ export default function CredentialStoresPage() {
       />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Ready stores" value={readyStores.length} detail={`${stores.length} advertised`} intent={readyStores.length > 0 ? "success" : "warning"} state={metricState} />
-        <MetricCard label="Default store" value={defaultStore?.shortLabel || "None"} detail={defaultStore?.label || "No default ready"} intent={defaultStore?.available ? "success" : "warning"} state={metricState} />
-        <MetricCard label="Server resolvers" value={nativeResolverCount} detail="resolve references at runtime" intent={nativeResolverCount > 0 ? "success" : "neutral"} state={metricState} />
-        <MetricCard label="Need setup" value={setupCount} detail="stores not ready" intent={setupCount > 0 ? "warning" : "success"} state={metricState} />
+        <MetricCard label="Stores in use" value={totals.storesInUse} detail={`${totals.readyStores} ready`} intent={totals.storesInUse > 0 ? "success" : "neutral"} state={metricState} />
+        <MetricCard label="Runtime bindings" value={totals.bindings} detail={`${totals.fieldReferences} field references`} intent={totals.bindings > 0 ? "success" : "neutral"} state={metricState} />
+        <MetricCard label="Credential records" value={totals.credentials} detail={storesQuery.data?.credential_store_status || "unknown"} state={metricState} />
+        <MetricCard label="Open issues" value={totals.issues} detail={storesQuery.data?.runtime_store_status || "runtime store unknown"} intent={totals.issues > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
       <section className="surface-panel p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(160px,0.75fr)_minmax(220px,1.25fr)]">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
           <label className={labelClass}>
-            Search credential stores
+            Search stores, runtimes, fields
             <div className="relative mt-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
                 value={storeQuery}
                 onChange={(event) => setStoreQuery(event.target.value)}
-                placeholder="Store, provider, prefix, status"
+                placeholder="Store, runtime, credential, field"
                 className="control-input w-full px-9 py-2 text-[13px]"
               />
             </div>
@@ -218,19 +297,67 @@ export default function CredentialStoresPage() {
       </section>
 
       {loading && <LoadingBlock label="Loading credential stores..." />}
-      {libraryQuery.error && <ErrorBlock error={libraryQuery.error} onRetry={() => void libraryQuery.reload()} recoveryDetail="Credential store status will appear when the connector API is reachable." />}
+      {storesQuery.error && <ErrorBlock error={storesQuery.error} onRetry={() => void storesQuery.reload()} recoveryDetail="Credential store data appears when /credential-stores is reachable." />}
 
       <Panel
-        title="Stores"
-        action={<span className="text-[12px] text-[var(--text-muted)]">{visibleStores.length} shown</span>}
+        title="Store Health"
+        action={<span className="text-[12px] text-[var(--text-muted)]">{visibleStores.length} stores</span>}
       >
-        <div className="space-y-3">
-          {visibleStores.map((store) => (
-            <CredentialStoreCard key={store.id} store={store} />
-          ))}
-          {visibleStores.length === 0 && <EmptyBlock label="No credential stores match these filters." />}
-        </div>
+        <StoreTable stores={visibleStores} />
       </Panel>
+
+      <Panel
+        title="Open Issues"
+        action={<span className="text-[12px] text-[var(--text-muted)]">{issues.length} issues</span>}
+      >
+        <IssueTable issues={issues} />
+      </Panel>
+
+      <Panel
+        title="Runtime Bindings"
+        action={<span className="text-[12px] text-[var(--text-muted)]">{bindings.length} shown</span>}
+      >
+        <BindingTable bindings={bindings} />
+      </Panel>
+
+      {stores.some((store) => (store.store.setup_steps ?? []).length > 0) && (
+        <Panel title="Backend Setup">
+          <div className="grid gap-3 lg:grid-cols-2">
+            {visibleStores.filter((store) => (store.store.setup_steps ?? []).length > 0 || (store.store.required_config ?? []).length > 0).map((item) => (
+              <section key={item.store.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-[13px] font-semibold text-[var(--text-primary)]">{item.store.label}</h2>
+                  <Badge value={item.health.status} />
+                </div>
+                {(item.store.required_config ?? []).length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Config</div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(item.store.required_config ?? []).map((field) => (
+                        <code key={field.env || field.label} className="rounded bg-[var(--surface)] px-1.5 py-0.5 text-[11px] text-[var(--text-secondary)]">
+                          {field.env || field.label}
+                        </code>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(item.store.setup_steps ?? []).length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Steps</div>
+                    {(item.store.setup_steps ?? []).slice(0, 3).map((step) => (
+                      <div key={step.id || step.label} className="text-[12px] leading-5 text-[var(--text-secondary)]">
+                        <span className="font-semibold text-[var(--text-primary)]">{step.label}</span>
+                        {step.description && <span> / {step.description}</span>}
+                        {step.command && <code className="mt-1 block overflow-x-auto rounded bg-[var(--surface)] px-2 py-1 text-[11px]">{step.command}</code>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }
