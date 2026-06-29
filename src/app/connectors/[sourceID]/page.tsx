@@ -23,9 +23,10 @@ import { CoverageMetadata, CoverageMetadataList } from "@/components/connectors/
 import ConnectorDiagnosticTimelinePanel from "@/components/connectors/ConnectorDiagnosticTimeline";
 import ConnectorSetupForm from "@/components/connectors/ConnectorSetupForm";
 import { useApiKey } from "@/components/providers";
-import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, Panel } from "@/components/grc/Primitives";
+import { Badge, EmptyBlock, ErrorBlock, LoadingBlock, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { displayDate, humanize } from "@/lib/grc";
 import { formatDuration } from "@/lib/mission-control";
 import {
@@ -75,6 +76,7 @@ const tabs: Array<{ id: DetailTab; label: string; icon: ReactNode }> = [
 
 const labelClass = "text-[11px] font-semibold text-[var(--text-muted)]";
 const inputClass = "control-input mt-1 w-full px-3 py-2 text-[13px]";
+const CONNECTOR_DETAIL_KIND_LIMIT = 24;
 
 function ProviderMark({ connector }: { connector: ConnectorCatalogEntry }) {
   const meta = connectorDisplayMetadata(connector);
@@ -332,6 +334,7 @@ function ScopeListBlock({ title, items, mono = false }: { title: string; items: 
 
 function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
   const kinds = connector.emitted_kinds ?? [];
+  const boundedKinds = grcBoundedRows({ rows: kinds, limit: CONNECTOR_DETAIL_KIND_LIMIT });
   const resourceTypes = connectorResourceTypes(connector, 12);
   if (kinds.length === 0 && resourceTypes.length === 0) return <EmptyBlock label="No emitted kinds or resource types advertised." />;
   return (
@@ -353,8 +356,9 @@ function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
       {kinds.length > 0 && (
         <div>
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Emitted kinds</div>
+          <ResultLimitNotice className="mb-3" loaded={boundedKinds.rows.length} meta={boundedKinds.meta} limit={CONNECTOR_DETAIL_KIND_LIMIT} noun="emitted kinds" />
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {kinds.map((kind) => (
+            {boundedKinds.rows.map((kind) => (
               <div key={kind} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
                 <div className="font-mono text-[12px] text-[var(--text-primary)]">{kind}</div>
                 <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">{connectorCapabilityLabel(kind.split(".")[0] || "data")} data</div>
@@ -369,6 +373,7 @@ function DataKinds({ connector }: { connector: ConnectorCatalogEntry }) {
 
 function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntry }) {
   const families = connector.resource_families ?? [];
+  const boundedFamilies = grcBoundedRows({ rows: families, limit: GRC_DETAIL_LIMIT });
   const resourceTypeStats = connectorResourceTypeStats(connector);
   const resourceTypes = connectorResourceTypes(connector, 8);
   if (!connector.catalog_status && families.length === 0) return null;
@@ -436,39 +441,42 @@ function CatalogDefinitionPanel({ connector }: { connector: ConnectorCatalogEntr
         </div>
       )}
       {families.length > 0 && (
-        <div className="mt-4 grid gap-2 lg:grid-cols-2">
-          {families.map((family) => {
-            const projectionTemplate = connectorProjectionTemplate(family);
-            const eventKind = connectorResourceFamilyEventKind(family);
-            const schemaRef = connectorResourceFamilySchemaRef(family);
-            const endpoint = [family.method, family.path].filter(Boolean).join(" ") || eventKind || family.id;
-            return (
-              <div key={family.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">{family.label || humanize(family.id)}</div>
-                    <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{endpoint}</div>
+        <>
+          <ResultLimitNotice className="mt-4" loaded={boundedFamilies.rows.length} meta={boundedFamilies.meta} limit={GRC_DETAIL_LIMIT} noun="resource families" />
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {boundedFamilies.rows.map((family) => {
+              const projectionTemplate = connectorProjectionTemplate(family);
+              const eventKind = connectorResourceFamilyEventKind(family);
+              const schemaRef = connectorResourceFamilySchemaRef(family);
+              const endpoint = [family.method, family.path].filter(Boolean).join(" ") || eventKind || family.id;
+              return (
+                <div key={family.id} className="rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">{family.label || humanize(family.id)}</div>
+                      <div className="mt-1 truncate font-mono text-[11px] text-[var(--text-muted)]">{endpoint}</div>
+                    </div>
+                    {family.high_value && <Badge value="high value" />}
                   </div>
-                  {family.high_value && <Badge value="high value" />}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {projectionTemplate && (
-                    <span title={projectionTemplate} className="rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)]">
-                      {connectorResourceTypeLabel(projectionTemplate)}
-                    </span>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {projectionTemplate && (
+                      <span title={projectionTemplate} className="rounded bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)]">
+                        {connectorResourceTypeLabel(projectionTemplate)}
+                      </span>
+                    )}
+                    {eventKind && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{eventKind}</span>}
+                    {schemaRef && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{schemaRef}</span>}
+                  </div>
+                  {family.coverage && family.coverage.length > 0 && (
+                    <div className="mt-3 border-t border-[color:var(--border)] pt-2">
+                      <CoverageMetadataList items={family.coverage} compact showNotes />
+                    </div>
                   )}
-                  {eventKind && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{eventKind}</span>}
-                  {schemaRef && <span className="rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[10px] text-[var(--text-secondary)]">{schemaRef}</span>}
                 </div>
-                {family.coverage && family.coverage.length > 0 && (
-                  <div className="mt-3 border-t border-[color:var(--border)] pt-2">
-                    <CoverageMetadataList items={family.coverage} compact showNotes />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </Panel>
   );
@@ -601,15 +609,27 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const [tenantID, setTenantID] = useState(searchParams.get("tenant_id") ?? "");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
 
-  const detailQuery = useGRCQuery<ConnectorDetailResponse>(withQuery(`/connectors/${encodeURIComponent(sourceID)}`, { tenant_id: debouncedTenantID }));
+  const detailQuery = useGRCQuery<ConnectorDetailResponse>(withQuery(`/connectors/${encodeURIComponent(sourceID)}`, { tenant_id: debouncedTenantID, limit: GRC_DETAIL_LIMIT }));
   const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
 
   const credentialStores = useMemo(() => normalizeCredentialStores(libraryQuery.data), [libraryQuery.data]);
   const connector = detailQuery.data?.connector;
   const summary: ConnectorOperationsSummary = detailQuery.data?.summary ?? { status: "not_configured" };
-  const connections = detailQuery.data?.connections ?? [];
-  const activity = detailQuery.data?.activity ?? [];
-  const diagnosticTimeline = detailQuery.data?.diagnostic_timeline ?? [];
+  const boundedConnectionRows = useMemo(
+    () => grcBoundedRows({ rows: detailQuery.data?.connections, limit: GRC_DETAIL_LIMIT, total: summary.total_connections }),
+    [detailQuery.data?.connections, summary.total_connections],
+  );
+  const boundedActivityRows = useMemo(
+    () => grcBoundedRows({ rows: detailQuery.data?.activity, limit: GRC_DETAIL_LIMIT }),
+    [detailQuery.data?.activity],
+  );
+  const boundedDiagnosticRows = useMemo(
+    () => grcBoundedRows({ rows: detailQuery.data?.diagnostic_timeline, limit: GRC_DETAIL_LIMIT }),
+    [detailQuery.data?.diagnostic_timeline],
+  );
+  const connections = boundedConnectionRows.rows;
+  const activity = boundedActivityRows.rows;
+  const diagnosticTimeline = boundedDiagnosticRows.rows;
   const loading = detailQuery.loading && !detailQuery.data;
 
   if (loading) return <LoadingBlock label="Loading connector..." />;
@@ -887,6 +907,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
 
       {activeTab === "connections" && (
         <Panel title="Connections" action={<span className="text-[12px] text-[var(--text-muted)]">{connections.length} shown</span>}>
+          <ResultLimitNotice className="mb-3" loaded={connections.length} meta={boundedConnectionRows.meta} limit={GRC_DETAIL_LIMIT} noun="connections" />
           <ConnectionsTable connections={connections} activeRuntimeID={runtimeID} />
         </Panel>
       )}
@@ -894,9 +915,11 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
       {activeTab === "activity" && (
         <div className="space-y-4">
           <Panel title="Diagnostic timeline" action={<span className="text-[12px] text-[var(--text-muted)]">{diagnosticTimeline.length} stages</span>}>
+            <ResultLimitNotice className="mb-3" loaded={diagnosticTimeline.length} meta={boundedDiagnosticRows.meta} limit={GRC_DETAIL_LIMIT} noun="diagnostic stages" />
             <ConnectorDiagnosticTimelinePanel timeline={diagnosticTimeline} />
           </Panel>
           <Panel title="Activity" action={<span className="text-[12px] text-[var(--text-muted)]">{activity.length} events</span>}>
+            <ResultLimitNotice className="mb-3" loaded={activity.length} meta={boundedActivityRows.meta} limit={GRC_DETAIL_LIMIT} noun="activity events" />
             <ConnectorActivityTable activity={activity} />
           </Panel>
         </div>

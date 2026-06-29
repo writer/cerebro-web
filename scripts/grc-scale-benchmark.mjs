@@ -51,11 +51,50 @@ const routeSpecs = [
     filterText: "source 12",
   },
   {
+    route: "/connectors/source-cdk",
+    label: "Source Activation",
+    readySelector: "text=Runtime activation plan",
+  },
+  {
+    route: "/connectors/source-0?tab=connections",
+    label: "Connector Detail",
+    readySelector: "table.data-table",
+    interactions: [
+      {
+        label: "open activity",
+        action: async (page) => page.getByRole("button", { name: "Activity" }).click(),
+        readySelector: "text=Diagnostic timeline",
+      },
+      {
+        label: "open data",
+        action: async (page) => page.getByRole("button", { name: "Data" }).click(),
+        readySelector: "text=Data and graph",
+      },
+    ],
+  },
+  {
     route: "/risk-inbox",
     label: "Risk Inbox",
     readySelector: "table.data-table",
     filterSelector: 'input[placeholder="Filter loaded findings"]',
     filterText: "finding 12",
+  },
+  {
+    route: "/findings/finding-0",
+    label: "Finding Detail",
+    readySelector: "text=Risk Score",
+    interactions: [
+      {
+        label: "open evidence",
+        action: async (page) => page.getByRole("button", { name: /Evidence/ }).click(),
+        readySelector: "#finding-evidence table",
+      },
+      {
+        label: "open timeline",
+        action: async (page) => page.getByRole("button", { name: "Timeline" }).click(),
+        readySelector: "text=Finding Lifecycle",
+      },
+    ],
   },
   {
     route: "/evidence",
@@ -335,13 +374,23 @@ function createMockApi({ bounded, recordCount: count, stats }) {
           generated_at: generatedAt,
         });
       }
+      const connectorDetailMatch = /^connectors\/([^/]+)$/.exec(normalizedPath);
+      if (connectorDetailMatch) {
+        return sendJSON(response, stats, normalizedPath, connectorDetailFixture(data, decodeURIComponent(connectorDetailMatch[1]), url.searchParams, bounded));
+      }
       if (normalizedPath === "connector-definitions") {
+        const definitionRows = data.connectorDefinitions.map(connectorDefinitionListItem);
+        const definitions = boundedList(definitionRows, url.searchParams, bounded);
         return sendJSON(response, stats, normalizedPath, {
-          definitions: [],
+          definitions,
           tenant_id: tenantID,
           runtime_store: "scale",
           generated_at: generatedAt,
         });
+      }
+      const connectorPlanMatch = /^connector-definitions\/([^/]+)\/promotion-plan$/.exec(normalizedPath);
+      if (connectorPlanMatch) {
+        return sendJSON(response, stats, normalizedPath, connectorPromotionPlanFixture(data, decodeURIComponent(connectorPlanMatch[1])));
       }
       if (normalizedPath === "grc/vendors") {
         const vendors = boundedList(data.vendors, url.searchParams, bounded);
@@ -394,10 +443,18 @@ function createMockApi({ bounded, recordCount: count, stats }) {
       const auditPacketMatch = /^grc\/audit-packets\/([^/]+)$/.exec(normalizedPath);
       if (auditPacketMatch) {
         const finding = data.findings.find((item) => item.id === decodeURIComponent(auditPacketMatch[1])) ?? data.findings[0];
+        const evidence = boundedList(data.evidence, url.searchParams, bounded);
+        const resourceURNs = Array.from({ length: recordCount }, (_, index) => `urn:cerebro:${tenantID}:asset:asset-${index}`);
+        const sourceCoverageRefs = Array.from({ length: recordCount }, (_, index) => ({
+          source_id: `source-${index % 32}`,
+          dimension_id: `dimension-${index}`,
+          dimension_type: index % 2 === 0 ? "resource" : "identity",
+          support_level: index % 5 === 0 ? "partial" : "supported",
+        }));
         return sendJSON(response, stats, normalizedPath, {
           id: `packet-${finding.id}`,
-          finding,
-          evidence: data.evidence.slice(0, 10),
+          finding: { ...finding, evidence_count: data.evidence.length, resource_urns: resourceURNs, source_coverage_refs: sourceCoverageRefs },
+          evidence,
           controls: finding.controls,
           recommended_action: "Review owner, evidence freshness, and remediation due date.",
           metadata: reportMetadata("ready"),
@@ -456,7 +513,8 @@ function makeScaleData(count) {
   const inventoryAssets = Array.from({ length: count }, (_, index) => makeInventoryAsset(index));
   const connectors = Array.from({ length: count }, (_, index) => makeConnector(index));
   const connectorRuntimes = Array.from({ length: count }, (_, index) => makeConnectorRuntime(index));
-  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue, inventoryAssets, connectors, connectorRuntimes };
+  const connectorDefinitions = Array.from({ length: count }, (_, index) => makeConnectorDefinition(index, count));
+  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue, inventoryAssets, connectors, connectorRuntimes, connectorDefinitions };
 }
 
 function makeVendor(index) {
@@ -763,6 +821,248 @@ function makeConnectorRuntime(index) {
       findings_emitted: index % 9,
     },
     config: {},
+  };
+}
+
+function makeConnectorResourceFamily(index, sourceID = "source-0") {
+  const template = [
+    "identity_user",
+    "identity_group",
+    "app_entitlement",
+    "asset",
+    "cloud_resource",
+    "repository",
+    "deployment",
+    "finding",
+  ][index % 8];
+  return {
+    id: `${sourceID}-family-${index}`,
+    label: `Resource family ${index}`,
+    method: "GET",
+    path: `/scale/${sourceID}/resources/${index}`,
+    default_enabled: index % 11 !== 0,
+    projection: { template },
+    coverage: [
+      {
+        id: `coverage-${index}`,
+        label: `Coverage dimension ${index % 12}`,
+        dimension_type: index % 2 === 0 ? "resource" : "identity",
+        support_level: index % 5 === 0 ? "partial" : "supported",
+      },
+    ],
+    high_value: index % 9 === 0,
+  };
+}
+
+function makeConnectorDefinition(index, count) {
+  const sourceID = `source-${index}`;
+  const largeDefinition = index === 0;
+  const familyCount = largeDefinition ? count : 4 + (index % 5);
+  const reviewCount = largeDefinition ? count : 2 + (index % 4);
+  const openCheckCount = largeDefinition ? count : 3 + (index % 4);
+  return {
+    id: `definition-${index}`,
+    tenant_id: tenantID,
+    source_id: sourceID,
+    display_name: `Source ${String(index).padStart(5, "0")}`,
+    description: "Synthetic source definition generated for scale benchmarking.",
+    runtime: "json_api",
+    stage: index % 5 === 0 ? "pilot" : "sandbox",
+    auth: {
+      model: "api_key",
+      credential_fields: [{ key: "api_key", label: "API key", reference_only: true }],
+      supported_store_ids: ["cerebro_vault", "aws_secrets_manager"],
+      requires_references: true,
+    },
+    ingest: { mode: "pull" },
+    resource_families: Array.from({ length: familyCount }, (_, familyIndex) => makeConnectorResourceFamily(familyIndex, sourceID)),
+    scope_options: Array.from({ length: reviewCount }, (_, scopeIndex) => ({
+      id: `${sourceID}-scope-${scopeIndex}`,
+      label: `Scope ${scopeIndex}`,
+      needs_user_review: true,
+      permission_note: "Confirm this collection scope is approved for the tenant.",
+      families: [`${sourceID}-family-${scopeIndex % Math.max(1, familyCount)}`],
+      support_level: scopeIndex % 5 === 0 ? "partial" : "supported",
+    })),
+    validation: {
+      status: index % 5 === 0 ? "warning" : "ready",
+      summary: "Synthetic validation checks for scale benchmarking.",
+      checks: Array.from({ length: openCheckCount }, (_, checkIndex) => ({
+        id: `${sourceID}-check-${checkIndex}`,
+        label: `Check ${checkIndex}`,
+        status: checkIndex % 5 === 0 ? "blocked" : "warning",
+        severity: checkIndex % 5 === 0 ? "error" : "warning",
+        detail: "Synthetic setup check.",
+        next_action: "Review the generated source definition before relying on it.",
+        blocking: checkIndex % 5 === 0,
+      })),
+      observed_at: generatedAt,
+    },
+    promotion: {
+      eligible_stages: ["sandbox", "pilot", "approved"],
+      required_gates: ["definition_validation", "sandbox_probe", "admin_review"],
+      next_action: "Run a bounded source validation.",
+    },
+    created_at: isoDay(-14),
+    updated_at: isoDay(-1 * (index % 7)),
+  };
+}
+
+function connectorDefinitionListItem(definition) {
+  return {
+    ...definition,
+    resource_families: (definition.resource_families ?? []).slice(0, 3),
+    scope_options: (definition.scope_options ?? []).slice(0, 3),
+    validation: definition.validation ? {
+      ...definition.validation,
+      checks: (definition.validation.checks ?? []).slice(0, 3),
+    } : undefined,
+  };
+}
+
+function makeConnectorConnection(sourceID, index) {
+  const needsAttention = index % 7 === 0;
+  return {
+    runtime_id: `runtime-${index}`,
+    source_id: sourceID,
+    tenant_id: tenantID,
+    family: `family-${index % 24}`,
+    status: needsAttention ? "needs_refresh" : "healthy",
+    graph_status: needsAttention ? "behind" : "current",
+    contract_probe_state: needsAttention ? "warning" : "passed",
+    last_activity_at: isoDay(-1 * (index % 12)),
+    checkpoint_watermark: isoDay(-1 * (index % 10)),
+    watermark_lag_seconds: needsAttention ? 86_400 + index : 300 + index,
+    records_accepted: 1000 + index,
+    records_rejected: needsAttention ? index % 11 : 0,
+    entities_projected: 500 + index,
+    links_projected: 900 + index,
+    cursor_pending: needsAttention,
+    checkpoint_cursor_present: !needsAttention,
+    next_action: needsAttention ? "inspect_runtime" : "monitor",
+    scope_policy: index % 4 === 0 ? {
+      excluded_families: [`family-${index % 24}`],
+      excluded_asset_classes: [`asset-class-${index % 8}`],
+      excluded_kinds: [`kind-${index % 10}`],
+      excluded_resource_urns: [`urn:cerebro:${tenantID}:asset:asset-${index}`],
+      excluded_resources: [{ type: "asset", id: `asset-${index}` }],
+    } : undefined,
+  };
+}
+
+function makeConnectorActivity(sourceID, index) {
+  const failed = index % 9 === 0;
+  return {
+    id: `${sourceID}-activity-${index}`,
+    runtime_id: `runtime-${index}`,
+    source_id: sourceID,
+    tenant_id: tenantID,
+    family: `family-${index % 24}`,
+    type: index % 2 === 0 ? "sync" : "graph",
+    status: failed ? "failed" : "success",
+    title: failed ? "Runtime sync failed" : "Runtime sync completed",
+    description: failed ? "Synthetic runtime failure for scale benchmark." : "Synthetic runtime event for scale benchmark.",
+    occurred_at: isoDay(-1 * (index % 10)),
+    duration_seconds: 30 + (index % 300),
+    records_accepted: 100 + index,
+    records_rejected: failed ? index % 10 : 0,
+    entities_projected: 200 + index,
+    links_projected: 350 + index,
+    failure_class: failed ? "synthetic_failure" : undefined,
+  };
+}
+
+function makeConnectorDiagnostic(sourceID, index) {
+  const stages = ["setup", "preflight", "source_sync", "contract_probe", "graph_projection", "finding_evaluation"];
+  const stage = stages[index % stages.length];
+  const failed = index % 11 === 0;
+  return {
+    stage,
+    stage_order: index,
+    status: failed ? "failed" : index % 5 === 0 ? "warning" : "success",
+    title: `${humanize(stage)} ${index}`,
+    description: failed ? "Synthetic diagnostic failure for scale benchmark." : "Synthetic diagnostic stage for scale benchmark.",
+    occurred_at: isoDay(-1 * (index % 12)),
+    runtime_id: `runtime-${index}`,
+    correlation_id: `${sourceID}-correlation-${index}`,
+    next_action: failed ? "inspect_runtime" : "monitor",
+    failure_class: failed ? "synthetic_failure" : undefined,
+    records_accepted: 100 + index,
+    records_rejected: failed ? index % 10 : 0,
+    entities_projected: 200 + index,
+    links_projected: 300 + index,
+    findings_evaluated: 20 + (index % 50),
+    findings_opened: index % 7,
+    duration_seconds: 15 + (index % 120),
+  };
+}
+
+function connectorDetailFixture(data, sourceID, searchParams, bounded) {
+  const baseConnector = data.connectors.find((connector) => connector.source_id === sourceID) ?? data.connectors[0];
+  const limit = positiveInteger(searchParams.get("limit"), 100);
+  const allFamilies = Array.from({ length: recordCount }, (_, index) => makeConnectorResourceFamily(index, sourceID));
+  const allKinds = Array.from({ length: recordCount }, (_, index) => `scale.kind.${index}`);
+  const allConnections = Array.from({ length: recordCount }, (_, index) => makeConnectorConnection(sourceID, index));
+  const allActivity = Array.from({ length: recordCount }, (_, index) => makeConnectorActivity(sourceID, index));
+  const allDiagnostics = Array.from({ length: recordCount }, (_, index) => makeConnectorDiagnostic(sourceID, index));
+  return {
+    generated_at: generatedAt,
+    tenant_id: tenantID,
+    connector: {
+      ...baseConnector,
+      source_id: sourceID,
+      emitted_kinds: bounded ? allKinds.slice(0, limit) : allKinds,
+      resource_families: bounded ? allFamilies.slice(0, limit) : allFamilies,
+    },
+    summary: {
+      status: "healthy",
+      status_reason: "Synthetic connector detail is current.",
+      total_connections: allConnections.length,
+      healthy_connections: allConnections.filter((connection) => connection.status === "healthy").length,
+      needs_attention: allConnections.filter((connection) => connection.status !== "healthy").length,
+      last_activity_at: isoDay(-1),
+      sync_frequency_seconds: 3600,
+      resource_types: allFamilies.length,
+      emitted_kinds: allKinds.length,
+    },
+    connections: bounded ? allConnections.slice(0, limit) : allConnections,
+    activity: bounded ? allActivity.slice(0, limit) : allActivity,
+    diagnostic_timeline: bounded ? allDiagnostics.slice(0, limit) : allDiagnostics,
+  };
+}
+
+function connectorPromotionPlanFixture(data, definitionID) {
+  const definition = data.connectorDefinitions.find((item) => item.id === definitionID) ?? data.connectorDefinitions[0];
+  const blockers = Array.from({ length: recordCount }, (_, index) => `definition-check-${index}`);
+  return {
+    generated_at: generatedAt,
+    plan: {
+      generated_at: generatedAt,
+      definition,
+      status: "blocked",
+      summary: "Synthetic runtime activation plan generated for scale benchmarking.",
+      next_stage: "pilot",
+      blockers,
+      warnings: blockers.slice(0, 20),
+      metrics: {
+        resource_families: definition?.resource_families?.length ?? 0,
+        config_fields: definition?.config_fields?.length ?? 0,
+        credential_fields: definition?.auth?.credential_fields?.length ?? 0,
+        scope_options: definition?.scope_options?.length ?? 0,
+        blocked_checks: blockers.length,
+        warning_checks: 20,
+        ready_checks: 0,
+      },
+      checklist: blockers.map((blocker, index) => ({
+        id: blocker,
+        title: `Activation check ${index}`,
+        category: index % 2 === 0 ? "runtime" : "governance",
+        status: index % 5 === 0 ? "blocked" : "warning",
+        detail: "Synthetic activation check.",
+        action: "Review before runtime activation.",
+        blocking: index % 5 === 0,
+      })),
+    },
   };
 }
 
