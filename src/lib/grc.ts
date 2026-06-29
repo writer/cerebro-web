@@ -1368,6 +1368,7 @@ export type GRCVendorRelationships = {
 
 export type GRCVendorsResponse = {
   summary?: GRCVendorSummary;
+  meta?: GRCListMeta;
   vendors: GRCVendor[];
   generated_at: string;
 };
@@ -1425,6 +1426,7 @@ export type GRCVendorDetailResponse = {
 
 export type GRCVendorDiscoveriesResponse = {
   summary?: GRCVendorDiscoverySummary;
+  meta?: GRCListMeta;
   source_summaries?: GRCVendorDiscoverySourceSummary[];
   discoveries: GRCVendorDiscovery[];
   decisions?: GRCVendorDiscoveryDecision[];
