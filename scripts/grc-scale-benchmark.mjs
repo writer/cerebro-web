@@ -130,6 +130,27 @@ const routeSpecs = [
     filterText: "asset 12",
   },
   {
+    route: `/explore?root_urn=${encodeURIComponent(impactRootURN)}`,
+    label: "Graph Explore",
+    readySelector: 'input[placeholder="Search graph"]',
+    filterSelector: 'input[placeholder="Search graph"]',
+    filterText: "asset 12",
+  },
+  {
+    route: "/identity",
+    label: "Identity",
+    readySelector: 'input[placeholder="User, email, organization, provider"]',
+    filterSelector: 'input[placeholder="User, email, organization, provider"]',
+    filterText: "user 12",
+    interactions: [
+      {
+        label: "open users",
+        action: async (page) => page.getByRole("button", { name: /Users/ }).click(),
+        readySelector: "table",
+      },
+    ],
+  },
+  {
     route: "/policies",
     label: "Policies",
     readySelector: 'input[placeholder="Filter loaded work"]',
@@ -362,6 +383,24 @@ function createMockApi({ bounded, recordCount: count, stats }) {
       if (normalizedPath === "user/preferences") {
         return sendJSON(response, stats, normalizedPath, { tenant_id: tenantID, user_id: "scale-benchmark", preferences: {}, generated_at: generatedAt });
       }
+      if (normalizedPath === "identity/orgs") {
+        const organizations = boundedList(filterIdentityOrganizations(data.identityOrganizations, url.searchParams), url.searchParams, bounded);
+        return sendJSON(response, stats, normalizedPath, {
+          tenant_id: tenantID,
+          organizations,
+          meta: identityMeta(organizations, data.identityOrganizations, url.searchParams),
+          generated_at: generatedAt,
+        });
+      }
+      if (normalizedPath === "identity/users") {
+        const users = boundedList(filterIdentityUsers(data.identityUsers, url.searchParams), url.searchParams, bounded);
+        return sendJSON(response, stats, normalizedPath, {
+          tenant_id: tenantID,
+          users,
+          meta: identityMeta(users, data.identityUsers, url.searchParams),
+          generated_at: generatedAt,
+        });
+      }
       if (normalizedPath === "connectors") {
         return sendJSON(response, stats, normalizedPath, {
           connectors: data.connectors,
@@ -514,7 +553,83 @@ function makeScaleData(count) {
   const connectors = Array.from({ length: count }, (_, index) => makeConnector(index));
   const connectorRuntimes = Array.from({ length: count }, (_, index) => makeConnectorRuntime(index));
   const connectorDefinitions = Array.from({ length: count }, (_, index) => makeConnectorDefinition(index, count));
-  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue, inventoryAssets, connectors, connectorRuntimes, connectorDefinitions };
+  const identityOrganizations = Array.from({ length: count }, (_, index) => makeIdentityOrganization(index));
+  const identityUsers = Array.from({ length: count }, (_, index) => makeIdentityUser(index));
+  return { vendors, vendorDiscoveries, evidence, findings, policies, documents, riskRegister, governanceGaps, workQueue, documentWorkQueue, inventoryAssets, connectors, connectorRuntimes, connectorDefinitions, identityOrganizations, identityUsers };
+}
+
+function makeIdentityOrganization(index) {
+  return {
+    org_id: `org-${index}`,
+    tenant_id: tenantID,
+    name: `Organization ${String(index).padStart(5, "0")}`,
+    slug: `organization-${index}`,
+    domain: `org-${index}.example.com`,
+    provider: index % 3 === 0 ? "okta" : "oidc",
+    source: index % 2 === 0 ? "mcp_oauth" : "auth_config",
+    external_id: `external-org-${index}`,
+    user_count: 10 + (index % 500),
+    last_synced_at: isoDay(-1 * (index % 20)),
+    created_at: isoDay(-60),
+    updated_at: isoDay(-1 * (index % 10)),
+  };
+}
+
+function makeIdentityUser(index) {
+  return {
+    user_id: `user-${index}`,
+    tenant_id: tenantID,
+    org_id: `org-${index % Math.max(1, recordCount)}`,
+    subject: `subject-${index}`,
+    email: `user-${index}@example.com`,
+    display_name: `User ${String(index).padStart(5, "0")}`,
+    status: index % 11 === 0 ? "suspended" : "active",
+    provider: index % 3 === 0 ? "okta" : "oidc",
+    source: index % 2 === 0 ? "mcp_oauth" : "auth_config",
+    roles: [`role-${index % 12}`, `role-${(index + 3) % 12}`],
+    groups: [`group-${index % 20}`, `group-${(index + 5) % 20}`],
+    last_seen_at: isoDay(-1 * (index % 30)),
+    last_synced_at: isoDay(-1 * (index % 20)),
+    created_at: isoDay(-90),
+    updated_at: isoDay(-1 * (index % 10)),
+  };
+}
+
+function identityMeta(rows, allRows, searchParams) {
+  return {
+    limit: positiveInteger(searchParams.get("limit"), rows.length || 100),
+    loaded: rows.length,
+    configured: allRows.length,
+    persisted: allRows.length,
+  };
+}
+
+function filterIdentityOrganizations(organizations, searchParams) {
+  const tenant = searchParams.get("tenant_id")?.trim().toLowerCase() || "";
+  const org = searchParams.get("org_id")?.trim().toLowerCase() || "";
+  const query = searchParams.get("q")?.trim().toLowerCase() || "";
+  return organizations.filter((item) => {
+    if (tenant && item.tenant_id.toLowerCase() !== tenant) return false;
+    if (org && item.org_id.toLowerCase() !== org) return false;
+    if (!query) return true;
+    return [item.org_id, item.name, item.slug, item.domain, item.provider, item.source]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+}
+
+function filterIdentityUsers(users, searchParams) {
+  const tenant = searchParams.get("tenant_id")?.trim().toLowerCase() || "";
+  const org = searchParams.get("org_id")?.trim().toLowerCase() || "";
+  const query = searchParams.get("q")?.trim().toLowerCase() || "";
+  return users.filter((item) => {
+    if (tenant && item.tenant_id.toLowerCase() !== tenant) return false;
+    if (org && item.org_id?.toLowerCase() !== org) return false;
+    if (!query) return true;
+    return [item.user_id, item.display_name, item.email, item.subject, item.org_id, item.provider, item.source, ...(item.roles ?? []), ...(item.groups ?? [])]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
 }
 
 function makeVendor(index) {
