@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Check, Settings2, Share2 } from "lucide-react";
+import { Check, Settings2, Share2, UsersRound } from "lucide-react";
 
 import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme, useUserPreferences } from "@/components/providers";
@@ -422,6 +422,23 @@ export default function Topbar() {
       {showConnection && (
         <div className="surface-raised absolute right-6 top-16 z-50 mt-1 max-h-[calc(100vh-5rem)] w-[480px] overflow-y-auto p-4 max-md:right-3 max-md:w-[calc(100vw-1.5rem)]">
           <div className="space-y-5">
+            <section>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Workspace</div>
+              <Link
+                href="/identity"
+                onClick={() => setShowConnection(false)}
+                className="mt-3 flex items-start gap-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 transition hover:border-[color:var(--border-strong)] hover:bg-[var(--surface-raised)]"
+              >
+                <UsersRound className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-[var(--text-primary)]">Members</span>
+                  <span className="mt-1 block text-[12px] leading-5 text-[var(--text-muted)]">
+                    Organizations, users, auth providers, roles, and login history.
+                  </span>
+                </span>
+              </Link>
+            </section>
+
             <section>
               <div className="flex items-center justify-between gap-3">
                 <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Home</div>

@@ -10,6 +10,7 @@ describe("route labels", () => {
     expect(routeLabelForPath("/connectors/builder")).toBe("Connector builder");
     expect(routeLabelForPath("/connectors/source-cdk")).toBe("Source activation");
     expect(routeLabelForPath("/credential-stores")).toBe("Credential stores");
+    expect(routeLabelForPath("/identity")).toBe("Members");
     expect(routeLabelForPath("/developer/audit-log")).toBe("Audit log");
     expect(routeLabelForPath("/developer/security-producers")).toBe("Security producers");
   });

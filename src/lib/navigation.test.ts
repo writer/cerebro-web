@@ -29,6 +29,13 @@ describe("navigation entries", () => {
     expect(hrefs).toContain("/credential-stores");
   });
 
+  it("keeps members discoverable outside the sidebar", () => {
+    expect(navigationEntries.find((entry) => entry.href === "/identity")).toMatchObject({
+      label: "Members",
+      section: "Advanced",
+    });
+  });
+
   it("includes developer tools in utility links", () => {
     const hrefs = utilityLinks.map((e) => e.href);
     expect(hrefs).toContain("/developer");
