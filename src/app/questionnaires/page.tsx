@@ -81,6 +81,7 @@ export default function QuestionnairesPage() {
   const [createOwner, setCreateOwner] = useState("");
   const [createDueAt, setCreateDueAt] = useState("");
   const [linkVendorURN, setLinkVendorURN] = useState("");
+  const [linkVendorRowID, setLinkVendorRowID] = useState<string | null>(null);
   const [linkVendorReason, setLinkVendorReason] = useState("");
   const [sourceFilename, setSourceFilename] = useState("");
   const [intakeMode, setIntakeMode] = useState<IntakeMode>("paste");
@@ -144,7 +145,7 @@ export default function QuestionnairesPage() {
   const activeControlMapping = mappingRowID === selectedRow?.id ? controlMapping : selectedControlMapping;
   const activeMappingOwner = mappingRowID === selectedRow?.id ? mappingOwner : selectedMappingOwner;
   const activeMappingReason = mappingRowID === selectedRow?.id ? mappingReason : "";
-  const activeLinkVendorURN = linkVendorURN || selectedRun?.vendor_urn || "";
+  const activeLinkVendorURN = linkVendorRowID === selectedRow?.id ? linkVendorURN : selectedRun?.vendor_urn || "";
   const intakeLineCount = intakeText.split(/\r?\n/).filter((line) => line.trim()).length;
   const selectedFileDetail = sourceFilename ? [sourceFilename, intakeFormat ? intakeFormat.toUpperCase() : "", intakeContentType].filter(Boolean).join(" · ") : "";
   const metricState: RuntimeState = runsQuery.error ? runtimeStateForError(runsQuery.error) : runsQuery.loading && !runsQuery.data ? "loading" : "ready";
@@ -181,6 +182,7 @@ export default function QuestionnairesPage() {
     setControlMapping(joinMappingList(question?.mapped_controls ?? answer?.controls));
     setMappingOwner(question?.owner_id ?? "");
     setMappingReason("");
+    setLinkVendorRowID(rowID);
     setLinkVendorURN(run?.vendor_urn ?? "");
     setLinkVendorReason("");
     resetRowActionForms();
@@ -263,6 +265,11 @@ export default function QuestionnairesPage() {
     setMappingReason(value);
   };
 
+  const updateLinkVendorURN = (value: string) => {
+    setLinkVendorRowID(selectedRow?.id ?? null);
+    setLinkVendorURN(value);
+  };
+
   const submitCreateRun = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
@@ -289,6 +296,7 @@ export default function QuestionnairesPage() {
       setSelectedRowID(initialQuestionnaireRowID(response.run));
       setMappingRowID(null);
       setMappingReason("");
+      setLinkVendorRowID(null);
       resetRowActionForms();
       setIntakeText("");
       setIntakeMode("paste");
@@ -316,6 +324,9 @@ export default function QuestionnairesPage() {
         vendor_id: vendor?.vendor_id || vendorIDFromURN(nextVendorURN) || undefined,
         reason: linkVendorReason || "Vendor matched to questionnaire.",
       });
+      setLinkVendorRowID(selectedRow?.id ?? null);
+      setLinkVendorURN(nextVendorURN);
+      setLinkVendorReason("");
       reloadQuestionnaireData();
     } catch {
       return;
@@ -330,7 +341,9 @@ export default function QuestionnairesPage() {
         unlink: true,
         reason: linkVendorReason || "Vendor link removed.",
       });
+      setLinkVendorRowID(selectedRow?.id ?? null);
       setLinkVendorURN("");
+      setLinkVendorReason("");
       reloadQuestionnaireData();
     } catch {
       return;
@@ -749,7 +762,7 @@ export default function QuestionnairesPage() {
             onDecisionReasonChange={setDecisionReason}
             onDecisionStateChange={setDecisionState}
             onLinkVendorReasonChange={setLinkVendorReason}
-            onLinkVendorURNChange={setLinkVendorURN}
+            onLinkVendorURNChange={updateLinkVendorURN}
             onMappingOwnerChange={updateMappingOwner}
             onMappingReasonChange={updateMappingReason}
             onMappedControlsChange={updateControlMapping}
