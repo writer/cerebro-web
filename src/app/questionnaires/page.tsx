@@ -127,6 +127,7 @@ export default function QuestionnairesPage() {
   const actionMutation = useGRCMutation<GRCQuestionnaireRunResponse>();
   const createMutation = useGRCMutation<GRCQuestionnaireRunResponse>();
   const reloadQuestionnaireRuns = runsQuery.reload;
+  const reloadVendors = vendorsQuery.reload;
   const runs = runsQuery.data?.runs ?? EMPTY_RUNS;
   const vendors = vendorsQuery.data?.vendors ?? EMPTY_VENDORS;
   const vendorsByURN = useMemo(() => new Map(vendors.map((vendor) => [vendor.urn, vendor])), [vendors]);
@@ -192,8 +193,8 @@ export default function QuestionnairesPage() {
 
   const reloadQuestionnaireData = useCallback(() => {
     void reloadQuestionnaireRuns();
-    void vendorsQuery.reload();
-  }, [reloadQuestionnaireRuns, vendorsQuery]);
+    void reloadVendors();
+  }, [reloadQuestionnaireRuns, reloadVendors]);
 
   const clearIntakeFile = () => {
     setSourceFilename("");
@@ -495,7 +496,6 @@ export default function QuestionnairesPage() {
     : intakeMode === "file"
       ? Boolean(intakeFileBase64 || (sourceFilename && intakeText.trim()))
       : Boolean(intakeText.trim());
-  const hasCreateParty = createDirection === "vendor_review" ? Boolean(createVendorURN) : Boolean(createCustomer.trim() || createRequester.trim());
 
   return (
     <main className="space-y-6">
@@ -669,7 +669,7 @@ export default function QuestionnairesPage() {
           </div>
 
           <div className="flex justify-end">
-            <button type="submit" disabled={createMutation.saving || !hasCreateIntake || !hasCreateParty} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px] sm:w-auto">
+            <button type="submit" disabled={createMutation.saving || !hasCreateIntake} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px] sm:w-auto">
               <Plus className="h-3.5 w-3.5" />
               Create questionnaire
             </button>
@@ -709,10 +709,10 @@ export default function QuestionnairesPage() {
           </label>
           <label htmlFor="filter-vendor">
             <span className={labelClass}>Vendor</span>
-            <select id="filter-vendor" value={vendorURN} onChange={(event) => setVendorURN(event.target.value)} className={inputClass}>
-              <option value="">All vendors</option>
+            <input id="filter-vendor" list="filter-vendor-options" value={vendorURN} onChange={(event) => setVendorURN(event.target.value)} className={inputClass} placeholder="vendor URN" />
+            <datalist id="filter-vendor-options">
               {vendors.map((vendor) => <option key={vendor.urn} value={vendor.urn}>{vendor.name}</option>)}
-            </select>
+            </datalist>
           </label>
           <label htmlFor="filter-search">
             <span className={labelClass}>Search</span>
