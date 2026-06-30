@@ -98,7 +98,9 @@ export const questionnaireRollups = (
   return {
     total: summary?.total_runs ?? runs.length,
     due: summary?.due_runs ?? runs.filter((run) => isDue(run.due_at, run.status, now)).length,
-    blocked: summary?.blocked_answers ?? rows.filter((row) => row.state === "blocked" || row.state === "needs_input" || row.state === "rejected").length,
+    blocked: summary?.blocked_answers ?? rows.filter((row) =>
+      row.state === "blocked" || row.state === "needs_input" || (row.state === "rejected" && row.questionID)
+    ).length,
     needsReview: summary?.review_answers ?? rows.filter((row) =>
       row.state === "needs_review" || row.state === "partial" || row.state === "ready_for_approval" || row.state === "approved_with_conditions"
     ).length,
@@ -159,9 +161,12 @@ const runRequester = (run: GRCQuestionnaireRun) =>
   run.customer_name || run.requester || run.vendor_id || run.vendor_urn || "Unspecified";
 
 const answerOwner = (run: GRCQuestionnaireRun, questionID?: string) => {
-  const assignment = (run.assignments ?? []).find((item) => !questionID || item.question_id === questionID);
+  const assignments = run.assignments ?? [];
+  const assignment = questionID ? assignments.find((item) => item.question_id === questionID) : undefined;
+  const runAssignment = assignments.find((item) => !item.question_id);
   const question = (run.questions ?? []).find((item) => !questionID || item.id === questionID);
-  return assignment?.owner_id || assignment?.team || question?.owner_id || run.owner_id || run.assigned_team || "";
+  return assignment?.owner_id || assignment?.team || runAssignment?.owner_id || runAssignment?.team ||
+    question?.owner_id || run.owner_id || run.assigned_team || "";
 };
 
 const answerDueAt = (run: GRCQuestionnaireRun, questionID?: string) => {

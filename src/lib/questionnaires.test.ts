@@ -142,8 +142,34 @@ describe("questionnaire queue helpers", () => {
 
     expect(questionnaireRollups(runs, undefined, new Date("2026-01-15T00:00:00.000Z"))).toMatchObject({
       due: 1,
+      blocked: 0,
       needsReview: 2,
     });
+  });
+
+  it("uses run-level assignments when an answer has no question-specific owner", () => {
+    const rows = questionnaireQueueRows([{
+      id: "run-1",
+      run_id: "run-1",
+      title: "Customer review",
+      direction: "customer_security_review",
+      status: "ready_for_approval",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-02T00:00:00.000Z",
+      question_count: 1,
+      answer_count: 1,
+      owner_id: "run-owner@example.com",
+      assignments: [{ id: "assignment-1", owner_id: "queue-owner@example.com", status: "open" }],
+      answers: [{
+        id: "answer-1",
+        question_id: "q-1",
+        question: "Is the report current?",
+        answer_state: "partial",
+        review_state: "needs_review",
+      }],
+    }]);
+
+    expect(rows[0]).toMatchObject({ owner: "queue-owner@example.com" });
   });
 
   it("selects the first answer row for a newly created run", () => {
