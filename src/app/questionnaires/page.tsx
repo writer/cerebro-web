@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import { CheckCircle2, FileUp, MessageSquare, Plus, RefreshCw, Send, UserPlus } from "lucide-react";
+import { useCallback, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { CheckCircle2, ClipboardPaste, FileUp, Link2, MessageSquare, Plus, RefreshCw, Send, UserPlus, X } from "lucide-react";
 
 import DataTable, { type TableColumn } from "@/components/grc/DataTable";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
@@ -35,6 +35,21 @@ const statusOptions = [
   { value: "processing", label: "Processing" },
 ];
 
+type IntakeMode = "paste" | "file" | "portal";
+
+const intakeModeOptions = [
+  { value: "paste", label: "Paste", Icon: ClipboardPaste },
+  { value: "file", label: "File", Icon: FileUp },
+  { value: "portal", label: "Portal", Icon: Link2 },
+] satisfies Array<{ value: IntakeMode; label: string; Icon: typeof ClipboardPaste }>;
+
+const pastedFormatOptions = [
+  { value: "csv", label: "CSV" },
+  { value: "tsv", label: "TSV" },
+  { value: "json", label: "JSON" },
+  { value: "text", label: "Text" },
+];
+
 export default function QuestionnairesPage() {
   const [tenantID, setTenantID] = useQueryParamState("tenant_id");
   const [direction, setDirection] = useQueryParamState("direction");
@@ -64,6 +79,7 @@ export default function QuestionnairesPage() {
   const [createOwner, setCreateOwner] = useState("");
   const [createDueAt, setCreateDueAt] = useState("");
   const [sourceFilename, setSourceFilename] = useState("");
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>("paste");
   const [intakeFormat, setIntakeFormat] = useState("csv");
   const [intakeText, setIntakeText] = useState("");
   const [intakeFileBase64, setIntakeFileBase64] = useState("");
@@ -112,6 +128,8 @@ export default function QuestionnairesPage() {
   const activeControlMapping = mappingRowID === selectedRow?.id ? controlMapping : selectedControlMapping;
   const activeMappingOwner = mappingRowID === selectedRow?.id ? mappingOwner : selectedMappingOwner;
   const activeMappingReason = mappingRowID === selectedRow?.id ? mappingReason : "";
+  const intakeLineCount = intakeText.split(/\r?\n/).filter((line) => line.trim()).length;
+  const selectedFileDetail = sourceFilename ? [sourceFilename, intakeFormat ? intakeFormat.toUpperCase() : "", intakeContentType].filter(Boolean).join(" · ") : "";
   const metricState: RuntimeState = runsQuery.error ? runtimeStateForError(runsQuery.error) : runsQuery.loading && !runsQuery.data ? "loading" : "ready";
 
   const resetRowActionForms = () => {
@@ -138,6 +156,36 @@ export default function QuestionnairesPage() {
   };
 
   const reloadRuns = useCallback(() => { void reloadQuestionnaireRuns(); }, [reloadQuestionnaireRuns]);
+
+  const clearIntakeFile = () => {
+    setSourceFilename("");
+    setIntakeContentType("");
+    setIntakeFileBase64("");
+    setIntakeText("");
+  };
+
+  const selectIntakeMode = (nextMode: IntakeMode) => {
+    if (nextMode === intakeMode) return;
+    setIntakeMode(nextMode);
+    setFileReadError("");
+    if (nextMode === "paste") {
+      clearIntakeFile();
+      setPortalURL("");
+      setPortalInstructions("");
+      if (intakeFormat === "portal" || isQuestionnaireBinaryIntakeFormat(intakeFormat)) setIntakeFormat("csv");
+      return;
+    }
+    if (nextMode === "file") {
+      setIntakeText("");
+      setPortalURL("");
+      setPortalInstructions("");
+      if (intakeFormat === "portal") setIntakeFormat("pdf");
+      return;
+    }
+    setIntakeText("");
+    clearIntakeFile();
+    setIntakeFormat("portal");
+  };
 
   const updateSlotMapping = (value: string) => {
     if (mappingRowID !== selectedRow?.id) {
@@ -192,12 +240,12 @@ export default function QuestionnairesPage() {
         vendor_urn: createDirection === "vendor_review" ? createVendorURN || undefined : undefined,
         owner_id: createOwner || undefined,
         due_at: createDueAt || undefined,
-        source_filename: sourceFilename || undefined,
+        source_filename: intakeMode === "file" ? sourceFilename || undefined : undefined,
         source_format: intakeFormat,
         intake_format: intakeFormat,
-        intake_text: intakeText || undefined,
-        intake_file_base64: intakeFileBase64 || undefined,
-        intake_content_type: intakeContentType || undefined,
+        intake_text: intakeMode !== "portal" ? intakeText || undefined : undefined,
+        intake_file_base64: intakeMode === "file" ? intakeFileBase64 || undefined : undefined,
+        intake_content_type: intakeMode === "file" ? intakeContentType || undefined : undefined,
         portal_url: intakeFormat === "portal" ? portalURL || undefined : undefined,
         portal_instructions: intakeFormat === "portal" ? portalInstructions || undefined : undefined,
       });
@@ -206,6 +254,7 @@ export default function QuestionnairesPage() {
       setMappingReason("");
       resetRowActionForms();
       setIntakeText("");
+      setIntakeMode("paste");
       setIntakeFileBase64("");
       setIntakeContentType("");
       setSourceFilename("");
@@ -244,9 +293,24 @@ export default function QuestionnairesPage() {
   const handleIntakeFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    await readIntakeFile(file);
+    event.target.value = "";
+  };
+
+  const handleIntakeDrop = async (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    await readIntakeFile(file);
+  };
+
+  const readIntakeFile = async (file: File) => {
+    setIntakeMode("file");
     setSourceFilename(file.name);
     setIntakeContentType(file.type);
     setFileReadError("");
+    setPortalURL("");
+    setPortalInstructions("");
     const format = inferQuestionnaireIntakeFormat(file.name, file.type);
     setIntakeFormat(format);
     try {
@@ -261,8 +325,6 @@ export default function QuestionnairesPage() {
       setIntakeFileBase64("");
       setIntakeText("");
       setFileReadError(error instanceof Error ? error.message : "Could not read file.");
-    } finally {
-      event.target.value = "";
     }
   };
 
@@ -345,7 +407,11 @@ export default function QuestionnairesPage() {
     { key: "mappedControls", label: "Controls", render: (_value, row) => <span className={monoText}>{row.mappedControls.slice(0, 2).join(", ") || "—"}</span> },
     { key: "citationCount", label: "Citations", render: (_value, row) => <span className="tabular-nums">{row.citationCount}</span> },
   ], []);
-  const hasCreateIntake = Boolean(intakeText.trim() || intakeFileBase64 || (intakeFormat === "portal" && portalURL.trim()));
+  const hasCreateIntake = intakeMode === "portal"
+    ? Boolean(portalURL.trim())
+    : intakeMode === "file"
+      ? Boolean(intakeFileBase64 || (sourceFilename && intakeText.trim()))
+      : Boolean(intakeText.trim());
 
   return (
     <main className="space-y-6">
@@ -401,80 +467,114 @@ export default function QuestionnairesPage() {
               <span className={labelClass}>Due date</span>
               <input id="create-due" type="date" value={createDueAt} onChange={(event) => setCreateDueAt(event.target.value)} className={inputClass} />
             </label>
-            <label htmlFor="create-format">
-              <span className={labelClass}>Format</span>
-              <select
-                id="create-format"
-                value={intakeFormat}
-                onChange={(event) => {
-                  const nextFormat = event.target.value;
-                  setIntakeFormat(nextFormat);
-                  if (!isQuestionnaireBinaryIntakeFormat(nextFormat)) {
-                    setIntakeFileBase64("");
-                    setIntakeContentType("");
-                  }
-                  if (nextFormat !== "portal") {
-                    setPortalURL("");
-                    setPortalInstructions("");
-                  }
-                }}
-                className={inputClass}
-              >
-                <option value="csv">CSV</option>
-                <option value="tsv">TSV</option>
-                <option value="json">JSON</option>
-                <option value="text">Text</option>
-                <option value="portal">Portal</option>
-                <option value="pdf">PDF</option>
-                <option value="xlsx">XLSX</option>
-                <option value="xlsm">XLSM</option>
-              </select>
-            </label>
           </div>
-          {intakeFormat === "portal" && (
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+
+          <div className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={labelClass}>Question source</span>
+                <div className="inline-flex rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-0.5">
+                  {intakeModeOptions.map(({ value, label, Icon }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => selectIntakeMode(value)}
+                      className={`inline-flex min-w-[5.25rem] items-center justify-center gap-1.5 rounded-[5px] px-2.5 py-1.5 text-[12px] font-semibold transition ${intakeMode === value ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="text-[12px] text-[var(--text-muted)]">
+                {intakeMode === "paste" ? `${intakeLineCount} non-empty lines` : intakeMode === "file" ? selectedFileDetail || "No file selected." : portalURL || "Portal URL required."}
+              </div>
+            </div>
+
+            {intakeMode === "paste" && (
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <label htmlFor="intake-text">
+                    <span className={labelClass}>Questions</span>
+                  </label>
+                  <label htmlFor="create-format" className="w-full sm:w-48">
+                    <span className={labelClass}>Format</span>
+                    <select id="create-format" value={intakeFormat} onChange={(event) => setIntakeFormat(event.target.value)} className={inputClass}>
+                      {pastedFormatOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <textarea
+                  id="intake-text"
+                  value={intakeText}
+                  onChange={(event) => setIntakeText(event.target.value)}
+                  className={`${inputClass} min-h-[220px] resize-y font-mono text-[12px] leading-5`}
+                  placeholder={"question,section,required_evidence_slots,mapped_controls\nDo you enforce MFA?,Access,identity_mfa,SOC2-CC6.1"}
+                />
+              </div>
+            )}
+
+            {intakeMode === "file" && (
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+                <label
+                  htmlFor="intake-file"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={handleIntakeDrop}
+                  className="flex min-h-[190px] cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-[color:var(--border-strong)] bg-[var(--surface-muted)] px-4 py-6 text-center transition hover:border-[color:var(--primary)] hover:bg-[var(--surface)]"
+                >
+                  <FileUp className="h-6 w-6 text-[var(--text-muted)]" />
+                  <span className="mt-3 text-[13px] font-semibold text-[var(--text-primary)]">Upload questionnaire file</span>
+                  <span className="mt-1 text-[12px] text-[var(--text-muted)]">CSV, TSV, JSON, TXT, PDF, XLSX, XLSM</span>
+                </label>
+                <div className="space-y-2">
+                  <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3">
+                    <div className={labelClass}>Selected file</div>
+                    <div className="mt-1 break-words text-[13px] text-[var(--text-secondary)]">{selectedFileDetail || "No file selected."}</div>
+                  </div>
+                  {sourceFilename && (
+                    <button type="button" onClick={clearIntakeFile} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[12px]">
+                      <X className="h-3.5 w-3.5" />
+                      Clear file
+                    </button>
+                  )}
+                  {fileReadError && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">{fileReadError}</div>}
+                </div>
+                <input
+                  id="intake-file"
+                  type="file"
+                  accept=".csv,.tsv,.json,.txt,.pdf,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroenabled.12"
+                  onChange={handleIntakeFile}
+                  className="sr-only"
+                />
+              </div>
+            )}
+
+            {intakeMode === "portal" && (
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
               <label htmlFor="portal-url">
                 <span className={labelClass}>Portal URL</span>
-                <input id="portal-url" value={portalURL} onChange={(event) => setPortalURL(event.target.value)} className={inputClass} placeholder="https://portal.example.com/review" />
+                <input id="portal-url" value={portalURL} onChange={(event) => setPortalURL(event.target.value)} className={`${inputClass} py-2`} placeholder="https://portal.example.com/review" />
               </label>
               <label htmlFor="portal-instructions">
                 <span className={labelClass}>Portal notes</span>
-                <input id="portal-instructions" value={portalInstructions} onChange={(event) => setPortalInstructions(event.target.value)} className={inputClass} placeholder="Login, workspace, owner, or access notes" />
+                <textarea
+                  id="portal-instructions"
+                  value={portalInstructions}
+                  onChange={(event) => setPortalInstructions(event.target.value)}
+                  className={`${inputClass} min-h-[86px] resize-y leading-5`}
+                  placeholder="Login, workspace, owner, or access notes"
+                />
               </label>
             </div>
-          )}
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <label htmlFor="intake-text">
-              <span className={labelClass}>Questions</span>
-              <textarea
-                id="intake-text"
-                value={intakeText}
-                onChange={(event) => setIntakeText(event.target.value)}
-                className={`${inputClass} min-h-[120px] resize-y leading-5`}
-                placeholder="question,section,required_evidence_slots,mapped_controls&#10;Do you enforce MFA?,Access,identity_mfa,SOC2-CC6.1"
-              />
-            </label>
-            <div className="space-y-2">
-              <label htmlFor="intake-file" className="secondary-button flex cursor-pointer items-center justify-center gap-2 px-3 py-2 text-[12px]">
-                <FileUp className="h-3.5 w-3.5" />
-                Upload questions
-              </label>
-              <input
-                id="intake-file"
-                type="file"
-                accept=".csv,.tsv,.json,.txt,.pdf,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroenabled.12"
-                onChange={handleIntakeFile}
-                className="sr-only"
-              />
-              <div className="min-h-[2rem] rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
-                {sourceFilename ? `${sourceFilename}${intakeContentType ? ` · ${intakeContentType}` : ""}` : "No file selected."}
-              </div>
-              {fileReadError && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">{fileReadError}</div>}
-              <button type="submit" disabled={createMutation.saving || !hasCreateIntake} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px]">
-                <Plus className="h-3.5 w-3.5" />
-                Create questionnaire
-              </button>
-            </div>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <button type="submit" disabled={createMutation.saving || !hasCreateIntake} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px] sm:w-auto">
+              <Plus className="h-3.5 w-3.5" />
+              Create questionnaire
+            </button>
           </div>
         </form>
       </Panel>
