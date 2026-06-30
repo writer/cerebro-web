@@ -282,6 +282,87 @@ describe("cerebro fixture proxy responses", () => {
       run: { title: "New customer questionnaire", question_count: 2, unassigned_count: 2 },
     });
 
+    const portalCreated = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/questionnaire-runs",
+      body: JSON.stringify({
+        direction: "customer_security_review",
+        title: "Portal questionnaire",
+        source_format: "portal",
+        intake_format: "portal",
+        portal_url: "https://portal.example.com/review/123",
+        portal_instructions: "Use SSO and assign missing access to sales ops.",
+        intake_text: "Access:\nQuestion 1: Do you enforce MFA?\nSave\nAudit:\nQuestion: Attach the SOC 2 report.",
+      }),
+    });
+    expect(portalCreated?.status).toBe(201);
+    expect(parseFixture(portalCreated!)).toMatchObject({
+      run: {
+        title: "Portal questionnaire",
+        question_count: 2,
+        questions: expect.arrayContaining([
+          expect.objectContaining({ question: "Do you enforce MFA?", section: "Access" }),
+          expect.objectContaining({ question: "Attach the SOC 2 report.", section: "Audit" }),
+        ]),
+        attributes: {
+          intake_format: "portal",
+          portal_url: "https://portal.example.com/review/123",
+          portal_status: "questions_captured",
+          portal_instructions: "Use SSO and assign missing access to sales ops.",
+        },
+      },
+    });
+
+    const portalCapture = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/questionnaire-runs",
+      body: JSON.stringify({
+        direction: "customer_security_review",
+        title: "Portal capture",
+        source_format: "portal",
+        intake_format: "portal",
+        portal_url: "https://portal.example.com/review/456",
+        portal_instructions: "Waiting on portal access.",
+      }),
+    });
+    expect(portalCapture?.status).toBe(201);
+    const portalCapturePayload = parseFixture(portalCapture!);
+    expect(portalCapturePayload).toMatchObject({
+      run: {
+        title: "Portal capture",
+        question_count: 0,
+        status: "intake",
+        attributes: {
+          intake_format: "portal",
+          portal_url: "https://portal.example.com/review/456",
+          portal_status: "needs_capture",
+        },
+      },
+    });
+
+    const portalCaptureRun = portalCapturePayload.run as { run_id: string };
+    const portalAssignment = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${portalCaptureRun.run_id}/assignments`,
+      body: JSON.stringify({ owner_id: "sales-ops@example.com", reason: "Capture portal questions." }),
+    });
+    expect(parseFixture(portalAssignment!)).toMatchObject({
+      run: {
+        assignments: [expect.objectContaining({ owner_id: "sales-ops@example.com", question_id: "" })],
+      },
+    });
+
+    const portalComment = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${portalCaptureRun.run_id}/comments`,
+      body: JSON.stringify({ body: "Portal access requested." }),
+    });
+    expect(parseFixture(portalComment!)).toMatchObject({
+      run: {
+        comments: [expect.objectContaining({ body: "Portal access requested.", question_id: "" })],
+      },
+    });
+
     const createdRun = createdPayload.run as { run_id: string };
     const mapped = cerebroFixtureResponseFor({
       method: "POST",

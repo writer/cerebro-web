@@ -9,7 +9,7 @@ import { displayDate, humanize, shortEntity } from "@/lib/grc";
 import type { GRCQuestionnaireRun, GRCQuestionnaireRunResponse, GRCQuestionnaireRunsResponse } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
-import { initialQuestionnaireRowID, primaryAnswerForRun, questionnaireDirectionLabel, questionnaireQueueRows, questionnaireRollups, questionnaireStateIntent, type QuestionnaireQueueRow } from "@/lib/questionnaires";
+import { inferQuestionnaireIntakeFormat, initialQuestionnaireRowID, isQuestionnaireBinaryIntakeFormat, primaryAnswerForRun, questionnaireDirectionLabel, questionnaireQueueRows, questionnaireRollups, questionnaireStateIntent, type QuestionnaireQueueRow } from "@/lib/questionnaires";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 const QUEUE_LIMIT = 100;
@@ -66,6 +66,11 @@ export default function QuestionnairesPage() {
   const [sourceFilename, setSourceFilename] = useState("");
   const [intakeFormat, setIntakeFormat] = useState("csv");
   const [intakeText, setIntakeText] = useState("");
+  const [intakeFileBase64, setIntakeFileBase64] = useState("");
+  const [intakeContentType, setIntakeContentType] = useState("");
+  const [portalURL, setPortalURL] = useState("");
+  const [portalInstructions, setPortalInstructions] = useState("");
+  const [fileReadError, setFileReadError] = useState("");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedDirection = useDebouncedValue(direction.trim());
   const debouncedStatus = useDebouncedValue(status.trim());
@@ -99,6 +104,7 @@ export default function QuestionnairesPage() {
   const selectedRun = selectedRow ? runs.find((run) => run.run_id === selectedRow.runID) ?? null : null;
   const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
   const selectedQuestion = questionnaireQuestionForRun(selectedRun, selectedAnswer?.question_id ?? selectedRow?.questionID);
+  const selectedQuestionID = selectedAnswer?.question_id ?? selectedRow?.questionID ?? null;
   const selectedSlotMapping = joinMappingList(selectedQuestion?.required_evidence_slots ?? answerEvidenceSlotIDs(selectedAnswer));
   const selectedControlMapping = joinMappingList(selectedQuestion?.mapped_controls ?? selectedAnswer?.controls);
   const selectedMappingOwner = selectedQuestion?.owner_id ?? "";
@@ -189,14 +195,23 @@ export default function QuestionnairesPage() {
         source_filename: sourceFilename || undefined,
         source_format: intakeFormat,
         intake_format: intakeFormat,
-        intake_text: intakeText,
+        intake_text: intakeText || undefined,
+        intake_file_base64: intakeFileBase64 || undefined,
+        intake_content_type: intakeContentType || undefined,
+        portal_url: intakeFormat === "portal" ? portalURL || undefined : undefined,
+        portal_instructions: intakeFormat === "portal" ? portalInstructions || undefined : undefined,
       });
       setSelectedRowID(initialQuestionnaireRowID(response.run));
       setMappingRowID(null);
       setMappingReason("");
       resetRowActionForms();
       setIntakeText("");
+      setIntakeFileBase64("");
+      setIntakeContentType("");
       setSourceFilename("");
+      setPortalURL("");
+      setPortalInstructions("");
+      setFileReadError("");
       reloadRuns();
     } catch {
       return;
@@ -205,13 +220,13 @@ export default function QuestionnairesPage() {
 
   const submitQuestionUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedRun || !selectedAnswer) return;
+    if (!selectedRun || !selectedQuestionID) return;
     const requiredSlots = splitMappingList(activeSlotMapping);
     const mappedControls = splitMappingList(activeControlMapping);
     try {
       await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/questions`, {
         tenant_id: tenantID || undefined,
-        question_id: selectedAnswer.question_id,
+        question_id: selectedQuestionID,
         required_evidence_slots: requiredSlots,
         mapped_controls: mappedControls,
         owner_id: activeMappingOwner || undefined,
@@ -230,9 +245,25 @@ export default function QuestionnairesPage() {
     const file = event.target.files?.[0];
     if (!file) return;
     setSourceFilename(file.name);
-    setIntakeFormat(inferIntakeFormat(file.name));
-    setIntakeText(await file.text());
-    event.target.value = "";
+    setIntakeContentType(file.type);
+    setFileReadError("");
+    const format = inferQuestionnaireIntakeFormat(file.name, file.type);
+    setIntakeFormat(format);
+    try {
+      if (isQuestionnaireBinaryIntakeFormat(format)) {
+        setIntakeFileBase64(await fileToBase64(file));
+        setIntakeText("");
+      } else {
+        setIntakeText(await file.text());
+        setIntakeFileBase64("");
+      }
+    } catch (error) {
+      setIntakeFileBase64("");
+      setIntakeText("");
+      setFileReadError(error instanceof Error ? error.message : "Could not read file.");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const processRun = async () => {
@@ -247,11 +278,11 @@ export default function QuestionnairesPage() {
 
   const submitAssignment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedRun || !selectedAnswer) return;
+    if (!selectedRun) return;
     try {
       await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/assignments`, {
         tenant_id: tenantID || undefined,
-        question_id: selectedAnswer.question_id,
+        question_id: selectedQuestionID || undefined,
         owner_id: assignmentOwner,
         team: assignmentTeam,
         reason: assignmentReason,
@@ -268,7 +299,7 @@ export default function QuestionnairesPage() {
     try {
       await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/decisions`, {
         tenant_id: tenantID || undefined,
-        question_id: selectedAnswer?.question_id,
+        question_id: selectedQuestionID || undefined,
         state: decisionState,
         reason: decisionReason,
       });
@@ -280,11 +311,11 @@ export default function QuestionnairesPage() {
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedRun || !selectedAnswer || !commentBody.trim()) return;
+    if (!selectedRun || !commentBody.trim()) return;
     try {
       await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/comments`, {
         tenant_id: tenantID || undefined,
-        question_id: selectedAnswer.question_id,
+        question_id: selectedQuestionID || undefined,
         body: commentBody,
       });
       setCommentBody("");
@@ -314,6 +345,7 @@ export default function QuestionnairesPage() {
     { key: "mappedControls", label: "Controls", render: (_value, row) => <span className={monoText}>{row.mappedControls.slice(0, 2).join(", ") || "—"}</span> },
     { key: "citationCount", label: "Citations", render: (_value, row) => <span className="tabular-nums">{row.citationCount}</span> },
   ], []);
+  const hasCreateIntake = Boolean(intakeText.trim() || intakeFileBase64 || (intakeFormat === "portal" && portalURL.trim()));
 
   return (
     <main className="space-y-6">
@@ -371,14 +403,46 @@ export default function QuestionnairesPage() {
             </label>
             <label htmlFor="create-format">
               <span className={labelClass}>Format</span>
-              <select id="create-format" value={intakeFormat} onChange={(event) => setIntakeFormat(event.target.value)} className={inputClass}>
+              <select
+                id="create-format"
+                value={intakeFormat}
+                onChange={(event) => {
+                  const nextFormat = event.target.value;
+                  setIntakeFormat(nextFormat);
+                  if (!isQuestionnaireBinaryIntakeFormat(nextFormat)) {
+                    setIntakeFileBase64("");
+                    setIntakeContentType("");
+                  }
+                  if (nextFormat !== "portal") {
+                    setPortalURL("");
+                    setPortalInstructions("");
+                  }
+                }}
+                className={inputClass}
+              >
                 <option value="csv">CSV</option>
                 <option value="tsv">TSV</option>
                 <option value="json">JSON</option>
                 <option value="text">Text</option>
+                <option value="portal">Portal</option>
+                <option value="pdf">PDF</option>
+                <option value="xlsx">XLSX</option>
+                <option value="xlsm">XLSM</option>
               </select>
             </label>
           </div>
+          {intakeFormat === "portal" && (
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <label htmlFor="portal-url">
+                <span className={labelClass}>Portal URL</span>
+                <input id="portal-url" value={portalURL} onChange={(event) => setPortalURL(event.target.value)} className={inputClass} placeholder="https://portal.example.com/review" />
+              </label>
+              <label htmlFor="portal-instructions">
+                <span className={labelClass}>Portal notes</span>
+                <input id="portal-instructions" value={portalInstructions} onChange={(event) => setPortalInstructions(event.target.value)} className={inputClass} placeholder="Login, workspace, owner, or access notes" />
+              </label>
+            </div>
+          )}
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
             <label htmlFor="intake-text">
               <span className={labelClass}>Questions</span>
@@ -395,11 +459,18 @@ export default function QuestionnairesPage() {
                 <FileUp className="h-3.5 w-3.5" />
                 Upload questions
               </label>
-              <input id="intake-file" type="file" accept=".csv,.tsv,.json,.txt,text/csv,application/json,text/plain" onChange={handleIntakeFile} className="sr-only" />
+              <input
+                id="intake-file"
+                type="file"
+                accept=".csv,.tsv,.json,.txt,.pdf,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroenabled.12"
+                onChange={handleIntakeFile}
+                className="sr-only"
+              />
               <div className="min-h-[2rem] rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
-                {sourceFilename || "No file selected."}
+                {sourceFilename ? `${sourceFilename}${intakeContentType ? ` · ${intakeContentType}` : ""}` : "No file selected."}
               </div>
-              <button type="submit" disabled={createMutation.saving || !intakeText.trim()} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px]">
+              {fileReadError && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">{fileReadError}</div>}
+              <button type="submit" disabled={createMutation.saving || !hasCreateIntake} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px]">
                 <Plus className="h-3.5 w-3.5" />
                 Create run
               </button>
@@ -574,6 +645,7 @@ function QuestionnaireDetail({
       </Panel>
     );
   }
+  const intakeFacts = questionnaireIntakeFacts(run);
   return (
     <Panel
       title="Answer detail"
@@ -586,12 +658,25 @@ function QuestionnaireDetail({
             <Badge value={answer?.answer_state ?? run.status} />
             <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase ${intentClass(questionnaireStateIntent(answer?.answer_state ?? run.status))}`}>{questionnaireDirectionLabel(run.direction)}</span>
           </div>
-          <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">{answer?.question ?? run.title}</h2>
+          <h2 className="text-[15px] font-semibold text-[var(--text-primary)]">{answer?.question ?? row.question ?? run.title}</h2>
           <div className="text-[12px] text-[var(--text-muted)]">{run.title} · {shortEntity(run.vendor_urn || run.customer_name || run.requester || "")}</div>
         </div>
 
         <DetailSection title="Draft answer">
           <p className="text-[13px] leading-5 text-[var(--text-secondary)]">{answer?.draft_answer || "No draft answer is ready."}</p>
+        </DetailSection>
+
+        <DetailSection title="Intake">
+          {intakeFacts.length === 0 ? <EmptyDetail label="No intake source recorded." /> : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {intakeFacts.map((fact) => (
+                <div key={fact.label} className="rounded-md border border-[color:var(--border)] p-3 text-[12px]">
+                  <div className={labelClass}>{fact.label}</div>
+                  <div className="mt-1 break-words text-[var(--text-secondary)]">{fact.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </DetailSection>
 
         <DetailSection title="Question mapping">
@@ -614,7 +699,7 @@ function QuestionnaireDetail({
                 <input id="mapping-reason" value={mappingReason} onChange={(event) => onMappingReasonChange(event.target.value)} className={inputClass} placeholder="evidence slot or owner change" />
               </label>
             </div>
-            <button type="submit" disabled={actionSaving || !answer} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]">
+            <button type="submit" disabled={actionSaving || !row.questionID} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Save mapping
             </button>
@@ -795,17 +880,34 @@ const intentClass = (intent: "neutral" | "danger" | "warning" | "success") => {
   }
 };
 
-const inferIntakeFormat = (filename: string) => {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".json")) return "json";
-  if (lower.endsWith(".tsv")) return "tsv";
-  if (lower.endsWith(".txt")) return "text";
-  return "csv";
-};
+const fileToBase64 = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result : "";
+      const comma = value.indexOf(",");
+      resolve(comma >= 0 ? value.slice(comma + 1) : value);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
 
 const questionnaireQuestionForRun = (run: GRCQuestionnaireRun | null, questionID?: string | null) => {
   if (!run || !questionID) return undefined;
   return (run.questions ?? []).find((question) => question.id === questionID);
+};
+
+const questionnaireIntakeFacts = (run: GRCQuestionnaireRun) => {
+  const attributes = run.attributes ?? {};
+  return [
+    { label: "File", value: run.source_filename },
+    { label: "Format", value: attributes.intake_format || run.source_format },
+    { label: "Attachment", value: attributes.intake_file_attached === "true" ? "Attached" : "" },
+    { label: "Content type", value: attributes.intake_content_type },
+    { label: "Portal URL", value: attributes.portal_url },
+    { label: "Portal status", value: attributes.portal_status },
+    { label: "Portal notes", value: attributes.portal_instructions },
+  ].filter((item): item is { label: string; value: string } => typeof item.value === "string" && item.value.trim() !== "");
 };
 
 const answerEvidenceSlotIDs = (answer: ReturnType<typeof primaryAnswerForRun>) =>

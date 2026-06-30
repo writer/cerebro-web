@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GRCQuestionnaireRun } from "@/lib/grc";
-import { initialQuestionnaireRowID, primaryAnswerForRun, questionnaireQueueRows, questionnaireRollups } from "@/lib/questionnaires";
+import { inferQuestionnaireIntakeFormat, initialQuestionnaireRowID, primaryAnswerForRun, questionnaireQueueRows, questionnaireRollups } from "@/lib/questionnaires";
 
 describe("questionnaire queue helpers", () => {
   it("builds answer rows and rollups from questionnaire runs", () => {
@@ -93,6 +93,129 @@ describe("questionnaire queue helpers", () => {
       unassigned: 1,
     });
     expect(primaryAnswerForRun(runs[0], "q-2")?.id).toBe("answer-2");
+    expect(primaryAnswerForRun(runs[0], "missing")).toBeNull();
+  });
+
+  it("infers structured intake formats from filenames before broad MIME types", () => {
+    expect(inferQuestionnaireIntakeFormat("review.csv", "text/plain")).toBe("csv");
+    expect(inferQuestionnaireIntakeFormat("review.tsv", "text/plain")).toBe("tsv");
+    expect(inferQuestionnaireIntakeFormat("review.json", "text/plain")).toBe("json");
+    expect(inferQuestionnaireIntakeFormat("review.xlsx", "application/octet-stream")).toBe("xlsx");
+    expect(inferQuestionnaireIntakeFormat("", "application/pdf")).toBe("pdf");
+  });
+
+  it("uses run-level assignments for portal capture rows without questions", () => {
+    const rows = questionnaireQueueRows([{
+      id: "run-1",
+      run_id: "run-1",
+      title: "Portal capture",
+      direction: "customer_security_review",
+      requester: "Acme",
+      status: "intake",
+      assigned_team: "security",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-02T00:00:00.000Z",
+      question_count: 0,
+      answer_count: 0,
+      assignments: [{
+        id: "assignment-1",
+        question_id: "",
+        owner_id: "sales-ops@example.com",
+        status: "open",
+        due_at: "2026-01-08T00:00:00.000Z",
+      }],
+    }]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: "run-1", owner: "sales-ops@example.com", dueAt: "2026-01-08T00:00:00.000Z" });
+    expect(rows[0].questionID).toBeUndefined();
+  });
+
+  it("shows parsed question rows before answer generation", () => {
+    const runs: GRCQuestionnaireRun[] = [{
+      id: "run-1",
+      run_id: "run-1",
+      title: "Portal review",
+      direction: "customer_security_review",
+      requester: "Acme",
+      status: "intake",
+      owner_id: "security@example.com",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-02T00:00:00.000Z",
+      question_count: 2,
+      answer_count: 0,
+      ready_answer_count: 0,
+      blocked_answer_count: 0,
+      review_answer_count: 0,
+      missing_evidence_count: 0,
+      stale_evidence_count: 0,
+      unassigned_count: 1,
+      assignments: [{ id: "assignment-2", question_id: "q-2", team: "legal", status: "open" }],
+      questions: [
+        {
+          id: "q-1",
+          question: "Do you enforce MFA?",
+          section: "Access",
+          mapped_controls: ["SOC2-CC6.1"],
+          required_evidence_slots: ["identity_mfa"],
+          answer_state: "blocked",
+          review_state: "blocked",
+        },
+        {
+          id: "q-2",
+          question: "Attach SOC 2 report.",
+          section: "Audit",
+          answer_state: "blocked",
+          review_state: "blocked",
+        },
+      ],
+    }];
+
+    const rows = questionnaireQueueRows(runs);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ id: "run-1:q-1", question: "Do you enforce MFA?", questionID: "q-1", owner: "security@example.com", mappedControls: ["SOC2-CC6.1"] });
+    expect(rows[1]).toMatchObject({ id: "run-1:q-2", question: "Attach SOC 2 report.", questionID: "q-2", owner: "legal" });
+    expect(initialQuestionnaireRowID(runs[0])).toBe("run-1:q-1");
+  });
+
+  it("keeps unanswered questions visible on partially processed runs", () => {
+    const runs: GRCQuestionnaireRun[] = [{
+      id: "run-1",
+      run_id: "run-1",
+      title: "Partial review",
+      direction: "customer_security_review",
+      requester: "Acme",
+      status: "needs_input",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-02T00:00:00.000Z",
+      question_count: 2,
+      answer_count: 1,
+      ready_answer_count: 1,
+      blocked_answer_count: 0,
+      review_answer_count: 0,
+      missing_evidence_count: 0,
+      stale_evidence_count: 0,
+      unassigned_count: 1,
+      questions: [
+        { id: "q-1", question: "Do you enforce MFA?", answer_state: "blocked", review_state: "blocked" },
+        { id: "q-2", question: "Attach SOC 2 report.", answer_state: "blocked", review_state: "blocked" },
+      ],
+      answers: [{
+        id: "answer-1",
+        question_id: "q-1",
+        question: "Do you enforce MFA?",
+        answer_state: "supported",
+        review_state: "ready",
+        citations: [{ id: "citation-1" }],
+      }],
+    }];
+
+    const rows = questionnaireQueueRows(runs);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ questionID: "q-1", state: "supported", citationCount: 1 });
+    expect(rows[1]).toMatchObject({ questionID: "q-2", question: "Attach SOC 2 report.", state: "blocked", citationCount: 0 });
   });
 
   it("keeps terminal runs out of due rollups and counts review-intent fallback states", () => {

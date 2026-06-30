@@ -3554,6 +3554,12 @@ const questionnaireRowsFromText = (value: string, format: string): Array<Record<
   const text = value.trim();
   if (!text) return [];
   const normalizedFormat = format.toLowerCase();
+  if (normalizedFormat === "portal") {
+    return questionnairePortalRowsFromText(text);
+  }
+  if (normalizedFormat === "pdf") {
+    return questionnairePromptRowsFromText(text);
+  }
   if (normalizedFormat === "json" || text.startsWith("[") || text.startsWith("{")) {
     try {
       const parsed = JSON.parse(text) as unknown;
@@ -3592,14 +3598,73 @@ const questionnaireRowsFromText = (value: string, format: string): Array<Record<
   return text.split(/\r?\n/).map((line) => ({ question: line.trim().replace(/^- /, "").replace(/^\* /, "") }));
 };
 
+const questionnairePortalRowsFromText = (text: string): Array<Record<string, unknown>> => {
+  let section = "";
+  return text.split(/\r?\n/).flatMap((rawLine) => {
+    const line = normalizeFixturePortalLine(rawLine);
+    if (!line) return [];
+    if (line.endsWith(":") && !line.includes("?") && line.length <= 80) {
+      section = line.slice(0, -1);
+      return [];
+    }
+    return fixtureLooksLikeQuestionnairePrompt(line) ? [{ question: line, section }] : [];
+  });
+};
+
+const questionnairePromptRowsFromText = (text: string): Array<Record<string, unknown>> =>
+  text.split(/\r?\n/).map(normalizeFixturePortalLine).filter(fixtureLooksLikeQuestionnairePrompt).map((line) => ({ question: line }));
+
+const normalizeFixturePortalLine = (value: string) => {
+  let line = value.trim().replace(/^- /, "").replace(/^\* /, "").replace(/^\d+[.)]\s*/, "");
+  line = line.replace(/^question\s+\d+\s*:\s*/i, "");
+  for (const prefix of ["question:", "field:", "prompt:"]) {
+    if (line.toLowerCase().startsWith(prefix)) {
+      line = line.slice(prefix.length).trim();
+      break;
+    }
+  }
+  return ["", "next", "previous", "submit", "save", "cancel", "continue", "back", "login", "log in", "sign in", "upload", "upload file"].includes(line.toLowerCase().replace(/[ .:]+$/g, "")) ? "" : line;
+};
+
+const fixtureLooksLikeQuestionnairePrompt = (value: string) => {
+  const line = value.trim();
+  if (!line) return false;
+  if (line.includes("?")) return true;
+  const lower = line.toLowerCase();
+  return ["attach ", "confirm ", "describe ", "enter ", "explain ", "identify ", "list ", "provide ", "select ", "share ", "state ", "upload "]
+    .some((prefix) => lower.startsWith(prefix) || lower.startsWith(`please ${prefix}`));
+};
+
 const splitFixtureList = (value: string) =>
   value.split(/[|,;]/).map((item) => item.trim()).filter(Boolean);
 
+const questionnaireRunAttributesFromRequest = (parsed: Record<string, unknown>, questionCount: number) => {
+  const attributes = stringAttributes(parsed.attributes);
+  const intakeFormat = stringField(parsed.intake_format) || stringField(parsed.source_format);
+  if (intakeFormat) attributes.intake_format = intakeFormat;
+  if (stringField(parsed.intake_file_base64)) {
+    attributes.intake_file_attached = "true";
+  }
+  const contentType = stringField(parsed.intake_content_type);
+  if (contentType) attributes.intake_content_type = contentType;
+  const portalURL = stringField(parsed.portal_url);
+  if (portalURL) {
+    attributes.portal_url = portalURL;
+    attributes.portal_status = questionCount > 0 ? "questions_captured" : "needs_capture";
+  }
+  const portalInstructions = stringField(parsed.portal_instructions);
+  if (portalInstructions) attributes.portal_instructions = portalInstructions;
+  return attributes;
+};
+
 const createQuestionnaireRunFixture = (parsed: Record<string, unknown>) => {
   const questions = questionnaireQuestionsFromRequest(parsed);
-  if (questions.length === 0) return jsonFixture({ error: "At least one question is required.", generated_at: generatedAt }, 400);
+  if (questions.length === 0 && !questionnaireAllowsPortalCaptureWithoutQuestions(parsed)) {
+    return jsonFixture({ error: "At least one question is required.", generated_at: generatedAt }, 400);
+  }
   const title = stringField(parsed.title) || "Security questionnaire";
   const direction = stringField(parsed.direction) || "customer_security_review";
+  const attributes = questionnaireRunAttributesFromRequest(parsed, questions.length);
   const id = `fixture-questionnaire-run-${questionnaireRuns.length + 1}`;
   const run: GRCQuestionnaireRun = {
     id,
@@ -3642,11 +3707,14 @@ const createQuestionnaireRunFixture = (parsed: Record<string, unknown>) => {
     decisions: [],
     comments: [],
     timeline: [{ id: `${id}-created`, event_type: "created", actor_id: "local-developer", summary: "Questionnaire run created", created_at: generatedAt }],
-    attributes: stringAttributes(parsed.attributes),
+    attributes,
   };
   questionnaireRuns.unshift(run);
   return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt }, 201);
 };
+
+const questionnaireAllowsPortalCaptureWithoutQuestions = (parsed: Record<string, unknown>) =>
+  (stringField(parsed.intake_format) || stringField(parsed.source_format)).toLowerCase() === "portal" && Boolean(stringField(parsed.portal_url));
 
 const processQuestionnaireRunFixture = (runID: string) => {
   const run = findQuestionnaireRun(safeDecode(runID));
@@ -3671,7 +3739,7 @@ const processQuestionnaireRunFixture = (runID: string) => {
       };
     });
   }
-  run.status = "needs_input";
+  run.status = (run.questions ?? []).length === 0 ? "intake" : "needs_input";
   recalculateQuestionnaireRunCounts(run);
   run.updated_at = generatedAt;
   run.timeline = [{ id: `${run.run_id}-processed-${run.timeline?.length ?? 0}`, event_type: "processed", actor_id: "local-developer", summary: "Questionnaire answers refreshed from evidence", created_at: generatedAt }, ...(run.timeline ?? [])];
@@ -3781,7 +3849,7 @@ const questionnaireRunAssignmentFixture = (runID: string, parsed: Record<string,
     due_at: stringField(parsed.due_at),
     created_at: generatedAt,
   };
-  if (!fixtureQuestionExists(run, assignment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+  if (assignment.question_id && !fixtureQuestionExists(run, assignment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
   if (!assignment.owner_id && !assignment.team) return jsonFixture({ error: "owner_id or team is required.", generated_at: generatedAt }, 400);
   run.assignments = [assignment, ...(run.assignments ?? [])];
   run.updated_at = generatedAt;
@@ -3840,7 +3908,7 @@ const questionnaireRunCommentFixture = (runID: string, parsed: Record<string, un
     body: stringField(parsed.body),
     created_at: generatedAt,
   };
-  if (!fixtureQuestionExists(run, comment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+  if (comment.question_id && !fixtureQuestionExists(run, comment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
   if (!comment.body) {
     return jsonFixture({ error: "Comment body is required.", generated_at: generatedAt }, 400);
   }

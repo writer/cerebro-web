@@ -272,6 +272,7 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
   const selectedRow = rows.find((row) => row.id === selectedRowID) ?? rows[0] ?? null;
   const selectedRun = selectedRow ? runs.find((run) => run.run_id === selectedRow.runID) ?? null : null;
   const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
+  const selectedQuestionID = selectedAnswer?.question_id ?? selectedRow?.questionID ?? null;
   const queueHref = useMemo(() => {
     const params = new URLSearchParams({ direction: "vendor_review", vendor_urn: vendorURN });
     if (tenantID) params.set("tenant_id", tenantID);
@@ -306,11 +307,11 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
 
   const submitAssignment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedRun || !selectedAnswer) return;
+    if (!selectedRun) return;
     try {
       await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/assignments`, {
         tenant_id: tenantID || undefined,
-        question_id: selectedAnswer.question_id,
+        question_id: selectedQuestionID || undefined,
         owner_id: assignmentOwner,
         team: assignmentTeam,
         reason: assignmentReason,
@@ -327,7 +328,7 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
     try {
       await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/decisions`, {
         tenant_id: tenantID || undefined,
-        question_id: selectedAnswer?.question_id,
+        question_id: selectedQuestionID || undefined,
         state: decisionState,
         reason: decisionReason,
       });
@@ -339,11 +340,11 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedRun || !selectedAnswer || !commentBody.trim()) return;
+    if (!selectedRun || !commentBody.trim()) return;
     try {
       await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/comments`, {
         tenant_id: tenantID || undefined,
-        question_id: selectedAnswer.question_id,
+        question_id: selectedQuestionID || undefined,
         body: commentBody,
       });
       setCommentBody("");
