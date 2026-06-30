@@ -266,6 +266,47 @@ describe("cerebro fixture proxy responses", () => {
     });
   });
 
+  it("returns and mutates unified questionnaire run fixtures", () => {
+    withFixtureMode();
+    const list = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/questionnaire-runs",
+    });
+    expect(list?.status).toBe(200);
+    expect(parseFixture(list!)).toMatchObject({
+      summary: {
+        total_runs: 2,
+        blocked_answers: 1,
+        review_answers: 3,
+        ready_answers: 2,
+        stale_evidence: 2,
+      },
+      runs: [
+        expect.objectContaining({ direction: "customer_security_review" }),
+        expect.objectContaining({ direction: "vendor_review" }),
+      ],
+    });
+
+    const vendorList = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/questionnaire-runs",
+      searchParams: new URLSearchParams({ direction: "vendor_review", vendor_urn: "urn:cerebro:demo-tenant:vendor:core-sso" }),
+    });
+    expect(parseFixture(vendorList!)).toMatchObject({
+      summary: { total_runs: 1, vendor_runs: 1 },
+      runs: [expect.objectContaining({ run_id: "vendor-review-core-sso-2026" })],
+    });
+
+    const decision = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/questionnaire-runs/customer-review-acme-2026/decisions",
+      body: JSON.stringify({ state: "approved", reason: "Answers accepted." }),
+    });
+    expect(parseFixture(decision!)).toMatchObject({
+      run: { run_id: "customer-review-acme-2026", status: "approved", decision: "approved" },
+    });
+  });
+
   it("returns policy lifecycle records in fixture mode", () => {
     withFixtureMode();
     const response = cerebroFixtureResponseFor({ method: "GET", path: "grc/policy-lifecycle" });

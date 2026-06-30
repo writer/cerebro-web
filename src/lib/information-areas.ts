@@ -121,6 +121,7 @@ export const informationAreas: InformationArea[] = [
       { href: "/policies", label: "Policies", detail: "Policy versions, approvals, attestations, exceptions, and mappings." },
       { href: "/frameworks", label: "Frameworks", detail: "Framework readiness, maturity, gaps, planning, and exports." },
       { href: "/evidence", label: "Evidence", detail: "Evidence register linked to findings, rules, and graph roots." },
+      { href: "/questionnaires", label: "Questionnaires", detail: "Customer and vendor answer queues, blockers, owners, approvals, and evidence gaps." },
       { href: "/reports", label: "Reports", detail: "Audit packs with controls, evidence, and impact proof." },
     ],
     secondaryRoutes: [

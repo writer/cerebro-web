@@ -257,6 +257,12 @@ export const permissionForCerebroProxyRequest = (
   if (normalizedPath === "grc/dashboards") return "dashboards:write";
   if (normalizedPath.startsWith("grc/dashboards/") && normalizedPath.endsWith("/clone")) return "dashboards:write";
   if (normalizedPath === "grc/findings/triage") return "findings:write";
+  if (normalizedPath === "grc/questionnaire-runs") return "grc:inventory:write";
+  if (normalizedPath.startsWith("grc/questionnaire-runs/") && (
+    normalizedPath.endsWith("/process") ||
+    normalizedPath.endsWith("/assignments") ||
+    normalizedPath.endsWith("/decisions")
+  )) return "grc:inventory:write";
   if (normalizedPath === "grc/vendors") return "grc:inventory:write";
   if (normalizedPath.startsWith("grc/vendors/") && normalizedPath.endsWith("/actions")) return "grc:inventory:write";
   if (normalizedPath.startsWith("grc/vendor-discoveries/") && normalizedPath.endsWith("/decision")) return "grc:inventory:write";

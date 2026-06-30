@@ -9,20 +9,18 @@ import {
   ClipboardCheck,
   Download,
   LockKeyhole,
-  MessageSquare,
   MoreVertical,
   Play,
   RefreshCw,
   Send,
   Sparkles,
-  Upload,
   UserPlus,
   Wrench,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { type FormEvent, type ReactNode, memo, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 
 import GraphViewer from "@/components/grc/LazyGraphViewer";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, Panel, ResultLimitNotice, SeverityDot } from "@/components/grc/Primitives";
@@ -37,18 +35,20 @@ import {
   GRCVendorMonitoringSignal,
   GRCVendorObligation,
   GRCVendorPacket,
-  GRCVendorQuestionnaireReview,
-  GRCVendorQuestionnaireReviewResponse,
-  GRCVendorQuestionnaireReviewsResponse,
+  GRCQuestionnaireRun,
+  GRCQuestionnaireRunResponse,
+  GRCQuestionnaireRunsResponse,
   GRCVendorRelatedRecord,
   humanize,
   shortEntity,
 } from "@/lib/grc";
 import { grcPath, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
+import { primaryAnswerForRun, questionnaireDirectionLabel, questionnaireQueueRows, questionnaireRollups, questionnaireStateIntent, type QuestionnaireQueueRow } from "@/lib/questionnaires";
 
 const EMPTY_FINDINGS: NonNullable<GRCVendorDetailResponse["findings"]> = [];
 const EMPTY_EVIDENCE: NonNullable<GRCVendorDetailResponse["evidence"]> = [];
+const EMPTY_QUESTIONNAIRE_RUNS: GRCQuestionnaireRun[] = [];
 
 function DetailRow({ label, value }: { label: string; value?: string }) {
   return (
@@ -248,349 +248,152 @@ function BadgeList({ items, emptyLabel }: { items: string[]; emptyLabel: string 
   );
 }
 
-const compactDateInput = (value?: string) => value?.slice(0, 10) ?? "";
-
-const reviewProgress = (review: GRCVendorQuestionnaireReview) =>
-  review.question_count > 0 ? Math.round((review.answered_count / review.question_count) * 100) : 0;
-
-const QuestionnaireReviewDetail = memo(function QuestionnaireReviewDetail({ review }: { review: GRCVendorQuestionnaireReview }) {
-  const evidenceMatches = review.evidence_matches ?? [];
-  const assignments = review.assignments ?? [];
-  const comments = review.comments ?? [];
-  const approvals = review.approvals ?? [];
-  const timeline = review.timeline ?? [];
-
-  return (
-    <div className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-4">
-        <MetricCard label="Answered" value={`${reviewProgress(review)}%`} detail={`${review.answered_count} of ${review.question_count}`} intent={review.missing_answer_count > 0 ? "warning" : "success"} />
-        <MetricCard label="Missing" value={review.missing_answer_count} detail="answers" intent={review.missing_answer_count > 0 ? "warning" : "success"} />
-        <MetricCard label="Matches" value={review.evidence_match_count} detail="evidence sources" intent={evidenceMatches.some((match) => match.match_state === "conflict") ? "warning" : "success"} />
-        <MetricCard label="Decision" value={humanize(review.decision_state || "not_started")} detail={review.decision_recommendation || "No recommendation"} intent={review.decision_state === "approved" ? "success" : review.decision_state === "needs_followup" ? "warning" : "neutral"} />
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div>
-          <h3 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Evidence matches</h3>
-          {evidenceMatches.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No evidence matches yet.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead><tr><th>Question</th><th>Source</th><th>State</th><th>Confidence</th></tr></thead>
-                <tbody>
-                  {evidenceMatches.map((match) => (
-                    <tr key={match.id}>
-                      <td className="font-mono text-[12px]">{match.question_id}</td>
-                      <td>
-                        <div className="font-semibold text-[var(--text-primary)]">{match.source_label}</div>
-                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">{match.control_id || humanize(match.source_type)}</div>
-                      </td>
-                      <td><Badge value={match.match_state} /></td>
-                      <td>{typeof match.confidence_score === "number" ? `${match.confidence_score}%` : "Not set"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h3 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Missing answers</h3>
-          <BadgeList items={review.missing_answers ?? []} emptyLabel="No missing answers." />
-          <h3 className="mb-3 mt-5 text-[13px] font-semibold text-[var(--text-primary)]">Risk notes</h3>
-          <BadgeList items={review.risk_notes ?? []} emptyLabel="No risk notes." />
-        </div>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        <div>
-          <h3 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Assignments</h3>
-          <div className="divide-y divide-[color:var(--border)]">
-            {assignments.length === 0 ? (
-              <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No assignments.</div>
-            ) : assignments.map((assignment) => (
-              <div key={assignment.id} className="py-3 text-[13px]">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-semibold text-[var(--text-primary)]">{assignment.owner}</span>
-                  <Badge value={assignment.status} />
-                </div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{assignment.reason || assignment.question_id || "No reason"}</div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{assignment.due_at ? `Due ${displayDate(assignment.due_at)}` : "No due date"}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <h3 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Comments</h3>
-          <div className="divide-y divide-[color:var(--border)]">
-            {comments.length === 0 ? (
-              <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No comments.</div>
-            ) : comments.map((comment) => (
-              <div key={comment.id} className="py-3 text-[13px]">
-                <div className="font-semibold text-[var(--text-primary)]">{comment.author}</div>
-                <div className="mt-1 text-[var(--text-secondary)]">{comment.body}</div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDate(comment.created_at)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <h3 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Approvals</h3>
-          <div className="divide-y divide-[color:var(--border)]">
-            {approvals.length === 0 ? (
-              <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No approvals.</div>
-            ) : approvals.map((approval) => (
-              <div key={approval.id} className="py-3 text-[13px]">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-semibold text-[var(--text-primary)]">{approval.approver}</span>
-                  <Badge value={approval.state} />
-                </div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{approval.reason || "No reason"}</div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDate(approval.created_at)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">Timeline</h3>
-        <div className="divide-y divide-[color:var(--border)]">
-          {timeline.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No timeline events.</div>
-          ) : timeline.map((event) => (
-            <div key={event.id} className="grid gap-2 py-3 text-[13px] md:grid-cols-[150px_minmax(0,1fr)]">
-              <div className="text-[12px] text-[var(--text-muted)]">{displayDate(event.created_at)}</div>
-              <div>
-                <div className="font-semibold text-[var(--text-primary)]">{event.label}</div>
-                <div className="mt-1 text-[12px] text-[var(--text-muted)]">{[event.actor, event.detail].filter(Boolean).join(" | ")}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-});
-
 function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; vendorURN: string }) {
-  const [selectedReviewID, setSelectedReviewID] = useState("");
-  const [newTitle, setNewTitle] = useState("Security questionnaire");
-  const [newFileName, setNewFileName] = useState("vendor-questionnaire.xlsx");
-  const [newQuestionCount, setNewQuestionCount] = useState("12");
+  const [selectedRowID, setSelectedRowID] = useState<string | null>(null);
   const [assignmentOwner, setAssignmentOwner] = useState("security@example.com");
-  const [assignmentReason, setAssignmentReason] = useState("Attach missing answer evidence.");
-  const [assignmentDue, setAssignmentDue] = useState("");
-  const [commentBody, setCommentBody] = useState("");
-  const [approvalApprover, setApprovalApprover] = useState("");
-  const [approvalState, setApprovalState] = useState("approved");
-  const [approvalReason, setApprovalReason] = useState("Evidence accepted.");
-  const reviewsQuery = useGRCQuery<GRCVendorQuestionnaireReviewsResponse>(
-    grcPath(`/grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`, { tenant_id: tenantID }),
+  const [assignmentTeam, setAssignmentTeam] = useState("security");
+  const [assignmentReason, setAssignmentReason] = useState("Attach current evidence.");
+  const [decisionState, setDecisionState] = useState("approved");
+  const [decisionReason, setDecisionReason] = useState("Evidence accepted.");
+  const runsQuery = useGRCQuery<GRCQuestionnaireRunsResponse>(
+    grcPath("/grc/questionnaire-runs", {
+      tenant_id: tenantID,
+      direction: "vendor_review",
+      vendor_urn: vendorURN,
+      limit: 50,
+    }),
   );
-  const mutation = useGRCMutation<GRCVendorQuestionnaireReviewResponse>();
-  const reviews = reviewsQuery.data?.reviews ?? [];
-  const summary = reviewsQuery.data?.summary;
-  const selectedReview = reviews.find((review) => review.id === selectedReviewID) ?? reviews[0];
+  const mutation = useGRCMutation<GRCQuestionnaireRunResponse>();
+  const runs = runsQuery.data?.runs ?? EMPTY_QUESTIONNAIRE_RUNS;
+  const rows = useMemo(() => questionnaireQueueRows(runs), [runs]);
+  const rollups = useMemo(() => questionnaireRollups(runs, runsQuery.data?.summary), [runs, runsQuery.data?.summary]);
+  const selectedRow = rows.find((row) => row.id === selectedRowID) ?? rows[0] ?? null;
+  const selectedRun = selectedRow ? runs.find((run) => run.run_id === selectedRow.runID) ?? null : null;
+  const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
+  const queueHref = useMemo(() => {
+    const params = new URLSearchParams({ direction: "vendor_review", vendor_urn: vendorURN });
+    if (tenantID) params.set("tenant_id", tenantID);
+    return `/questionnaires?${params.toString()}`;
+  }, [tenantID, vendorURN]);
 
-  const reloadReviews = () => {
-    void reviewsQuery.reload();
-  };
+  const reloadRuns = () => { void runsQuery.reload(); };
 
-  const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    let response: GRCVendorQuestionnaireReviewResponse;
+  const processRun = async () => {
+    if (!selectedRun) return;
     try {
-      response = await mutation.mutate(`/grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`, {
-        tenant_id: tenantID || undefined,
-        title: newTitle,
-        source_filename: newFileName,
-        question_count: Number.parseInt(newQuestionCount, 10) || 12,
-      });
+      await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/process`, { tenant_id: tenantID || undefined });
     } catch {
       return;
     }
-    setSelectedReviewID(response.review.id);
-    reloadReviews();
-  };
-
-  const processReview = async () => {
-    if (!selectedReview) return;
-    try {
-      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/process`, { tenant_id: tenantID || undefined });
-    } catch {
-      return;
-    }
-    reloadReviews();
+    reloadRuns();
   };
 
   const submitAssignment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedReview) return;
+    if (!selectedRun || !selectedAnswer) return;
     try {
-      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/assignments`, {
+      await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/assignments`, {
         tenant_id: tenantID || undefined,
-        owner: assignmentOwner,
+        question_id: selectedAnswer.question_id,
+        owner_id: assignmentOwner,
+        team: assignmentTeam,
         reason: assignmentReason,
-        due_at: assignmentDue || undefined,
       });
     } catch {
       return;
     }
-    reloadReviews();
+    reloadRuns();
   };
 
-  const submitComment = async (event: FormEvent<HTMLFormElement>) => {
+  const submitDecision = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedReview || !commentBody.trim()) return;
+    if (!selectedRun) return;
     try {
-      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/comments`, {
+      await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/decisions`, {
         tenant_id: tenantID || undefined,
-        body: commentBody,
+        question_id: selectedAnswer?.question_id,
+        state: decisionState,
+        reason: decisionReason,
       });
     } catch {
       return;
     }
-    setCommentBody("");
-    reloadReviews();
-  };
-
-  const submitApproval = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const approver = approvalApprover.trim();
-    if (!selectedReview || !approver) return;
-    try {
-      await mutation.mutate(`/grc/vendor-questionnaire-reviews/${encodeURIComponent(selectedReview.id)}/approvals`, {
-        tenant_id: tenantID || undefined,
-        approver,
-        state: approvalState,
-        reason: approvalReason,
-      });
-    } catch {
-      return;
-    }
-    reloadReviews();
+    reloadRuns();
   };
 
   return (
     <Panel
-      title="Questionnaire reviews"
-      action={<button type="button" onClick={() => { void reviewsQuery.reload(); }} className="secondary-button px-3 py-1.5 text-[12px]">Refresh reviews</button>}
+      title="Questionnaire queue"
+      action={(
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={queueHref} className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">Open queue</Link>
+          <button type="button" onClick={reloadRuns} className="secondary-button px-3 py-1.5 text-[12px]">Refresh</button>
+        </div>
+      )}
     >
-      {reviewsQuery.error && <ErrorBlock error={reviewsQuery.error} onRetry={() => { void reviewsQuery.reload(); }} recoveryDetail="Questionnaire reviews appear when the vendor review API is reachable." />}
-      {reviewsQuery.loading && !reviewsQuery.data ? (
-        <LoadingBlock label="Loading questionnaire reviews..." />
+      {runsQuery.error && <ErrorBlock error={runsQuery.error} onRetry={reloadRuns} recoveryDetail="Questionnaire runs require the unified questionnaire API." />}
+      {runsQuery.loading && !runsQuery.data ? (
+        <LoadingBlock label="Loading questionnaire queue..." />
       ) : (
         <div className="space-y-5">
           <div className="grid gap-3 md:grid-cols-5">
-            <MetricCard label="Reviews" value={summary?.total_reviews ?? reviews.length} detail={`${summary?.ready_reviews ?? 0} processed`} />
-            <MetricCard label="Missing answers" value={summary?.missing_answers ?? 0} detail="need owner input" intent={(summary?.missing_answers ?? 0) > 0 ? "warning" : "success"} />
-            <MetricCard label="Assignments" value={summary?.open_assignments ?? 0} detail="open" intent={(summary?.open_assignments ?? 0) > 0 ? "warning" : "success"} />
-            <MetricCard label="Approvals" value={summary?.pending_approvals ?? 0} detail="pending" intent={(summary?.pending_approvals ?? 0) > 0 ? "warning" : "success"} />
-            <MetricCard label="Approved" value={summary?.approved_reviews ?? 0} detail="reviews" intent="success" />
+            <MetricCard label="Runs" value={rollups.total} detail="vendor review runs" />
+            <MetricCard label="Blocked" value={rollups.blocked} detail="answers blocked" intent={rollups.blocked > 0 ? "danger" : "success"} />
+            <MetricCard label="Needs review" value={rollups.needsReview} detail="answers queued" intent={rollups.needsReview > 0 ? "warning" : "success"} />
+            <MetricCard label="Ready" value={rollups.ready} detail="answers with citations" intent="success" />
+            <MetricCard label="Stale evidence" value={rollups.stale} detail="answers affected" intent={rollups.stale > 0 ? "warning" : "success"} />
           </div>
 
-          <form onSubmit={submitCreate} className="grid gap-3 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_120px_auto]">
-            <input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} className="control-input px-3 py-1.5 text-[13px]" aria-label="Questionnaire title" />
-            <input value={newFileName} onChange={(event) => setNewFileName(event.target.value)} className="control-input px-3 py-1.5 text-[13px]" aria-label="Source file name" />
-            <input value={newQuestionCount} onChange={(event) => setNewQuestionCount(event.target.value)} inputMode="numeric" className="control-input px-3 py-1.5 text-[13px]" aria-label="Question count" />
-            <button type="submit" disabled={mutation.saving} className="primary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
-              <Upload className="h-4 w-4" aria-hidden="true" />
-              {mutation.saving ? "Saving" : "Add review"}
-            </button>
-          </form>
+          {mutation.error && <ErrorBlock error={mutation.error} recoveryDetail="The questionnaire action did not save." />}
 
-          {mutation.error && <ErrorBlock error={mutation.error} recoveryDetail="The review action did not save." />}
-
-          {reviews.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No questionnaire reviews for this vendor.</div>
+          {rows.length === 0 ? (
+            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No vendor questionnaire runs for this vendor.</div>
           ) : (
-            <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
               <div className="divide-y divide-[color:var(--border)] rounded-md border border-[color:var(--border)]">
-                {reviews.map((review) => (
+                {rows.map((row) => (
                   <button
-                    key={review.id}
+                    key={row.id}
                     type="button"
-                    onClick={() => setSelectedReviewID(review.id)}
-                    className={`block w-full p-3 text-left transition hover:bg-[var(--surface-muted)] ${selectedReview?.id === review.id ? "bg-[var(--surface-muted)]" : ""}`}
+                    onClick={() => setSelectedRowID(row.id)}
+                    className={`block w-full p-3 text-left transition hover:bg-[var(--surface-muted)] ${selectedRow?.id === row.id ? "bg-[var(--surface-muted)]" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{review.title}</div>
-                        <div className="mt-1 truncate text-[12px] text-[var(--text-muted)]">{review.source_filename || "No file name"}</div>
+                        <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{row.question}</div>
+                        <div className="mt-1 truncate text-[12px] text-[var(--text-muted)]">{row.title}</div>
                       </div>
-                      <Badge value={review.review_state} />
+                      <Badge value={row.state} />
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[12px] text-[var(--text-muted)]">
-                      <span>{reviewProgress(review)}% answered</span>
-                      <span>{review.missing_answer_count} missing</span>
-                      <span>{displayDate(review.updated_at || review.created_at)}</span>
+                      <span>{row.owner || "Unassigned"}</span>
+                      <span>{row.citationCount} citations</span>
+                      <span>Due {displayDate(row.dueAt)}</span>
                     </div>
                   </button>
                 ))}
               </div>
 
-              {selectedReview && (
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">{selectedReview.title}</h3>
-                      <div className="mt-1 flex flex-wrap gap-2 text-[12px] text-[var(--text-muted)]">
-                        <span>Upload {humanize(selectedReview.upload_state || "unknown")}</span>
-                        <span>Process {humanize(selectedReview.process_state || "unknown")}</span>
-                        <span>Enrichment {humanize(selectedReview.enrichment_state || "unknown")}</span>
-                        <span>Due {selectedReview.due_at ? displayDate(selectedReview.due_at) : "not set"}</span>
-                      </div>
-                    </div>
-                    <button type="button" onClick={processReview} disabled={mutation.saving} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
-                      <Play className="h-4 w-4" aria-hidden="true" />
-                      {mutation.saving ? "Processing" : "Process"}
-                    </button>
-                  </div>
-
-                  <QuestionnaireReviewDetail review={selectedReview} />
-
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    <form onSubmit={submitAssignment} className="space-y-2 rounded-md border border-[color:var(--border)] p-3">
-                      <div className="text-[13px] font-semibold text-[var(--text-primary)]">Assign answer</div>
-                      <input value={assignmentOwner} onChange={(event) => setAssignmentOwner(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment owner" />
-                      <input value={assignmentReason} onChange={(event) => setAssignmentReason(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment reason" />
-                      <input type="date" value={compactDateInput(assignmentDue)} onChange={(event) => setAssignmentDue(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment due date" />
-                      <button type="submit" disabled={mutation.saving} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
-                        <UserPlus className="h-4 w-4" aria-hidden="true" />
-                        Add assignment
-                      </button>
-                    </form>
-
-                    <form onSubmit={submitComment} className="space-y-2 rounded-md border border-[color:var(--border)] p-3">
-                      <div className="text-[13px] font-semibold text-[var(--text-primary)]">Add comment</div>
-                      <textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} rows={4} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Comment body" placeholder="What changed?" />
-                      <button type="submit" disabled={mutation.saving || !commentBody.trim()} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
-                        <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                        Add comment
-                      </button>
-                    </form>
-
-                    <form onSubmit={submitApproval} className="space-y-2 rounded-md border border-[color:var(--border)] p-3">
-                      <div className="text-[13px] font-semibold text-[var(--text-primary)]">Record decision</div>
-                      <input value={approvalApprover} onChange={(event) => setApprovalApprover(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Approver" placeholder="approver@example.com" />
-                      <select value={approvalState} onChange={(event) => setApprovalState(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Approval state">
-                        <option value="approved">Approved</option>
-                        <option value="needs_followup">Needs follow-up</option>
-                        <option value="rejected">Rejected</option>
-                      </select>
-                      <input value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Approval reason" />
-                      <button type="submit" disabled={mutation.saving || !approvalApprover.trim()} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
-                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                        Save decision
-                      </button>
-                    </form>
-                  </div>
-                </div>
+              {selectedRun && selectedRow && (
+                <QuestionnaireRunDetail
+                  actionSaving={mutation.saving}
+                  answer={selectedAnswer}
+                  assignmentOwner={assignmentOwner}
+                  assignmentReason={assignmentReason}
+                  assignmentTeam={assignmentTeam}
+                  decisionReason={decisionReason}
+                  decisionState={decisionState}
+                  onAssignmentOwnerChange={setAssignmentOwner}
+                  onAssignmentReasonChange={setAssignmentReason}
+                  onAssignmentTeamChange={setAssignmentTeam}
+                  onDecisionReasonChange={setDecisionReason}
+                  onDecisionStateChange={setDecisionState}
+                  onProcess={processRun}
+                  onSubmitAssignment={submitAssignment}
+                  onSubmitDecision={submitDecision}
+                  row={selectedRow}
+                  run={selectedRun}
+                />
               )}
             </div>
           )}
@@ -599,6 +402,253 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
     </Panel>
   );
 }
+
+function QuestionnaireRunDetail({
+  actionSaving,
+  answer,
+  assignmentOwner,
+  assignmentReason,
+  assignmentTeam,
+  decisionReason,
+  decisionState,
+  onAssignmentOwnerChange,
+  onAssignmentReasonChange,
+  onAssignmentTeamChange,
+  onDecisionReasonChange,
+  onDecisionStateChange,
+  onProcess,
+  onSubmitAssignment,
+  onSubmitDecision,
+  row,
+  run,
+}: {
+  actionSaving: boolean;
+  answer: ReturnType<typeof primaryAnswerForRun>;
+  assignmentOwner: string;
+  assignmentReason: string;
+  assignmentTeam: string;
+  decisionReason: string;
+  decisionState: string;
+  onAssignmentOwnerChange: (value: string) => void;
+  onAssignmentReasonChange: (value: string) => void;
+  onAssignmentTeamChange: (value: string) => void;
+  onDecisionReasonChange: (value: string) => void;
+  onDecisionStateChange: (value: string) => void;
+  onProcess: () => Promise<void>;
+  onSubmitAssignment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onSubmitDecision: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  row: QuestionnaireQueueRow;
+  run: GRCQuestionnaireRun;
+}) {
+  const citations = answer?.citations ?? [];
+  const slots = answer?.evidence_slots ?? [];
+  const gaps = [...(answer?.missing_evidence ?? []), ...(answer?.conflicts ?? [])];
+  const assignments = run.assignments ?? [];
+  const decisions = run.decisions ?? [];
+  const comments = run.comments ?? [];
+  const timeline = run.timeline ?? [];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge value={answer?.answer_state ?? run.status} />
+            <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase ${questionnaireIntentClass(questionnaireStateIntent(answer?.answer_state ?? run.status))}`}>
+              {questionnaireDirectionLabel(run.direction)}
+            </span>
+          </div>
+          <h3 className="mt-2 text-[15px] font-semibold text-[var(--text-primary)]">{row.question}</h3>
+          <div className="mt-1 flex flex-wrap gap-2 text-[12px] text-[var(--text-muted)]">
+            <span>{run.title}</span>
+            <span>Due {displayDate(row.dueAt)}</span>
+            <span>{row.owner || "Unassigned"}</span>
+          </div>
+        </div>
+        <button type="button" onClick={() => { void onProcess(); }} disabled={actionSaving} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[13px]">
+          <Play className="h-4 w-4" aria-hidden="true" />
+          {actionSaving ? "Processing" : "Process"}
+        </button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <MetricCard label="Citations" value={citations.length} detail="linked sources" intent={citations.length > 0 ? "success" : "warning"} />
+        <MetricCard label="Missing" value={gaps.length} detail="open gaps" intent={gaps.length > 0 ? "warning" : "success"} />
+        <MetricCard label="Freshness" value={humanize(answer?.freshness?.status || "unknown")} detail={answer?.freshness?.observed_at ? `Observed ${displayDate(answer.freshness.observed_at)}` : "No observed date"} intent={(answer?.freshness?.status || "").toLowerCase() === "stale" ? "warning" : "neutral"} />
+        <MetricCard label="Controls" value={row.mappedControls.length} detail={row.mappedControls.slice(0, 2).join(", ") || "none mapped"} />
+      </div>
+
+      <QuestionnaireSection title="Draft answer">
+        <div className="rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] p-3 text-[13px] leading-5 text-[var(--text-secondary)]">
+          {answer?.draft_answer || "No draft answer is ready."}
+        </div>
+      </QuestionnaireSection>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <QuestionnaireSection title="Evidence slots">
+          {slots.length === 0 ? <QuestionnaireEmpty label="No evidence slots recorded." /> : (
+            <div className="space-y-2">
+              {slots.map((slot) => (
+                <div key={slot.id} className="rounded-md border border-[color:var(--border)] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[13px] font-medium text-[var(--text-primary)]">{slot.label || humanize(slot.id)}</span>
+                    <Badge value={slot.state} />
+                  </div>
+                  {(slot.missing_reasons ?? []).length > 0 && <div className="mt-2 text-[12px] text-[var(--text-muted)]">{slot.missing_reasons?.join("; ")}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </QuestionnaireSection>
+
+        <QuestionnaireSection title="Citations">
+          {citations.length === 0 ? <QuestionnaireEmpty label="No citations linked." /> : (
+            <div className="space-y-2">
+              {citations.map((citation) => (
+                <div key={citation.id} className="rounded-md border border-[color:var(--border)] p-3 text-[12px]">
+                  <div className="font-semibold text-[var(--text-primary)]">{citation.label || shortEntity(citation.id)}</div>
+                  <div className="mt-1 text-[var(--text-muted)]">{citation.source || "source"} | {citation.freshness_status || answer?.freshness?.status || "unknown"}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </QuestionnaireSection>
+      </div>
+
+      <QuestionnaireSection title="Blockers">
+        {gaps.length === 0 ? <QuestionnaireEmpty label="No blockers recorded." /> : (
+          <div className="space-y-2">
+            {gaps.map((gap) => (
+              <div key={gap.id} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+                <div className="font-semibold">{humanize(gap.code)}</div>
+                <div className="mt-1">{gap.reason || gap.slot_id || "Reviewer follow-up required."}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </QuestionnaireSection>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <form onSubmit={onSubmitAssignment} className="space-y-2 rounded-md border border-[color:var(--border)] p-3">
+          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Assign answer</div>
+          <input value={assignmentOwner} onChange={(event) => onAssignmentOwnerChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment owner" />
+          <input value={assignmentTeam} onChange={(event) => onAssignmentTeamChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment team" />
+          <input value={assignmentReason} onChange={(event) => onAssignmentReasonChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment reason" />
+          <button type="submit" disabled={actionSaving} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
+            <UserPlus className="h-4 w-4" aria-hidden="true" />
+            Assign
+          </button>
+        </form>
+
+        <form onSubmit={onSubmitDecision} className="space-y-2 rounded-md border border-[color:var(--border)] p-3">
+          <div className="text-[13px] font-semibold text-[var(--text-primary)]">Record decision</div>
+          <select value={decisionState} onChange={(event) => onDecisionStateChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Decision state">
+            <option value="approved">Approved</option>
+            <option value="approved_with_conditions">Approved with conditions</option>
+            <option value="needs_input">Needs input</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input value={decisionReason} onChange={(event) => onDecisionReasonChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Decision reason" />
+          <button type="submit" disabled={actionSaving} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            Save decision
+          </button>
+        </form>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <QuestionnaireSection title="Assignments">
+          {assignments.length === 0 ? <QuestionnaireEmpty label="No assignments." /> : (
+            <div className="divide-y divide-[color:var(--border)]">
+              {assignments.map((assignment) => (
+                <div key={assignment.id} className="py-3 text-[13px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-[var(--text-primary)]">{assignment.owner_id || assignment.team || "Unassigned"}</span>
+                    <Badge value={assignment.status} />
+                  </div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{assignment.reason || assignment.question_id || "No reason"}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </QuestionnaireSection>
+
+        <QuestionnaireSection title="Decisions">
+          {decisions.length === 0 ? <QuestionnaireEmpty label="No decisions." /> : (
+            <div className="divide-y divide-[color:var(--border)]">
+              {decisions.map((decision) => (
+                <div key={decision.id} className="py-3 text-[13px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-[var(--text-primary)]">{decision.actor_id || "Reviewer"}</span>
+                    <Badge value={decision.decision} />
+                  </div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{decision.reason || "No reason"}</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDate(decision.created_at)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </QuestionnaireSection>
+
+        <QuestionnaireSection title="Comments">
+          {comments.length === 0 ? <QuestionnaireEmpty label="No comments." /> : (
+            <div className="divide-y divide-[color:var(--border)]">
+              {comments.map((comment) => (
+                <div key={comment.id} className="py-3 text-[13px]">
+                  <div className="font-semibold text-[var(--text-primary)]">{comment.actor_id || "Comment"}</div>
+                  <div className="mt-1 text-[var(--text-secondary)]">{comment.body}</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{displayDate(comment.created_at)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </QuestionnaireSection>
+      </div>
+
+      <QuestionnaireSection title="Timeline">
+        {timeline.length === 0 ? <QuestionnaireEmpty label="No timeline events." /> : (
+          <div className="divide-y divide-[color:var(--border)]">
+            {timeline.map((event) => (
+              <div key={event.id} className="grid gap-2 py-3 text-[13px] md:grid-cols-[150px_minmax(0,1fr)]">
+                <div className="text-[12px] text-[var(--text-muted)]">{displayDate(event.created_at)}</div>
+                <div>
+                  <div className="font-semibold text-[var(--text-primary)]">{event.summary || humanize(event.event_type)}</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{event.actor_id || "System"}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </QuestionnaireSection>
+    </div>
+  );
+}
+
+function QuestionnaireSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <section>
+      <h3 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function QuestionnaireEmpty({ label }: { label: string }) {
+  return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">{label}</div>;
+}
+
+const questionnaireIntentClass = (intent: "neutral" | "danger" | "warning" | "success") => {
+  switch (intent) {
+    case "danger":
+      return "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200";
+    case "warning":
+      return "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-100";
+    case "success":
+      return "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200";
+    default:
+      return "bg-[var(--surface-muted)] text-[var(--text-secondary)]";
+  }
+};
 
 const packetActions = (packet?: GRCVendorPacket, vendor?: GRCVendor) =>
   packet?.next_actions ?? vendor?.next_actions ?? [];
