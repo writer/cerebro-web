@@ -48,12 +48,12 @@ const countTextClass = "tabular-nums text-[var(--text-secondary)]";
 const questionnaireCitationCount = (answer: GRCQuestionnaireEvidenceAnswer) =>
   (answer.source_evidence?.length ?? 0) +
   (answer.policy_documents?.length ?? 0) +
-	  (answer.citations?.evidence_ids?.length ?? 0) +
-	  (answer.citations?.rule_ids?.length ?? 0) +
-	  (answer.citations?.claim_ids?.length ?? 0) +
-	  (answer.citations?.event_ids?.length ?? 0) +
-	  (answer.citations?.run_ids?.length ?? 0) +
-	  (answer.citations?.graph_root_urns?.length ?? 0);
+  (answer.citations?.evidence_ids?.length ?? 0) +
+  (answer.citations?.rule_ids?.length ?? 0) +
+  (answer.citations?.claim_ids?.length ?? 0) +
+  (answer.citations?.event_ids?.length ?? 0) +
+  (answer.citations?.run_ids?.length ?? 0) +
+  (answer.citations?.graph_root_urns?.length ?? 0);
 
 export default function EvidencePage() {
   const [sectionParam, setSectionParam] = useQueryParamState("view");

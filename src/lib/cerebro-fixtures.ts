@@ -3,6 +3,7 @@ import type {
   GRCControlArchetype,
   GRCEvidence,
   GRCEvidencePacketsResponse,
+  GRCQuestionnaireEvidenceAnswer,
   GRCQuestionnaireRun,
   GRCVendor,
   GRCVendorActionRequest,
@@ -2204,6 +2205,7 @@ const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsRes
     control_ids: [controlRows[index % controlRows.length]?.id].filter(Boolean),
   }));
   const sourceIDs = sourceRows.map((source) => source.source_id).filter((sourceID): sourceID is string => Boolean(sourceID));
+  const questionnaireAnswers = questionnaireEvidenceAnswersFixture();
 
   return {
     version: "fixture-1",
@@ -2273,6 +2275,7 @@ const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsRes
       last_observed_at: generatedAt,
     })),
     evidence_lineage: lineage,
+    questionnaire_answers: questionnaireAnswers,
     claim_records: [],
     evaluation_runs: evidenceItems.map((item) => ({
       id: item.run_id ?? `fixture-run-${item.id}`,
@@ -2331,6 +2334,54 @@ const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsRes
     },
   };
 };
+
+const questionnaireEvidenceAnswersFixture = (): GRCQuestionnaireEvidenceAnswer[] =>
+  questionnaireRuns.flatMap((run) =>
+    (run.answers ?? []).map((answer) => {
+      const citations = answer.citations ?? [];
+      const evidencePacketIDs = Array.from(new Set(citations.map((citation) => citation.evidence_packet_id).filter((value): value is string => Boolean(value))));
+      const evidenceIDs = Array.from(new Set(citations.map((citation) => citation.evidence_id).filter((value): value is string => Boolean(value))));
+      return {
+        id: answer.id,
+        question_id: answer.question_id,
+        question: answer.question ?? answer.question_id,
+        answer: answer.draft_answer ?? "",
+        answer_state: answer.answer_state,
+        review_state: answer.review_state,
+        confidence: { level: answer.confidence, score: answer.confidence_score },
+        controls: (answer.controls ?? []).map((control) => ({ id: control, control_id: control, title: control })),
+        source_evidence: citations.map((citation) => ({
+          id: citation.evidence_id ?? citation.id,
+          evidence_packet_id: citation.evidence_packet_id,
+          source: citation.source,
+          source_id: citation.source,
+          freshness: {
+            status: citation.freshness_status ?? answer.freshness.status,
+            observed_at: citation.observed_at ?? answer.freshness.observed_at,
+            expires_at: citation.expires_at ?? answer.freshness.expires_at,
+            reason: answer.freshness.reason,
+          },
+          review_state: answer.review_state,
+        })),
+        evidence_packet_ids: evidencePacketIDs,
+        citations: { evidence_ids: evidenceIDs },
+        freshness: {
+          status: answer.freshness.status,
+          observed_at: answer.freshness.observed_at,
+          expires_at: answer.freshness.expires_at,
+          reason: answer.freshness.reason,
+        },
+        missing_evidence: (answer.missing_evidence ?? []).map((gap) => ({
+          id: gap.id,
+          code: gap.code,
+          reason: gap.reason,
+          control_id: gap.control_id,
+          evidence_packet_id: gap.evidence_packet_id,
+          review_state: answer.review_state,
+        })),
+      };
+    }),
+  );
 
 const policyLifecycleFixture = () => ({
   summary: {

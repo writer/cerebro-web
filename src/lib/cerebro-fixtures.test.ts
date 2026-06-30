@@ -338,6 +338,9 @@ describe("cerebro fixture proxy responses", () => {
       evidence_lineage: expect.arrayContaining([
         expect.objectContaining({ evidence_id: "demo-evidence-identity-mfa", evidence_packet_ids: ["fixture-packet-1"] }),
       ]),
+      questionnaire_answers: expect.arrayContaining([
+        expect.objectContaining({ id: "acme-a-mfa", evidence_packet_ids: ["fixture-packet-1"] }),
+      ]),
     });
     expect(payload.evidence_items).toHaveLength(2);
   });

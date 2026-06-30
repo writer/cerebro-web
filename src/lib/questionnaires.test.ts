@@ -25,6 +25,7 @@ describe("questionnaire queue helpers", () => {
         missing_evidence_count: 1,
         stale_evidence_count: 0,
         unassigned_count: 1,
+        assignments: [{ id: "assignment-2", question_id: "q-2", team: "legal", status: "open" }],
         answers: [
           {
             id: "answer-1",
@@ -80,7 +81,7 @@ describe("questionnaire queue helpers", () => {
 
     expect(rows).toHaveLength(3);
     expect(rows[0]).toMatchObject({ state: "supported", citationCount: 1, mappedControls: ["IAM-01"] });
-    expect(rows[1]).toMatchObject({ state: "blocked", blocker: "Audit report is missing.", missingEvidenceCount: 1 });
+    expect(rows[1]).toMatchObject({ state: "blocked", blocker: "Audit report is missing.", owner: "legal", missingEvidenceCount: 1 });
     expect(questionnaireRollups(runs, undefined, new Date("2026-01-15T00:00:00.000Z"))).toMatchObject({
       total: 2,
       due: 1,
