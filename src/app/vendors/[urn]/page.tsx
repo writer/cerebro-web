@@ -278,6 +278,20 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
     return `/questionnaires?${params.toString()}`;
   }, [tenantID, vendorURN]);
 
+  const resetRowActionForms = () => {
+    setAssignmentOwner("");
+    setAssignmentTeam("");
+    setAssignmentReason("");
+    setCommentBody("");
+    setDecisionState("needs_input");
+    setDecisionReason("");
+  };
+
+  const selectQueueRow = (rowID: string) => {
+    setSelectedRowID(rowID);
+    resetRowActionForms();
+  };
+
   const reloadRuns = () => { void runsQuery.reload(); };
 
   const processRun = async () => {
@@ -373,7 +387,7 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
                   <button
                     key={row.id}
                     type="button"
-                    onClick={() => setSelectedRowID(row.id)}
+                    onClick={() => selectQueueRow(row.id)}
                     className={`block w-full p-3 text-left transition hover:bg-[var(--surface-muted)] ${selectedRow?.id === row.id ? "bg-[var(--surface-muted)]" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-3">

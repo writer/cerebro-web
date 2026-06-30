@@ -94,6 +94,20 @@ export default function QuestionnairesPage() {
   const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
   const metricState: RuntimeState = runsQuery.error ? runtimeStateForError(runsQuery.error) : runsQuery.loading && !runsQuery.data ? "loading" : "ready";
 
+  const resetRowActionForms = () => {
+    setAssignmentOwner("");
+    setAssignmentTeam("");
+    setAssignmentReason("");
+    setCommentBody("");
+    setDecisionState("needs_input");
+    setDecisionReason("");
+  };
+
+  const selectQueueRow = (rowID: string) => {
+    setSelectedRowID(rowID);
+    resetRowActionForms();
+  };
+
   const reloadRuns = useCallback(() => { void runsQuery.reload(); }, [runsQuery]);
 
   const submitCreateRun = async (event: FormEvent<HTMLFormElement>) => {
@@ -113,7 +127,7 @@ export default function QuestionnairesPage() {
         intake_format: intakeFormat,
         intake_text: intakeText,
       });
-      setSelectedRowID(response.run.run_id);
+      selectQueueRow(response.run.run_id);
       setIntakeText("");
       setSourceFilename("");
       reloadRuns();
@@ -357,7 +371,7 @@ export default function QuestionnairesPage() {
               pageSize={12}
               selectedRowKey={selectedRow?.id}
               getRowKey={(row) => row.id}
-              onRowClick={(row) => setSelectedRowID(row.id)}
+              onRowClick={(row) => selectQueueRow(row.id)}
               resultLimit={QUEUE_LIMIT}
               resultNoun="answers"
             />
