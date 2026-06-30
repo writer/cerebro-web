@@ -253,7 +253,7 @@ describe("cerebro fixture proxy responses", () => {
       body: JSON.stringify({ state: "approved", reason: "Answers accepted." }),
     });
     expect(parseFixture(decision!)).toMatchObject({
-      run: { run_id: "customer-review-acme-2026", status: "approved", decision: "approved" },
+      run: { run_id: "customer-review-acme-2026", status: "needs_input", decision: "approved" },
     });
 
     const conditionalDecision = cerebroFixtureResponseFor({
@@ -283,6 +283,28 @@ describe("cerebro fixture proxy responses", () => {
     });
 
     const createdRun = createdPayload.run as { run_id: string };
+    const mapped = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${createdRun.run_id}/questions`,
+      body: JSON.stringify({
+        question_id: "fixture-question-1",
+        required_evidence_slots: ["identity_mfa", "policy"],
+        mapped_controls: ["SOC2-CC6.1"],
+        owner_id: "security@example.com",
+      }),
+    });
+    expect(parseFixture(mapped!)).toMatchObject({
+      run: {
+        questions: expect.arrayContaining([expect.objectContaining({
+          id: "fixture-question-1",
+          required_evidence_slots: ["identity_mfa", "policy"],
+          mapped_controls: ["SOC2-CC6.1"],
+          owner_id: "security@example.com",
+        })]),
+        timeline: expect.arrayContaining([expect.objectContaining({ event_type: "updated" })]),
+      },
+    });
+
     const comment = cerebroFixtureResponseFor({
       method: "POST",
       path: `grc/questionnaire-runs/${createdRun.run_id}/comments`,

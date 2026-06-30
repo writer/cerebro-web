@@ -98,6 +98,9 @@ const sourceProvider = (sourceID?: string) =>
 const stringField = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
 
+const stringListField = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean) : undefined;
+
 const slugField = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
 
@@ -1813,18 +1816,21 @@ const vendorSummary = (items: GRCVendor[]) => ({
   evidence_items: items.reduce((sum, vendor) => sum + (vendor.evidence_items ?? 0), 0),
 });
 
-const questionnaireRunSummary = (items: GRCQuestionnaireRun[]) => ({
-  total_runs: items.length,
-  customer_runs: items.filter((run) => run.direction === "customer_security_review").length,
-  vendor_runs: items.filter((run) => run.direction === "vendor_review").length,
-  due_runs: items.filter((run) => run.due_at && run.status !== "approved" && Date.parse(run.due_at) <= Date.parse(generatedAt)).length,
-  blocked_answers: items.reduce((sum, run) => sum + (run.blocked_answer_count ?? 0), 0),
-  review_answers: items.reduce((sum, run) => sum + (run.review_answer_count ?? 0), 0),
-  ready_answers: items.reduce((sum, run) => sum + (run.ready_answer_count ?? 0), 0),
-  stale_evidence: items.reduce((sum, run) => sum + (run.stale_evidence_count ?? 0), 0),
-  missing_evidence: items.reduce((sum, run) => sum + (run.missing_evidence_count ?? 0), 0),
-  unassigned: items.reduce((sum, run) => sum + (run.unassigned_count ?? 0), 0),
-});
+const questionnaireRunSummary = (items: GRCQuestionnaireRun[]) => {
+  const openItems = items.filter((run) => !["approved", "rejected"].includes(run.status));
+  return {
+    total_runs: items.length,
+    customer_runs: items.filter((run) => run.direction === "customer_security_review").length,
+    vendor_runs: items.filter((run) => run.direction === "vendor_review").length,
+    due_runs: openItems.filter((run) => run.due_at && Date.parse(run.due_at) <= Date.parse(generatedAt)).length,
+    blocked_answers: openItems.reduce((sum, run) => sum + (run.blocked_answer_count ?? 0), 0),
+    review_answers: openItems.reduce((sum, run) => sum + (run.review_answer_count ?? 0), 0),
+    ready_answers: openItems.reduce((sum, run) => sum + (run.ready_answer_count ?? 0), 0),
+    stale_evidence: openItems.reduce((sum, run) => sum + (run.stale_evidence_count ?? 0), 0),
+    missing_evidence: openItems.reduce((sum, run) => sum + (run.missing_evidence_count ?? 0), 0),
+    unassigned: openItems.reduce((sum, run) => sum + (run.unassigned_count ?? 0), 0),
+  };
+};
 
 const questionnaireRunSearchValues = (run: GRCQuestionnaireRun) => [
   run.title,
@@ -3657,7 +3663,7 @@ const processQuestionnaireRunFixture = (runID: string) => {
         review_state: "blocked",
         confidence: "low",
         confidence_score: 10,
-        evidence_slots: slots.map((slot) => ({ id: slot, label: slot.replaceAll("_", " "), state: "missing", required: true, missing_reasons: ["Required evidence is missing."] })),
+        evidence_slots: slots.map((slot) => ({ id: slot, label: fixtureQuestionnaireSlotLabel(slot), state: "missing", required: true, missing_reasons: ["Required evidence is missing."] })),
         missing_evidence: slots.length
           ? [{ id: `${question.id}-gap`, code: "missing_required_evidence", reason: "Required evidence is missing." }]
           : [{ id: `${question.id}-unresolved-slot`, code: "unresolved_evidence_slot", reason: "No required evidence slot was provided for this question." }],
@@ -3665,13 +3671,8 @@ const processQuestionnaireRunFixture = (runID: string) => {
       };
     });
   }
-  const answers = run.answers ?? [];
   run.status = "needs_input";
-  run.answer_count = answers.length;
-  run.blocked_answer_count = answers.filter((answer) => answer.answer_state === "blocked").length;
-  run.review_answer_count = answers.filter((answer) => ["needs_review", "partial"].includes(answer.answer_state)).length;
-  run.ready_answer_count = answers.filter((answer) => ["supported", "not_applicable"].includes(answer.answer_state)).length;
-  run.missing_evidence_count = answers.reduce((sum, answer) => sum + (answer.missing_evidence?.length ?? 0), 0);
+  recalculateQuestionnaireRunCounts(run);
   run.updated_at = generatedAt;
   run.timeline = [{ id: `${run.run_id}-processed-${run.timeline?.length ?? 0}`, event_type: "processed", actor_id: "local-developer", summary: "Questionnaire answers refreshed from evidence", created_at: generatedAt }, ...(run.timeline ?? [])];
   return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
@@ -3685,6 +3686,86 @@ const fixtureRequiredSlotsForQuestion = (run: GRCQuestionnaireRun, question: Non
 
 const fixtureQuestionExists = (run: GRCQuestionnaireRun, questionID: string) =>
   Boolean(questionID && (run.questions ?? []).some((question) => question.id === questionID));
+
+const fixtureQuestionnaireSlotLabel = (slotID: string) =>
+  slotID.replaceAll("_", " ");
+
+const recalculateQuestionnaireRunCounts = (run: GRCQuestionnaireRun) => {
+  const answers = run.answers ?? [];
+  run.answer_count = answers.length;
+  run.blocked_answer_count = answers.filter((answer) => answer.answer_state === "blocked").length;
+  run.review_answer_count = answers.filter((answer) => ["needs_review", "partial"].includes(answer.answer_state)).length;
+  run.ready_answer_count = answers.filter((answer) => ["supported", "not_applicable"].includes(answer.answer_state)).length;
+  run.missing_evidence_count = answers.reduce((sum, answer) => sum + (answer.missing_evidence?.length ?? 0), 0);
+  run.stale_evidence_count = answers.filter((answer) =>
+    answer.freshness?.status === "stale" || (answer.missing_evidence ?? []).some((gap) => gap.code === "stale_evidence"),
+  ).length;
+  run.unassigned_count = (run.questions ?? []).filter((question) => {
+    const assignment = (run.assignments ?? []).find((item) => item.question_id === question.id && (item.owner_id || item.team));
+    return !question.owner_id && !assignment;
+  }).length;
+};
+
+const openQuestionnaireBlockedAnswers = (run: GRCQuestionnaireRun) =>
+  (run.answers ?? []).filter((answer) => answer.answer_state === "blocked").length;
+
+const questionnaireRunQuestionFixture = (runID: string, parsed: Record<string, unknown>) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/questions`);
+  if (parsed.question || parsed.actor_id) return jsonFixture({ error: "Use top-level question fields; actor is assigned by the service.", generated_at: generatedAt }, 400);
+
+  const questionID = stringField(parsed.question_id);
+  const question = (run.questions ?? []).find((item) => item.id === questionID);
+  if (!question) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+
+  const requiredSlots = stringListField(parsed.required_evidence_slots);
+  const mappedControls = stringListField(parsed.mapped_controls);
+  const clearRequiredSlots = parsed.clear_required_evidence_slots === true;
+  const clearMappedControls = parsed.clear_mapped_controls === true;
+  const clearOwner = parsed.clear_owner === true;
+  const ownerID = stringField(parsed.owner_id);
+  if (!requiredSlots && !mappedControls && !clearRequiredSlots && !clearMappedControls && !clearOwner && !ownerID) {
+    return jsonFixture({ error: "At least one question field is required.", generated_at: generatedAt }, 400);
+  }
+
+  if (requiredSlots || clearRequiredSlots) question.required_evidence_slots = clearRequiredSlots ? [] : requiredSlots;
+  if (mappedControls || clearMappedControls) question.mapped_controls = clearMappedControls ? [] : mappedControls;
+  if (clearOwner) delete question.owner_id;
+  if (ownerID) question.owner_id = ownerID;
+
+  const answer = (run.answers ?? []).find((item) => item.question_id === questionID);
+  if (answer) {
+    if (mappedControls || clearMappedControls) answer.controls = question.mapped_controls ?? [];
+    if (requiredSlots || clearRequiredSlots) {
+      const slots = fixtureRequiredSlotsForQuestion(run, question);
+      const previousSlots = answer.evidence_slots ?? [];
+      answer.evidence_slots = slots.map((slot) =>
+        previousSlots.find((item) => item.id === slot) ?? {
+          id: slot,
+          label: fixtureQuestionnaireSlotLabel(slot),
+          state: "missing",
+          required: true,
+          missing_reasons: ["Required evidence is missing."],
+        },
+      );
+      const missingSlots = answer.evidence_slots.filter((slot) => slot.state !== "satisfied");
+      answer.missing_evidence = missingSlots.length > 0
+        ? missingSlots.map((slot) => ({ id: `${question.id}-${slot.id}-gap`, code: "missing_required_evidence", reason: "Required evidence is missing.", slot_id: slot.id }))
+        : [];
+      if (missingSlots.length > 0) {
+        answer.answer_state = "blocked";
+        answer.review_state = "blocked";
+        answer.freshness = { status: "missing" };
+      }
+    }
+  }
+
+  recalculateQuestionnaireRunCounts(run);
+  if ((run.answers ?? []).length > 0) run.status = run.blocked_answer_count > 0 ? "needs_input" : "ready_for_approval";
+  run.updated_at = generatedAt;
+  run.timeline = [{ id: `${run.run_id}-question-${run.timeline?.length ?? 0}`, event_type: "updated", actor_id: "local-developer", summary: "Question mapping updated", created_at: generatedAt }, ...(run.timeline ?? [])];
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
+};
 
 const questionnaireRunAssignmentFixture = (runID: string, parsed: Record<string, unknown>) => {
   const run = findQuestionnaireRun(safeDecode(runID));
@@ -3735,13 +3816,12 @@ const questionnaireRunDecisionFixture = (runID: string, parsed: Record<string, u
   if (!decision.question_id) {
     run.decision = decision.decision;
     run.decision_reason = decision.reason;
-    if (decision.decision === "approved" || decision.decision === "approved_with_conditions") run.status = "approved";
+    recalculateQuestionnaireRunCounts(run);
+    if (decision.decision === "approved" || decision.decision === "approved_with_conditions") run.status = openQuestionnaireBlockedAnswers(run) > 0 ? "needs_input" : "approved";
     if (decision.decision === "rejected") run.status = "rejected";
     if (decision.decision === "needs_input") run.status = "needs_input";
   } else {
-    run.blocked_answer_count = (run.answers ?? []).filter((answer) => answer.answer_state === "blocked").length;
-    run.review_answer_count = (run.answers ?? []).filter((answer) => ["needs_review", "partial"].includes(answer.answer_state)).length;
-    run.ready_answer_count = (run.answers ?? []).filter((answer) => ["supported", "not_applicable"].includes(answer.answer_state)).length;
+    recalculateQuestionnaireRunCounts(run);
     run.status = run.blocked_answer_count > 0 ? "needs_input" : "ready_for_approval";
   }
   run.updated_at = generatedAt;
@@ -3794,6 +3874,11 @@ const writeFixture = (path: string, body?: string) => {
   const runAssignmentMatch = /^grc\/questionnaire-runs\/([^/]+)\/assignments$/.exec(path);
   if (runAssignmentMatch) {
     return questionnaireRunAssignmentFixture(runAssignmentMatch[1], parsed);
+  }
+
+  const runQuestionMatch = /^grc\/questionnaire-runs\/([^/]+)\/questions$/.exec(path);
+  if (runQuestionMatch) {
+    return questionnaireRunQuestionFixture(runQuestionMatch[1], parsed);
   }
 
   const runDecisionMatch = /^grc\/questionnaire-runs\/([^/]+)\/decisions$/.exec(path);

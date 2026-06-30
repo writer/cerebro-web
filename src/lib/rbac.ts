@@ -261,6 +261,7 @@ export const permissionForCerebroProxyRequest = (
   if (normalizedPath.startsWith("grc/questionnaire-runs/") && (
     normalizedPath.endsWith("/process") ||
     normalizedPath.endsWith("/assignments") ||
+    normalizedPath.endsWith("/questions") ||
     normalizedPath.endsWith("/decisions") ||
     normalizedPath.endsWith("/comments")
   )) return "grc:inventory:write";

@@ -153,7 +153,8 @@ const runRequester = (run: GRCQuestionnaireRun) =>
 
 const answerOwner = (run: GRCQuestionnaireRun, questionID?: string) => {
   const assignment = (run.assignments ?? []).find((item) => !questionID || item.question_id === questionID);
-  return assignment?.owner_id || assignment?.team || run.owner_id || run.assigned_team || "";
+  const question = (run.questions ?? []).find((item) => !questionID || item.id === questionID);
+  return assignment?.owner_id || assignment?.team || question?.owner_id || run.owner_id || run.assigned_team || "";
 };
 
 const answerDueAt = (run: GRCQuestionnaireRun, questionID?: string) => {

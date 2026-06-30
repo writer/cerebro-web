@@ -51,6 +51,11 @@ export default function QuestionnairesPage() {
   const [commentBody, setCommentBody] = useState("");
   const [decisionState, setDecisionState] = useState("needs_input");
   const [decisionReason, setDecisionReason] = useState("");
+  const [mappingRowID, setMappingRowID] = useState<string | null>(null);
+  const [slotMapping, setSlotMapping] = useState("");
+  const [controlMapping, setControlMapping] = useState("");
+  const [mappingOwner, setMappingOwner] = useState("");
+  const [mappingReason, setMappingReason] = useState("");
   const [createDirection, setCreateDirection] = useState("customer_security_review");
   const [createTitle, setCreateTitle] = useState("Security questionnaire");
   const [createRequester, setCreateRequester] = useState("");
@@ -92,6 +97,14 @@ export default function QuestionnairesPage() {
   const selectedRow = rows.find((row) => row.id === selectedRowID) ?? rows[0] ?? null;
   const selectedRun = selectedRow ? runs.find((run) => run.run_id === selectedRow.runID) ?? null : null;
   const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
+  const selectedQuestion = questionnaireQuestionForRun(selectedRun, selectedAnswer?.question_id ?? selectedRow?.questionID);
+  const selectedSlotMapping = joinMappingList(selectedQuestion?.required_evidence_slots ?? answerEvidenceSlotIDs(selectedAnswer));
+  const selectedControlMapping = joinMappingList(selectedQuestion?.mapped_controls ?? selectedAnswer?.controls);
+  const selectedMappingOwner = selectedQuestion?.owner_id ?? "";
+  const activeSlotMapping = mappingRowID === selectedRow?.id ? slotMapping : selectedSlotMapping;
+  const activeControlMapping = mappingRowID === selectedRow?.id ? controlMapping : selectedControlMapping;
+  const activeMappingOwner = mappingRowID === selectedRow?.id ? mappingOwner : selectedMappingOwner;
+  const activeMappingReason = mappingRowID === selectedRow?.id ? mappingReason : "";
   const metricState: RuntimeState = runsQuery.error ? runtimeStateForError(runsQuery.error) : runsQuery.loading && !runsQuery.data ? "loading" : "ready";
 
   const resetRowActionForms = () => {
@@ -105,16 +118,66 @@ export default function QuestionnairesPage() {
 
   const selectQueueRow = (rowID: string) => {
     setSelectedRowID(rowID);
+    const row = rows.find((item) => item.id === rowID) ?? null;
+    const run = row ? runs.find((item) => item.run_id === row.runID) ?? null : null;
+    const answer = primaryAnswerForRun(run, row?.questionID);
+    const question = questionnaireQuestionForRun(run, answer?.question_id ?? row?.questionID);
+    setMappingRowID(rowID);
+    setSlotMapping(joinMappingList(question?.required_evidence_slots ?? answerEvidenceSlotIDs(answer)));
+    setControlMapping(joinMappingList(question?.mapped_controls ?? answer?.controls));
+    setMappingOwner(question?.owner_id ?? "");
+    setMappingReason("");
     resetRowActionForms();
   };
 
   const reloadRuns = useCallback(() => { void runsQuery.reload(); }, [runsQuery]);
+
+  const updateSlotMapping = (value: string) => {
+    if (mappingRowID !== selectedRow?.id) {
+      setMappingRowID(selectedRow?.id ?? null);
+      setControlMapping(selectedControlMapping);
+      setMappingOwner(selectedMappingOwner);
+      setMappingReason("");
+    }
+    setSlotMapping(value);
+  };
+
+  const updateControlMapping = (value: string) => {
+    if (mappingRowID !== selectedRow?.id) {
+      setMappingRowID(selectedRow?.id ?? null);
+      setSlotMapping(selectedSlotMapping);
+      setMappingOwner(selectedMappingOwner);
+      setMappingReason("");
+    }
+    setControlMapping(value);
+  };
+
+  const updateMappingOwner = (value: string) => {
+    if (mappingRowID !== selectedRow?.id) {
+      setMappingRowID(selectedRow?.id ?? null);
+      setSlotMapping(selectedSlotMapping);
+      setControlMapping(selectedControlMapping);
+      setMappingReason("");
+    }
+    setMappingOwner(value);
+  };
+
+  const updateMappingReason = (value: string) => {
+    if (mappingRowID !== selectedRow?.id) {
+      setMappingRowID(selectedRow?.id ?? null);
+      setSlotMapping(selectedSlotMapping);
+      setControlMapping(selectedControlMapping);
+      setMappingOwner(selectedMappingOwner);
+    }
+    setMappingReason(value);
+  };
 
   const submitCreateRun = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
       const response = await createMutation.mutate("/grc/questionnaire-runs", {
         tenant_id: tenantID || undefined,
+        upload_id: newUploadID(),
         direction: createDirection,
         title: createTitle,
         requester: createRequester || undefined,
@@ -130,6 +193,29 @@ export default function QuestionnairesPage() {
       selectQueueRow(response.run.run_id);
       setIntakeText("");
       setSourceFilename("");
+      reloadRuns();
+    } catch {
+      return;
+    }
+  };
+
+  const submitQuestionUpdate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRun || !selectedAnswer) return;
+    const requiredSlots = splitMappingList(activeSlotMapping);
+    const mappedControls = splitMappingList(activeControlMapping);
+    try {
+      await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/questions`, {
+        tenant_id: tenantID || undefined,
+        question_id: selectedAnswer.question_id,
+        required_evidence_slots: requiredSlots,
+        mapped_controls: mappedControls,
+        owner_id: activeMappingOwner || undefined,
+        reason: activeMappingReason || "Question mapping updated.",
+        clear_required_evidence_slots: requiredSlots.length === 0,
+        clear_mapped_controls: mappedControls.length === 0,
+        clear_owner: !activeMappingOwner.trim(),
+      });
       reloadRuns();
     } catch {
       return;
@@ -386,16 +472,25 @@ export default function QuestionnairesPage() {
             commentBody={commentBody}
             decisionReason={decisionReason}
             decisionState={decisionState}
+            mappingOwner={activeMappingOwner}
+            mappingReason={activeMappingReason}
+            mappedControls={activeControlMapping}
+            requiredSlots={activeSlotMapping}
             onAssignmentOwnerChange={setAssignmentOwner}
             onAssignmentReasonChange={setAssignmentReason}
             onAssignmentTeamChange={setAssignmentTeam}
             onCommentBodyChange={setCommentBody}
             onDecisionReasonChange={setDecisionReason}
             onDecisionStateChange={setDecisionState}
+            onMappingOwnerChange={updateMappingOwner}
+            onMappingReasonChange={updateMappingReason}
+            onMappedControlsChange={updateControlMapping}
             onProcess={processRun}
+            onRequiredSlotsChange={updateSlotMapping}
             onSubmitAssignment={submitAssignment}
             onSubmitComment={submitComment}
             onSubmitDecision={submitDecision}
+            onSubmitQuestionUpdate={submitQuestionUpdate}
             row={selectedRow}
             run={selectedRun}
           />
@@ -415,16 +510,25 @@ function QuestionnaireDetail({
   commentBody,
   decisionReason,
   decisionState,
+  mappingOwner,
+  mappingReason,
+  mappedControls,
   onAssignmentOwnerChange,
   onAssignmentReasonChange,
   onAssignmentTeamChange,
   onCommentBodyChange,
   onDecisionReasonChange,
   onDecisionStateChange,
+  onMappingOwnerChange,
+  onMappingReasonChange,
+  onMappedControlsChange,
   onProcess,
+  onRequiredSlotsChange,
   onSubmitAssignment,
   onSubmitComment,
   onSubmitDecision,
+  onSubmitQuestionUpdate,
+  requiredSlots,
   row,
   run,
 }: {
@@ -437,16 +541,25 @@ function QuestionnaireDetail({
   commentBody: string;
   decisionReason: string;
   decisionState: string;
+  mappingOwner: string;
+  mappingReason: string;
+  mappedControls: string;
   onAssignmentOwnerChange: (value: string) => void;
   onAssignmentReasonChange: (value: string) => void;
   onAssignmentTeamChange: (value: string) => void;
   onCommentBodyChange: (value: string) => void;
   onDecisionReasonChange: (value: string) => void;
   onDecisionStateChange: (value: string) => void;
+  onMappingOwnerChange: (value: string) => void;
+  onMappingReasonChange: (value: string) => void;
+  onMappedControlsChange: (value: string) => void;
   onProcess: () => Promise<void>;
+  onRequiredSlotsChange: (value: string) => void;
   onSubmitAssignment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onSubmitComment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onSubmitDecision: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onSubmitQuestionUpdate: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  requiredSlots: string;
   row: QuestionnaireQueueRow | null;
   run: GRCQuestionnaireRun | null;
 }) {
@@ -475,6 +588,33 @@ function QuestionnaireDetail({
 
         <DetailSection title="Draft answer">
           <p className="text-[13px] leading-5 text-[var(--text-secondary)]">{answer?.draft_answer || "No draft answer is ready."}</p>
+        </DetailSection>
+
+        <DetailSection title="Question mapping">
+          <form onSubmit={onSubmitQuestionUpdate} className="space-y-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label htmlFor="required-slots">
+                <span className={labelClass}>Required slots</span>
+                <input id="required-slots" value={requiredSlots} onChange={(event) => onRequiredSlotsChange(event.target.value)} className={inputClass} placeholder="identity_mfa, audit_report" />
+              </label>
+              <label htmlFor="mapped-controls">
+                <span className={labelClass}>Mapped controls</span>
+                <input id="mapped-controls" value={mappedControls} onChange={(event) => onMappedControlsChange(event.target.value)} className={inputClass} placeholder="SOC2-CC6.1, ISO-A.5.15" />
+              </label>
+              <label htmlFor="mapping-owner">
+                <span className={labelClass}>Owner</span>
+                <input id="mapping-owner" value={mappingOwner} onChange={(event) => onMappingOwnerChange(event.target.value)} className={inputClass} placeholder="owner@example.com" />
+              </label>
+              <label htmlFor="mapping-reason">
+                <span className={labelClass}>Reason</span>
+                <input id="mapping-reason" value={mappingReason} onChange={(event) => onMappingReasonChange(event.target.value)} className={inputClass} placeholder="evidence slot or owner change" />
+              </label>
+            </div>
+            <button type="submit" disabled={actionSaving || !answer} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Save mapping
+            </button>
+          </form>
         </DetailSection>
 
         <DetailSection title="Evidence slots">
@@ -657,4 +797,23 @@ const inferIntakeFormat = (filename: string) => {
   if (lower.endsWith(".tsv")) return "tsv";
   if (lower.endsWith(".txt")) return "text";
   return "csv";
+};
+
+const questionnaireQuestionForRun = (run: GRCQuestionnaireRun | null, questionID?: string | null) => {
+  if (!run || !questionID) return undefined;
+  return (run.questions ?? []).find((question) => question.id === questionID);
+};
+
+const answerEvidenceSlotIDs = (answer: ReturnType<typeof primaryAnswerForRun>) =>
+  (answer?.evidence_slots ?? []).map((slot) => slot.id).filter(Boolean);
+
+const joinMappingList = (values?: string[]) =>
+  Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean))).join(", ");
+
+const splitMappingList = (value: string) =>
+  Array.from(new Set(value.split(/[,\n;]/).map((item) => item.trim()).filter(Boolean)));
+
+const newUploadID = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return `web-${crypto.randomUUID()}`;
+  return `web-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 };
