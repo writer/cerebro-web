@@ -364,13 +364,13 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
         </div>
       )}
     >
-      {runsQuery.error && <ErrorBlock error={runsQuery.error} onRetry={reloadRuns} recoveryDetail="Questionnaire runs require the unified questionnaire API." />}
+      {runsQuery.error && <ErrorBlock error={runsQuery.error} onRetry={reloadRuns} recoveryDetail="The questionnaire queue needs the GRC questionnaire API." />}
       {runsQuery.loading && !runsQuery.data ? (
         <LoadingBlock label="Loading questionnaire queue..." />
       ) : (
         <div className="space-y-5">
           <div className="grid gap-3 md:grid-cols-5">
-            <MetricCard label="Runs" value={rollups.total} detail="vendor review runs" />
+            <MetricCard label="Reviews" value={rollups.total} detail="vendor questionnaires" />
             <MetricCard label="Blocked" value={rollups.blocked} detail="answers blocked" intent={rollups.blocked > 0 ? "danger" : "success"} />
             <MetricCard label="Needs review" value={rollups.needsReview} detail="answers queued" intent={rollups.needsReview > 0 ? "warning" : "success"} />
             <MetricCard label="Ready" value={rollups.ready} detail="answers with citations" intent="success" />
@@ -380,7 +380,7 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
           {mutation.error && <ErrorBlock error={mutation.error} recoveryDetail="The questionnaire action did not save." />}
 
           {rows.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No vendor review runs for this vendor.</div>
+            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No vendor questionnaires for this vendor.</div>
           ) : (
             <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
               <div className="divide-y divide-[color:var(--border)] rounded-md border border-[color:var(--border)]">

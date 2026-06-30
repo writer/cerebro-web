@@ -328,7 +328,7 @@ export default function QuestionnairesPage() {
   const columns = useMemo<TableColumn<QuestionnaireQueueRow>[]>(() => [
     {
       key: "question",
-      label: "Question / run",
+      label: "Question",
       render: (_value, row) => (
         <div>
           <div className="max-w-[28rem] truncate font-medium text-[var(--text-primary)]">{row.question}</div>
@@ -357,7 +357,7 @@ export default function QuestionnairesPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
-        <MetricCard label="Due" value={rollups.due} detail="runs past due" intent={rollups.due > 0 ? "danger" : "success"} state={metricState} />
+        <MetricCard label="Due" value={rollups.due} detail="questionnaires past due" intent={rollups.due > 0 ? "danger" : "success"} state={metricState} />
         <MetricCard label="Blocked" value={rollups.blocked} detail="answers blocked" intent={rollups.blocked > 0 ? "danger" : "success"} state={metricState} />
         <MetricCard label="Needs review" value={rollups.needsReview} detail="answers queued" intent={rollups.needsReview > 0 ? "warning" : "success"} state={metricState} />
         <MetricCard label="Ready" value={rollups.ready} detail="answers with citations" intent="success" state={metricState} />
@@ -366,7 +366,7 @@ export default function QuestionnairesPage() {
         <MetricCard label="Unassigned" value={rollups.unassigned} detail="questions without owner" intent={rollups.unassigned > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
-      <Panel title="New run">
+      <Panel title="Add questionnaire">
         <form onSubmit={submitCreateRun} className="space-y-4">
           {createMutation.error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">{createMutation.error}</div>}
           <div className="grid gap-3 lg:grid-cols-4">
@@ -378,7 +378,7 @@ export default function QuestionnairesPage() {
               </select>
             </label>
             <label htmlFor="create-title">
-              <span className={labelClass}>Run name</span>
+              <span className={labelClass}>Questionnaire name</span>
               <input id="create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} className={inputClass} placeholder="Security questionnaire" />
             </label>
             <label htmlFor="create-requester">
@@ -472,7 +472,7 @@ export default function QuestionnairesPage() {
               {fileReadError && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">{fileReadError}</div>}
               <button type="submit" disabled={createMutation.saving || !hasCreateIntake} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px]">
                 <Plus className="h-3.5 w-3.5" />
-                Create run
+                Create questionnaire
               </button>
             </div>
           </div>
@@ -520,8 +520,8 @@ export default function QuestionnairesPage() {
         </div>
       </Panel>
 
-      {runsQuery.error && <ErrorBlock error={runsQuery.error} onRetry={reloadRuns} recoveryDetail="Questionnaire runs require the GRC questionnaire API." />}
-      {runsQuery.loading && !runsQuery.data ? <LoadingBlock label="Loading questionnaire runs..." /> : (
+      {runsQuery.error && <ErrorBlock error={runsQuery.error} onRetry={reloadRuns} recoveryDetail="The questionnaire queue needs the GRC questionnaire API." />}
+      {runsQuery.loading && !runsQuery.data ? <LoadingBlock label="Loading questionnaires..." /> : (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.9fr)]">
           <Panel title="Queue">
             <DataTable
