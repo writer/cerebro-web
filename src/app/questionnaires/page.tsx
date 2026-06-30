@@ -142,7 +142,7 @@ export default function QuestionnairesPage() {
     <main className="space-y-6">
       <PageHeader
         title="Questionnaires"
-        description="Customer and vendor questionnaire runs with evidence-backed answers, blockers, owners, and approvals."
+        description="Customer questionnaires and vendor reviews with evidence-backed answers, blockers, owners, and approvals."
         contractId="questionnaires"
         action={<button type="button" onClick={reloadRuns} className="secondary-button inline-flex items-center gap-2 px-3 py-1.5 text-[12px]"><RefreshCw className="h-3.5 w-3.5" />Refresh</button>}
       />

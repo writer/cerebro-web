@@ -347,7 +347,7 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
           {mutation.error && <ErrorBlock error={mutation.error} recoveryDetail="The questionnaire action did not save." />}
 
           {rows.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No vendor questionnaire runs for this vendor.</div>
+            <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">No vendor review runs for this vendor.</div>
           ) : (
             <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
               <div className="divide-y divide-[color:var(--border)] rounded-md border border-[color:var(--border)]">

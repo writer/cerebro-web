@@ -9,7 +9,6 @@ import type {
   GRCVendorCreateRequest,
   GRCVendorDiscovery,
   GRCVendorDiscoverySyncRequest,
-  GRCVendorQuestionnaireReview,
 } from "@/lib/grc";
 
 type FixtureResponse = {
@@ -976,171 +975,6 @@ const baseVendorDiscoveries: GRCVendorDiscovery[] = [
   },
 ];
 
-const baseQuestionnaireReviews: GRCVendorQuestionnaireReview[] = [
-  {
-    id: "core-sso-qnr-2026",
-    vendor_urn: coreSsoVendorURN,
-    tenant_id: tenantID,
-    title: "Core SSO security questionnaire",
-    source_filename: "core-sso-security-questionnaire.xlsx",
-    review_state: "in_review",
-    upload_state: "parsed",
-    process_state: "processed",
-    enrichment_state: "partial",
-    decision_state: "needs_followup",
-    decision_recommendation: "Approve after MFA evidence and ISO certificate are attached.",
-    owner: "security@example.com",
-    due_at: "2026-01-20T12:00:00.000Z",
-    created_at: "2026-01-12T12:00:00.000Z",
-    updated_at: "2026-01-15T12:00:00.000Z",
-    processed_at: "2026-01-15T11:30:00.000Z",
-    question_count: 24,
-    answered_count: 18,
-    missing_answer_count: 6,
-    evidence_match_count: 3,
-    risk_notes: [
-      "Privileged workforce access requires current MFA proof.",
-      "ISO 27001 certificate is missing from the packet.",
-    ],
-    missing_answers: [
-      "Describe privileged access review cadence.",
-      "Attach ISO 27001 certificate.",
-      "Confirm subprocessor notification window.",
-      "Provide latest penetration test executive summary.",
-    ],
-    evidence_matches: [
-      {
-        id: "core-sso-match-soc2",
-        question_id: "Q-04",
-        source_label: "SOC 2 report",
-        source_type: "assurance_document",
-        evidence_urn: "evidencecas://vendor/core-sso/soc2",
-        control_id: "SOC2-CC6.1",
-        match_state: "matched",
-        confidence_score: 94,
-        answer_text: "SOC 2 Type II report covers access controls.",
-        observed_at: "2026-01-15T11:30:00.000Z",
-      },
-      {
-        id: "core-sso-match-dpa",
-        question_id: "Q-11",
-        source_label: "DPA",
-        source_type: "contract",
-        evidence_urn: `${coreSsoVendorURN}:contract`,
-        control_id: "privacy-dpa",
-        match_state: "matched",
-        confidence_score: 90,
-        answer_text: "DPA is signed and current.",
-        observed_at: "2026-01-15T11:30:00.000Z",
-      },
-      {
-        id: "core-sso-match-mfa",
-        question_id: "Q-17",
-        source_label: "MFA finding",
-        source_type: "finding",
-        evidence_urn: "demo-finding-critical",
-        control_id: "SOC2-CC6.1",
-        match_state: "conflict",
-        confidence_score: 82,
-        answer_text: "Open finding indicates privileged MFA evidence is not current.",
-        observed_at: "2026-01-15T11:45:00.000Z",
-      },
-    ],
-    assignments: [
-      {
-        id: "core-sso-assignment-mfa",
-        question_id: "Q-17",
-        owner: "security@example.com",
-        status: "open",
-        due_at: "2026-01-18T12:00:00.000Z",
-        reason: "Attach current privileged MFA evidence.",
-        created_at: "2026-01-15T11:35:00.000Z",
-      },
-    ],
-    comments: [
-      {
-        id: "core-sso-comment-1",
-        author: "grc@example.com",
-        body: "Vendor answered most access questions. MFA proof and ISO certificate are still open.",
-        created_at: "2026-01-15T11:40:00.000Z",
-      },
-    ],
-    approvals: [
-      {
-        id: "core-sso-approval-security",
-        approver: "security@example.com",
-        state: "pending",
-        reason: "Waiting on MFA evidence.",
-        created_at: "2026-01-15T11:42:00.000Z",
-      },
-    ],
-    timeline: [
-      { id: "core-sso-event-upload", event_type: "upload", actor: "grc@example.com", label: "Questionnaire uploaded", detail: "24 questions parsed.", created_at: "2026-01-12T12:00:00.000Z" },
-      { id: "core-sso-event-process", event_type: "process", actor: "Cerebro", label: "Evidence matched", detail: "3 matches, 6 missing answers.", created_at: "2026-01-15T11:30:00.000Z" },
-      { id: "core-sso-event-assign", event_type: "assignment", actor: "grc@example.com", label: "MFA evidence assigned", detail: "security@example.com owns Q-17.", created_at: "2026-01-15T11:35:00.000Z" },
-    ],
-  },
-  {
-    id: "payments-processor-qnr-2026",
-    vendor_urn: paymentsProcessorVendorURN,
-    tenant_id: tenantID,
-    title: "Payments Processor annual questionnaire",
-    source_filename: "payments-processor-questionnaire.pdf",
-    review_state: "approved",
-    upload_state: "parsed",
-    process_state: "processed",
-    enrichment_state: "complete",
-    decision_state: "approved",
-    decision_recommendation: "Approve. Required evidence is current.",
-    owner: "finance@example.com",
-    created_at: "2026-01-03T12:00:00.000Z",
-    updated_at: "2026-01-05T12:00:00.000Z",
-    processed_at: "2026-01-05T10:00:00.000Z",
-    question_count: 18,
-    answered_count: 18,
-    missing_answer_count: 0,
-    evidence_match_count: 4,
-    risk_notes: [],
-    missing_answers: [],
-    evidence_matches: [
-      {
-        id: "payments-match-soc2",
-        question_id: "Q-03",
-        source_label: "SOC 2 report",
-        source_type: "assurance_document",
-        evidence_urn: "evidencecas://vendor/payments-processor/soc2",
-        control_id: "SOC2-CC7.2",
-        match_state: "matched",
-        confidence_score: 96,
-        answer_text: "SOC 2 report is current.",
-        observed_at: "2026-01-05T10:00:00.000Z",
-      },
-    ],
-    assignments: [],
-    comments: [
-      {
-        id: "payments-comment-1",
-        author: "grc@example.com",
-        body: "Evidence packet is complete for annual review.",
-        created_at: "2026-01-05T11:00:00.000Z",
-      },
-    ],
-    approvals: [
-      {
-        id: "payments-approval-security",
-        approver: "security@example.com",
-        state: "approved",
-        reason: "Required evidence is current.",
-        created_at: "2026-01-05T12:00:00.000Z",
-      },
-    ],
-    timeline: [
-      { id: "payments-event-upload", event_type: "upload", actor: "finance@example.com", label: "Questionnaire uploaded", detail: "18 questions parsed.", created_at: "2026-01-03T12:00:00.000Z" },
-      { id: "payments-event-approve", event_type: "approval", actor: "security@example.com", label: "Review approved", detail: "No missing answers.", created_at: "2026-01-05T12:00:00.000Z" },
-    ],
-  },
-];
-
 const baseQuestionnaireRuns: GRCQuestionnaireRun[] = [
   {
     id: "customer-review-acme-2026",
@@ -1249,7 +1083,7 @@ const baseQuestionnaireRuns: GRCQuestionnaireRun[] = [
     id: "vendor-review-core-sso-2026",
     run_id: "vendor-review-core-sso-2026",
     tenant_id: tenantID,
-    title: "Core SSO vendor questionnaire",
+    title: "Core SSO vendor review",
     direction: "vendor_review",
     requester: "Core SSO",
     vendor_urn: coreSsoVendorURN,
@@ -1329,20 +1163,17 @@ const cloneVendorDiscovery = (discovery: GRCVendorDiscovery): GRCVendorDiscovery
 });
 
 const cloneVendor = (vendor: GRCVendor): GRCVendor => structuredClone(vendor);
-const cloneQuestionnaireReview = (review: GRCVendorQuestionnaireReview): GRCVendorQuestionnaireReview => structuredClone(review);
 const cloneQuestionnaireRun = (run: GRCQuestionnaireRun): GRCQuestionnaireRun => structuredClone(run);
 
 const fixtureCreatedVendors: GRCVendor[] = [];
 let currentVendors: GRCVendor[] = baseVendors.map(cloneVendor);
 let vendorDiscoveries: GRCVendorDiscovery[] = baseVendorDiscoveries.map(cloneVendorDiscovery);
-let questionnaireReviews: GRCVendorQuestionnaireReview[] = baseQuestionnaireReviews.map(cloneQuestionnaireReview);
 let questionnaireRuns: GRCQuestionnaireRun[] = baseQuestionnaireRuns.map(cloneQuestionnaireRun);
 
 export const resetCerebroFixtureStateForTests = () => {
   fixtureCreatedVendors.length = 0;
   currentVendors = baseVendors.map(cloneVendor);
   vendorDiscoveries = baseVendorDiscoveries.map(cloneVendorDiscovery);
-  questionnaireReviews = baseQuestionnaireReviews.map(cloneQuestionnaireReview);
   questionnaireRuns = baseQuestionnaireRuns.map(cloneQuestionnaireRun);
 };
 
@@ -1980,24 +1811,6 @@ const vendorSummary = (items: GRCVendor[]) => ({
   high_findings: items.reduce((sum, vendor) => sum + (vendor.high_findings ?? 0), 0),
   evidence_items: items.reduce((sum, vendor) => sum + (vendor.evidence_items ?? 0), 0),
 });
-
-const questionnaireReviewSummary = (items: GRCVendorQuestionnaireReview[]) => ({
-  total_reviews: items.length,
-  intake_reviews: items.filter((review) => ["uploaded", "parsed", "intake"].includes(review.upload_state ?? review.review_state)).length,
-  processing_reviews: items.filter((review) => review.process_state === "processing").length,
-  ready_reviews: items.filter((review) => ["ready", "processed", "complete"].includes(review.process_state ?? "")).length,
-  blocked_reviews: items.filter((review) => ["blocked", "needs_followup"].includes(review.decision_state ?? review.review_state)).length,
-  approved_reviews: items.filter((review) => ["approved", "accepted"].includes(review.decision_state ?? review.review_state)).length,
-  missing_answers: items.reduce((sum, review) => sum + review.missing_answer_count, 0),
-  open_assignments: items.reduce((sum, review) => sum + (review.assignments ?? []).filter((assignment) => assignment.status !== "closed").length, 0),
-  pending_approvals: items.reduce((sum, review) => sum + (review.approvals ?? []).filter((approval) => approval.state === "pending").length, 0),
-});
-
-const vendorQuestionnaireReviews = (vendorURN: string) =>
-  questionnaireReviews.filter((review) => review.vendor_urn === vendorURN).map(cloneQuestionnaireReview);
-
-const findQuestionnaireReview = (reviewID: string) =>
-  questionnaireReviews.find((review) => review.id === reviewID);
 
 const questionnaireRunSummary = (items: GRCQuestionnaireRun[]) => ({
   total_runs: items.length,
@@ -3787,161 +3600,6 @@ const questionnaireRunDecisionFixture = (runID: string, parsed: Record<string, u
   return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
 };
 
-const createQuestionnaireReviewFixture = (vendorPathValue: string, parsed: Record<string, unknown>) => {
-  const vendorURN = safeDecode(vendorPathValue);
-  const vendor = allFixtureVendors().find((item) => item.urn === vendorURN);
-  if (!vendor) {
-    return jsonFixture({ error: `No fixture vendor found for ${vendorURN}`, generated_at: generatedAt }, 404);
-  }
-  const id = `fixture-qnr-${Date.now()}`;
-  const review: GRCVendorQuestionnaireReview = {
-    id,
-    vendor_urn: vendorURN,
-    tenant_id: stringField(parsed.tenant_id) || tenantID,
-    title: stringField(parsed.title) || `${vendor.name} questionnaire`,
-    source_filename: stringField(parsed.source_filename) || "questionnaire-upload.csv",
-    review_state: "intake",
-    upload_state: "parsed",
-    process_state: "not_started",
-    enrichment_state: "not_started",
-    decision_state: "not_started",
-    owner: stringField(parsed.owner) || vendor.owner || vendor.security_owner_user_id,
-    due_at: stringField(parsed.due_at) || undefined,
-    created_at: generatedAt,
-    updated_at: generatedAt,
-    question_count: Number.parseInt(String(parsed.question_count ?? "12"), 10) || 12,
-    answered_count: Number.parseInt(String(parsed.answered_count ?? "0"), 10) || 0,
-    missing_answer_count: Number.parseInt(String(parsed.question_count ?? "12"), 10) || 12,
-    evidence_match_count: 0,
-    risk_notes: [],
-    missing_answers: ["Process the questionnaire to find missing answers."],
-    evidence_matches: [],
-    assignments: [],
-    comments: [],
-    approvals: [],
-    timeline: [
-      { id: `${id}-upload`, event_type: "upload", actor: "local-developer", label: "Questionnaire uploaded", detail: "Review intake created.", created_at: generatedAt },
-    ],
-  };
-  questionnaireReviews.unshift(review);
-  return jsonFixture({ review: cloneQuestionnaireReview(review), generated_at: generatedAt }, 201);
-};
-
-const processQuestionnaireReviewFixture = (reviewID: string) => {
-  const review = findQuestionnaireReview(safeDecode(reviewID));
-  if (!review) {
-    return jsonFixture({ error: `No fixture questionnaire review found for ${safeDecode(reviewID)}`, generated_at: generatedAt }, 404);
-  }
-  review.review_state = "in_review";
-  review.process_state = "processed";
-  review.enrichment_state = "partial";
-  review.decision_state = "needs_followup";
-  review.decision_recommendation = "Approve after missing answers are assigned and attached evidence is current.";
-  review.processed_at = generatedAt;
-  review.updated_at = generatedAt;
-  review.answered_count = Math.max(review.answered_count, Math.max(0, review.question_count - 3));
-  review.missing_answer_count = Math.max(1, review.question_count - review.answered_count);
-  review.evidence_match_count = Math.max(review.evidence_match_count, 2);
-  review.risk_notes = review.risk_notes?.length ? review.risk_notes : ["Evidence packet needs reviewer confirmation."];
-  review.missing_answers = review.missing_answers?.[0] === "Process the questionnaire to find missing answers."
-    ? ["Attach current security review evidence.", "Confirm data retention window.", "Assign unresolved access control answer."]
-    : review.missing_answers;
-  review.evidence_matches = review.evidence_matches?.length ? review.evidence_matches : [
-    {
-      id: `${review.id}-match-soc2`,
-      question_id: "Q-03",
-      source_label: "SOC 2 report",
-      source_type: "assurance_document",
-      evidence_urn: `${review.vendor_urn}:soc2`,
-      control_id: "SOC2-CC7.2",
-      match_state: "matched",
-      confidence_score: 91,
-      answer_text: "SOC 2 report is linked to this vendor.",
-      observed_at: generatedAt,
-    },
-    {
-      id: `${review.id}-match-open-risk`,
-      question_id: "Q-09",
-      source_label: "Open vendor risk",
-      source_type: "finding",
-      evidence_urn: "demo-finding-high",
-      control_id: "SOC2-CC6.1",
-      match_state: "needs_review",
-      confidence_score: 74,
-      answer_text: "Open risk should be reviewed before approval.",
-      observed_at: generatedAt,
-    },
-  ];
-  review.assignments = review.assignments?.length ? review.assignments : [
-    {
-      id: `${review.id}-assignment`,
-      question_id: "Q-09",
-      owner: review.owner || "security@example.com",
-      status: "open",
-      due_at: "2026-01-22T12:00:00.000Z",
-      reason: "Confirm open risk status before approval.",
-      created_at: generatedAt,
-    },
-  ];
-  review.timeline = [
-    ...(review.timeline ?? []),
-    { id: `${review.id}-process-${Date.now()}`, event_type: "process", actor: "Cerebro", label: "Questionnaire processed", detail: `${review.evidence_match_count} evidence matches, ${review.missing_answer_count} missing answers.`, created_at: generatedAt },
-  ];
-  return jsonFixture({ review: cloneQuestionnaireReview(review), generated_at: generatedAt });
-};
-
-const questionnaireReviewMutationFixture = (reviewID: string, section: string, parsed: Record<string, unknown>) => {
-  const review = findQuestionnaireReview(safeDecode(reviewID));
-  if (!review) {
-    return jsonFixture({ error: `No fixture questionnaire review found for ${safeDecode(reviewID)}`, generated_at: generatedAt }, 404);
-  }
-  const id = `${review.id}-${section}-${Date.now()}`;
-  if (section === "assignments") {
-    const assignment = {
-      id,
-      question_id: stringField(parsed.question_id) || undefined,
-      owner: stringField(parsed.owner) || "security@example.com",
-      status: stringField(parsed.status) || "open",
-      due_at: stringField(parsed.due_at) || undefined,
-      reason: stringField(parsed.reason) || "Review questionnaire answer.",
-      created_at: generatedAt,
-      updated_at: generatedAt,
-    };
-    review.assignments = [assignment, ...(review.assignments ?? [])];
-    review.timeline = [{ id: `${id}-event`, event_type: "assignment", actor: "local-developer", label: "Assignment added", detail: assignment.owner, created_at: generatedAt }, ...(review.timeline ?? [])];
-    review.updated_at = generatedAt;
-    return jsonFixture({ review: cloneQuestionnaireReview(review), assignment, generated_at: generatedAt }, 201);
-  }
-  if (section === "comments") {
-    const comment = {
-      id,
-      author: stringField(parsed.author) || "local-developer",
-      body: stringField(parsed.body) || "Review note added.",
-      created_at: generatedAt,
-    };
-    review.comments = [comment, ...(review.comments ?? [])];
-    review.timeline = [{ id: `${id}-event`, event_type: "comment", actor: comment.author, label: "Comment added", detail: comment.body, created_at: generatedAt }, ...(review.timeline ?? [])];
-    review.updated_at = generatedAt;
-    return jsonFixture({ review: cloneQuestionnaireReview(review), comment, generated_at: generatedAt }, 201);
-  }
-  if (section === "approvals") {
-    const approval = {
-      id,
-      approver: stringField(parsed.approver) || "security@example.com",
-      state: stringField(parsed.state) || "approved",
-      reason: stringField(parsed.reason) || "Questionnaire reviewed.",
-      created_at: generatedAt,
-    };
-    review.approvals = [approval, ...(review.approvals ?? [])];
-    review.decision_state = approval.state;
-    review.review_state = approval.state === "approved" ? "approved" : review.review_state;
-    review.timeline = [{ id: `${id}-event`, event_type: "approval", actor: approval.approver, label: `Approval ${approval.state}`, detail: approval.reason, created_at: generatedAt }, ...(review.timeline ?? [])];
-    review.updated_at = generatedAt;
-    return jsonFixture({ review: cloneQuestionnaireReview(review), approval, generated_at: generatedAt }, 201);
-  }
-  return notFoundFixture(`grc/vendor-questionnaire-reviews/${reviewID}/${section}`);
-};
-
 const writeFixture = (path: string, body?: string) => {
   let parsed: Record<string, unknown> = {};
   try {
@@ -3971,21 +3629,6 @@ const writeFixture = (path: string, body?: string) => {
   const runDecisionMatch = /^grc\/questionnaire-runs\/([^/]+)\/decisions$/.exec(path);
   if (runDecisionMatch) {
     return questionnaireRunDecisionFixture(runDecisionMatch[1], parsed);
-  }
-
-  const createReviewMatch = /^grc\/vendors\/(.+)\/questionnaire-reviews$/.exec(path);
-  if (createReviewMatch) {
-    return createQuestionnaireReviewFixture(createReviewMatch[1], parsed);
-  }
-
-  const processReviewMatch = /^grc\/vendor-questionnaire-reviews\/([^/]+)\/process$/.exec(path);
-  if (processReviewMatch) {
-    return processQuestionnaireReviewFixture(processReviewMatch[1]);
-  }
-
-  const reviewMutationMatch = /^grc\/vendor-questionnaire-reviews\/([^/]+)\/(assignments|comments|approvals)$/.exec(path);
-  if (reviewMutationMatch) {
-    return questionnaireReviewMutationFixture(reviewMutationMatch[1], reviewMutationMatch[2], parsed);
   }
 
   const vendorActionMatch = /^grc\/vendors\/(.+)\/actions$/.exec(path);
@@ -4278,17 +3921,6 @@ export const cerebroFixtureResponseFor = ({
     const run = findQuestionnaireRun(safeDecode(questionnaireRunMatch[1]));
     if (!run) return notFoundFixture(`grc/questionnaire-runs/${questionnaireRunMatch[1]}`);
     return jsonFixture({ run: cloneQuestionnaireRun(run), events: [], generated_at: generatedAt });
-  }
-
-  const vendorQuestionnaireReviewsMatch = /^grc\/vendors\/(.+)\/questionnaire-reviews$/.exec(normalizedPath);
-  if (vendorQuestionnaireReviewsMatch) {
-    const vendorURN = safeDecode(vendorQuestionnaireReviewsMatch[1]);
-    const reviews = vendorQuestionnaireReviews(vendorURN);
-    return jsonFixture({
-      reviews,
-      summary: questionnaireReviewSummary(reviews),
-      generated_at: generatedAt,
-    });
   }
 
   const vendorDetailMatch = /^grc\/vendors\/(.+)$/.exec(normalizedPath);

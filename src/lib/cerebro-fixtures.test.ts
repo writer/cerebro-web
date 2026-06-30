@@ -216,56 +216,6 @@ describe("cerebro fixture proxy responses", () => {
     expect(parseFixture(resetResponse!).vendors[0].owner).toBeUndefined();
   });
 
-  it("returns and mutates vendor questionnaire review fixtures", () => {
-    withFixtureMode();
-    const vendorURN = "urn:cerebro:demo-tenant:vendor:core-sso";
-    const list = cerebroFixtureResponseFor({
-      method: "GET",
-      path: `grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`,
-    });
-    expect(list?.status).toBe(200);
-    expect(parseFixture(list!)).toMatchObject({
-      summary: { total_reviews: 1, missing_answers: 6, open_assignments: 1, pending_approvals: 1 },
-      reviews: [expect.objectContaining({
-        id: "core-sso-qnr-2026",
-        evidence_matches: expect.arrayContaining([expect.objectContaining({ match_state: "conflict" })]),
-      })],
-    });
-
-    const created = cerebroFixtureResponseFor({
-      method: "POST",
-      path: `grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`,
-      body: JSON.stringify({ title: "New questionnaire", source_filename: "new.csv", question_count: 5 }),
-    });
-    expect(created?.status).toBe(201);
-    const createdReview = parseFixture(created!).review as { id: string };
-    expect(createdReview).toMatchObject({ title: "New questionnaire", process_state: "not_started" });
-
-    const processed = cerebroFixtureResponseFor({
-      method: "POST",
-      path: `grc/vendor-questionnaire-reviews/${createdReview.id}/process`,
-      body: JSON.stringify({ tenant_id: "demo-tenant" }),
-    });
-    expect(parseFixture(processed!)).toMatchObject({
-      review: {
-        id: createdReview.id,
-        process_state: "processed",
-        decision_state: "needs_followup",
-        evidence_match_count: 2,
-      },
-    });
-
-    const approval = cerebroFixtureResponseFor({
-      method: "POST",
-      path: `grc/vendor-questionnaire-reviews/${createdReview.id}/approvals`,
-      body: JSON.stringify({ approver: "security@example.com", state: "approved", reason: "Evidence accepted." }),
-    });
-    expect(parseFixture(approval!)).toMatchObject({
-      review: { id: createdReview.id, decision_state: "approved", review_state: "approved" },
-      approval: { state: "approved" },
-    });
-  });
-
   it("returns and mutates unified questionnaire run fixtures", () => {
     withFixtureMode();
     const list = cerebroFixtureResponseFor({
