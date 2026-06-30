@@ -91,6 +91,7 @@ export default function QuestionnairesPage() {
   const runsQuery = useGRCQuery<GRCQuestionnaireRunsResponse>(path);
   const actionMutation = useGRCMutation<GRCQuestionnaireRunResponse>();
   const createMutation = useGRCMutation<GRCQuestionnaireRunResponse>();
+  const reloadQuestionnaireRuns = runsQuery.reload;
   const runs = runsQuery.data?.runs ?? EMPTY_RUNS;
   const rows = useMemo(() => questionnaireQueueRows(runs), [runs]);
   const rollups = useMemo(() => questionnaireRollups(runs, runsQuery.data?.summary), [runs, runsQuery.data?.summary]);
@@ -130,7 +131,7 @@ export default function QuestionnairesPage() {
     resetRowActionForms();
   };
 
-  const reloadRuns = useCallback(() => { void runsQuery.reload(); }, [runsQuery]);
+  const reloadRuns = useCallback(() => { void reloadQuestionnaireRuns(); }, [reloadQuestionnaireRuns]);
 
   const updateSlotMapping = (value: string) => {
     if (mappingRowID !== selectedRow?.id) {
