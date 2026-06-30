@@ -362,7 +362,6 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
           <Link href={queueHref} className="primary-button inline-flex items-center gap-2 px-3 py-1.5 text-[12px]">
             Add questionnaire
           </Link>
-          <Link href={queueHref} className="text-[12px] font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]">Open queue</Link>
           <button type="button" onClick={reloadRuns} className="secondary-button px-3 py-1.5 text-[12px]">Refresh</button>
         </div>
       )}

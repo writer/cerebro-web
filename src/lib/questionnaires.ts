@@ -288,10 +288,9 @@ const phraseMatches = (haystack: string, needle: string) =>
   Boolean(needle) && (` ${haystack} `).includes(` ${needle} `);
 
 const portalHost = (value?: string) => {
-  if (!value) return "";
-  try {
-    return new URL(value.includes("://") ? value : `https://${value}`).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
+  const trimmed = (value ?? "").trim().toLowerCase();
+  if (!trimmed) return "";
+  const withoutScheme = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
+  const authority = withoutScheme.split(/[/?#]/, 1)[0] ?? "";
+  return authority.replace(/^www\./, "").split("@").pop()?.split(":")[0] ?? "";
 };
