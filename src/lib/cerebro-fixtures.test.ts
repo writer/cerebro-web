@@ -386,6 +386,57 @@ describe("cerebro fixture proxy responses", () => {
       },
     });
 
+    const linked = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${createdRun.run_id}/vendor-link`,
+      body: JSON.stringify({
+        vendor_urn: "urn:cerebro:demo-tenant:vendor:core-sso",
+        reason: "Matched requester.",
+      }),
+    });
+    expect(parseFixture(linked!)).toMatchObject({
+      run: {
+        direction: "vendor_review",
+        vendor_urn: "urn:cerebro:demo-tenant:vendor:core-sso",
+        vendor_id: "core-sso",
+        attributes: {
+          linked_vendor_urn: "urn:cerebro:demo-tenant:vendor:core-sso",
+          vendor_link_status: "linked",
+        },
+        timeline: expect.arrayContaining([expect.objectContaining({ event_type: "vendor_linked" })]),
+      },
+    });
+
+    const linkedVendorList = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/questionnaire-runs",
+      searchParams: new URLSearchParams({ direction: "vendor_review", vendor_urn: "urn:cerebro:demo-tenant:vendor:core-sso" }),
+    });
+    expect(parseFixture(linkedVendorList!)).toMatchObject({
+      summary: { total_runs: 2, vendor_runs: 2 },
+    });
+
+    const unlinked = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${createdRun.run_id}/vendor-link`,
+      body: JSON.stringify({ unlink: true, reason: "Wrong vendor." }),
+    });
+    expect(parseFixture(unlinked!)).toMatchObject({
+      run: {
+        attributes: {
+          vendor_link_status: "unlinked",
+        },
+      },
+    });
+    expect((parseFixture(unlinked!).run as { vendor_urn?: string }).vendor_urn).toBeUndefined();
+
+    const missingVendor = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${createdRun.run_id}/vendor-link`,
+      body: JSON.stringify({ reason: "No selected vendor." }),
+    });
+    expect(missingVendor?.status).toBe(400);
+
     const comment = cerebroFixtureResponseFor({
       method: "POST",
       path: `grc/questionnaire-runs/${createdRun.run_id}/comments`,

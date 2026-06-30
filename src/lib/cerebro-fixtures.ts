@@ -3835,6 +3835,43 @@ const questionnaireRunQuestionFixture = (runID: string, parsed: Record<string, u
   return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
 };
 
+const questionnaireRunVendorLinkFixture = (runID: string, parsed: Record<string, unknown>) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/vendor-link`);
+  const attributes = { ...(run.attributes ?? {}) };
+  if (parsed.unlink === true) {
+    delete run.vendor_urn;
+    delete run.vendor_id;
+    delete attributes.linked_vendor_urn;
+    delete attributes.linked_vendor_id;
+    attributes.vendor_link_status = "unlinked";
+    const reason = stringField(parsed.reason);
+    if (reason) attributes.vendor_link_reason = reason;
+    run.attributes = attributes;
+    run.updated_at = generatedAt;
+    run.timeline = [{ id: `${run.run_id}-vendor-unlinked-${run.timeline?.length ?? 0}`, event_type: "vendor_linked", actor_id: "local-developer", summary: "Vendor link removed", created_at: generatedAt }, ...(run.timeline ?? [])];
+    return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
+  }
+
+  const vendorURN = stringField(parsed.vendor_urn);
+  if (!vendorURN) return jsonFixture({ error: "vendor_urn is required.", generated_at: generatedAt }, 400);
+  const vendor = allFixtureVendors().find((item) => item.urn === vendorURN);
+  const vendorURNParts = vendorURN.split(":").filter(Boolean);
+  run.direction = "vendor_review";
+  run.vendor_urn = vendorURN;
+  run.vendor_id = stringField(parsed.vendor_id) || vendor?.vendor_id || vendorURNParts[vendorURNParts.length - 1];
+  run.requester = run.requester || vendor?.name;
+  attributes.linked_vendor_urn = vendorURN;
+  if (run.vendor_id) attributes.linked_vendor_id = run.vendor_id;
+  attributes.vendor_link_status = "linked";
+  const reason = stringField(parsed.reason);
+  if (reason) attributes.vendor_link_reason = reason;
+  run.attributes = attributes;
+  run.updated_at = generatedAt;
+  run.timeline = [{ id: `${run.run_id}-vendor-linked-${run.timeline?.length ?? 0}`, event_type: "vendor_linked", actor_id: "local-developer", summary: "Vendor linked", created_at: generatedAt }, ...(run.timeline ?? [])];
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
+};
+
 const questionnaireRunAssignmentFixture = (runID: string, parsed: Record<string, unknown>) => {
   const run = findQuestionnaireRun(safeDecode(runID));
   if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/assignments`);
@@ -3947,6 +3984,11 @@ const writeFixture = (path: string, body?: string) => {
   const runQuestionMatch = /^grc\/questionnaire-runs\/([^/]+)\/questions$/.exec(path);
   if (runQuestionMatch) {
     return questionnaireRunQuestionFixture(runQuestionMatch[1], parsed);
+  }
+
+  const runVendorLinkMatch = /^grc\/questionnaire-runs\/([^/]+)\/vendor-link$/.exec(path);
+  if (runVendorLinkMatch) {
+    return questionnaireRunVendorLinkFixture(runVendorLinkMatch[1], parsed);
   }
 
   const runDecisionMatch = /^grc\/questionnaire-runs\/([^/]+)\/decisions$/.exec(path);

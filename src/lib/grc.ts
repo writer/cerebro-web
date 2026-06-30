@@ -1653,6 +1653,14 @@ export type GRCQuestionnaireRunResponse = {
   generated_at: string;
 };
 
+export type GRCQuestionnaireVendorLinkRequest = {
+  tenant_id?: string;
+  vendor_urn?: string;
+  vendor_id?: string;
+  reason?: string;
+  unlink?: boolean;
+};
+
 export type GRCVendorDiscoveriesResponse = {
   summary?: GRCVendorDiscoverySummary;
   meta?: GRCListMeta;
