@@ -401,6 +401,7 @@ describe("cerebro fixture proxy responses", () => {
         vendor_id: "core-sso",
         attributes: {
           linked_vendor_urn: "urn:cerebro:demo-tenant:vendor:core-sso",
+          vendor_link_previous_direction: "customer_security_review",
           vendor_link_status: "linked",
         },
         timeline: expect.arrayContaining([expect.objectContaining({ event_type: "vendor_linked" })]),
@@ -421,14 +422,17 @@ describe("cerebro fixture proxy responses", () => {
       path: `grc/questionnaire-runs/${createdRun.run_id}/vendor-link`,
       body: JSON.stringify({ unlink: true, reason: "Wrong vendor." }),
     });
-    expect(parseFixture(unlinked!)).toMatchObject({
+    const unlinkedPayload = parseFixture(unlinked!);
+    expect(unlinkedPayload).toMatchObject({
       run: {
+        direction: "customer_security_review",
         attributes: {
           vendor_link_status: "unlinked",
         },
       },
     });
-    expect((parseFixture(unlinked!).run as { vendor_urn?: string }).vendor_urn).toBeUndefined();
+    expect((unlinkedPayload.run as { vendor_urn?: string }).vendor_urn).toBeUndefined();
+    expect((unlinkedPayload.run as { attributes?: Record<string, string> }).attributes?.vendor_link_previous_direction).toBeUndefined();
 
     const missingVendor = cerebroFixtureResponseFor({
       method: "POST",

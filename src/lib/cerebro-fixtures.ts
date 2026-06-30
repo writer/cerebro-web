@@ -3840,13 +3840,16 @@ const questionnaireRunVendorLinkFixture = (runID: string, parsed: Record<string,
   if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/vendor-link`);
   const attributes = { ...(run.attributes ?? {}) };
   if (parsed.unlink === true) {
+    run.direction = attributes.vendor_link_previous_direction || "customer_security_review";
     delete run.vendor_urn;
     delete run.vendor_id;
     delete attributes.linked_vendor_urn;
     delete attributes.linked_vendor_id;
+    delete attributes.vendor_link_previous_direction;
     attributes.vendor_link_status = "unlinked";
     const reason = stringField(parsed.reason);
     if (reason) attributes.vendor_link_reason = reason;
+    else delete attributes.vendor_link_reason;
     run.attributes = attributes;
     run.updated_at = generatedAt;
     run.timeline = [{ id: `${run.run_id}-vendor-unlinked-${run.timeline?.length ?? 0}`, event_type: "vendor_linked", actor_id: "local-developer", summary: "Vendor link removed", created_at: generatedAt }, ...(run.timeline ?? [])];
@@ -3857,6 +3860,7 @@ const questionnaireRunVendorLinkFixture = (runID: string, parsed: Record<string,
   if (!vendorURN) return jsonFixture({ error: "vendor_urn is required.", generated_at: generatedAt }, 400);
   const vendor = allFixtureVendors().find((item) => item.urn === vendorURN);
   const vendorURNParts = vendorURN.split(":").filter(Boolean);
+  attributes.vendor_link_previous_direction = attributes.vendor_link_previous_direction || run.direction || "customer_security_review";
   run.direction = "vendor_review";
   run.vendor_urn = vendorURN;
   run.vendor_id = stringField(parsed.vendor_id) || vendor?.vendor_id || vendorURNParts[vendorURNParts.length - 1];
@@ -3866,6 +3870,7 @@ const questionnaireRunVendorLinkFixture = (runID: string, parsed: Record<string,
   attributes.vendor_link_status = "linked";
   const reason = stringField(parsed.reason);
   if (reason) attributes.vendor_link_reason = reason;
+  else delete attributes.vendor_link_reason;
   run.attributes = attributes;
   run.updated_at = generatedAt;
   run.timeline = [{ id: `${run.run_id}-vendor-linked-${run.timeline?.length ?? 0}`, event_type: "vendor_linked", actor_id: "local-developer", summary: "Vendor linked", created_at: generatedAt }, ...(run.timeline ?? [])];
