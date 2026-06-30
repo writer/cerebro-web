@@ -216,53 +216,105 @@ describe("cerebro fixture proxy responses", () => {
     expect(parseFixture(resetResponse!).vendors[0].owner).toBeUndefined();
   });
 
-  it("returns and mutates vendor questionnaire review fixtures", () => {
+  it("returns and mutates unified questionnaire run fixtures", () => {
     withFixtureMode();
-    const vendorURN = "urn:cerebro:demo-tenant:vendor:core-sso";
     const list = cerebroFixtureResponseFor({
       method: "GET",
-      path: `grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`,
+      path: "grc/questionnaire-runs",
     });
     expect(list?.status).toBe(200);
     expect(parseFixture(list!)).toMatchObject({
-      summary: { total_reviews: 1, missing_answers: 6, open_assignments: 1, pending_approvals: 1 },
-      reviews: [expect.objectContaining({
-        id: "core-sso-qnr-2026",
-        evidence_matches: expect.arrayContaining([expect.objectContaining({ match_state: "conflict" })]),
-      })],
+      summary: {
+        total_runs: 2,
+        blocked_answers: 1,
+        review_answers: 3,
+        ready_answers: 2,
+        stale_evidence: 2,
+      },
+      runs: [
+        expect.objectContaining({ direction: "customer_security_review" }),
+        expect.objectContaining({ direction: "vendor_review" }),
+      ],
+    });
+
+    const vendorList = cerebroFixtureResponseFor({
+      method: "GET",
+      path: "grc/questionnaire-runs",
+      searchParams: new URLSearchParams({ direction: "vendor_review", vendor_urn: "urn:cerebro:demo-tenant:vendor:core-sso" }),
+    });
+    expect(parseFixture(vendorList!)).toMatchObject({
+      summary: { total_runs: 1, vendor_runs: 1 },
+      runs: [expect.objectContaining({ run_id: "vendor-review-core-sso-2026" })],
+    });
+
+    const decision = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/questionnaire-runs/customer-review-acme-2026/decisions",
+      body: JSON.stringify({ state: "approved", reason: "Answers accepted." }),
+    });
+    expect(parseFixture(decision!)).toMatchObject({
+      run: { run_id: "customer-review-acme-2026", status: "needs_input", decision: "approved" },
+    });
+
+    const conditionalDecision = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/questionnaire-runs/vendor-review-core-sso-2026/decisions",
+      body: JSON.stringify({ state: "approved_with_conditions", reason: "Refresh MFA proof before renewal." }),
+    });
+    expect(parseFixture(conditionalDecision!)).toMatchObject({
+      run: { run_id: "vendor-review-core-sso-2026", status: "approved", decision: "approved_with_conditions" },
     });
 
     const created = cerebroFixtureResponseFor({
       method: "POST",
-      path: `grc/vendors/${encodeURIComponent(vendorURN)}/questionnaire-reviews`,
-      body: JSON.stringify({ title: "New questionnaire", source_filename: "new.csv", question_count: 5 }),
+      path: "grc/questionnaire-runs",
+      body: JSON.stringify({
+        direction: "customer_security_review",
+        title: "New customer questionnaire",
+        customer_name: "NewCo",
+        source_format: "csv",
+        intake_text: "section,question,required_evidence_slots\nAccess,Do you enforce MFA?,identity_mfa\nAudit,Attach the SOC 2 report.,audit_report",
+      }),
     });
     expect(created?.status).toBe(201);
-    const createdReview = parseFixture(created!).review as { id: string };
-    expect(createdReview).toMatchObject({ title: "New questionnaire", process_state: "not_started" });
-
-    const processed = cerebroFixtureResponseFor({
-      method: "POST",
-      path: `grc/vendor-questionnaire-reviews/${createdReview.id}/process`,
-      body: JSON.stringify({ tenant_id: "demo-tenant" }),
+    const createdPayload = parseFixture(created!);
+    expect(createdPayload).toMatchObject({
+      run: { title: "New customer questionnaire", question_count: 2, unassigned_count: 2 },
     });
-    expect(parseFixture(processed!)).toMatchObject({
-      review: {
-        id: createdReview.id,
-        process_state: "processed",
-        decision_state: "needs_followup",
-        evidence_match_count: 2,
+
+    const createdRun = createdPayload.run as { run_id: string };
+    const mapped = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${createdRun.run_id}/questions`,
+      body: JSON.stringify({
+        question_id: "fixture-question-1",
+        required_evidence_slots: ["identity_mfa", "policy"],
+        mapped_controls: ["SOC2-CC6.1"],
+        owner_id: "security@example.com",
+      }),
+    });
+    expect(parseFixture(mapped!)).toMatchObject({
+      run: {
+        questions: expect.arrayContaining([expect.objectContaining({
+          id: "fixture-question-1",
+          required_evidence_slots: ["identity_mfa", "policy"],
+          mapped_controls: ["SOC2-CC6.1"],
+          owner_id: "security@example.com",
+        })]),
+        timeline: expect.arrayContaining([expect.objectContaining({ event_type: "updated" })]),
       },
     });
 
-    const approval = cerebroFixtureResponseFor({
+    const comment = cerebroFixtureResponseFor({
       method: "POST",
-      path: `grc/vendor-questionnaire-reviews/${createdReview.id}/approvals`,
-      body: JSON.stringify({ approver: "security@example.com", state: "approved", reason: "Evidence accepted." }),
+      path: `grc/questionnaire-runs/${createdRun.run_id}/comments`,
+      body: JSON.stringify({ question_id: "fixture-question-1", body: "Owner asked for current evidence." }),
     });
-    expect(parseFixture(approval!)).toMatchObject({
-      review: { id: createdReview.id, decision_state: "approved", review_state: "approved" },
-      approval: { state: "approved" },
+    expect(parseFixture(comment!)).toMatchObject({
+      run: {
+        comments: [expect.objectContaining({ body: "Owner asked for current evidence." })],
+        timeline: expect.arrayContaining([expect.objectContaining({ event_type: "commented" })]),
+      },
     });
   });
 
@@ -346,6 +398,9 @@ describe("cerebro fixture proxy responses", () => {
       ]),
       evidence_lineage: expect.arrayContaining([
         expect.objectContaining({ evidence_id: "demo-evidence-identity-mfa", evidence_packet_ids: ["fixture-packet-1"] }),
+      ]),
+      questionnaire_answers: expect.arrayContaining([
+        expect.objectContaining({ id: "acme-a-mfa", evidence_packet_ids: ["fixture-packet-1"] }),
       ]),
     });
     expect(payload.evidence_items).toHaveLength(2);

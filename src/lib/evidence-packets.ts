@@ -18,6 +18,7 @@ export type EvidencePacketMetrics = {
   graphPaths: number;
   collectedSources: number;
   linkedLineage: number;
+  questionnaireAnswers: number;
 };
 
 export const evidencePacketMetrics = (response?: GRCEvidencePacketsResponse | null): EvidencePacketMetrics => {
@@ -43,6 +44,7 @@ export const evidencePacketMetrics = (response?: GRCEvidencePacketsResponse | nu
     graphPaths: response?.graph_path_records?.length ?? 0,
     collectedSources: sources.filter((source) => source.status === "collected").length,
     linkedLineage: lineage.filter((item) => (item.evidence_packet_ids?.length ?? 0) > 0 && (item.control_ids?.length ?? 0) > 0).length,
+    questionnaireAnswers: response?.questionnaire_answers?.length ?? 0,
   };
 };
 

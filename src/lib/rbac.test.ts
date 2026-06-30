@@ -85,6 +85,12 @@ describe("Cerebro proxy route permissions", () => {
     expect(permissionForCerebroProxyRequest("POST", "reports/aws-soc2/runs")).toBe("reports:run");
     expect(permissionForCerebroProxyRequest("PATCH", "grc/inventory/asset-reports/report-1/triage")).toBe("grc:inventory:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/vendors")).toBe("grc:inventory:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/questionnaire-runs")).toBe("grc:inventory:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/questionnaire-runs/run-1/process")).toBe("grc:inventory:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/questionnaire-runs/run-1/assignments")).toBe("grc:inventory:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/questionnaire-runs/run-1/questions")).toBe("grc:inventory:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/questionnaire-runs/run-1/decisions")).toBe("grc:inventory:write");
+    expect(permissionForCerebroProxyRequest("POST", "grc/questionnaire-runs/run-1/comments")).toBe("grc:inventory:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/vendors/urn%3Acerebro%3Ademo%3Avendor%3Aone/actions")).toBe("grc:inventory:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/vendor-discoveries/discovery-1/decision")).toBe("grc:inventory:write");
     expect(permissionForCerebroProxyRequest("POST", "grc/vendor-discoveries/sync")).toBe("grc:inventory:write");

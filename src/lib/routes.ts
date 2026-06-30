@@ -73,6 +73,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["claims", "events", "proof", "audit"],
   },
   {
+    label: "Questionnaires",
+    href: "/questionnaires",
+    description: "Customer questionnaires, vendor reviews, answer blockers, owners, approvals, and evidence gaps.",
+    section: "Operator",
+    keywords: ["questionnaires", "security review", "customer review", "vendor review", "answers", "evidence gaps", "approvals", "owners"],
+  },
+  {
     label: "Inventory",
     href: "/inventory",
     description: "Browse assets, owners, scope, tests, vulnerabilities, and graph context.",

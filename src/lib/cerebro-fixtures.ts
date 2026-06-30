@@ -3,12 +3,13 @@ import type {
   GRCControlArchetype,
   GRCEvidence,
   GRCEvidencePacketsResponse,
+  GRCQuestionnaireEvidenceAnswer,
+  GRCQuestionnaireRun,
   GRCVendor,
   GRCVendorActionRequest,
   GRCVendorCreateRequest,
   GRCVendorDiscovery,
   GRCVendorDiscoverySyncRequest,
-  GRCVendorQuestionnaireReview,
 } from "@/lib/grc";
 
 type FixtureResponse = {
@@ -96,6 +97,9 @@ const sourceProvider = (sourceID?: string) =>
 
 const stringField = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
+
+const stringListField = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean) : undefined;
 
 const slugField = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
@@ -975,168 +979,180 @@ const baseVendorDiscoveries: GRCVendorDiscovery[] = [
   },
 ];
 
-const baseQuestionnaireReviews: GRCVendorQuestionnaireReview[] = [
+const baseQuestionnaireRuns: GRCQuestionnaireRun[] = [
   {
-    id: "core-sso-qnr-2026",
-    vendor_urn: coreSsoVendorURN,
+    id: "customer-review-acme-2026",
+    run_id: "customer-review-acme-2026",
     tenant_id: tenantID,
-    title: "Core SSO security questionnaire",
-    source_filename: "core-sso-security-questionnaire.xlsx",
-    review_state: "in_review",
-    upload_state: "parsed",
-    process_state: "processed",
-    enrichment_state: "partial",
-    decision_state: "needs_followup",
-    decision_recommendation: "Approve after MFA evidence and ISO certificate are attached.",
-    owner: "security@example.com",
-    due_at: "2026-01-20T12:00:00.000Z",
+    title: "Acme Corp security review",
+    direction: "customer_security_review",
+    requester: "Acme Corp",
+    customer_name: "Acme Corp",
+    source_filename: "acme-security-questionnaire.csv",
+    source_format: "csv",
+    status: "needs_input",
+    owner_id: "security@example.com",
+    assigned_team: "security",
+    decision: "needs_input",
+    decision_reason: "SOC 2 report and AI data-use answer need review.",
+    due_at: "2026-01-18T12:00:00.000Z",
     created_at: "2026-01-12T12:00:00.000Z",
     updated_at: "2026-01-15T12:00:00.000Z",
-    processed_at: "2026-01-15T11:30:00.000Z",
-    question_count: 24,
-    answered_count: 18,
-    missing_answer_count: 6,
-    evidence_match_count: 3,
-    risk_notes: [
-      "Privileged workforce access requires current MFA proof.",
-      "ISO 27001 certificate is missing from the packet.",
+    question_count: 4,
+    answer_count: 4,
+    ready_answer_count: 1,
+    blocked_answer_count: 1,
+    review_answer_count: 2,
+    missing_evidence_count: 2,
+    stale_evidence_count: 1,
+    unassigned_count: 1,
+    questions: [
+      { id: "acme-q-mfa", question: "Do you enforce MFA for workforce users?", section: "Identity", required_evidence_slots: ["identity_mfa"], mapped_controls: ["SOC2-CC6.1"], answer_state: "supported", review_state: "ready", owner_id: "security@example.com" },
+      { id: "acme-q-soc2", question: "Attach the latest SOC 2 report.", section: "Assurance", required_evidence_slots: ["audit_report"], mapped_controls: ["SOC2-CC7.2"], answer_state: "blocked", review_state: "blocked" },
+      { id: "acme-q-encryption", question: "Is customer data encrypted at rest and in transit?", section: "Data protection", required_evidence_slots: ["encryption"], mapped_controls: ["SOC2-CC6.7"], answer_state: "partial", review_state: "needs_review", owner_id: "platform@example.com" },
+      { id: "acme-q-ai", question: "Is customer data used to train AI models?", section: "AI and data use", required_evidence_slots: ["ai_data_use"], answer_state: "needs_review", review_state: "needs_review" },
     ],
-    missing_answers: [
-      "Describe privileged access review cadence.",
-      "Attach ISO 27001 certificate.",
-      "Confirm subprocessor notification window.",
-      "Provide latest penetration test executive summary.",
-    ],
-    evidence_matches: [
+    answers: [
       {
-        id: "core-sso-match-soc2",
-        question_id: "Q-04",
-        source_label: "SOC 2 report",
-        source_type: "assurance_document",
-        evidence_urn: "evidencecas://vendor/core-sso/soc2",
-        control_id: "SOC2-CC6.1",
-        match_state: "matched",
-        confidence_score: 94,
-        answer_text: "SOC 2 Type II report covers access controls.",
-        observed_at: "2026-01-15T11:30:00.000Z",
+        id: "acme-a-mfa",
+        question_id: "acme-q-mfa",
+        question: "Do you enforce MFA for workforce users?",
+        draft_answer: "Workforce MFA is enforced for SSO users. Current evidence is linked.",
+        answer_state: "supported",
+        review_state: "ready",
+        confidence: "high",
+        confidence_score: 92,
+        controls: ["SOC2-CC6.1"],
+        evidence_slots: [{ id: "identity_mfa", label: "MFA evidence", state: "satisfied", required: true, citation_ids: ["okta-mfa-policy"] }],
+        citations: [{ id: "okta-mfa-policy", label: "Okta MFA policy", source: "okta", evidence_packet_id: "fixture-packet-1", evidence_id: "demo-evidence-identity-mfa", freshness_status: "current", observed_at: "2026-01-15T11:00:00.000Z" }],
+        freshness: { status: "current", observed_at: "2026-01-15T11:00:00.000Z" },
       },
       {
-        id: "core-sso-match-dpa",
-        question_id: "Q-11",
-        source_label: "DPA",
-        source_type: "contract",
-        evidence_urn: `${coreSsoVendorURN}:contract`,
-        control_id: "privacy-dpa",
-        match_state: "matched",
-        confidence_score: 90,
-        answer_text: "DPA is signed and current.",
-        observed_at: "2026-01-15T11:30:00.000Z",
+        id: "acme-a-soc2",
+        question_id: "acme-q-soc2",
+        question: "Attach the latest SOC 2 report.",
+        draft_answer: "No answer is ready. The current SOC 2 report is missing.",
+        answer_state: "blocked",
+        review_state: "blocked",
+        confidence: "low",
+        confidence_score: 10,
+        controls: ["SOC2-CC7.2"],
+        evidence_slots: [{ id: "audit_report", label: "Audit report", state: "missing", required: true, missing_reasons: ["SOC 2 report is missing."] }],
+        missing_evidence: [{ id: "acme-gap-soc2", code: "missing_required_evidence", reason: "SOC 2 report is missing.", slot_id: "audit_report" }],
+        freshness: { status: "missing", reason: "Audit report is not attached." },
       },
       {
-        id: "core-sso-match-mfa",
-        question_id: "Q-17",
-        source_label: "MFA finding",
-        source_type: "finding",
-        evidence_urn: "demo-finding-critical",
-        control_id: "SOC2-CC6.1",
-        match_state: "conflict",
-        confidence_score: 82,
-        answer_text: "Open finding indicates privileged MFA evidence is not current.",
-        observed_at: "2026-01-15T11:45:00.000Z",
+        id: "acme-a-encryption",
+        question_id: "acme-q-encryption",
+        question: "Is customer data encrypted at rest and in transit?",
+        draft_answer: "Encryption evidence exists, but the last key rotation record is stale.",
+        answer_state: "partial",
+        review_state: "needs_review",
+        confidence: "medium",
+        confidence_score: 58,
+        controls: ["SOC2-CC6.7"],
+        evidence_slots: [{ id: "encryption", label: "Encryption evidence", state: "stale", required: true, citation_ids: ["kms-key-policy"] }],
+        citations: [{ id: "kms-key-policy", label: "KMS key policy", source: "aws", evidence_packet_id: "fixture-packet-2", evidence_id: "demo-evidence-kms", freshness_status: "stale", observed_at: "2025-10-01T00:00:00.000Z" }],
+        missing_evidence: [{ id: "acme-gap-encryption", code: "stale_evidence", reason: "Key rotation evidence is older than the freshness window.", slot_id: "encryption" }],
+        freshness: { status: "stale", observed_at: "2025-10-01T00:00:00.000Z", reason: "Key rotation evidence is stale." },
+      },
+      {
+        id: "acme-a-ai",
+        question_id: "acme-q-ai",
+        question: "Is customer data used to train AI models?",
+        draft_answer: "Policy language is available, but legal approval is required before sending the answer.",
+        answer_state: "needs_review",
+        review_state: "needs_review",
+        confidence: "medium",
+        confidence_score: 60,
+        evidence_slots: [{ id: "ai_data_use", label: "AI and data-use evidence", state: "needs_review", required: true, citation_ids: ["ai-data-use-policy"] }],
+        citations: [{ id: "ai-data-use-policy", label: "AI data-use policy", source: "policy", evidence_packet_id: "fixture-packet-3", evidence_id: "demo-evidence-ai-policy", freshness_status: "current", observed_at: "2026-01-13T00:00:00.000Z" }],
+        missing_evidence: [{ id: "acme-gap-ai", code: "manual_review_required", reason: "Legal approval is required before external use.", slot_id: "ai_data_use" }],
+        freshness: { status: "current", observed_at: "2026-01-13T00:00:00.000Z" },
       },
     ],
     assignments: [
-      {
-        id: "core-sso-assignment-mfa",
-        question_id: "Q-17",
-        owner: "security@example.com",
-        status: "open",
-        due_at: "2026-01-18T12:00:00.000Z",
-        reason: "Attach current privileged MFA evidence.",
-        created_at: "2026-01-15T11:35:00.000Z",
-      },
+      { id: "acme-assignment-soc2", question_id: "acme-q-soc2", team: "security", owner_id: "security@example.com", status: "open", reason: "Attach the current SOC 2 report.", due_at: "2026-01-17T12:00:00.000Z", created_at: "2026-01-15T11:00:00.000Z" },
+      { id: "acme-assignment-ai", question_id: "acme-q-ai", team: "legal", owner_id: "legal@example.com", status: "open", reason: "Approve external AI data-use language.", due_at: "2026-01-18T12:00:00.000Z", created_at: "2026-01-15T11:05:00.000Z" },
     ],
-    comments: [
-      {
-        id: "core-sso-comment-1",
-        author: "grc@example.com",
-        body: "Vendor answered most access questions. MFA proof and ISO certificate are still open.",
-        created_at: "2026-01-15T11:40:00.000Z",
-      },
-    ],
-    approvals: [
-      {
-        id: "core-sso-approval-security",
-        approver: "security@example.com",
-        state: "pending",
-        reason: "Waiting on MFA evidence.",
-        created_at: "2026-01-15T11:42:00.000Z",
-      },
-    ],
+    decisions: [],
+    comments: [{ id: "acme-comment-1", question_id: "acme-q-ai", actor_id: "security@example.com", body: "Legal needs to approve the AI answer before export.", created_at: "2026-01-15T11:10:00.000Z" }],
     timeline: [
-      { id: "core-sso-event-upload", event_type: "upload", actor: "grc@example.com", label: "Questionnaire uploaded", detail: "24 questions parsed.", created_at: "2026-01-12T12:00:00.000Z" },
-      { id: "core-sso-event-process", event_type: "process", actor: "Cerebro", label: "Evidence matched", detail: "3 matches, 6 missing answers.", created_at: "2026-01-15T11:30:00.000Z" },
-      { id: "core-sso-event-assign", event_type: "assignment", actor: "grc@example.com", label: "MFA evidence assigned", detail: "security@example.com owns Q-17.", created_at: "2026-01-15T11:35:00.000Z" },
+      { id: "acme-event-create", event_type: "created", actor_id: "grc@example.com", summary: "Questionnaire run created", created_at: "2026-01-12T12:00:00.000Z" },
+      { id: "acme-event-process", event_type: "processed", actor_id: "security@example.com", summary: "Questionnaire answers refreshed from evidence", created_at: "2026-01-15T11:00:00.000Z" },
     ],
+    attributes: { intake_format: "csv" },
   },
   {
-    id: "payments-processor-qnr-2026",
-    vendor_urn: paymentsProcessorVendorURN,
+    id: "vendor-review-core-sso-2026",
+    run_id: "vendor-review-core-sso-2026",
     tenant_id: tenantID,
-    title: "Payments Processor annual questionnaire",
-    source_filename: "payments-processor-questionnaire.pdf",
-    review_state: "approved",
-    upload_state: "parsed",
-    process_state: "processed",
-    enrichment_state: "complete",
-    decision_state: "approved",
-    decision_recommendation: "Approve. Required evidence is current.",
-    owner: "finance@example.com",
-    created_at: "2026-01-03T12:00:00.000Z",
-    updated_at: "2026-01-05T12:00:00.000Z",
-    processed_at: "2026-01-05T10:00:00.000Z",
-    question_count: 18,
-    answered_count: 18,
-    missing_answer_count: 0,
-    evidence_match_count: 4,
-    risk_notes: [],
-    missing_answers: [],
-    evidence_matches: [
+    title: "Core SSO vendor review",
+    direction: "vendor_review",
+    requester: "Core SSO",
+    vendor_urn: coreSsoVendorURN,
+    vendor_id: "core-sso",
+    source_filename: "core-sso-security-questionnaire.csv",
+    source_format: "csv",
+    status: "ready_for_approval",
+    owner_id: "security@example.com",
+    assigned_team: "security",
+    decision: "approved_with_conditions",
+    decision_reason: "MFA evidence is stale and must be refreshed before renewal.",
+    due_at: "2026-01-20T12:00:00.000Z",
+    created_at: "2026-01-12T12:00:00.000Z",
+    updated_at: "2026-01-15T12:00:00.000Z",
+    question_count: 2,
+    answer_count: 2,
+    ready_answer_count: 1,
+    blocked_answer_count: 0,
+    review_answer_count: 1,
+    missing_evidence_count: 1,
+    stale_evidence_count: 1,
+    unassigned_count: 0,
+    questions: [
+      { id: "core-sso-q-assurance", question: "Which assurance artifacts support the review?", section: "Assurance", required_evidence_slots: ["vendor_profile", "audit_report"], mapped_controls: ["SOC2-CC6.1"], answer_state: "supported", review_state: "ready", owner_id: "security@example.com" },
+      { id: "core-sso-q-mfa", question: "Is privileged MFA evidence current?", section: "Identity", required_evidence_slots: ["vendor_profile", "identity_mfa"], mapped_controls: ["SOC2-CC6.1"], answer_state: "partial", review_state: "needs_review", owner_id: "security@example.com" },
+    ],
+    answers: [
       {
-        id: "payments-match-soc2",
-        question_id: "Q-03",
-        source_label: "SOC 2 report",
-        source_type: "assurance_document",
-        evidence_urn: "evidencecas://vendor/payments-processor/soc2",
-        control_id: "SOC2-CC7.2",
-        match_state: "matched",
-        confidence_score: 96,
-        answer_text: "SOC 2 report is current.",
-        observed_at: "2026-01-05T10:00:00.000Z",
+        id: "core-sso-a-assurance",
+        question_id: "core-sso-q-assurance",
+        question: "Which assurance artifacts support the review?",
+        draft_answer: "SOC 2 and DPA records are linked for this vendor review.",
+        answer_state: "supported",
+        review_state: "ready",
+        confidence: "high",
+        confidence_score: 88,
+        controls: ["SOC2-CC6.1"],
+        evidence_slots: [{ id: "audit_report", label: "Audit report", state: "satisfied", required: true, citation_ids: ["core-sso-soc2"] }],
+        citations: [{ id: "core-sso-soc2", label: "SOC 2 report", source: "graph", evidence_id: "evidencecas://vendor/core-sso/soc2", control_id: "SOC2-CC6.1", freshness_status: "current", observed_at: "2026-01-15T11:30:00.000Z" }],
+        freshness: { status: "current", observed_at: "2026-01-15T11:30:00.000Z" },
+      },
+      {
+        id: "core-sso-a-mfa",
+        question_id: "core-sso-q-mfa",
+        question: "Is privileged MFA evidence current?",
+        draft_answer: "Open finding evidence indicates privileged MFA proof needs review.",
+        answer_state: "partial",
+        review_state: "needs_review",
+        confidence: "medium",
+        confidence_score: 52,
+        controls: ["SOC2-CC6.1"],
+        evidence_slots: [{ id: "identity_mfa", label: "MFA evidence", state: "stale", required: true, citation_ids: ["core-sso-mfa-finding"] }],
+        citations: [{ id: "core-sso-mfa-finding", label: "MFA finding", source: "finding", evidence_id: "demo-finding-critical", control_id: "SOC2-CC6.1", freshness_status: "stale", observed_at: "2026-01-15T11:45:00.000Z" }],
+        missing_evidence: [{ id: "core-sso-gap-mfa", code: "stale_evidence", reason: "Privileged MFA evidence is stale.", slot_id: "identity_mfa" }],
+        freshness: { status: "stale", observed_at: "2026-01-15T11:45:00.000Z" },
       },
     ],
-    assignments: [],
-    comments: [
-      {
-        id: "payments-comment-1",
-        author: "grc@example.com",
-        body: "Evidence packet is complete for annual review.",
-        created_at: "2026-01-05T11:00:00.000Z",
-      },
-    ],
-    approvals: [
-      {
-        id: "payments-approval-security",
-        approver: "security@example.com",
-        state: "approved",
-        reason: "Required evidence is current.",
-        created_at: "2026-01-05T12:00:00.000Z",
-      },
-    ],
+    assignments: [{ id: "core-sso-run-assignment-mfa", question_id: "core-sso-q-mfa", team: "security", owner_id: "security@example.com", status: "open", reason: "Refresh privileged MFA evidence.", due_at: "2026-01-18T12:00:00.000Z", created_at: "2026-01-15T11:35:00.000Z" }],
+    decisions: [{ id: "core-sso-run-decision-1", actor_id: "security@example.com", decision: "approved_with_conditions", reason: "Refresh MFA proof before renewal.", created_at: "2026-01-15T12:00:00.000Z" }],
+    comments: [{ id: "core-sso-run-comment-1", actor_id: "grc@example.com", body: "Vendor review is ready after MFA proof is refreshed.", created_at: "2026-01-15T11:40:00.000Z" }],
     timeline: [
-      { id: "payments-event-upload", event_type: "upload", actor: "finance@example.com", label: "Questionnaire uploaded", detail: "18 questions parsed.", created_at: "2026-01-03T12:00:00.000Z" },
-      { id: "payments-event-approve", event_type: "approval", actor: "security@example.com", label: "Review approved", detail: "No missing answers.", created_at: "2026-01-05T12:00:00.000Z" },
+      { id: "core-sso-run-event-create", event_type: "created", actor_id: "grc@example.com", summary: "Questionnaire run created", created_at: "2026-01-12T12:00:00.000Z" },
+      { id: "core-sso-run-event-decision", event_type: "decision_recorded", actor_id: "security@example.com", summary: "Questionnaire decision recorded", created_at: "2026-01-15T12:00:00.000Z" },
     ],
+    attributes: { legacy_review_id: "core-sso-qnr-2026" },
   },
 ];
 
@@ -1151,18 +1167,18 @@ const cloneVendorDiscovery = (discovery: GRCVendorDiscovery): GRCVendorDiscovery
 });
 
 const cloneVendor = (vendor: GRCVendor): GRCVendor => structuredClone(vendor);
-const cloneQuestionnaireReview = (review: GRCVendorQuestionnaireReview): GRCVendorQuestionnaireReview => structuredClone(review);
+const cloneQuestionnaireRun = (run: GRCQuestionnaireRun): GRCQuestionnaireRun => structuredClone(run);
 
 const fixtureCreatedVendors: GRCVendor[] = [];
 let currentVendors: GRCVendor[] = baseVendors.map(cloneVendor);
 let vendorDiscoveries: GRCVendorDiscovery[] = baseVendorDiscoveries.map(cloneVendorDiscovery);
-let questionnaireReviews: GRCVendorQuestionnaireReview[] = baseQuestionnaireReviews.map(cloneQuestionnaireReview);
+let questionnaireRuns: GRCQuestionnaireRun[] = baseQuestionnaireRuns.map(cloneQuestionnaireRun);
 
 export const resetCerebroFixtureStateForTests = () => {
   fixtureCreatedVendors.length = 0;
   currentVendors = baseVendors.map(cloneVendor);
   vendorDiscoveries = baseVendorDiscoveries.map(cloneVendorDiscovery);
-  questionnaireReviews = baseQuestionnaireReviews.map(cloneQuestionnaireReview);
+  questionnaireRuns = baseQuestionnaireRuns.map(cloneQuestionnaireRun);
 };
 
 const allFixtureVendors = () => [...fixtureCreatedVendors, ...currentVendors];
@@ -1800,23 +1816,74 @@ const vendorSummary = (items: GRCVendor[]) => ({
   evidence_items: items.reduce((sum, vendor) => sum + (vendor.evidence_items ?? 0), 0),
 });
 
-const questionnaireReviewSummary = (items: GRCVendorQuestionnaireReview[]) => ({
-  total_reviews: items.length,
-  intake_reviews: items.filter((review) => ["uploaded", "parsed", "intake"].includes(review.upload_state ?? review.review_state)).length,
-  processing_reviews: items.filter((review) => review.process_state === "processing").length,
-  ready_reviews: items.filter((review) => ["ready", "processed", "complete"].includes(review.process_state ?? "")).length,
-  blocked_reviews: items.filter((review) => ["blocked", "needs_followup"].includes(review.decision_state ?? review.review_state)).length,
-  approved_reviews: items.filter((review) => ["approved", "accepted"].includes(review.decision_state ?? review.review_state)).length,
-  missing_answers: items.reduce((sum, review) => sum + review.missing_answer_count, 0),
-  open_assignments: items.reduce((sum, review) => sum + (review.assignments ?? []).filter((assignment) => assignment.status !== "closed").length, 0),
-  pending_approvals: items.reduce((sum, review) => sum + (review.approvals ?? []).filter((approval) => approval.state === "pending").length, 0),
-});
+const questionnaireRunSummary = (items: GRCQuestionnaireRun[]) => {
+  const openItems = items.filter((run) => !["approved", "rejected"].includes(run.status));
+  return {
+    total_runs: items.length,
+    customer_runs: items.filter((run) => run.direction === "customer_security_review").length,
+    vendor_runs: items.filter((run) => run.direction === "vendor_review").length,
+    due_runs: openItems.filter((run) => run.due_at && Date.parse(run.due_at) <= Date.parse(generatedAt)).length,
+    blocked_answers: openItems.reduce((sum, run) => sum + (run.blocked_answer_count ?? 0), 0),
+    review_answers: openItems.reduce((sum, run) => sum + (run.review_answer_count ?? 0), 0),
+    ready_answers: openItems.reduce((sum, run) => sum + (run.ready_answer_count ?? 0), 0),
+    stale_evidence: openItems.reduce((sum, run) => sum + (run.stale_evidence_count ?? 0), 0),
+    missing_evidence: openItems.reduce((sum, run) => sum + (run.missing_evidence_count ?? 0), 0),
+    unassigned: openItems.reduce((sum, run) => sum + (run.unassigned_count ?? 0), 0),
+  };
+};
 
-const vendorQuestionnaireReviews = (vendorURN: string) =>
-  questionnaireReviews.filter((review) => review.vendor_urn === vendorURN).map(cloneQuestionnaireReview);
+const questionnaireRunSearchValues = (run: GRCQuestionnaireRun) => [
+  run.title,
+  run.direction,
+  run.requester,
+  run.customer_name,
+  run.vendor_urn,
+  run.vendor_id,
+  run.status,
+  run.owner_id,
+  run.assigned_team,
+  ...(run.assignments ?? []).flatMap((assignment) => [
+    assignment.owner_id,
+    assignment.team,
+    assignment.reason,
+    assignment.status,
+  ]),
+  ...(run.comments ?? []).flatMap((comment) => [
+    comment.actor_id,
+    comment.body,
+  ]),
+  ...(run.answers ?? []).flatMap((answer) => [
+    answer.question,
+    answer.answer_state,
+    answer.review_state,
+    answer.draft_answer,
+    ...(answer.controls ?? []),
+    ...(answer.missing_evidence ?? []).map((gap) => gap.reason),
+  ]),
+].filter((value): value is string => typeof value === "string" && value.length > 0);
 
-const findQuestionnaireReview = (reviewID: string) =>
-  questionnaireReviews.find((review) => review.id === reviewID);
+const questionnaireRunsFixture = (params?: URLSearchParams) => {
+  const direction = params?.get("direction")?.trim();
+  const status = params?.get("status")?.trim();
+  const vendorURN = params?.get("vendor_urn")?.trim();
+  const requester = params?.get("requester")?.trim().toLowerCase();
+  const customer = params?.get("customer_name")?.trim().toLowerCase();
+  const ownerID = params?.get("owner_id")?.trim().toLowerCase();
+  const query = params?.get("q")?.trim().toLowerCase();
+  return limitList(questionnaireRuns.filter((run) => {
+    if (direction && run.direction !== direction) return false;
+    if (status && run.status !== status) return false;
+    if (vendorURN && run.vendor_urn !== vendorURN) return false;
+    if (requester && !contains(run.requester ?? "", requester)) return false;
+    if (customer && !contains(run.customer_name ?? "", customer)) return false;
+    if (ownerID && ![run.owner_id, run.assigned_team, ...(run.assignments ?? []).flatMap((assignment) => [assignment.owner_id, assignment.team])].some((value) => contains(value ?? "", ownerID))) return false;
+    if (query && !questionnaireRunSearchValues(run).some((value) => contains(value, query))) return false;
+    return true;
+  }).map(cloneQuestionnaireRun), params);
+};
+
+const findQuestionnaireRun = (runID: string) =>
+  questionnaireRuns.find((run) => run.run_id === runID || run.id === runID);
 
 const vendorDiscoverySourceIDs = (discovery: GRCVendorDiscovery) =>
   Array.from(new Set([
@@ -2154,6 +2221,7 @@ const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsRes
     control_ids: [controlRows[index % controlRows.length]?.id].filter(Boolean),
   }));
   const sourceIDs = sourceRows.map((source) => source.source_id).filter((sourceID): sourceID is string => Boolean(sourceID));
+  const questionnaireAnswers = questionnaireEvidenceAnswersFixture();
 
   return {
     version: "fixture-1",
@@ -2223,6 +2291,7 @@ const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsRes
       last_observed_at: generatedAt,
     })),
     evidence_lineage: lineage,
+    questionnaire_answers: questionnaireAnswers,
     claim_records: [],
     evaluation_runs: evidenceItems.map((item) => ({
       id: item.run_id ?? `fixture-run-${item.id}`,
@@ -2281,6 +2350,54 @@ const evidencePacketsFixture = (params?: URLSearchParams): GRCEvidencePacketsRes
     },
   };
 };
+
+const questionnaireEvidenceAnswersFixture = (): GRCQuestionnaireEvidenceAnswer[] =>
+  questionnaireRuns.flatMap((run) =>
+    (run.answers ?? []).map((answer) => {
+      const citations = answer.citations ?? [];
+      const evidencePacketIDs = Array.from(new Set(citations.map((citation) => citation.evidence_packet_id).filter((value): value is string => Boolean(value))));
+      const evidenceIDs = Array.from(new Set(citations.map((citation) => citation.evidence_id).filter((value): value is string => Boolean(value))));
+      return {
+        id: answer.id,
+        question_id: answer.question_id,
+        question: answer.question ?? answer.question_id,
+        answer: answer.draft_answer ?? "",
+        answer_state: answer.answer_state,
+        review_state: answer.review_state,
+        confidence: { level: answer.confidence, score: answer.confidence_score },
+        controls: (answer.controls ?? []).map((control) => ({ id: control, control_id: control, title: control })),
+        source_evidence: citations.map((citation) => ({
+          id: citation.evidence_id ?? citation.id,
+          evidence_packet_id: citation.evidence_packet_id,
+          source: citation.source,
+          source_id: citation.source,
+          freshness: {
+            status: citation.freshness_status ?? answer.freshness.status,
+            observed_at: citation.observed_at ?? answer.freshness.observed_at,
+            expires_at: citation.expires_at ?? answer.freshness.expires_at,
+            reason: answer.freshness.reason,
+          },
+          review_state: answer.review_state,
+        })),
+        evidence_packet_ids: evidencePacketIDs,
+        citations: { evidence_ids: evidenceIDs },
+        freshness: {
+          status: answer.freshness.status,
+          observed_at: answer.freshness.observed_at,
+          expires_at: answer.freshness.expires_at,
+          reason: answer.freshness.reason,
+        },
+        missing_evidence: (answer.missing_evidence ?? []).map((gap) => ({
+          id: gap.id,
+          code: gap.code,
+          reason: gap.reason,
+          control_id: gap.control_id,
+          evidence_packet_id: gap.evidence_packet_id,
+          review_state: answer.review_state,
+        })),
+      };
+    }),
+  );
 
 const policyLifecycleFixture = () => ({
   summary: {
@@ -3426,159 +3543,311 @@ const vendorDiscoverySyncFixture = (parsed: Record<string, unknown>) => {
   });
 };
 
-const createQuestionnaireReviewFixture = (vendorPathValue: string, parsed: Record<string, unknown>) => {
-  const vendorURN = safeDecode(vendorPathValue);
-  const vendor = allFixtureVendors().find((item) => item.urn === vendorURN);
-  if (!vendor) {
-    return jsonFixture({ error: `No fixture vendor found for ${vendorURN}`, generated_at: generatedAt }, 404);
+const questionnaireQuestionsFromRequest = (parsed: Record<string, unknown>) => {
+  const direct = Array.isArray(parsed.questions) ? parsed.questions as Array<Record<string, unknown>> : [];
+  const rows = Array.isArray(parsed.intake_rows) ? parsed.intake_rows as Array<Record<string, unknown>> : [];
+  const textRows = questionnaireRowsFromText(stringField(parsed.intake_text), stringField(parsed.intake_format) || stringField(parsed.source_format));
+  return [...direct, ...rows, ...textRows].filter((question) => stringField(question.question));
+};
+
+const questionnaireRowsFromText = (value: string, format: string): Array<Record<string, unknown>> => {
+  const text = value.trim();
+  if (!text) return [];
+  const normalizedFormat = format.toLowerCase();
+  if (normalizedFormat === "json" || text.startsWith("[") || text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (Array.isArray(parsed)) return parsed.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>;
+        if (Array.isArray(record.questions)) return record.questions.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item));
+        if (Array.isArray(record.intake_rows)) return record.intake_rows.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item));
+      }
+    } catch {
+      return [];
+    }
   }
-  const id = `fixture-qnr-${Date.now()}`;
-  const review: GRCVendorQuestionnaireReview = {
+  if (normalizedFormat === "csv" || normalizedFormat === "tsv" || text.includes(",") || text.includes("\t")) {
+    const delimiter = normalizedFormat === "tsv" || text.split("\t").length > text.split(",").length ? "\t" : ",";
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const headers = (lines[0] ?? "").split(delimiter).map((header) => header.trim().toLowerCase().replaceAll(" ", "_"));
+    const questionIndex = Math.max(headers.indexOf("question"), headers.indexOf("question_text"), headers.indexOf("prompt"));
+    if (questionIndex < 0) return [];
+    return lines.slice(1).map((line) => {
+      const cells = line.split(delimiter).map((cell) => cell.trim());
+      const value = (name: string) => {
+        const index = headers.indexOf(name);
+        return index >= 0 ? cells[index] ?? "" : "";
+      };
+      return {
+        question: cells[questionIndex] ?? "",
+        section: value("section") || value("category"),
+        required_answer_format: value("required_answer_format") || value("answer_format"),
+        required_evidence_slots: splitFixtureList(value("required_evidence_slots") || value("evidence_slots") || value("slots")),
+        mapped_controls: splitFixtureList(value("mapped_controls") || value("controls") || value("control_ids")),
+        owner_id: value("owner_id") || value("owner") || value("assignee"),
+      };
+    });
+  }
+  return text.split(/\r?\n/).map((line) => ({ question: line.trim().replace(/^- /, "").replace(/^\* /, "") }));
+};
+
+const splitFixtureList = (value: string) =>
+  value.split(/[|,;]/).map((item) => item.trim()).filter(Boolean);
+
+const createQuestionnaireRunFixture = (parsed: Record<string, unknown>) => {
+  const questions = questionnaireQuestionsFromRequest(parsed);
+  if (questions.length === 0) return jsonFixture({ error: "At least one question is required.", generated_at: generatedAt }, 400);
+  const title = stringField(parsed.title) || "Security questionnaire";
+  const direction = stringField(parsed.direction) || "customer_security_review";
+  const id = `fixture-questionnaire-run-${questionnaireRuns.length + 1}`;
+  const run: GRCQuestionnaireRun = {
     id,
-    vendor_urn: vendorURN,
+    run_id: id,
     tenant_id: stringField(parsed.tenant_id) || tenantID,
-    title: stringField(parsed.title) || `${vendor.name} questionnaire`,
-    source_filename: stringField(parsed.source_filename) || "questionnaire-upload.csv",
-    review_state: "intake",
-    upload_state: "parsed",
-    process_state: "not_started",
-    enrichment_state: "not_started",
-    decision_state: "not_started",
-    owner: stringField(parsed.owner) || vendor.owner || vendor.security_owner_user_id,
-    due_at: stringField(parsed.due_at) || undefined,
+    title,
+    direction,
+    requester: stringField(parsed.requester),
+    customer_name: stringField(parsed.customer_name),
+    vendor_urn: stringField(parsed.vendor_urn),
+    vendor_id: stringField(parsed.vendor_id),
+    source_filename: stringField(parsed.source_filename),
+    source_format: stringField(parsed.source_format) || "json",
+    status: "intake",
+    owner_id: stringField(parsed.owner_id),
+    assigned_team: stringField(parsed.assigned_team) || "security",
+    decision: "needs_input",
+    due_at: stringField(parsed.due_at),
     created_at: generatedAt,
     updated_at: generatedAt,
-    question_count: Number.parseInt(String(parsed.question_count ?? "12"), 10) || 12,
-    answered_count: Number.parseInt(String(parsed.answered_count ?? "0"), 10) || 0,
-    missing_answer_count: Number.parseInt(String(parsed.question_count ?? "12"), 10) || 12,
-    evidence_match_count: 0,
-    risk_notes: [],
-    missing_answers: ["Process the questionnaire to find missing answers."],
-    evidence_matches: [],
+    question_count: questions.length,
+    answer_count: 0,
+    ready_answer_count: 0,
+    blocked_answer_count: 0,
+    review_answer_count: 0,
+    missing_evidence_count: 0,
+    stale_evidence_count: 0,
+    unassigned_count: questions.length,
+    questions: questions.map((question, index) => ({
+      id: stringField(question.id) || `fixture-question-${index + 1}`,
+      question: stringField(question.question) || `Question ${index + 1}`,
+      section: stringField(question.section),
+      required_evidence_slots: Array.isArray(question.required_evidence_slots) ? question.required_evidence_slots.filter((item): item is string => typeof item === "string") : undefined,
+      mapped_controls: Array.isArray(question.mapped_controls) ? question.mapped_controls.filter((item): item is string => typeof item === "string") : undefined,
+      answer_state: "blocked",
+      review_state: "blocked",
+    })),
+    answers: [],
     assignments: [],
+    decisions: [],
     comments: [],
-    approvals: [],
-    timeline: [
-      { id: `${id}-upload`, event_type: "upload", actor: "local-developer", label: "Questionnaire uploaded", detail: "Review intake created.", created_at: generatedAt },
-    ],
+    timeline: [{ id: `${id}-created`, event_type: "created", actor_id: "local-developer", summary: "Questionnaire run created", created_at: generatedAt }],
+    attributes: stringAttributes(parsed.attributes),
   };
-  questionnaireReviews.unshift(review);
-  return jsonFixture({ review: cloneQuestionnaireReview(review), generated_at: generatedAt }, 201);
+  questionnaireRuns.unshift(run);
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt }, 201);
 };
 
-const processQuestionnaireReviewFixture = (reviewID: string) => {
-  const review = findQuestionnaireReview(safeDecode(reviewID));
-  if (!review) {
-    return jsonFixture({ error: `No fixture questionnaire review found for ${safeDecode(reviewID)}`, generated_at: generatedAt }, 404);
+const processQuestionnaireRunFixture = (runID: string) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/process`);
+  if ((run.answers ?? []).length === 0) {
+    run.answers = (run.questions ?? []).map((question) => {
+      const slots = fixtureRequiredSlotsForQuestion(run, question);
+      return {
+        id: `${question.id}-answer`,
+        question_id: question.id,
+        question: question.question,
+        draft_answer: slots.length ? "No answer is ready. Required evidence is missing." : "No answer is ready. No required evidence slot was provided.",
+        answer_state: "blocked",
+        review_state: "blocked",
+        confidence: "low",
+        confidence_score: 10,
+        evidence_slots: slots.map((slot) => ({ id: slot, label: fixtureQuestionnaireSlotLabel(slot), state: "missing", required: true, missing_reasons: ["Required evidence is missing."] })),
+        missing_evidence: slots.length
+          ? [{ id: `${question.id}-gap`, code: "missing_required_evidence", reason: "Required evidence is missing." }]
+          : [{ id: `${question.id}-unresolved-slot`, code: "unresolved_evidence_slot", reason: "No required evidence slot was provided for this question." }],
+        freshness: { status: "missing" },
+      };
+    });
   }
-  review.review_state = "in_review";
-  review.process_state = "processed";
-  review.enrichment_state = "partial";
-  review.decision_state = "needs_followup";
-  review.decision_recommendation = "Approve after missing answers are assigned and attached evidence is current.";
-  review.processed_at = generatedAt;
-  review.updated_at = generatedAt;
-  review.answered_count = Math.max(review.answered_count, Math.max(0, review.question_count - 3));
-  review.missing_answer_count = Math.max(1, review.question_count - review.answered_count);
-  review.evidence_match_count = Math.max(review.evidence_match_count, 2);
-  review.risk_notes = review.risk_notes?.length ? review.risk_notes : ["Evidence packet needs reviewer confirmation."];
-  review.missing_answers = review.missing_answers?.[0] === "Process the questionnaire to find missing answers."
-    ? ["Attach current security review evidence.", "Confirm data retention window.", "Assign unresolved access control answer."]
-    : review.missing_answers;
-  review.evidence_matches = review.evidence_matches?.length ? review.evidence_matches : [
-    {
-      id: `${review.id}-match-soc2`,
-      question_id: "Q-03",
-      source_label: "SOC 2 report",
-      source_type: "assurance_document",
-      evidence_urn: `${review.vendor_urn}:soc2`,
-      control_id: "SOC2-CC7.2",
-      match_state: "matched",
-      confidence_score: 91,
-      answer_text: "SOC 2 report is linked to this vendor.",
-      observed_at: generatedAt,
-    },
-    {
-      id: `${review.id}-match-open-risk`,
-      question_id: "Q-09",
-      source_label: "Open vendor risk",
-      source_type: "finding",
-      evidence_urn: "demo-finding-high",
-      control_id: "SOC2-CC6.1",
-      match_state: "needs_review",
-      confidence_score: 74,
-      answer_text: "Open risk should be reviewed before approval.",
-      observed_at: generatedAt,
-    },
-  ];
-  review.assignments = review.assignments?.length ? review.assignments : [
-    {
-      id: `${review.id}-assignment`,
-      question_id: "Q-09",
-      owner: review.owner || "security@example.com",
-      status: "open",
-      due_at: "2026-01-22T12:00:00.000Z",
-      reason: "Confirm open risk status before approval.",
-      created_at: generatedAt,
-    },
-  ];
-  review.timeline = [
-    ...(review.timeline ?? []),
-    { id: `${review.id}-process-${Date.now()}`, event_type: "process", actor: "Cerebro", label: "Questionnaire processed", detail: `${review.evidence_match_count} evidence matches, ${review.missing_answer_count} missing answers.`, created_at: generatedAt },
-  ];
-  return jsonFixture({ review: cloneQuestionnaireReview(review), generated_at: generatedAt });
+  run.status = "needs_input";
+  recalculateQuestionnaireRunCounts(run);
+  run.updated_at = generatedAt;
+  run.timeline = [{ id: `${run.run_id}-processed-${run.timeline?.length ?? 0}`, event_type: "processed", actor_id: "local-developer", summary: "Questionnaire answers refreshed from evidence", created_at: generatedAt }, ...(run.timeline ?? [])];
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
 };
 
-const questionnaireReviewMutationFixture = (reviewID: string, section: string, parsed: Record<string, unknown>) => {
-  const review = findQuestionnaireReview(safeDecode(reviewID));
-  if (!review) {
-    return jsonFixture({ error: `No fixture questionnaire review found for ${safeDecode(reviewID)}`, generated_at: generatedAt }, 404);
+const fixtureRequiredSlotsForQuestion = (run: GRCQuestionnaireRun, question: NonNullable<GRCQuestionnaireRun["questions"]>[number]) => {
+  const slots = [...(question.required_evidence_slots ?? [])];
+  if (run.direction === "vendor_review" && !slots.includes("vendor_profile")) slots.push("vendor_profile");
+  return slots;
+};
+
+const fixtureQuestionExists = (run: GRCQuestionnaireRun, questionID: string) =>
+  Boolean(questionID && (run.questions ?? []).some((question) => question.id === questionID));
+
+const fixtureQuestionnaireSlotLabel = (slotID: string) =>
+  slotID.replaceAll("_", " ");
+
+const recalculateQuestionnaireRunCounts = (run: GRCQuestionnaireRun) => {
+  const answers = run.answers ?? [];
+  run.answer_count = answers.length;
+  run.blocked_answer_count = answers.filter((answer) => answer.answer_state === "blocked").length;
+  run.review_answer_count = answers.filter((answer) => ["needs_review", "partial"].includes(answer.answer_state)).length;
+  run.ready_answer_count = answers.filter((answer) => ["supported", "not_applicable"].includes(answer.answer_state)).length;
+  run.missing_evidence_count = answers.reduce((sum, answer) => sum + (answer.missing_evidence?.length ?? 0), 0);
+  run.stale_evidence_count = answers.filter((answer) =>
+    answer.freshness?.status === "stale" || (answer.missing_evidence ?? []).some((gap) => gap.code === "stale_evidence"),
+  ).length;
+  run.unassigned_count = (run.questions ?? []).filter((question) => {
+    const assignment = (run.assignments ?? []).find((item) => item.question_id === question.id && (item.owner_id || item.team));
+    return !question.owner_id && !assignment;
+  }).length;
+};
+
+const openQuestionnaireBlockedAnswers = (run: GRCQuestionnaireRun) =>
+  (run.answers ?? []).filter((answer) => answer.answer_state === "blocked").length;
+
+const questionnaireRunQuestionFixture = (runID: string, parsed: Record<string, unknown>) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/questions`);
+  if (parsed.question || parsed.actor_id) return jsonFixture({ error: "Use top-level question fields; actor is assigned by the service.", generated_at: generatedAt }, 400);
+
+  const questionID = stringField(parsed.question_id);
+  const question = (run.questions ?? []).find((item) => item.id === questionID);
+  if (!question) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+
+  const requiredSlots = stringListField(parsed.required_evidence_slots);
+  const mappedControls = stringListField(parsed.mapped_controls);
+  const clearRequiredSlots = parsed.clear_required_evidence_slots === true;
+  const clearMappedControls = parsed.clear_mapped_controls === true;
+  const clearOwner = parsed.clear_owner === true;
+  const ownerID = stringField(parsed.owner_id);
+  if (!requiredSlots && !mappedControls && !clearRequiredSlots && !clearMappedControls && !clearOwner && !ownerID) {
+    return jsonFixture({ error: "At least one question field is required.", generated_at: generatedAt }, 400);
   }
-  const id = `${review.id}-${section}-${Date.now()}`;
-  if (section === "assignments") {
-    const assignment = {
-      id,
-      question_id: stringField(parsed.question_id) || undefined,
-      owner: stringField(parsed.owner) || "security@example.com",
-      status: stringField(parsed.status) || "open",
-      due_at: stringField(parsed.due_at) || undefined,
-      reason: stringField(parsed.reason) || "Review questionnaire answer.",
-      created_at: generatedAt,
-      updated_at: generatedAt,
-    };
-    review.assignments = [assignment, ...(review.assignments ?? [])];
-    review.timeline = [{ id: `${id}-event`, event_type: "assignment", actor: "local-developer", label: "Assignment added", detail: assignment.owner, created_at: generatedAt }, ...(review.timeline ?? [])];
-    review.updated_at = generatedAt;
-    return jsonFixture({ review: cloneQuestionnaireReview(review), assignment, generated_at: generatedAt }, 201);
+
+  if (requiredSlots || clearRequiredSlots) question.required_evidence_slots = clearRequiredSlots ? [] : requiredSlots;
+  if (mappedControls || clearMappedControls) question.mapped_controls = clearMappedControls ? [] : mappedControls;
+  if (clearOwner) delete question.owner_id;
+  if (ownerID) question.owner_id = ownerID;
+
+  const answer = (run.answers ?? []).find((item) => item.question_id === questionID);
+  if (answer) {
+    if (mappedControls || clearMappedControls) answer.controls = question.mapped_controls ?? [];
+    if (requiredSlots || clearRequiredSlots) {
+      const slots = fixtureRequiredSlotsForQuestion(run, question);
+      const previousSlots = answer.evidence_slots ?? [];
+      answer.evidence_slots = slots.map((slot) =>
+        previousSlots.find((item) => item.id === slot) ?? {
+          id: slot,
+          label: fixtureQuestionnaireSlotLabel(slot),
+          state: "missing",
+          required: true,
+          missing_reasons: ["Required evidence is missing."],
+        },
+      );
+      const missingSlots = answer.evidence_slots.filter((slot) => slot.state !== "satisfied");
+      answer.missing_evidence = missingSlots.length > 0
+        ? missingSlots.map((slot) => ({ id: `${question.id}-${slot.id}-gap`, code: "missing_required_evidence", reason: "Required evidence is missing.", slot_id: slot.id }))
+        : [];
+      if (missingSlots.length > 0) {
+        answer.answer_state = "blocked";
+        answer.review_state = "blocked";
+        answer.freshness = { status: "missing" };
+      }
+    }
   }
-  if (section === "comments") {
-    const comment = {
-      id,
-      author: stringField(parsed.author) || "local-developer",
-      body: stringField(parsed.body) || "Review note added.",
-      created_at: generatedAt,
-    };
-    review.comments = [comment, ...(review.comments ?? [])];
-    review.timeline = [{ id: `${id}-event`, event_type: "comment", actor: comment.author, label: "Comment added", detail: comment.body, created_at: generatedAt }, ...(review.timeline ?? [])];
-    review.updated_at = generatedAt;
-    return jsonFixture({ review: cloneQuestionnaireReview(review), comment, generated_at: generatedAt }, 201);
+
+  recalculateQuestionnaireRunCounts(run);
+  if ((run.answers ?? []).length > 0) run.status = run.blocked_answer_count > 0 ? "needs_input" : "ready_for_approval";
+  run.updated_at = generatedAt;
+  run.timeline = [{ id: `${run.run_id}-question-${run.timeline?.length ?? 0}`, event_type: "updated", actor_id: "local-developer", summary: "Question mapping updated", created_at: generatedAt }, ...(run.timeline ?? [])];
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
+};
+
+const questionnaireRunAssignmentFixture = (runID: string, parsed: Record<string, unknown>) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/assignments`);
+  if (parsed.assignment) return jsonFixture({ error: "Use top-level assignment fields.", generated_at: generatedAt }, 400);
+  const assignment = {
+    id: `fixture-assignment-${(run.assignments?.length ?? 0) + 1}`,
+    question_id: stringField(parsed.question_id),
+    team: stringField(parsed.team),
+    owner_id: stringField(parsed.owner_id),
+    status: stringField(parsed.status) || "open",
+    reason: stringField(parsed.reason),
+    due_at: stringField(parsed.due_at),
+    created_at: generatedAt,
+  };
+  if (!fixtureQuestionExists(run, assignment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+  if (!assignment.owner_id && !assignment.team) return jsonFixture({ error: "owner_id or team is required.", generated_at: generatedAt }, 400);
+  run.assignments = [assignment, ...(run.assignments ?? [])];
+  run.updated_at = generatedAt;
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
+};
+
+const questionnaireRunDecisionFixture = (runID: string, parsed: Record<string, unknown>) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/decisions`);
+  if (parsed.decision || parsed.actor_id) return jsonFixture({ error: "Use top-level decision fields; actor is assigned by the service.", generated_at: generatedAt }, 400);
+  const decision = {
+    id: `fixture-decision-${(run.decisions?.length ?? 0) + 1}`,
+    question_id: stringField(parsed.question_id),
+    actor_id: stringField(parsed.actor_id) || "local-developer",
+    decision: stringField(parsed.state),
+    reason: stringField(parsed.reason),
+    created_at: generatedAt,
+  };
+  if (!["approved", "approved_with_conditions", "rejected", "needs_input"].includes(decision.decision)) return jsonFixture({ error: "state is required.", generated_at: generatedAt }, 400);
+  if (decision.question_id && !fixtureQuestionExists(run, decision.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+  run.decisions = [decision, ...(run.decisions ?? [])];
+  run.answers = (run.answers ?? []).map((answer) => {
+    if (decision.question_id && answer.question_id !== decision.question_id) return answer;
+    if (decision.decision === "needs_input" || decision.decision === "rejected") {
+      return { ...answer, answer_state: "blocked", review_state: decision.decision === "rejected" ? "rejected" : "blocked", reviewer_decision: decision.decision, reviewer_reason: decision.reason };
+    }
+    if (decision.decision === "approved" || decision.decision === "approved_with_conditions") {
+      return { ...answer, review_state: "approved", reviewer_decision: decision.decision, reviewer_reason: decision.reason };
+    }
+    return answer;
+  });
+  if (!decision.question_id) {
+    run.decision = decision.decision;
+    run.decision_reason = decision.reason;
+    recalculateQuestionnaireRunCounts(run);
+    if (decision.decision === "approved" || decision.decision === "approved_with_conditions") run.status = openQuestionnaireBlockedAnswers(run) > 0 ? "needs_input" : "approved";
+    if (decision.decision === "rejected") run.status = "rejected";
+    if (decision.decision === "needs_input") run.status = "needs_input";
+  } else {
+    recalculateQuestionnaireRunCounts(run);
+    run.status = run.blocked_answer_count > 0 ? "needs_input" : "ready_for_approval";
   }
-  if (section === "approvals") {
-    const approval = {
-      id,
-      approver: stringField(parsed.approver) || "security@example.com",
-      state: stringField(parsed.state) || "approved",
-      reason: stringField(parsed.reason) || "Questionnaire reviewed.",
-      created_at: generatedAt,
-    };
-    review.approvals = [approval, ...(review.approvals ?? [])];
-    review.decision_state = approval.state;
-    review.review_state = approval.state === "approved" ? "approved" : review.review_state;
-    review.timeline = [{ id: `${id}-event`, event_type: "approval", actor: approval.approver, label: `Approval ${approval.state}`, detail: approval.reason, created_at: generatedAt }, ...(review.timeline ?? [])];
-    review.updated_at = generatedAt;
-    return jsonFixture({ review: cloneQuestionnaireReview(review), approval, generated_at: generatedAt }, 201);
+  run.updated_at = generatedAt;
+  run.timeline = [{ id: `${run.run_id}-decision-${run.timeline?.length ?? 0}`, event_type: "decision_recorded", actor_id: decision.actor_id, summary: "Questionnaire decision recorded", created_at: generatedAt }, ...(run.timeline ?? [])];
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
+};
+
+const questionnaireRunCommentFixture = (runID: string, parsed: Record<string, unknown>) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/comments`);
+  if (parsed.comment || parsed.actor_id) return jsonFixture({ error: "Use top-level comment fields; actor is assigned by the service.", generated_at: generatedAt }, 400);
+  const comment = {
+    id: `fixture-comment-${(run.comments?.length ?? 0) + 1}`,
+    question_id: stringField(parsed.question_id),
+    actor_id: "local-developer",
+    body: stringField(parsed.body),
+    created_at: generatedAt,
+  };
+  if (!fixtureQuestionExists(run, comment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+  if (!comment.body) {
+    return jsonFixture({ error: "Comment body is required.", generated_at: generatedAt }, 400);
   }
-  return notFoundFixture(`grc/vendor-questionnaire-reviews/${reviewID}/${section}`);
+  run.comments = [comment, ...(run.comments ?? [])];
+  run.updated_at = generatedAt;
+  run.timeline = [{ id: `${run.run_id}-comment-${run.timeline?.length ?? 0}`, event_type: "commented", actor_id: comment.actor_id, summary: "Questionnaire comment added", created_at: generatedAt }, ...(run.timeline ?? [])];
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
 };
 
 const writeFixture = (path: string, body?: string) => {
@@ -3586,26 +3855,40 @@ const writeFixture = (path: string, body?: string) => {
   try {
     parsed = body ? JSON.parse(body) as Record<string, unknown> : {};
   } catch {
-    parsed = {};
+    return jsonFixture({ error: "Malformed JSON request body.", generated_at: generatedAt }, 400);
   }
 
   if (path === "grc/vendors") {
     return createVendorFixture(parsed);
   }
 
-  const createReviewMatch = /^grc\/vendors\/(.+)\/questionnaire-reviews$/.exec(path);
-  if (createReviewMatch) {
-    return createQuestionnaireReviewFixture(createReviewMatch[1], parsed);
+  if (path === "grc/questionnaire-runs") {
+    return createQuestionnaireRunFixture(parsed);
   }
 
-  const processReviewMatch = /^grc\/vendor-questionnaire-reviews\/([^/]+)\/process$/.exec(path);
-  if (processReviewMatch) {
-    return processQuestionnaireReviewFixture(processReviewMatch[1]);
+  const processRunMatch = /^grc\/questionnaire-runs\/([^/]+)\/process$/.exec(path);
+  if (processRunMatch) {
+    return processQuestionnaireRunFixture(processRunMatch[1]);
   }
 
-  const reviewMutationMatch = /^grc\/vendor-questionnaire-reviews\/([^/]+)\/(assignments|comments|approvals)$/.exec(path);
-  if (reviewMutationMatch) {
-    return questionnaireReviewMutationFixture(reviewMutationMatch[1], reviewMutationMatch[2], parsed);
+  const runAssignmentMatch = /^grc\/questionnaire-runs\/([^/]+)\/assignments$/.exec(path);
+  if (runAssignmentMatch) {
+    return questionnaireRunAssignmentFixture(runAssignmentMatch[1], parsed);
+  }
+
+  const runQuestionMatch = /^grc\/questionnaire-runs\/([^/]+)\/questions$/.exec(path);
+  if (runQuestionMatch) {
+    return questionnaireRunQuestionFixture(runQuestionMatch[1], parsed);
+  }
+
+  const runDecisionMatch = /^grc\/questionnaire-runs\/([^/]+)\/decisions$/.exec(path);
+  if (runDecisionMatch) {
+    return questionnaireRunDecisionFixture(runDecisionMatch[1], parsed);
+  }
+
+  const runCommentMatch = /^grc\/questionnaire-runs\/([^/]+)\/comments$/.exec(path);
+  if (runCommentMatch) {
+    return questionnaireRunCommentFixture(runCommentMatch[1], parsed);
   }
 
   const vendorActionMatch = /^grc\/vendors\/(.+)\/actions$/.exec(path);
@@ -3888,15 +4171,16 @@ export const cerebroFixtureResponseFor = ({
     return jsonFixture({ vendors: filteredVendors, summary: vendorSummary(filteredVendors), generated_at: generatedAt });
   }
 
-  const vendorQuestionnaireReviewsMatch = /^grc\/vendors\/(.+)\/questionnaire-reviews$/.exec(normalizedPath);
-  if (vendorQuestionnaireReviewsMatch) {
-    const vendorURN = safeDecode(vendorQuestionnaireReviewsMatch[1]);
-    const reviews = vendorQuestionnaireReviews(vendorURN);
-    return jsonFixture({
-      reviews,
-      summary: questionnaireReviewSummary(reviews),
-      generated_at: generatedAt,
-    });
+  if (normalizedPath === "grc/questionnaire-runs") {
+    const runs = questionnaireRunsFixture(searchParams);
+    return jsonFixture({ runs, summary: questionnaireRunSummary(runs), generated_at: generatedAt });
+  }
+
+  const questionnaireRunMatch = /^grc\/questionnaire-runs\/([^/]+)$/.exec(normalizedPath);
+  if (questionnaireRunMatch) {
+    const run = findQuestionnaireRun(safeDecode(questionnaireRunMatch[1]));
+    if (!run) return notFoundFixture(`grc/questionnaire-runs/${questionnaireRunMatch[1]}`);
+    return jsonFixture({ run: cloneQuestionnaireRun(run), events: [], generated_at: generatedAt });
   }
 
   const vendorDetailMatch = /^grc\/vendors\/(.+)$/.exec(normalizedPath);

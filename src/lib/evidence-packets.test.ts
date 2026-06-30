@@ -24,6 +24,7 @@ describe("evidencePacketMetrics", () => {
       claim_records: [{ id: "claim-1" }],
       evaluation_runs: [{ id: "run-1" }],
       graph_path_records: [{ id: "path-1" }],
+      questionnaire_answers: [{ id: "answer-1" }],
       evidence_lineage: [
         { id: "lineage-1", control_ids: ["control-1"], evidence_packet_ids: ["packet-1"] },
         { id: "lineage-2", control_ids: [], evidence_packet_ids: ["packet-2"] },
@@ -48,6 +49,7 @@ describe("evidencePacketMetrics", () => {
       graphPaths: 1,
       collectedSources: 1,
       linkedLineage: 1,
+      questionnaireAnswers: 1,
     });
   });
 });

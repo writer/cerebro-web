@@ -8,7 +8,7 @@ import DataTable, { type TableColumn, WorklistTable } from "@/components/grc/Dat
 import { AppliedFilterChips, ErrorBlock, LoadingBlock, PageHeader, ResultLimitNotice } from "@/components/grc/Primitives";
 import { evidencePacketMetrics, evidencePacketReadinessLabel, evidenceReviewState } from "@/lib/evidence-packets";
 import { countLabel } from "@/lib/format";
-import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCListMeta, GRCEvidencePacketsResponse, GRCEvidenceRequest } from "@/lib/grc";
+import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCListMeta, GRCEvidencePacketsResponse, GRCEvidenceRequest, GRCQuestionnaireEvidenceAnswer } from "@/lib/grc";
 import { displayDate, shortEntity } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
@@ -44,6 +44,16 @@ const mutedTextClass = "text-[var(--text-muted)]";
 const monoSecondaryClass = "font-mono text-[12px] text-[var(--text-secondary)]";
 const monoMutedClass = "font-mono text-[12px] text-[var(--text-muted)]";
 const countTextClass = "tabular-nums text-[var(--text-secondary)]";
+
+const questionnaireCitationCount = (answer: GRCQuestionnaireEvidenceAnswer) =>
+  (answer.source_evidence?.length ?? 0) +
+  (answer.policy_documents?.length ?? 0) +
+  (answer.citations?.evidence_ids?.length ?? 0) +
+  (answer.citations?.rule_ids?.length ?? 0) +
+  (answer.citations?.claim_ids?.length ?? 0) +
+  (answer.citations?.event_ids?.length ?? 0) +
+  (answer.citations?.run_ids?.length ?? 0) +
+  (answer.citations?.graph_root_urns?.length ?? 0);
 
 export default function EvidencePage() {
   const [sectionParam, setSectionParam] = useQueryParamState("view");
@@ -175,6 +185,15 @@ export default function EvidencePage() {
     { key: "finding_count", label: "Findings", render: (_value, item) => <span className={countTextClass}>{item.finding_count}</span> },
     { key: "last_synced_at", label: "Synced", render: (_value, item) => <span className={mutedTextClass}>{displayDate(item.last_synced_at)}</span> },
   ], []);
+  const questionnaireAnswerColumns = useMemo<TableColumn<GRCQuestionnaireEvidenceAnswer>[]>(() => [
+    { key: "question", label: "Question", render: (_value, item) => <span className={`font-medium ${primaryTextClass}`}>{item.question || shortEntity(item.question_id)}</span> },
+    { key: "answer_state", label: "Answer", render: (_value, item) => <StatusPill status={item.answer_state} /> },
+    { key: "review_state", label: "Review", render: (_value, item) => <ReviewPill status={item.review_state} /> },
+    { key: "controls", label: "Controls", render: (_value, item) => <span className={countTextClass}>{item.controls?.length ?? 0}</span> },
+    { key: "evidence_packet_ids", label: "Packets", render: (_value, item) => <span className={countTextClass}>{item.evidence_packet_ids?.length ?? 0}</span> },
+    { key: "citations", label: "Citations", render: (_value, item) => <span className={countTextClass}>{questionnaireCitationCount(item)}</span> },
+    { key: "missing_evidence", label: "Gaps", render: (_value, item) => <span className={countTextClass}>{item.missing_evidence?.length ?? 0}</span> },
+  ], []);
   const itemColumns = useMemo<TableColumn<GRCEvidenceItemRecord>[]>(() => [
     { key: "id", label: "Evidence", render: (_value, item) => <span className={monoSecondaryClass}>{shortEntity(item.id)}</span> },
     { key: "finding_id", label: "Finding", render: (_value, item) => <span className={monoMutedClass}>{shortEntity(item.finding_id)}</span> },
@@ -214,6 +233,7 @@ export default function EvidencePage() {
     { label: "Requests", value: packagedMetrics.requests, detail: `${packagedMetrics.missingRequests} missing, ${packagedMetrics.staleRequests} stale`, state: packagedMetricState },
     { label: "Packets", value: packagedMetrics.packets, detail: `${packagedMetrics.readyPackets} ready`, state: packagedMetricState },
     { label: "Reviews", value: packagedMetrics.openReviews, detail: "open review records", intent: packagedMetrics.openReviews > 0 ? "warning" : "success", state: packagedMetricState },
+    { label: "Answers", value: packagedMetrics.questionnaireAnswers, detail: "questionnaire records", state: packagedMetricState },
     { label: "Sources", value: packagedMetrics.sources, detail: `${packagedMetrics.collectedSources} collected`, state: packagedMetricState },
     { label: "Evidence items", value: packagedMetrics.evidenceItems, detail: "raw proof records", state: packagedMetricState },
     { label: "Lineage", value: packagedMetrics.lineage, detail: `${packagedMetrics.linkedLineage} fully linked`, state: packagedMetricState },
@@ -339,6 +359,20 @@ export default function EvidencePage() {
                 pageSize={25}
                 resultLimit={GRC_WORKLIST_LIMIT}
                 resultNoun="requests"
+                getRowKey={(item) => item.id}
+                refreshing={packagedLoading}
+              />
+              <WorklistTable
+                title="Questionnaire answers"
+                description="Answer records linked to packets, controls, citations, and evidence gaps."
+                rows={packagedData.questionnaire_answers ?? []}
+                columns={questionnaireAnswerColumns}
+                emptyMessage="No questionnaire answer records are available."
+                searchPlaceholder="Filter loaded answers"
+                filterKeys={["id", "question_id", "question", "answer", "answer_state", "review_state"]}
+                pageSize={25}
+                resultLimit={GRC_WORKLIST_LIMIT}
+                resultNoun="answers"
                 getRowKey={(item) => item.id}
                 refreshing={packagedLoading}
               />
