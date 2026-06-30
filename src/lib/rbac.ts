@@ -262,6 +262,7 @@ export const permissionForCerebroProxyRequest = (
     normalizedPath.endsWith("/process") ||
     normalizedPath.endsWith("/assignments") ||
     normalizedPath.endsWith("/questions") ||
+    normalizedPath.endsWith("/vendor-link") ||
     normalizedPath.endsWith("/decisions") ||
     normalizedPath.endsWith("/comments")
   )) return "grc:inventory:write";

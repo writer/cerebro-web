@@ -3,6 +3,7 @@ import type {
   GRCQuestionnaireRun,
   GRCQuestionnaireRunAnswer,
   GRCQuestionnaireRunSummary,
+  GRCVendor,
 } from "@/lib/grc";
 
 export type QuestionnaireQueueRollups = {
@@ -141,6 +142,50 @@ export const inferQuestionnaireIntakeFormat = (filename: string, contentType = "
 
 export const isQuestionnaireBinaryIntakeFormat = (format: string) => ["pdf", "xlsx", "xlsm"].includes(format);
 
+export type QuestionnaireVendorSuggestionInput = {
+  title?: string;
+  requester?: string;
+  sourceFilename?: string;
+  portalURL?: string;
+  intakeText?: string;
+};
+
+export const suggestQuestionnaireVendor = (
+  vendors: GRCVendor[],
+  input: QuestionnaireVendorSuggestionInput,
+): GRCVendor | null => {
+  const haystack = normalizeVendorMatchText([
+    input.title,
+    input.requester,
+    input.sourceFilename,
+    portalHost(input.portalURL),
+    input.portalURL,
+    input.intakeText?.slice(0, 2_000),
+  ].filter(Boolean).join(" "));
+  if (!haystack) return null;
+
+  const scored = vendors.map((vendor) => {
+    const name = normalizeVendorMatchText(vendor.name);
+    const vendorID = normalizeVendorMatchText(vendor.vendor_id ?? "");
+    const urnParts = vendor.urn.split(":").filter(Boolean);
+    const urnTail = normalizeVendorMatchText(urnParts[urnParts.length - 1] ?? "");
+    const websiteHost = normalizeVendorMatchText(portalHost(vendor.website_url));
+    const nameTokens = name.split(" ").filter((token) => token.length >= 3);
+    let score = 0;
+    if (name && phraseMatches(haystack, name)) score += 80;
+    if (vendorID && phraseMatches(haystack, vendorID)) score += 55;
+    if (urnTail && phraseMatches(haystack, urnTail)) score += 45;
+    if (websiteHost && phraseMatches(haystack, websiteHost)) score += 35;
+    score += nameTokens.filter((token) => phraseMatches(haystack, token)).length * 10;
+    if (nameTokens.length === 1 && !phraseMatches(haystack, name) && score < 80) score = 0;
+    return { vendor, score };
+  }).filter((item) => item.score >= 40).sort((left, right) => right.score - left.score);
+
+  if (scored.length === 0) return null;
+  if (scored.length > 1 && scored[0].score === scored[1].score) return null;
+  return scored[0].vendor;
+};
+
 const queueRowFromAnswer = (run: GRCQuestionnaireRun, answer: GRCQuestionnaireRunAnswer): QuestionnaireQueueRow => {
   const missing = answer.missing_evidence ?? [];
   const staleEvidence = (answer.freshness?.status ?? "").toLowerCase() === "stale" || missing.some((gap) => gap.code === "stale_evidence");
@@ -229,4 +274,23 @@ const isDue = (dueAt: string | undefined, status: string | undefined, now: Date)
   if (!dueAt || status === "approved" || status === "rejected") return false;
   const due = Date.parse(dueAt);
   return Number.isFinite(due) && due <= now.getTime();
+};
+
+const normalizeVendorMatchText = (value?: string) =>
+  (value ?? "")
+    .toLowerCase()
+    .replace(/https?:\/\//g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+const phraseMatches = (haystack: string, needle: string) =>
+  Boolean(needle) && (` ${haystack} `).includes(` ${needle} `);
+
+const portalHost = (value?: string) => {
+  const trimmed = (value ?? "").trim().toLowerCase();
+  if (!trimmed) return "";
+  const withoutScheme = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
+  const authority = withoutScheme.split(/[/?#]/, 1)[0] ?? "";
+  return authority.replace(/^www\./, "").split("@").pop()?.split(":")[0] ?? "";
 };

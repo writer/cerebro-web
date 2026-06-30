@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { GRCQuestionnaireRun } from "@/lib/grc";
-import { inferQuestionnaireIntakeFormat, initialQuestionnaireRowID, primaryAnswerForRun, questionnaireQueueRows, questionnaireRollups } from "@/lib/questionnaires";
+import type { GRCQuestionnaireRun, GRCVendor } from "@/lib/grc";
+import { inferQuestionnaireIntakeFormat, initialQuestionnaireRowID, primaryAnswerForRun, questionnaireQueueRows, questionnaireRollups, suggestQuestionnaireVendor } from "@/lib/questionnaires";
 
 describe("questionnaire queue helpers", () => {
   it("builds answer rows and rollups from questionnaire runs", () => {
@@ -347,5 +347,16 @@ describe("questionnaire queue helpers", () => {
 
     expect(rows[0]).toMatchObject({ state: "rejected", blocker: "Evidence is not current." });
     expect(rows[1]).toMatchObject({ state: "approved_with_conditions", blocker: "Refresh before sending." });
+  });
+
+  it("suggests a vendor only when intake context has a clear match", () => {
+    const vendors = [
+      { urn: "urn:cerebro:demo:vendor:core-sso", vendor_id: "core-sso", name: "Core SSO", risk_level: "high", owner_state: "assigned", review_state: "current", contract_count: 0, security_review_count: 0, questionnaire_count: 0, assurance_document_count: 0 },
+      { urn: "urn:cerebro:demo:vendor:storage-grid", vendor_id: "storage-grid", name: "Storage Grid", risk_level: "medium", owner_state: "assigned", review_state: "current", contract_count: 0, security_review_count: 0, questionnaire_count: 0, assurance_document_count: 0 },
+    ] satisfies GRCVendor[];
+
+    expect(suggestQuestionnaireVendor(vendors, { sourceFilename: "core-sso-security-questionnaire.xlsx" })?.urn).toBe("urn:cerebro:demo:vendor:core-sso");
+    expect(suggestQuestionnaireVendor(vendors, { requester: "storage-grid vendor portal" })?.urn).toBe("urn:cerebro:demo:vendor:storage-grid");
+    expect(suggestQuestionnaireVendor(vendors, { title: "Security questionnaire", intakeText: "Do you enforce MFA?" })).toBeNull();
   });
 });
