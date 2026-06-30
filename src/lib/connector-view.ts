@@ -8,7 +8,7 @@ import {
   connectorSetupAllowed,
   connectorStatus,
 } from "@/lib/connectors";
-import type { SourceCoverageSummary, SourceReadiness } from "@/lib/mission-control";
+import type { SourceCoverageSummary, SourceReadiness } from "@/lib/connector-runtime";
 
 export type ReadinessFilter = SourceReadiness | "all";
 

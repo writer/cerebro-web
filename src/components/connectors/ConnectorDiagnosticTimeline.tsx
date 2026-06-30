@@ -5,7 +5,7 @@ import { Activity, CheckCircle2, Clock3, GitBranch, HelpCircle, ListChecks, Refr
 import { Badge, EmptyBlock } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import { displayDate, humanize } from "@/lib/grc";
-import { formatDuration } from "@/lib/mission-control";
+import { formatDuration } from "@/lib/connector-runtime";
 import {
   connectorDiagnosticStageLabel,
   connectorDiagnosticStatusLabel,

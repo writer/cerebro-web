@@ -16,7 +16,6 @@ const developerLinks = [
   { label: "Security Producers", href: "/developer/security-producers", description: "Source runtime coverage, graph context tools, and security producer queries." },
   { label: "Risk Scoring", href: "/developer/risk-scoring", description: "Tune tenant risk thresholds, signal cutoffs, relation weights, and factor weights." },
   { label: "Ask Evals", href: "/developer/evals", description: "Local Ask quality evals and rubric outcomes." },
-  { label: "Codegen Status", href: "/developer/codegen", description: "Unified codegen health: catalog coverage, projection templates, generator registry, and staleness." },
 ];
 
 export default function DeveloperPage() {

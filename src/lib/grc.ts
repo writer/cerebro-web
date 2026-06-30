@@ -848,27 +848,6 @@ export type GRCSourceCoverageSummary = {
 export type GRCCoverageRecord = GRCSourceCoverageRecord;
 export type GRCCoverageSummary = GRCSourceCoverageSummary;
 
-export type GRCProductAreaWorkflow = {
-  label: string;
-  href: string;
-};
-
-export type GRCProductAreaResponse = {
-  id: string;
-  title: string;
-  description: string;
-  href: string;
-  workflows: GRCProductAreaWorkflow[];
-  source_families?: string[];
-  coverage_dimensions?: string[];
-  evidence_types?: string[];
-  control_domains?: string[];
-  blind_spots?: GRCCoverageRecord[];
-  detail?: string;
-  signal?: string;
-  status?: string;
-};
-
 export type GRCProgramReadinessSummary = {
   status: string;
   score: number;
@@ -971,7 +950,6 @@ export type GRCProgramReadiness = {
   source_summaries?: GRCSourceRuntimeHealthSummary[];
   coverage_blind_spots?: GRCCoverageRecord[];
   coverage_summaries?: GRCCoverageSummary[];
-  product_areas?: GRCProductAreaResponse[];
   metadata: GRCReportMetadata;
   generated_at: string;
 };
@@ -1878,7 +1856,6 @@ export type GRCDashboard = {
   source_summaries?: GRCSourceRuntimeHealthSummary[];
   coverage_blind_spots?: GRCCoverageRecord[];
   coverage_summaries?: GRCCoverageSummary[];
-  product_areas?: GRCProductAreaResponse[];
   generated_at: string;
 };
 

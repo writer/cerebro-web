@@ -1,4 +1,3 @@
-import { grcProductAreas, productAreaStatus, type GRCProductArea } from "@/lib/grc-product-areas";
 import type {
   GRCControlArchetype,
   GRCEvidence,
@@ -1220,39 +1219,6 @@ const coverageSummaries = [
   { source_id: "aws", total: 5, healthy: 4, stale: 1, missing: 0, blind_spots: 0 },
 ];
 
-const productAreaBlindSpots = (area: GRCProductArea) => area.id === "assets" ? coverageBlindSpots : [];
-
-const productAreaDetail = (area: GRCProductArea, blindSpotCount: number) => {
-  if (blindSpotCount > 0) return `${blindSpotCount} coverage gap${blindSpotCount === 1 ? "" : "s"}`;
-  return `${area.workflows.length} workflows | ${area.coverageDimensions.length} dimensions | ${area.sourceFamilies.length} families`;
-};
-
-const productAreaSignal = (status: ReturnType<typeof productAreaStatus>, blindSpotCount: number) => {
-  if (status === "attention") return `${blindSpotCount} gap${blindSpotCount === 1 ? "" : "s"}`;
-  if (status === "mapped") return "mapped";
-  return "awaiting coverage";
-};
-
-const productAreas = grcProductAreas.map((area) => {
-  const blindSpots = productAreaBlindSpots(area);
-  const status = productAreaStatus(blindSpots.length, true);
-  return {
-    id: area.id,
-    title: area.title,
-    description: area.description,
-    href: area.href,
-    workflows: area.workflows,
-    source_families: area.sourceFamilies,
-    coverage_dimensions: area.coverageDimensions,
-    evidence_types: area.evidenceTypes,
-    control_domains: area.controlDomains,
-    blind_spots: blindSpots,
-    detail: productAreaDetail(area, blindSpots.length),
-    signal: productAreaSignal(status, blindSpots.length),
-    status,
-  };
-});
-
 const dashboardFixture = () => ({
   summary: {
     open_findings: 3,
@@ -1272,7 +1238,6 @@ const dashboardFixture = () => ({
   source_summaries: sourceSummaries,
   coverage_blind_spots: coverageBlindSpots,
   coverage_summaries: coverageSummaries,
-  product_areas: productAreas,
   generated_at: generatedAt,
 });
 
@@ -3123,7 +3088,6 @@ const programReadinessFixture = () => ({
   source_summaries: sourceSummaries,
   coverage_blind_spots: coverageBlindSpots,
   coverage_summaries: coverageSummaries,
-  product_areas: productAreas,
   metadata: { generated_by: "cerebro-web-fixture", tenant_id: tenantID, generated_at: generatedAt },
   generated_at: generatedAt,
 });
@@ -4122,7 +4086,7 @@ const writeFixture = (path: string, body?: string) => {
     });
   }
 
-  return jsonFixture({ ok: true, path, generated_at: generatedAt });
+  return notFoundFixture(path);
 };
 
 export const cerebroFixtureResponseFor = ({

@@ -168,7 +168,7 @@ const commandOnlyNavLinks: NavigationEntry[] = [
   },
   {
     label: "Source activation",
-    href: "/connectors/source-cdk",
+    href: "/connectors/activation",
     description: "See what a source collects, the access it needs, and whether you can trust it yet for your program.",
     section: "Operator",
     keywords: ["source", "activation", "connector", "coverage", "access", "trust", "onboarding"],

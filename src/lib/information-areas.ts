@@ -167,7 +167,7 @@ export const informationAreas: InformationArea[] = [
     secondaryRoutes: [
       { href: "/ask", label: "Ask", detail: "Ask runtime and coverage questions." },
       { href: "/impact", label: "Affected assets", detail: "Entity impact and affected paths." },
-      { href: "/connectors/source-cdk", label: "Source activation", detail: "Source collection scope, access, and trust posture." },
+      { href: "/connectors/activation", label: "Source activation", detail: "Source collection scope, access, and trust posture." },
       { href: "/credential-stores", label: "Credential stores", detail: "Store readiness, defaults, and accepted reference formats." },
       { href: "/developer", label: "Developer Tools", detail: "API status, OpenAPI resources, and diagnostics." },
     ],

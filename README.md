@@ -1,6 +1,6 @@
 # Cerebro Web
 
-Cerebro Web is a read-only Next.js console for a Cerebro API. It provides UI surfaces for sources, runtimes, findings, reports, workflow metadata, graph projections, and Ask/LLM-backed graph queries.
+Cerebro Web is a Next.js operator console for a Cerebro API. It provides UI surfaces for sources, runtimes, findings, reports, workflow metadata, graph projections, and Ask/LLM-backed graph queries.
 
 ## Status
 
@@ -10,7 +10,7 @@ Maintained by WRITER on a best-effort basis. There are no support SLAs.
 
 Cerebro Web mirrors the app-vs-deploy split used by Cerebro runtime:
 
-- `writer/cerebro-web` is authoritative for the read-only console app, shared UI behavior, generic source-readiness views, API proxy semantics, OpenAPI rendering, tests, and the source-linked web image.
+- `writer/cerebro-web` is authoritative for the public console app, shared UI behavior, generic source-readiness views, API proxy semantics, OpenAPI rendering, tests, and the source-linked web image.
 - `WriterInternal/cerebro-web` is the private deployment and operations mirror for Writer's web console. It should regularly promote the public app surface, then layer Writer-only dependency policy, deployment environment wiring, secret references, image promotion, rollout, rollback, and operational verification.
 - Private producer registries, private labels, source/runtime mappings, hostnames, identity wiring, and credentials are deployment concerns. Keep them in the internal mirror's deployment configuration or secret store and pass them through documented environment variables.
 
@@ -50,6 +50,8 @@ Application changes should land here first and then be promoted to `WriterIntern
 | `CEREBRO_MCP_BEARER_TOKEN`, `CEREBRO_MCP_TOKEN` | Optional bearer token used specifically for Cerebro MCP. |
 | `NEXT_PUBLIC_CEREBRO_SECURITY_PRODUCERS_JSON` | Optional deployment-provided JSON array for security producer coverage shown in `/developer/security-producers`. |
 | `NEXT_PUBLIC_CEREBRO_WEB_VERSION`, `NEXT_PUBLIC_APP_VERSION`, `CEREBRO_WEB_VERSION`, `APP_VERSION`, `RELEASE_VERSION`, `IMAGE_TAG` | Build-time version stamp for the sidebar. Without an explicit value, local builds fall back to Git metadata and then `package.json`. |
+
+For deployed environments, use server-side credentials or forwarded request auth. Browser-entered API keys are for local development and manual API checks.
 
 `/api/cerebro/*` keeps a small process-local cache for high-traffic GRC reads. Responses expose `x-cerebro-cache` for the web proxy cache state and `x-cerebro-upstream-cache` when the API also reports a shared backend cache state. Manual refreshes send `Cache-Control: no-cache` through the proxy so the API can bypass both layers.
 

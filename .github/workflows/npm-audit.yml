@@ -1,4 +1,4 @@
-name: Security Analysis
+name: NPM Audit
 
 on:
   push:

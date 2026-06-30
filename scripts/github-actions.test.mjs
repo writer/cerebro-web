@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const workflows = [
   ".github/workflows/ci.yml",
   ".github/workflows/release.yml",
-  ".github/workflows/socket.yml",
+  ".github/workflows/npm-audit.yml",
 ];
 const workflowText = workflows
   .map((path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8"))

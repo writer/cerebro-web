@@ -51,7 +51,7 @@ const routeSpecs = [
     filterText: "source 12",
   },
   {
-    route: "/connectors/source-cdk",
+    route: "/connectors/activation",
     label: "Source Activation",
     readySelector: "text=Runtime activation plan",
   },

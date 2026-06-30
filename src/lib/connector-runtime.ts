@@ -3,7 +3,7 @@ export type GraphFreshness = "current" | "behind" | "running" | "failed" | "not_
 export type CursorState = "pending" | "caught_up" | "unknown";
 export type SourceReadiness = "healthy" | "needs_refresh" | "poor" | "bad" | "not_configured";
 
-export type MissionControlGraphRun = {
+export type ConnectorRuntimeGraphRun = {
   id?: string;
   status?: string;
   started_at?: string;
@@ -22,7 +22,7 @@ export type MissionControlGraphRun = {
   duration_seconds?: number;
 };
 
-export type MissionControlFindingEvaluation = {
+export type ConnectorRuntimeFindingEvaluation = {
   id?: string;
   runtime_id?: string;
   rule_id?: string;
@@ -40,7 +40,7 @@ export type MissionControlFindingEvaluation = {
   duration_seconds?: number;
 };
 
-export type MissionControlRuntime = {
+export type ConnectorRuntime = {
   runtime_id: string;
   source_id: string;
   tenant_id: string;
@@ -62,8 +62,8 @@ export type MissionControlRuntime = {
   graph_finished_at?: string;
   graph_age_hours?: number;
   graph_lag_seconds?: number;
-  latest_graph_run?: MissionControlGraphRun;
-  latest_finding_evaluation?: MissionControlFindingEvaluation;
+  latest_graph_run?: ConnectorRuntimeGraphRun;
+  latest_finding_evaluation?: ConnectorRuntimeFindingEvaluation;
   finding_evaluation_status?: string;
   finding_evaluation_duration_seconds?: number;
   expected_cadence_seconds?: number;
@@ -74,7 +74,7 @@ export type MissionControlRuntime = {
   config: Record<string, unknown>;
 };
 
-export type MissionControlSummary = {
+export type ConnectorRuntimeSummary = {
   total: number;
   healthy: number;
   stale: number;
@@ -234,7 +234,7 @@ const normalizeNumber = (value: unknown) =>
       ? Number(value)
       : undefined;
 
-const normalizeGraphRun = (value: unknown): MissionControlGraphRun | undefined => {
+const normalizeGraphRun = (value: unknown): ConnectorRuntimeGraphRun | undefined => {
   const run = asRecord(value);
   if (Object.keys(run).length === 0) {
     return undefined;
@@ -259,7 +259,7 @@ const normalizeGraphRun = (value: unknown): MissionControlGraphRun | undefined =
   };
 };
 
-const normalizeFindingEvaluation = (value: unknown): MissionControlFindingEvaluation | undefined => {
+const normalizeFindingEvaluation = (value: unknown): ConnectorRuntimeFindingEvaluation | undefined => {
   const run = asRecord(value);
   if (Object.keys(run).length === 0) {
     return undefined;
@@ -318,10 +318,10 @@ export const latestGraphRunsByRuntime = (runs: Record<string, unknown>[]) => {
 };
 
 export const graphFreshnessForRuntime = (
-  runtime: Pick<MissionControlRuntime, "last_activity_at">,
+  runtime: Pick<ConnectorRuntime, "last_activity_at">,
   graphRun: Record<string, unknown> | undefined,
   now: Date,
-): Pick<MissionControlRuntime, "graph_freshness" | "graph_run_id" | "graph_status" | "graph_finished_at" | "graph_age_hours" | "latest_graph_run"> => {
+): Pick<ConnectorRuntime, "graph_freshness" | "graph_run_id" | "graph_status" | "graph_finished_at" | "graph_age_hours" | "latest_graph_run"> => {
   if (!graphRun) {
     return { graph_freshness: "not_observed" };
   }
@@ -357,10 +357,10 @@ export const graphFreshnessForRuntime = (
 };
 
 export const attachGraphFreshness = (
-  runtime: MissionControlRuntime,
+  runtime: ConnectorRuntime,
   graphRun: Record<string, unknown> | undefined,
   now: Date = new Date(),
-): MissionControlRuntime => graphRun
+): ConnectorRuntime => graphRun
   ? ({
       ...runtime,
       ...graphFreshnessForRuntime(runtime, graphRun, now),
@@ -371,7 +371,7 @@ export const normalizeRuntime = (
   runtime: Record<string, unknown>,
   now: Date = new Date(),
   staleAfterHours = 24,
-): MissionControlRuntime => {
+): ConnectorRuntime => {
   const config = asRecord(runtime.config);
   const health = runtimeHealth(runtime, now, staleAfterHours);
   const latestGraphRun = normalizeGraphRun(runtime.latest_graph_run ?? runtime.latestGraphRun);
@@ -450,10 +450,10 @@ export const snippet = (value?: string, maxLength = 96) => {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 };
 
-export const summarizeMissionControl = (runtimes: MissionControlRuntime[]): MissionControlSummary => {
+export const summarizeConnectorRuntime = (runtimes: ConnectorRuntime[]): ConnectorRuntimeSummary => {
   const sources = new Set<string>();
   const tenants = new Set<string>();
-  const summary: MissionControlSummary = {
+  const summary: ConnectorRuntimeSummary = {
     total: runtimes.length,
     healthy: 0,
     stale: 0,
@@ -566,7 +566,7 @@ export const sourceReadinessRank = (value: SourceReadiness) => {
 };
 
 export const sourceHealthBreakdown = (
-  runtimes: MissionControlRuntime[],
+  runtimes: ConnectorRuntime[],
   sourceCatalog: Record<string, unknown>[] = [],
 ): SourceCoverageSummary[] => {
   const counts = new Map<string, SourceCoverageSummary>();
@@ -618,7 +618,7 @@ export const sourceHealthBreakdown = (
     );
 };
 
-export const sourceBreakdown = (runtimes: MissionControlRuntime[]) => {
+export const sourceBreakdown = (runtimes: ConnectorRuntime[]) => {
   const counts = new Map<string, { total: number; stale: number; degraded: number; unknown: number }>();
   for (const runtime of runtimes) {
     const source = runtime.source_id || "unknown";
