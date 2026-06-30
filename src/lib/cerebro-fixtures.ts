@@ -1089,8 +1089,8 @@ const baseQuestionnaireRuns: GRCQuestionnaireRun[] = [
     requester: "Core SSO",
     vendor_urn: coreSsoVendorURN,
     vendor_id: "core-sso",
-    source_filename: "core-sso-security-questionnaire.xlsx",
-    source_format: "xlsx",
+    source_filename: "core-sso-security-questionnaire.csv",
+    source_format: "csv",
     status: "ready_for_approval",
     owner_id: "security@example.com",
     assigned_team: "security",
@@ -1836,6 +1836,16 @@ const questionnaireRunSearchValues = (run: GRCQuestionnaireRun) => [
   run.status,
   run.owner_id,
   run.assigned_team,
+  ...(run.assignments ?? []).flatMap((assignment) => [
+    assignment.owner_id,
+    assignment.team,
+    assignment.reason,
+    assignment.status,
+  ]),
+  ...(run.comments ?? []).flatMap((comment) => [
+    comment.actor_id,
+    comment.body,
+  ]),
   ...(run.answers ?? []).flatMap((answer) => [
     answer.question,
     answer.answer_state,
@@ -1860,7 +1870,7 @@ const questionnaireRunsFixture = (params?: URLSearchParams) => {
     if (vendorURN && run.vendor_urn !== vendorURN) return false;
     if (requester && !contains(run.requester ?? "", requester)) return false;
     if (customer && !contains(run.customer_name ?? "", customer)) return false;
-    if (ownerID && !contains(run.owner_id ?? "", ownerID)) return false;
+    if (ownerID && ![run.owner_id, run.assigned_team, ...(run.assignments ?? []).flatMap((assignment) => [assignment.owner_id, assignment.team])].some((value) => contains(value ?? "", ownerID))) return false;
     if (query && !questionnaireRunSearchValues(run).some((value) => contains(value, query))) return false;
     return true;
   }).map(cloneQuestionnaireRun), params);
@@ -3527,8 +3537,61 @@ const vendorDiscoverySyncFixture = (parsed: Record<string, unknown>) => {
   });
 };
 
+const questionnaireQuestionsFromRequest = (parsed: Record<string, unknown>) => {
+  const direct = Array.isArray(parsed.questions) ? parsed.questions as Array<Record<string, unknown>> : [];
+  const rows = Array.isArray(parsed.intake_rows) ? parsed.intake_rows as Array<Record<string, unknown>> : [];
+  const textRows = questionnaireRowsFromText(stringField(parsed.intake_text), stringField(parsed.intake_format) || stringField(parsed.source_format));
+  return [...direct, ...rows, ...textRows].filter((question) => stringField(question.question));
+};
+
+const questionnaireRowsFromText = (value: string, format: string): Array<Record<string, unknown>> => {
+  const text = value.trim();
+  if (!text) return [];
+  const normalizedFormat = format.toLowerCase();
+  if (normalizedFormat === "json" || text.startsWith("[") || text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (Array.isArray(parsed)) return parsed.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>;
+        if (Array.isArray(record.questions)) return record.questions.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item));
+        if (Array.isArray(record.intake_rows)) return record.intake_rows.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item));
+      }
+    } catch {
+      return [];
+    }
+  }
+  if (normalizedFormat === "csv" || normalizedFormat === "tsv" || text.includes(",") || text.includes("\t")) {
+    const delimiter = normalizedFormat === "tsv" || text.split("\t").length > text.split(",").length ? "\t" : ",";
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const headers = (lines[0] ?? "").split(delimiter).map((header) => header.trim().toLowerCase().replaceAll(" ", "_"));
+    const questionIndex = Math.max(headers.indexOf("question"), headers.indexOf("question_text"), headers.indexOf("prompt"));
+    if (questionIndex < 0) return [];
+    return lines.slice(1).map((line) => {
+      const cells = line.split(delimiter).map((cell) => cell.trim());
+      const value = (name: string) => {
+        const index = headers.indexOf(name);
+        return index >= 0 ? cells[index] ?? "" : "";
+      };
+      return {
+        question: cells[questionIndex] ?? "",
+        section: value("section") || value("category"),
+        required_answer_format: value("required_answer_format") || value("answer_format"),
+        required_evidence_slots: splitFixtureList(value("required_evidence_slots") || value("evidence_slots") || value("slots")),
+        mapped_controls: splitFixtureList(value("mapped_controls") || value("controls") || value("control_ids")),
+        owner_id: value("owner_id") || value("owner") || value("assignee"),
+      };
+    });
+  }
+  return text.split(/\r?\n/).map((line) => ({ question: line.trim().replace(/^- /, "").replace(/^\* /, "") }));
+};
+
+const splitFixtureList = (value: string) =>
+  value.split(/[|,;]/).map((item) => item.trim()).filter(Boolean);
+
 const createQuestionnaireRunFixture = (parsed: Record<string, unknown>) => {
-  const questions = Array.isArray(parsed.questions) ? parsed.questions as Array<Record<string, unknown>> : [];
+  const questions = questionnaireQuestionsFromRequest(parsed);
+  if (questions.length === 0) return jsonFixture({ error: "At least one question is required.", generated_at: generatedAt }, 400);
   const title = stringField(parsed.title) || "Security questionnaire";
   const direction = stringField(parsed.direction) || "customer_security_review";
   const id = `fixture-questionnaire-run-${questionnaireRuns.length + 1}`;
@@ -3583,19 +3646,24 @@ const processQuestionnaireRunFixture = (runID: string) => {
   const run = findQuestionnaireRun(safeDecode(runID));
   if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/process`);
   if ((run.answers ?? []).length === 0) {
-    run.answers = (run.questions ?? []).map((question) => ({
-      id: `${question.id}-answer`,
-      question_id: question.id,
-      question: question.question,
-      draft_answer: "No answer is ready. Required evidence is missing.",
-      answer_state: "blocked",
-      review_state: "blocked",
-      confidence: "low",
-      confidence_score: 10,
-      evidence_slots: (question.required_evidence_slots ?? ["control_evidence"]).map((slot) => ({ id: slot, label: slot.replaceAll("_", " "), state: "missing", required: true, missing_reasons: ["Required evidence is missing."] })),
-      missing_evidence: [{ id: `${question.id}-gap`, code: "missing_required_evidence", reason: "Required evidence is missing." }],
-      freshness: { status: "missing" },
-    }));
+    run.answers = (run.questions ?? []).map((question) => {
+      const slots = fixtureRequiredSlotsForQuestion(run, question);
+      return {
+        id: `${question.id}-answer`,
+        question_id: question.id,
+        question: question.question,
+        draft_answer: slots.length ? "No answer is ready. Required evidence is missing." : "No answer is ready. No required evidence slot was provided.",
+        answer_state: "blocked",
+        review_state: "blocked",
+        confidence: "low",
+        confidence_score: 10,
+        evidence_slots: slots.map((slot) => ({ id: slot, label: slot.replaceAll("_", " "), state: "missing", required: true, missing_reasons: ["Required evidence is missing."] })),
+        missing_evidence: slots.length
+          ? [{ id: `${question.id}-gap`, code: "missing_required_evidence", reason: "Required evidence is missing." }]
+          : [{ id: `${question.id}-unresolved-slot`, code: "unresolved_evidence_slot", reason: "No required evidence slot was provided for this question." }],
+        freshness: { status: "missing" },
+      };
+    });
   }
   const answers = run.answers ?? [];
   run.status = "needs_input";
@@ -3609,19 +3677,31 @@ const processQuestionnaireRunFixture = (runID: string) => {
   return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
 };
 
+const fixtureRequiredSlotsForQuestion = (run: GRCQuestionnaireRun, question: NonNullable<GRCQuestionnaireRun["questions"]>[number]) => {
+  const slots = [...(question.required_evidence_slots ?? [])];
+  if (run.direction === "vendor_review" && !slots.includes("vendor_profile")) slots.push("vendor_profile");
+  return slots;
+};
+
+const fixtureQuestionExists = (run: GRCQuestionnaireRun, questionID: string) =>
+  Boolean(questionID && (run.questions ?? []).some((question) => question.id === questionID));
+
 const questionnaireRunAssignmentFixture = (runID: string, parsed: Record<string, unknown>) => {
   const run = findQuestionnaireRun(safeDecode(runID));
   if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/assignments`);
+  if (parsed.assignment) return jsonFixture({ error: "Use top-level assignment fields.", generated_at: generatedAt }, 400);
   const assignment = {
     id: `fixture-assignment-${(run.assignments?.length ?? 0) + 1}`,
-    question_id: stringField(parsed.question_id) || stringField((parsed.assignment as Record<string, unknown> | undefined)?.question_id),
-    team: stringField(parsed.team) || stringField((parsed.assignment as Record<string, unknown> | undefined)?.team) || "security",
-    owner_id: stringField(parsed.owner_id) || stringField(parsed.owner) || stringField((parsed.assignment as Record<string, unknown> | undefined)?.owner_id),
+    question_id: stringField(parsed.question_id),
+    team: stringField(parsed.team),
+    owner_id: stringField(parsed.owner_id),
     status: stringField(parsed.status) || "open",
     reason: stringField(parsed.reason),
     due_at: stringField(parsed.due_at),
     created_at: generatedAt,
   };
+  if (!fixtureQuestionExists(run, assignment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+  if (!assignment.owner_id && !assignment.team) return jsonFixture({ error: "owner_id or team is required.", generated_at: generatedAt }, 400);
   run.assignments = [assignment, ...(run.assignments ?? [])];
   run.updated_at = generatedAt;
   return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
@@ -3630,24 +3710,63 @@ const questionnaireRunAssignmentFixture = (runID: string, parsed: Record<string,
 const questionnaireRunDecisionFixture = (runID: string, parsed: Record<string, unknown>) => {
   const run = findQuestionnaireRun(safeDecode(runID));
   if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/decisions`);
-  const nested = parsed.decision as Record<string, unknown> | undefined;
+  if (parsed.decision || parsed.actor_id) return jsonFixture({ error: "Use top-level decision fields; actor is assigned by the service.", generated_at: generatedAt }, 400);
   const decision = {
     id: `fixture-decision-${(run.decisions?.length ?? 0) + 1}`,
-    question_id: stringField(parsed.question_id) || stringField(nested?.question_id),
+    question_id: stringField(parsed.question_id),
     actor_id: stringField(parsed.actor_id) || "local-developer",
-    decision: stringField(parsed.state) || stringField(nested?.decision) || "approved",
-    reason: stringField(parsed.reason) || stringField(nested?.reason),
+    decision: stringField(parsed.state),
+    reason: stringField(parsed.reason),
     created_at: generatedAt,
   };
+  if (!["approved", "approved_with_conditions", "rejected", "needs_input"].includes(decision.decision)) return jsonFixture({ error: "state is required.", generated_at: generatedAt }, 400);
+  if (decision.question_id && !fixtureQuestionExists(run, decision.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
   run.decisions = [decision, ...(run.decisions ?? [])];
+  run.answers = (run.answers ?? []).map((answer) => {
+    if (decision.question_id && answer.question_id !== decision.question_id) return answer;
+    if (decision.decision === "needs_input" || decision.decision === "rejected") {
+      return { ...answer, answer_state: "blocked", review_state: decision.decision === "rejected" ? "rejected" : "blocked", reviewer_decision: decision.decision, reviewer_reason: decision.reason };
+    }
+    if (decision.decision === "approved" || decision.decision === "approved_with_conditions") {
+      return { ...answer, review_state: "approved", reviewer_decision: decision.decision, reviewer_reason: decision.reason };
+    }
+    return answer;
+  });
   if (!decision.question_id) {
     run.decision = decision.decision;
     run.decision_reason = decision.reason;
     if (decision.decision === "approved") run.status = "approved";
     if (decision.decision === "rejected") run.status = "rejected";
+    if (decision.decision === "needs_input") run.status = "needs_input";
+  } else {
+    run.blocked_answer_count = (run.answers ?? []).filter((answer) => answer.answer_state === "blocked").length;
+    run.review_answer_count = (run.answers ?? []).filter((answer) => ["needs_review", "partial"].includes(answer.answer_state)).length;
+    run.ready_answer_count = (run.answers ?? []).filter((answer) => ["supported", "not_applicable"].includes(answer.answer_state)).length;
+    run.status = run.blocked_answer_count > 0 ? "needs_input" : "ready_for_approval";
   }
   run.updated_at = generatedAt;
   run.timeline = [{ id: `${run.run_id}-decision-${run.timeline?.length ?? 0}`, event_type: "decision_recorded", actor_id: decision.actor_id, summary: "Questionnaire decision recorded", created_at: generatedAt }, ...(run.timeline ?? [])];
+  return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
+};
+
+const questionnaireRunCommentFixture = (runID: string, parsed: Record<string, unknown>) => {
+  const run = findQuestionnaireRun(safeDecode(runID));
+  if (!run) return notFoundFixture(`grc/questionnaire-runs/${runID}/comments`);
+  if (parsed.comment || parsed.actor_id) return jsonFixture({ error: "Use top-level comment fields; actor is assigned by the service.", generated_at: generatedAt }, 400);
+  const comment = {
+    id: `fixture-comment-${(run.comments?.length ?? 0) + 1}`,
+    question_id: stringField(parsed.question_id),
+    actor_id: "local-developer",
+    body: stringField(parsed.body),
+    created_at: generatedAt,
+  };
+  if (!fixtureQuestionExists(run, comment.question_id)) return jsonFixture({ error: "question_id does not exist on this run.", generated_at: generatedAt }, 400);
+  if (!comment.body) {
+    return jsonFixture({ error: "Comment body is required.", generated_at: generatedAt }, 400);
+  }
+  run.comments = [comment, ...(run.comments ?? [])];
+  run.updated_at = generatedAt;
+  run.timeline = [{ id: `${run.run_id}-comment-${run.timeline?.length ?? 0}`, event_type: "commented", actor_id: comment.actor_id, summary: "Questionnaire comment added", created_at: generatedAt }, ...(run.timeline ?? [])];
   return jsonFixture({ run: cloneQuestionnaireRun(run), generated_at: generatedAt });
 };
 
@@ -3656,7 +3775,7 @@ const writeFixture = (path: string, body?: string) => {
   try {
     parsed = body ? JSON.parse(body) as Record<string, unknown> : {};
   } catch {
-    parsed = {};
+    return jsonFixture({ error: "Malformed JSON request body.", generated_at: generatedAt }, 400);
   }
 
   if (path === "grc/vendors") {
@@ -3680,6 +3799,11 @@ const writeFixture = (path: string, body?: string) => {
   const runDecisionMatch = /^grc\/questionnaire-runs\/([^/]+)\/decisions$/.exec(path);
   if (runDecisionMatch) {
     return questionnaireRunDecisionFixture(runDecisionMatch[1], parsed);
+  }
+
+  const runCommentMatch = /^grc\/questionnaire-runs\/([^/]+)\/comments$/.exec(path);
+  if (runCommentMatch) {
+    return questionnaireRunCommentFixture(runCommentMatch[1], parsed);
   }
 
   const vendorActionMatch = /^grc\/vendors\/(.+)\/actions$/.exec(path);

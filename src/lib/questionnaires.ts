@@ -58,6 +58,7 @@ export const questionnaireStateIntent = (state?: string): "neutral" | "danger" |
     case "needs_review":
     case "partial":
     case "ready_for_approval":
+    case "approved_with_conditions":
       return "warning";
     default:
       return "neutral";
@@ -97,9 +98,9 @@ export const questionnaireRollups = (
   return {
     total: summary?.total_runs ?? runs.length,
     due: summary?.due_runs ?? runs.filter((run) => isDue(run.due_at, run.status, now)).length,
-    blocked: summary?.blocked_answers ?? rows.filter((row) => row.state === "blocked").length,
+    blocked: summary?.blocked_answers ?? rows.filter((row) => row.state === "blocked" || row.state === "needs_input" || row.state === "rejected").length,
     needsReview: summary?.review_answers ?? rows.filter((row) => row.state === "needs_review" || row.state === "partial").length,
-    ready: summary?.ready_answers ?? rows.filter((row) => row.state === "supported" || row.state === "not_applicable").length,
+    ready: summary?.ready_answers ?? rows.filter((row) => row.state === "supported" || row.state === "not_applicable" || row.state === "approved").length,
     stale: summary?.stale_evidence ?? rows.filter((row) => row.staleEvidence).length,
     missingEvidence: summary?.missing_evidence ?? rows.reduce((total, row) => total + row.missingEvidenceCount, 0),
     unassigned: summary?.unassigned ?? runs.reduce((total, run) => total + (run.unassigned_count ?? 0), 0),
@@ -126,7 +127,7 @@ const queueRowFromAnswer = (run: GRCQuestionnaireRun, answer: GRCQuestionnaireRu
     question: answer.question || answer.question_id,
     direction: run.direction,
     requester: runRequester(run),
-    state: answer.answer_state,
+    state: answerQueueState(answer),
     blocker: missing[0]?.reason || answer.reviewer_reason || run.decision_reason || "",
     owner: answerOwner(run, answer.question_id),
     dueAt: answerDueAt(run, answer.question_id),
@@ -135,6 +136,16 @@ const queueRowFromAnswer = (run: GRCQuestionnaireRun, answer: GRCQuestionnaireRu
     missingEvidenceCount: missing.length,
     staleEvidence,
   };
+};
+
+const answerQueueState = (answer: GRCQuestionnaireRunAnswer) => {
+  if (answer.reviewer_decision === "rejected") return "rejected";
+  if (answer.reviewer_decision === "approved_with_conditions") return "approved_with_conditions";
+  if (answer.reviewer_decision === "approved") return "approved";
+  if (answer.reviewer_decision === "needs_input") return "needs_input";
+  if (answer.review_state === "rejected") return "rejected";
+  if (answer.review_state === "approved" && answer.answer_state !== "blocked") return "approved";
+  return answer.answer_state;
 };
 
 const runRequester = (run: GRCQuestionnaireRun) =>

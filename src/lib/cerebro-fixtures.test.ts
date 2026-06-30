@@ -255,6 +255,36 @@ describe("cerebro fixture proxy responses", () => {
     expect(parseFixture(decision!)).toMatchObject({
       run: { run_id: "customer-review-acme-2026", status: "approved", decision: "approved" },
     });
+
+    const created = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/questionnaire-runs",
+      body: JSON.stringify({
+        direction: "customer_security_review",
+        title: "New customer questionnaire",
+        customer_name: "NewCo",
+        source_format: "csv",
+        intake_text: "section,question,required_evidence_slots\nAccess,Do you enforce MFA?,identity_mfa\nAudit,Attach the SOC 2 report.,audit_report",
+      }),
+    });
+    expect(created?.status).toBe(201);
+    const createdPayload = parseFixture(created!);
+    expect(createdPayload).toMatchObject({
+      run: { title: "New customer questionnaire", question_count: 2, unassigned_count: 2 },
+    });
+
+    const createdRun = createdPayload.run as { run_id: string };
+    const comment = cerebroFixtureResponseFor({
+      method: "POST",
+      path: `grc/questionnaire-runs/${createdRun.run_id}/comments`,
+      body: JSON.stringify({ question_id: "fixture-question-1", body: "Owner asked for current evidence." }),
+    });
+    expect(parseFixture(comment!)).toMatchObject({
+      run: {
+        comments: [expect.objectContaining({ body: "Owner asked for current evidence." })],
+        timeline: expect.arrayContaining([expect.objectContaining({ event_type: "commented" })]),
+      },
+    });
   });
 
   it("returns policy lifecycle records in fixture mode", () => {

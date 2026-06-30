@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Download,
   LockKeyhole,
+  MessageSquare,
   MoreVertical,
   Play,
   RefreshCw,
@@ -250,11 +251,12 @@ function BadgeList({ items, emptyLabel }: { items: string[]; emptyLabel: string 
 
 function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; vendorURN: string }) {
   const [selectedRowID, setSelectedRowID] = useState<string | null>(null);
-  const [assignmentOwner, setAssignmentOwner] = useState("security@example.com");
-  const [assignmentTeam, setAssignmentTeam] = useState("security");
-  const [assignmentReason, setAssignmentReason] = useState("Attach current evidence.");
-  const [decisionState, setDecisionState] = useState("approved");
-  const [decisionReason, setDecisionReason] = useState("Evidence accepted.");
+  const [assignmentOwner, setAssignmentOwner] = useState("");
+  const [assignmentTeam, setAssignmentTeam] = useState("");
+  const [assignmentReason, setAssignmentReason] = useState("");
+  const [commentBody, setCommentBody] = useState("");
+  const [decisionState, setDecisionState] = useState("needs_input");
+  const [decisionReason, setDecisionReason] = useState("");
   const runsQuery = useGRCQuery<GRCQuestionnaireRunsResponse>(
     grcPath("/grc/questionnaire-runs", {
       tenant_id: tenantID,
@@ -321,6 +323,22 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
     reloadRuns();
   };
 
+  const submitComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRun || !selectedAnswer || !commentBody.trim()) return;
+    try {
+      await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/comments`, {
+        tenant_id: tenantID || undefined,
+        question_id: selectedAnswer.question_id,
+        body: commentBody,
+      });
+      setCommentBody("");
+    } catch {
+      return;
+    }
+    reloadRuns();
+  };
+
   return (
     <Panel
       title="Questionnaire queue"
@@ -381,15 +399,18 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
                   assignmentOwner={assignmentOwner}
                   assignmentReason={assignmentReason}
                   assignmentTeam={assignmentTeam}
+                  commentBody={commentBody}
                   decisionReason={decisionReason}
                   decisionState={decisionState}
                   onAssignmentOwnerChange={setAssignmentOwner}
                   onAssignmentReasonChange={setAssignmentReason}
                   onAssignmentTeamChange={setAssignmentTeam}
+                  onCommentBodyChange={setCommentBody}
                   onDecisionReasonChange={setDecisionReason}
                   onDecisionStateChange={setDecisionState}
                   onProcess={processRun}
                   onSubmitAssignment={submitAssignment}
+                  onSubmitComment={submitComment}
                   onSubmitDecision={submitDecision}
                   row={selectedRow}
                   run={selectedRun}
@@ -409,15 +430,18 @@ function QuestionnaireRunDetail({
   assignmentOwner,
   assignmentReason,
   assignmentTeam,
+  commentBody,
   decisionReason,
   decisionState,
   onAssignmentOwnerChange,
   onAssignmentReasonChange,
   onAssignmentTeamChange,
+  onCommentBodyChange,
   onDecisionReasonChange,
   onDecisionStateChange,
   onProcess,
   onSubmitAssignment,
+  onSubmitComment,
   onSubmitDecision,
   row,
   run,
@@ -427,15 +451,18 @@ function QuestionnaireRunDetail({
   assignmentOwner: string;
   assignmentReason: string;
   assignmentTeam: string;
+  commentBody: string;
   decisionReason: string;
   decisionState: string;
   onAssignmentOwnerChange: (value: string) => void;
   onAssignmentReasonChange: (value: string) => void;
   onAssignmentTeamChange: (value: string) => void;
+  onCommentBodyChange: (value: string) => void;
   onDecisionReasonChange: (value: string) => void;
   onDecisionStateChange: (value: string) => void;
   onProcess: () => Promise<void>;
   onSubmitAssignment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onSubmitComment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onSubmitDecision: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   row: QuestionnaireQueueRow;
   run: GRCQuestionnaireRun;
@@ -534,7 +561,7 @@ function QuestionnaireRunDetail({
           <input value={assignmentOwner} onChange={(event) => onAssignmentOwnerChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment owner" />
           <input value={assignmentTeam} onChange={(event) => onAssignmentTeamChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment team" />
           <input value={assignmentReason} onChange={(event) => onAssignmentReasonChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment reason" />
-          <button type="submit" disabled={actionSaving} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
+          <button type="submit" disabled={actionSaving || (!assignmentOwner.trim() && !assignmentTeam.trim())} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
             <UserPlus className="h-4 w-4" aria-hidden="true" />
             Assign
           </button>
@@ -543,9 +570,9 @@ function QuestionnaireRunDetail({
         <form onSubmit={onSubmitDecision} className="space-y-2 rounded-md border border-[color:var(--border)] p-3">
           <div className="text-[13px] font-semibold text-[var(--text-primary)]">Record decision</div>
           <select value={decisionState} onChange={(event) => onDecisionStateChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Decision state">
+            <option value="needs_input">Needs input</option>
             <option value="approved">Approved</option>
             <option value="approved_with_conditions">Approved with conditions</option>
-            <option value="needs_input">Needs input</option>
             <option value="rejected">Rejected</option>
           </select>
           <input value={decisionReason} onChange={(event) => onDecisionReasonChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Decision reason" />
@@ -555,6 +582,20 @@ function QuestionnaireRunDetail({
           </button>
         </form>
       </div>
+
+      <form onSubmit={onSubmitComment} className="grid gap-2 rounded-md border border-[color:var(--border)] p-3 lg:grid-cols-[1fr_auto]">
+        <textarea
+          value={commentBody}
+          onChange={(event) => onCommentBodyChange(event.target.value)}
+          className="control-input min-h-[72px] w-full resize-y px-3 py-1.5 text-[13px] leading-5"
+          aria-label="Comment body"
+          placeholder="note, blocker update, or handoff"
+        />
+        <button type="submit" disabled={actionSaving || !commentBody.trim()} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
+          <MessageSquare className="h-4 w-4" aria-hidden="true" />
+          Add comment
+        </button>
+      </form>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <QuestionnaireSection title="Assignments">

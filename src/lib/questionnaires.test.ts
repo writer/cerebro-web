@@ -94,4 +94,43 @@ describe("questionnaire queue helpers", () => {
     });
     expect(primaryAnswerForRun(runs[0], "q-2")?.id).toBe("answer-2");
   });
+
+  it("surfaces question reviewer decisions in row state", () => {
+    const rows = questionnaireQueueRows([{
+      id: "run-1",
+      run_id: "run-1",
+      title: "Customer review",
+      direction: "customer_security_review",
+      status: "needs_input",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-02T00:00:00.000Z",
+      question_count: 2,
+      answer_count: 2,
+      answers: [
+        {
+          id: "answer-1",
+          question_id: "q-1",
+          question: "Is MFA enforced?",
+          answer_state: "blocked",
+          review_state: "rejected",
+          reviewer_decision: "rejected",
+          reviewer_reason: "Evidence is not current.",
+          freshness: { status: "missing" },
+        },
+        {
+          id: "answer-2",
+          question_id: "q-2",
+          question: "Is the audit report current?",
+          answer_state: "supported",
+          review_state: "approved",
+          reviewer_decision: "approved_with_conditions",
+          reviewer_reason: "Refresh before sending.",
+          freshness: { status: "current" },
+        },
+      ],
+    }]);
+
+    expect(rows[0]).toMatchObject({ state: "rejected", blocker: "Evidence is not current." });
+    expect(rows[1]).toMatchObject({ state: "approved_with_conditions", blocker: "Refresh before sending." });
+  });
 });

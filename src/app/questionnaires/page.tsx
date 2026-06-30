@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { CheckCircle2, RefreshCw, Send, UserPlus } from "lucide-react";
+import { useCallback, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { CheckCircle2, FileUp, MessageSquare, Plus, RefreshCw, Send, UserPlus } from "lucide-react";
 
 import DataTable, { type TableColumn } from "@/components/grc/DataTable";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
@@ -30,6 +30,7 @@ const statusOptions = [
   { value: "needs_input", label: "Needs input" },
   { value: "ready_for_approval", label: "Ready for approval" },
   { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
   { value: "intake", label: "Intake" },
   { value: "processing", label: "Processing" },
 ];
@@ -39,17 +40,34 @@ export default function QuestionnairesPage() {
   const [direction, setDirection] = useQueryParamState("direction");
   const [status, setStatus] = useQueryParamState("status");
   const [vendorURN, setVendorURN] = useQueryParamState("vendor_urn");
+  const [ownerID, setOwnerID] = useQueryParamState("owner_id");
+  const [requester, setRequester] = useQueryParamState("requester");
+  const [customerName, setCustomerName] = useQueryParamState("customer_name");
   const [query, setQuery] = useQueryParamState("q");
   const [selectedRowID, setSelectedRowID] = useState<string | null>(null);
-  const [assignmentOwner, setAssignmentOwner] = useState("security@example.com");
-  const [assignmentTeam, setAssignmentTeam] = useState("security");
-  const [assignmentReason, setAssignmentReason] = useState("Attach current evidence.");
-  const [decisionState, setDecisionState] = useState("approved");
-  const [decisionReason, setDecisionReason] = useState("Evidence accepted.");
+  const [assignmentOwner, setAssignmentOwner] = useState("");
+  const [assignmentTeam, setAssignmentTeam] = useState("");
+  const [assignmentReason, setAssignmentReason] = useState("");
+  const [commentBody, setCommentBody] = useState("");
+  const [decisionState, setDecisionState] = useState("needs_input");
+  const [decisionReason, setDecisionReason] = useState("");
+  const [createDirection, setCreateDirection] = useState("customer_security_review");
+  const [createTitle, setCreateTitle] = useState("Security questionnaire");
+  const [createRequester, setCreateRequester] = useState("");
+  const [createCustomer, setCreateCustomer] = useState("");
+  const [createVendorURN, setCreateVendorURN] = useState("");
+  const [createOwner, setCreateOwner] = useState("");
+  const [createDueAt, setCreateDueAt] = useState("");
+  const [sourceFilename, setSourceFilename] = useState("");
+  const [intakeFormat, setIntakeFormat] = useState("csv");
+  const [intakeText, setIntakeText] = useState("");
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedDirection = useDebouncedValue(direction.trim());
   const debouncedStatus = useDebouncedValue(status.trim());
   const debouncedVendorURN = useDebouncedValue(vendorURN.trim());
+  const debouncedOwnerID = useDebouncedValue(ownerID.trim());
+  const debouncedRequester = useDebouncedValue(requester.trim());
+  const debouncedCustomerName = useDebouncedValue(customerName.trim());
   const debouncedQuery = useDebouncedValue(query.trim());
   const path = useMemo(
     () => grcPath("/grc/questionnaire-runs", {
@@ -57,13 +75,17 @@ export default function QuestionnairesPage() {
       direction: debouncedDirection,
       status: debouncedStatus,
       vendor_urn: debouncedVendorURN,
+      owner_id: debouncedOwnerID,
+      requester: debouncedRequester,
+      customer_name: debouncedCustomerName,
       q: debouncedQuery,
       limit: QUEUE_LIMIT,
     }),
-    [debouncedDirection, debouncedQuery, debouncedStatus, debouncedTenantID, debouncedVendorURN],
+    [debouncedCustomerName, debouncedDirection, debouncedOwnerID, debouncedQuery, debouncedRequester, debouncedStatus, debouncedTenantID, debouncedVendorURN],
   );
   const runsQuery = useGRCQuery<GRCQuestionnaireRunsResponse>(path);
-  const mutation = useGRCMutation<GRCQuestionnaireRunResponse>();
+  const actionMutation = useGRCMutation<GRCQuestionnaireRunResponse>();
+  const createMutation = useGRCMutation<GRCQuestionnaireRunResponse>();
   const runs = runsQuery.data?.runs ?? EMPTY_RUNS;
   const rows = useMemo(() => questionnaireQueueRows(runs), [runs]);
   const rollups = useMemo(() => questionnaireRollups(runs, runsQuery.data?.summary), [runs, runsQuery.data?.summary]);
@@ -74,10 +96,45 @@ export default function QuestionnairesPage() {
 
   const reloadRuns = useCallback(() => { void runsQuery.reload(); }, [runsQuery]);
 
+  const submitCreateRun = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      const response = await createMutation.mutate("/grc/questionnaire-runs", {
+        tenant_id: tenantID || undefined,
+        direction: createDirection,
+        title: createTitle,
+        requester: createRequester || undefined,
+        customer_name: createDirection === "customer_security_review" ? createCustomer || createRequester || undefined : undefined,
+        vendor_urn: createDirection === "vendor_review" ? createVendorURN || undefined : undefined,
+        owner_id: createOwner || undefined,
+        due_at: createDueAt || undefined,
+        source_filename: sourceFilename || undefined,
+        source_format: intakeFormat,
+        intake_format: intakeFormat,
+        intake_text: intakeText,
+      });
+      setSelectedRowID(response.run.run_id);
+      setIntakeText("");
+      setSourceFilename("");
+      reloadRuns();
+    } catch {
+      return;
+    }
+  };
+
+  const handleIntakeFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setSourceFilename(file.name);
+    setIntakeFormat(inferIntakeFormat(file.name));
+    setIntakeText(await file.text());
+    event.target.value = "";
+  };
+
   const processRun = async () => {
     if (!selectedRun) return;
     try {
-      await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/process`, { tenant_id: tenantID || undefined });
+      await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/process`, { tenant_id: tenantID || undefined });
       reloadRuns();
     } catch {
       return;
@@ -88,7 +145,7 @@ export default function QuestionnairesPage() {
     event.preventDefault();
     if (!selectedRun || !selectedAnswer) return;
     try {
-      await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/assignments`, {
+      await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/assignments`, {
         tenant_id: tenantID || undefined,
         question_id: selectedAnswer.question_id,
         owner_id: assignmentOwner,
@@ -105,12 +162,28 @@ export default function QuestionnairesPage() {
     event.preventDefault();
     if (!selectedRun) return;
     try {
-      await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/decisions`, {
+      await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/decisions`, {
         tenant_id: tenantID || undefined,
         question_id: selectedAnswer?.question_id,
         state: decisionState,
         reason: decisionReason,
       });
+      reloadRuns();
+    } catch {
+      return;
+    }
+  };
+
+  const submitComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRun || !selectedAnswer || !commentBody.trim()) return;
+    try {
+      await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/comments`, {
+        tenant_id: tenantID || undefined,
+        question_id: selectedAnswer.question_id,
+        body: commentBody,
+      });
+      setCommentBody("");
       reloadRuns();
     } catch {
       return;
@@ -157,31 +230,117 @@ export default function QuestionnairesPage() {
         <MetricCard label="Unassigned" value={rollups.unassigned} detail="questions without owner" intent={rollups.unassigned > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
+      <Panel title="New run">
+        <form onSubmit={submitCreateRun} className="space-y-4">
+          {createMutation.error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">{createMutation.error}</div>}
+          <div className="grid gap-3 lg:grid-cols-4">
+            <label htmlFor="create-direction">
+              <span className={labelClass}>Direction</span>
+              <select id="create-direction" value={createDirection} onChange={(event) => setCreateDirection(event.target.value)} className={inputClass}>
+                <option value="customer_security_review">Customer review</option>
+                <option value="vendor_review">Vendor review</option>
+              </select>
+            </label>
+            <label htmlFor="create-title">
+              <span className={labelClass}>Run name</span>
+              <input id="create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} className={inputClass} placeholder="Security questionnaire" />
+            </label>
+            <label htmlFor="create-requester">
+              <span className={labelClass}>Requester</span>
+              <input id="create-requester" value={createRequester} onChange={(event) => setCreateRequester(event.target.value)} className={inputClass} placeholder="customer or team" />
+            </label>
+            <label htmlFor="create-owner">
+              <span className={labelClass}>Owner</span>
+              <input id="create-owner" value={createOwner} onChange={(event) => setCreateOwner(event.target.value)} className={inputClass} placeholder="owner@example.com" />
+            </label>
+            <label htmlFor="create-customer">
+              <span className={labelClass}>Customer</span>
+              <input id="create-customer" value={createCustomer} onChange={(event) => setCreateCustomer(event.target.value)} className={inputClass} placeholder="Acme Corp" />
+            </label>
+            <label htmlFor="create-vendor">
+              <span className={labelClass}>Vendor URN</span>
+              <input id="create-vendor" value={createVendorURN} onChange={(event) => setCreateVendorURN(event.target.value)} className={inputClass} placeholder="urn:cerebro:..." />
+            </label>
+            <label htmlFor="create-due">
+              <span className={labelClass}>Due date</span>
+              <input id="create-due" type="date" value={createDueAt} onChange={(event) => setCreateDueAt(event.target.value)} className={inputClass} />
+            </label>
+            <label htmlFor="create-format">
+              <span className={labelClass}>Format</span>
+              <select id="create-format" value={intakeFormat} onChange={(event) => setIntakeFormat(event.target.value)} className={inputClass}>
+                <option value="csv">CSV</option>
+                <option value="tsv">TSV</option>
+                <option value="json">JSON</option>
+                <option value="text">Text</option>
+              </select>
+            </label>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <label htmlFor="intake-text">
+              <span className={labelClass}>Questions</span>
+              <textarea
+                id="intake-text"
+                value={intakeText}
+                onChange={(event) => setIntakeText(event.target.value)}
+                className={`${inputClass} min-h-[120px] resize-y leading-5`}
+                placeholder="question,section,required_evidence_slots,mapped_controls&#10;Do you enforce MFA?,Access,identity_mfa,SOC2-CC6.1"
+              />
+            </label>
+            <div className="space-y-2">
+              <label htmlFor="intake-file" className="secondary-button flex cursor-pointer items-center justify-center gap-2 px-3 py-2 text-[12px]">
+                <FileUp className="h-3.5 w-3.5" />
+                Upload questions
+              </label>
+              <input id="intake-file" type="file" accept=".csv,.tsv,.json,.txt,text/csv,application/json,text/plain" onChange={handleIntakeFile} className="sr-only" />
+              <div className="min-h-[2rem] rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
+                {sourceFilename || "No file selected."}
+              </div>
+              <button type="submit" disabled={createMutation.saving || !intakeText.trim()} className="primary-button inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-[12px]">
+                <Plus className="h-3.5 w-3.5" />
+                Create run
+              </button>
+            </div>
+          </div>
+        </form>
+      </Panel>
+
       <Panel title="Filters">
-        <div className="grid gap-3 md:grid-cols-5">
-          <label>
+        <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-8">
+          <label htmlFor="filter-tenant">
             <span className={labelClass}>Tenant</span>
-            <input value={tenantID} onChange={(event) => setTenantID(event.target.value)} className={inputClass} placeholder="tenant id" />
+            <input id="filter-tenant" value={tenantID} onChange={(event) => setTenantID(event.target.value)} className={inputClass} placeholder="tenant id" />
           </label>
-          <label>
+          <label htmlFor="filter-direction">
             <span className={labelClass}>Direction</span>
-            <select value={direction} onChange={(event) => setDirection(event.target.value)} className={inputClass}>
+            <select id="filter-direction" value={direction} onChange={(event) => setDirection(event.target.value)} className={inputClass}>
               {directionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-          <label>
+          <label htmlFor="filter-status">
             <span className={labelClass}>Status</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value)} className={inputClass}>
+            <select id="filter-status" value={status} onChange={(event) => setStatus(event.target.value)} className={inputClass}>
               {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-          <label>
-            <span className={labelClass}>Vendor URN</span>
-            <input value={vendorURN} onChange={(event) => setVendorURN(event.target.value)} className={inputClass} placeholder="urn:cerebro:..." />
+          <label htmlFor="filter-owner">
+            <span className={labelClass}>Owner</span>
+            <input id="filter-owner" value={ownerID} onChange={(event) => setOwnerID(event.target.value)} className={inputClass} placeholder="owner" />
           </label>
-          <label>
+          <label htmlFor="filter-requester">
+            <span className={labelClass}>Requester</span>
+            <input id="filter-requester" value={requester} onChange={(event) => setRequester(event.target.value)} className={inputClass} placeholder="requester" />
+          </label>
+          <label htmlFor="filter-customer">
+            <span className={labelClass}>Customer</span>
+            <input id="filter-customer" value={customerName} onChange={(event) => setCustomerName(event.target.value)} className={inputClass} placeholder="customer" />
+          </label>
+          <label htmlFor="filter-vendor">
+            <span className={labelClass}>Vendor URN</span>
+            <input id="filter-vendor" value={vendorURN} onChange={(event) => setVendorURN(event.target.value)} className={inputClass} placeholder="urn:cerebro:..." />
+          </label>
+          <label htmlFor="filter-search">
             <span className={labelClass}>Search</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} className={inputClass} placeholder="question, owner, control" />
+            <input id="filter-search" value={query} onChange={(event) => setQuery(event.target.value)} className={inputClass} placeholder="question, owner, control" />
           </label>
         </div>
       </Panel>
@@ -204,21 +363,24 @@ export default function QuestionnairesPage() {
             />
           </Panel>
           <QuestionnaireDetail
-            actionError={mutation.error}
-            actionSaving={mutation.saving}
+            actionError={actionMutation.error}
+            actionSaving={actionMutation.saving}
             answer={selectedAnswer}
             assignmentOwner={assignmentOwner}
             assignmentReason={assignmentReason}
             assignmentTeam={assignmentTeam}
+            commentBody={commentBody}
             decisionReason={decisionReason}
             decisionState={decisionState}
             onAssignmentOwnerChange={setAssignmentOwner}
             onAssignmentReasonChange={setAssignmentReason}
             onAssignmentTeamChange={setAssignmentTeam}
+            onCommentBodyChange={setCommentBody}
             onDecisionReasonChange={setDecisionReason}
             onDecisionStateChange={setDecisionState}
             onProcess={processRun}
             onSubmitAssignment={submitAssignment}
+            onSubmitComment={submitComment}
             onSubmitDecision={submitDecision}
             row={selectedRow}
             run={selectedRun}
@@ -236,15 +398,18 @@ function QuestionnaireDetail({
   assignmentOwner,
   assignmentReason,
   assignmentTeam,
+  commentBody,
   decisionReason,
   decisionState,
   onAssignmentOwnerChange,
   onAssignmentReasonChange,
   onAssignmentTeamChange,
+  onCommentBodyChange,
   onDecisionReasonChange,
   onDecisionStateChange,
   onProcess,
   onSubmitAssignment,
+  onSubmitComment,
   onSubmitDecision,
   row,
   run,
@@ -255,15 +420,18 @@ function QuestionnaireDetail({
   assignmentOwner: string;
   assignmentReason: string;
   assignmentTeam: string;
+  commentBody: string;
   decisionReason: string;
   decisionState: string;
   onAssignmentOwnerChange: (value: string) => void;
   onAssignmentReasonChange: (value: string) => void;
   onAssignmentTeamChange: (value: string) => void;
+  onCommentBodyChange: (value: string) => void;
   onDecisionReasonChange: (value: string) => void;
   onDecisionStateChange: (value: string) => void;
   onProcess: () => Promise<void>;
   onSubmitAssignment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onSubmitComment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onSubmitDecision: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   row: QuestionnaireQueueRow | null;
   run: GRCQuestionnaireRun | null;
@@ -328,20 +496,36 @@ function QuestionnaireDetail({
 
         <DetailSection title="Owner and decision">
           <form onSubmit={onSubmitAssignment} className="grid gap-2 sm:grid-cols-3">
-            <input value={assignmentOwner} onChange={(event) => onAssignmentOwnerChange(event.target.value)} className={inputClass} placeholder="owner" />
-            <input value={assignmentTeam} onChange={(event) => onAssignmentTeamChange(event.target.value)} className={inputClass} placeholder="team" />
-            <button type="submit" disabled={actionSaving} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]"><UserPlus className="h-3.5 w-3.5" />Assign</button>
-            <input value={assignmentReason} onChange={(event) => onAssignmentReasonChange(event.target.value)} className={`${inputClass} sm:col-span-3`} placeholder="assignment reason" />
+            <input aria-label="Assignment owner" value={assignmentOwner} onChange={(event) => onAssignmentOwnerChange(event.target.value)} className={inputClass} placeholder="owner@example.com" />
+            <input aria-label="Assignment team" value={assignmentTeam} onChange={(event) => onAssignmentTeamChange(event.target.value)} className={inputClass} placeholder="team" />
+            <button type="submit" disabled={actionSaving || (!assignmentOwner.trim() && !assignmentTeam.trim())} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]"><UserPlus className="h-3.5 w-3.5" />Assign</button>
+            <input aria-label="Assignment note" value={assignmentReason} onChange={(event) => onAssignmentReasonChange(event.target.value)} className={`${inputClass} sm:col-span-3`} placeholder="what the owner needs to provide" />
           </form>
           <form onSubmit={onSubmitDecision} className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <select value={decisionState} onChange={(event) => onDecisionStateChange(event.target.value)} className={inputClass}>
+            <select aria-label="Decision" value={decisionState} onChange={(event) => onDecisionStateChange(event.target.value)} className={inputClass}>
+              <option value="needs_input">Needs input</option>
               <option value="approved">Approved</option>
               <option value="approved_with_conditions">Approved with conditions</option>
-              <option value="needs_input">Needs input</option>
               <option value="rejected">Rejected</option>
             </select>
-            <input value={decisionReason} onChange={(event) => onDecisionReasonChange(event.target.value)} className={inputClass} placeholder="decision reason" />
+            <input aria-label="Decision reason" value={decisionReason} onChange={(event) => onDecisionReasonChange(event.target.value)} className={inputClass} placeholder="decision reason" />
             <button type="submit" disabled={actionSaving} className="primary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]"><CheckCircle2 className="h-3.5 w-3.5" />Record</button>
+          </form>
+        </DetailSection>
+
+        <DetailSection title="Comment">
+          <form onSubmit={onSubmitComment} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <textarea
+              aria-label="Comment body"
+              value={commentBody}
+              onChange={(event) => onCommentBodyChange(event.target.value)}
+              className={`${inputClass} min-h-[72px] resize-y leading-5`}
+              placeholder="note, blocker update, or handoff"
+            />
+            <button type="submit" disabled={actionSaving || !commentBody.trim()} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]">
+              <MessageSquare className="h-3.5 w-3.5" />
+              Add comment
+            </button>
           </form>
         </DetailSection>
 
@@ -451,4 +635,12 @@ const intentClass = (intent: "neutral" | "danger" | "warning" | "success") => {
     default:
       return "bg-[var(--surface-muted)] text-[var(--text-secondary)]";
   }
+};
+
+const inferIntakeFormat = (filename: string) => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".json")) return "json";
+  if (lower.endsWith(".tsv")) return "tsv";
+  if (lower.endsWith(".txt")) return "text";
+  return "csv";
 };
