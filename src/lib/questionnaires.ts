@@ -1,4 +1,5 @@
 import type {
+  GRCQuestionnaireQuestion,
   GRCQuestionnaireRun,
   GRCQuestionnaireRunAnswer,
   GRCQuestionnaireRunSummary,
@@ -68,24 +69,17 @@ export const questionnaireStateIntent = (state?: string): "neutral" | "danger" |
 export const questionnaireQueueRows = (runs: GRCQuestionnaireRun[]): QuestionnaireQueueRow[] =>
   runs.flatMap((run) => {
     const answers = run.answers ?? [];
-    if (answers.length === 0) {
-      return [{
-        id: run.run_id,
-        runID: run.run_id,
-        title: run.title,
-        question: run.title,
-        direction: run.direction,
-        requester: runRequester(run),
-        state: run.status,
-        blocker: run.decision_reason || "",
-        owner: run.owner_id || run.assigned_team || "",
-        dueAt: run.due_at,
-        mappedControls: [],
-        citationCount: 0,
-        missingEvidenceCount: run.missing_evidence_count ?? 0,
-        staleEvidence: (run.stale_evidence_count ?? 0) > 0,
-      }];
+    const questions = run.questions ?? [];
+    if (questions.length > 0) {
+      const answersByQuestionID = new Map(answers.map((answer) => [answer.question_id, answer]));
+      const rows = questions.map((question) => {
+        const answer = answersByQuestionID.get(question.id);
+        return answer ? queueRowFromAnswer(run, answer) : queueRowFromQuestion(run, question);
+      });
+      const questionIDs = new Set(questions.map((question) => question.id));
+      return rows.concat(answers.filter((answer) => !questionIDs.has(answer.question_id)).map((answer) => queueRowFromAnswer(run, answer)));
     }
+    if (answers.length === 0) return [queueRowFromRun(run)];
     return answers.map((answer) => queueRowFromAnswer(run, answer));
   });
 
@@ -115,7 +109,7 @@ export const primaryAnswerForRun = (run?: GRCQuestionnaireRun | null, questionID
   const answers = run?.answers ?? [];
   if (!answers.length) return null;
   if (questionID) {
-    return answers.find((answer) => answer.question_id === questionID) ?? answers[0];
+    return answers.find((answer) => answer.question_id === questionID) ?? null;
   }
   return answers[0];
 };
@@ -124,6 +118,28 @@ export const initialQuestionnaireRowID = (run: GRCQuestionnaireRun) => {
   const questionID = run.answers?.[0]?.question_id || run.questions?.[0]?.id;
   return questionID ? `${run.run_id}:${questionID}` : run.run_id;
 };
+
+export const inferQuestionnaireIntakeFormat = (filename: string, contentType = "") => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".pdf")) return "pdf";
+  if (lower.endsWith(".xlsx")) return "xlsx";
+  if (lower.endsWith(".xlsm")) return "xlsm";
+  if (lower.endsWith(".json")) return "json";
+  if (lower.endsWith(".tsv")) return "tsv";
+  if (lower.endsWith(".txt")) return "text";
+  if (lower.endsWith(".csv")) return "csv";
+
+  const normalizedType = contentType.toLowerCase();
+  if (normalizedType === "application/pdf") return "pdf";
+  if (normalizedType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "xlsx";
+  if (normalizedType === "application/vnd.ms-excel.sheet.macroenabled.12") return "xlsm";
+  if (normalizedType === "text/tab-separated-values") return "tsv";
+  if (normalizedType === "application/json") return "json";
+  if (normalizedType === "text/plain") return "text";
+  return "csv";
+};
+
+export const isQuestionnaireBinaryIntakeFormat = (format: string) => ["pdf", "xlsx", "xlsm"].includes(format);
 
 const queueRowFromAnswer = (run: GRCQuestionnaireRun, answer: GRCQuestionnaireRunAnswer): QuestionnaireQueueRow => {
   const missing = answer.missing_evidence ?? [];
@@ -146,6 +162,41 @@ const queueRowFromAnswer = (run: GRCQuestionnaireRun, answer: GRCQuestionnaireRu
     staleEvidence,
   };
 };
+
+const queueRowFromQuestion = (run: GRCQuestionnaireRun, question: GRCQuestionnaireQuestion): QuestionnaireQueueRow => ({
+  id: `${run.run_id}:${question.id}`,
+  runID: run.run_id,
+  questionID: question.id,
+  title: run.title,
+  question: question.question || question.id,
+  direction: run.direction,
+  requester: runRequester(run),
+  state: question.answer_state || run.status,
+  blocker: run.decision_reason || "",
+  owner: answerOwner(run, question.id),
+  dueAt: answerDueAt(run, question.id),
+  mappedControls: question.mapped_controls ?? [],
+  citationCount: 0,
+  missingEvidenceCount: 0,
+  staleEvidence: false,
+});
+
+const queueRowFromRun = (run: GRCQuestionnaireRun): QuestionnaireQueueRow => ({
+  id: run.run_id,
+  runID: run.run_id,
+  title: run.title,
+  question: run.title,
+  direction: run.direction,
+  requester: runRequester(run),
+  state: run.status,
+  blocker: run.decision_reason || "",
+  owner: answerOwner(run),
+  dueAt: answerDueAt(run),
+  mappedControls: [],
+  citationCount: 0,
+  missingEvidenceCount: run.missing_evidence_count ?? 0,
+  staleEvidence: (run.stale_evidence_count ?? 0) > 0,
+});
 
 const answerQueueState = (answer: GRCQuestionnaireRunAnswer) => {
   if (answer.reviewer_decision === "rejected") return "rejected";
