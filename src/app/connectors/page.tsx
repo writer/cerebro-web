@@ -65,9 +65,9 @@ import {
   formatDuration,
   normalizeRuntime,
   sourceHealthBreakdown,
-  type MissionControlRuntime,
+  type ConnectorRuntime,
   type SourceReadiness,
-} from "@/lib/mission-control";
+} from "@/lib/connector-runtime";
 import { useQueryParamState } from "@/lib/query-params";
 
 type LibraryTab = "all" | "attention" | "connected" | "available" | "backlog";
@@ -275,14 +275,14 @@ function ConnectorLibraryRow({
   );
 }
 
-function runtimeNeedsAction(runtime: MissionControlRuntime) {
+function runtimeNeedsAction(runtime: ConnectorRuntime) {
   return runtime.health !== "healthy" ||
     runtime.graph_freshness !== "current" ||
     runtime.cursor_state === "pending" ||
     runtime.schedule_context_configured === false;
 }
 
-function runtimeIssueTitle(runtime: MissionControlRuntime) {
+function runtimeIssueTitle(runtime: ConnectorRuntime) {
   if (runtime.graph_freshness === "failed") return "Graph projection failed";
   if (runtime.health === "degraded") return "Sync degraded";
   if (runtime.health === "stale") return "Sync is stale";
@@ -299,11 +299,11 @@ function RuntimeIssueQueue({
   tenantID,
 }: {
   cards: ConnectorCard[];
-  runtimes: MissionControlRuntime[];
+  runtimes: ConnectorRuntime[];
   tenantID: string;
 }) {
   const runtimesBySource = useMemo(() => {
-    const grouped = new Map<string, MissionControlRuntime[]>();
+    const grouped = new Map<string, ConnectorRuntime[]>();
     runtimes.filter(runtimeNeedsAction).forEach((runtime) => {
       const sourceID = runtime.source_id || "unknown";
       grouped.set(sourceID, [...(grouped.get(sourceID) ?? []), runtime]);
@@ -633,7 +633,7 @@ function ConnectorResultList({
 }: {
   libraryTab: LibraryTab;
   visibleCards: ConnectorCard[];
-  sourceRuntimes: MissionControlRuntime[];
+  sourceRuntimes: ConnectorRuntime[];
   tenantID: string;
   activeSourceID: string;
 }) {
@@ -784,7 +784,7 @@ export default function ConnectorsPage() {
               <FileJson2 className="h-4 w-4" />
               Build custom
             </Link>
-            <Link href={`/connectors/source-cdk${debouncedTenantID ? `?tenant_id=${encodeURIComponent(debouncedTenantID)}` : ""}`} className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
+            <Link href={`/connectors/activation${debouncedTenantID ? `?tenant_id=${encodeURIComponent(debouncedTenantID)}` : ""}`} className="secondary-button inline-flex items-center gap-2 px-3 py-2 text-[13px]">
               <ShieldCheck className="h-4 w-4" />
               Activation
             </Link>

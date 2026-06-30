@@ -4,14 +4,14 @@ import Link from "next/link";
 
 import { Badge, EmptyBlock } from "@/components/grc/Primitives";
 import { displayDate, shortEntity } from "@/lib/grc";
-import { formatDuration } from "@/lib/mission-control";
-import type { MissionControlRuntime } from "@/lib/mission-control";
+import { formatDuration } from "@/lib/connector-runtime";
+import type { ConnectorRuntime } from "@/lib/connector-runtime";
 
 export default function ConnectorRuntimeTable({
   runtimes,
   showSource = true,
 }: {
-  runtimes: MissionControlRuntime[];
+  runtimes: ConnectorRuntime[];
   showSource?: boolean;
 }) {
   if (runtimes.length === 0) {

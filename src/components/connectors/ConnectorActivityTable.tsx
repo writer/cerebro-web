@@ -4,7 +4,7 @@ import { Activity, CheckCircle2, Clock3, RefreshCw, XCircle } from "lucide-react
 
 import { Badge, EmptyBlock } from "@/components/grc/Primitives";
 import { displayDate } from "@/lib/grc";
-import { formatDuration } from "@/lib/mission-control";
+import { formatDuration } from "@/lib/connector-runtime";
 import { countLabel } from "@/lib/format";
 import type { ConnectorActivity } from "@/lib/connectors";
 

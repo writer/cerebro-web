@@ -28,7 +28,7 @@ import { withQuery } from "@/lib/cerebro-data";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { GRC_DETAIL_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { displayDate, humanize } from "@/lib/grc";
-import { formatDuration } from "@/lib/mission-control";
+import { formatDuration } from "@/lib/connector-runtime";
 import {
   connectorCapabilityLabel,
   connectorCapabilities,

@@ -19,9 +19,9 @@ import {
   connectorDiagnosticStageLabel,
   connectorDiagnosticStatusLabel,
   connectorDisplayMetadata,
-  sourceCDKPlanCategoryCounts,
-  sourceCDKPlanPath,
-  sourceCDKPlanStatusLabel,
+  sourceActivationPlanCategoryCounts,
+  sourceActivationPlanPath,
+  sourceActivationPlanStatusLabel,
   sourceRuntimeSyncPath,
   connectorIntegrationDepthLabel,
   connectorIsCatalogOnly,
@@ -446,15 +446,15 @@ describe("dynamic connector definitions", () => {
     expect(connectorDefinitionNextStage(definition)).toBe("sandbox");
   });
 
-  it("derives Source CDK plan labels, links, and category counts", () => {
-    expect(sourceCDKPlanStatusLabel("blocked")).toBe("Blocked");
-    expect(sourceCDKPlanPath("tenant-a-example", "tenant-a")).toBe("/connectors/source-cdk?definition_id=tenant-a-example&tenant_id=tenant-a");
-    expect(sourceCDKPlanCategoryCounts({
+  it("derives source activation plan labels, links, and category counts", () => {
+    expect(sourceActivationPlanStatusLabel("blocked")).toBe("Blocked");
+    expect(sourceActivationPlanPath("tenant-a-example", "tenant-a")).toBe("/connectors/activation?definition_id=tenant-a-example&tenant_id=tenant-a");
+    expect(sourceActivationPlanCategoryCounts({
       checklist: [
         { id: "definition.id", title: "Definition ID", category: "definition", status: "ready" },
-        { id: "source_cdk.scaffold", title: "Scaffold", category: "source_cdk", status: "ready" },
-        { id: "source_cdk.fixture", title: "Fixture", category: "source_cdk", status: "ready" },
+        { id: "activation.scaffold", title: "Scaffold", category: "activation", status: "ready" },
+        { id: "activation.fixture", title: "Fixture", category: "activation", status: "ready" },
       ],
-    })).toEqual({ definition: 1, source_cdk: 2 });
+    })).toEqual({ definition: 1, activation: 2 });
   });
 });

@@ -825,37 +825,37 @@ export type ConnectorDefinitionPreviewResponse = {
   next_cursor?: string;
 };
 
-export type SourceCDKPlanStatus = "ready" | "warning" | "blocked";
+export type SourceActivationPlanStatus = "ready" | "warning" | "blocked";
 
-export type SourceCDKSupportCheck = {
+export type SourceActivationSupportCheck = {
   id: string;
   category: string;
   status: "ready" | "missing" | string;
   detail?: string;
 };
 
-export type SourceCDKSupportReport = {
+export type SourceActivationSupportReport = {
   definition_id?: string;
   source_id?: string;
   grammar_version?: string;
   verdict?: "supported" | "extension_required" | "bespoke_required" | string;
   supported_features?: string[];
   missing_features?: string[];
-  checks?: SourceCDKSupportCheck[];
+  checks?: SourceActivationSupportCheck[];
   validation?: ConnectorDefinitionValidation;
 };
 
-export type SourceCDKPromotionPlanStep = {
+export type SourceActivationPromotionPlanStep = {
   id: string;
   title: string;
   category: string;
-  status: SourceCDKPlanStatus | string;
+  status: SourceActivationPlanStatus | string;
   detail?: string;
   action?: string;
   blocking?: boolean;
 };
 
-export type SourceCDKPromotionPlanMetrics = {
+export type SourceActivationPromotionPlanMetrics = {
   resource_families?: number;
   config_fields?: number;
   credential_fields?: number;
@@ -866,7 +866,7 @@ export type SourceCDKPromotionPlanMetrics = {
   blocked_checks?: number;
 };
 
-export type SourceCDKScaffoldPlan = {
+export type SourceActivationScaffoldPlan = {
   source_id?: string;
   source_type?: string;
   auth_model?: string;
@@ -878,24 +878,24 @@ export type SourceCDKScaffoldPlan = {
   next_steps?: string[];
 };
 
-export type SourceCDKPromotionPlan = {
+export type SourceActivationPromotionPlan = {
   generated_at?: string;
   definition?: ConnectorDefinition;
-  support?: SourceCDKSupportReport;
-  status?: SourceCDKPlanStatus | string;
+  support?: SourceActivationSupportReport;
+  status?: SourceActivationPlanStatus | string;
   summary?: string;
   next_stage?: ConnectorDefinitionStage | string;
-  checklist?: SourceCDKPromotionPlanStep[];
+  checklist?: SourceActivationPromotionPlanStep[];
   blockers?: string[];
   warnings?: string[];
-  metrics?: SourceCDKPromotionPlanMetrics;
-  scaffold?: SourceCDKScaffoldPlan;
+  metrics?: SourceActivationPromotionPlanMetrics;
+  scaffold?: SourceActivationScaffoldPlan;
   commands?: string[];
 };
 
 export type ConnectorDefinitionPlanResponse = {
   generated_at?: string;
-  plan?: SourceCDKPromotionPlan;
+  plan?: SourceActivationPromotionPlan;
 };
 
 export const CONNECTOR_CREDENTIAL_TRANSPORT_ALGORITHM = "RSA-OAEP-256+A256GCM";
@@ -926,29 +926,29 @@ export const connectorDefinitionValidationLabel = (status?: string) => {
   return "Not validated";
 };
 
-export const sourceCDKPlanStatusLabel = (status?: string) => {
+export const sourceActivationPlanStatusLabel = (status?: string) => {
   if (status === "ready") return "Ready";
   if (status === "warning") return "Needs review";
   if (status === "blocked") return "Blocked";
   return "Not planned";
 };
 
-export const sourceCDKPlanStatusIntent = (status?: string) => {
+export const sourceActivationPlanStatusIntent = (status?: string) => {
   if (status === "ready") return "success";
   if (status === "warning") return "warning";
   if (status === "blocked") return "danger";
   return "neutral";
 };
 
-export const sourceCDKPlanPath = (definitionID?: string, tenantID?: string) => {
+export const sourceActivationPlanPath = (definitionID?: string, tenantID?: string) => {
   const query = new URLSearchParams();
   if (definitionID) query.set("definition_id", definitionID);
   if (tenantID) query.set("tenant_id", tenantID);
   const queryString = query.toString();
-  return `/connectors/source-cdk${queryString ? `?${queryString}` : ""}`;
+  return `/connectors/activation${queryString ? `?${queryString}` : ""}`;
 };
 
-export const sourceCDKPlanCategoryCounts = (plan?: Pick<SourceCDKPromotionPlan, "checklist"> | null) =>
+export const sourceActivationPlanCategoryCounts = (plan?: Pick<SourceActivationPromotionPlan, "checklist"> | null) =>
   (plan?.checklist ?? []).reduce<Record<string, number>>((counts, step) => {
     const category = step.category || "other";
     counts[category] = (counts[category] ?? 0) + 1;

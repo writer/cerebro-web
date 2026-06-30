@@ -11,12 +11,12 @@ import {
   runtimeIsBackfill,
   sourceBreakdown,
   sourceHealthBreakdown,
-  summarizeMissionControl,
-} from "./mission-control";
+  summarizeConnectorRuntime,
+} from "./connector-runtime";
 
 const now = new Date("2026-06-03T12:00:00Z");
 
-describe("Mission Control runtime normalization", () => {
+describe("Connector runtime normalization", () => {
   it("marks recently active runtimes healthy", () => {
     const runtime = normalizeRuntime(
       {
@@ -154,7 +154,7 @@ describe("Mission Control runtime normalization", () => {
       normalizeRuntime({ id: "d-backfill", source_id: "okta", tenant_id: "tenant-a", status: "failed" }, now, 24),
     ];
 
-    expect(summarizeMissionControl(runtimes)).toEqual({
+    expect(summarizeConnectorRuntime(runtimes)).toEqual({
       total: 4,
       healthy: 1,
       stale: 1,
