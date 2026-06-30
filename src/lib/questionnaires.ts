@@ -99,7 +99,9 @@ export const questionnaireRollups = (
     total: summary?.total_runs ?? runs.length,
     due: summary?.due_runs ?? runs.filter((run) => isDue(run.due_at, run.status, now)).length,
     blocked: summary?.blocked_answers ?? rows.filter((row) => row.state === "blocked" || row.state === "needs_input" || row.state === "rejected").length,
-    needsReview: summary?.review_answers ?? rows.filter((row) => row.state === "needs_review" || row.state === "partial").length,
+    needsReview: summary?.review_answers ?? rows.filter((row) =>
+      row.state === "needs_review" || row.state === "partial" || row.state === "ready_for_approval" || row.state === "approved_with_conditions"
+    ).length,
     ready: summary?.ready_answers ?? rows.filter((row) => row.state === "supported" || row.state === "not_applicable" || row.state === "approved").length,
     stale: summary?.stale_evidence ?? rows.filter((row) => row.staleEvidence).length,
     missingEvidence: summary?.missing_evidence ?? rows.reduce((total, row) => total + row.missingEvidenceCount, 0),
@@ -114,6 +116,11 @@ export const primaryAnswerForRun = (run?: GRCQuestionnaireRun | null, questionID
     return answers.find((answer) => answer.question_id === questionID) ?? answers[0];
   }
   return answers[0];
+};
+
+export const initialQuestionnaireRowID = (run: GRCQuestionnaireRun) => {
+  const questionID = run.answers?.[0]?.question_id || run.questions?.[0]?.id;
+  return questionID ? `${run.run_id}:${questionID}` : run.run_id;
 };
 
 const queueRowFromAnswer = (run: GRCQuestionnaireRun, answer: GRCQuestionnaireRunAnswer): QuestionnaireQueueRow => {
@@ -163,7 +170,7 @@ const answerDueAt = (run: GRCQuestionnaireRun, questionID?: string) => {
 };
 
 const isDue = (dueAt: string | undefined, status: string | undefined, now: Date) => {
-  if (!dueAt || status === "approved") return false;
+  if (!dueAt || status === "approved" || status === "rejected") return false;
   const due = Date.parse(dueAt);
   return Number.isFinite(due) && due <= now.getTime();
 };

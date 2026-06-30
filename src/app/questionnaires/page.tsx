@@ -9,7 +9,7 @@ import { displayDate, humanize, shortEntity } from "@/lib/grc";
 import type { GRCQuestionnaireRun, GRCQuestionnaireRunResponse, GRCQuestionnaireRunsResponse } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
-import { primaryAnswerForRun, questionnaireDirectionLabel, questionnaireQueueRows, questionnaireRollups, questionnaireStateIntent, type QuestionnaireQueueRow } from "@/lib/questionnaires";
+import { initialQuestionnaireRowID, primaryAnswerForRun, questionnaireDirectionLabel, questionnaireQueueRows, questionnaireRollups, questionnaireStateIntent, type QuestionnaireQueueRow } from "@/lib/questionnaires";
 import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 const QUEUE_LIMIT = 100;
@@ -191,7 +191,10 @@ export default function QuestionnairesPage() {
         intake_format: intakeFormat,
         intake_text: intakeText,
       });
-      selectQueueRow(response.run.run_id);
+      setSelectedRowID(initialQuestionnaireRowID(response.run));
+      setMappingRowID(null);
+      setMappingReason("");
+      resetRowActionForms();
       setIntakeText("");
       setSourceFilename("");
       reloadRuns();
