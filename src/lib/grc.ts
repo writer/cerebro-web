@@ -848,6 +848,35 @@ export type GRCSourceCoverageSummary = {
 export type GRCCoverageRecord = GRCSourceCoverageRecord;
 export type GRCCoverageSummary = GRCSourceCoverageSummary;
 
+/**
+ * @deprecated Product areas were a generated web fallback. Use route navigation,
+ * coverage summaries, and source health data instead.
+ */
+export type GRCProductAreaWorkflow = {
+  label: string;
+  href: string;
+};
+
+/**
+ * @deprecated Product areas were a generated web fallback. The app no longer
+ * emits fixture product_areas or renders this response field.
+ */
+export type GRCProductAreaResponse = {
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  workflows: GRCProductAreaWorkflow[];
+  source_families?: string[];
+  coverage_dimensions?: string[];
+  evidence_types?: string[];
+  control_domains?: string[];
+  blind_spots?: GRCCoverageRecord[];
+  detail?: string;
+  signal?: string;
+  status?: string;
+};
+
 export type GRCProgramReadinessSummary = {
   status: string;
   score: number;
@@ -950,6 +979,8 @@ export type GRCProgramReadiness = {
   source_summaries?: GRCSourceRuntimeHealthSummary[];
   coverage_blind_spots?: GRCCoverageRecord[];
   coverage_summaries?: GRCCoverageSummary[];
+  /** @deprecated Use coverage_summaries and route navigation instead. */
+  product_areas?: GRCProductAreaResponse[];
   metadata: GRCReportMetadata;
   generated_at: string;
 };
@@ -1864,6 +1895,8 @@ export type GRCDashboard = {
   source_summaries?: GRCSourceRuntimeHealthSummary[];
   coverage_blind_spots?: GRCCoverageRecord[];
   coverage_summaries?: GRCCoverageSummary[];
+  /** @deprecated Use coverage_summaries and route navigation instead. */
+  product_areas?: GRCProductAreaResponse[];
   generated_at: string;
 };
 
