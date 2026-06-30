@@ -3735,7 +3735,7 @@ const questionnaireRunDecisionFixture = (runID: string, parsed: Record<string, u
   if (!decision.question_id) {
     run.decision = decision.decision;
     run.decision_reason = decision.reason;
-    if (decision.decision === "approved") run.status = "approved";
+    if (decision.decision === "approved" || decision.decision === "approved_with_conditions") run.status = "approved";
     if (decision.decision === "rejected") run.status = "rejected";
     if (decision.decision === "needs_input") run.status = "needs_input";
   } else {

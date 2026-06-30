@@ -256,6 +256,15 @@ describe("cerebro fixture proxy responses", () => {
       run: { run_id: "customer-review-acme-2026", status: "approved", decision: "approved" },
     });
 
+    const conditionalDecision = cerebroFixtureResponseFor({
+      method: "POST",
+      path: "grc/questionnaire-runs/vendor-review-core-sso-2026/decisions",
+      body: JSON.stringify({ state: "approved_with_conditions", reason: "Refresh MFA proof before renewal." }),
+    });
+    expect(parseFixture(conditionalDecision!)).toMatchObject({
+      run: { run_id: "vendor-review-core-sso-2026", status: "approved", decision: "approved_with_conditions" },
+    });
+
     const created = cerebroFixtureResponseFor({
       method: "POST",
       path: "grc/questionnaire-runs",
