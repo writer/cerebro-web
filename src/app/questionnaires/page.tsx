@@ -1239,7 +1239,7 @@ const citationDetail = (citation: GRCQuestionnaireCitation, fallbackFreshness?: 
   [
     citation.source || "source",
     citation.evidence_type ? humanize(citation.evidence_type) : "",
-    citation.resource_urn ? shortEntity(citation.resource_urn) : shortEntity(citation.evidence_packet_id || citation.evidence_id || ""),
+    citation.resource_urn ? shortEntity(citation.resource_urn) : citation.evidence_packet_id || citation.evidence_id ? shortEntity(citation.evidence_packet_id || citation.evidence_id || "") : "",
     citation.freshness_status || fallbackFreshness || "unknown",
   ].filter(Boolean).join(" · ");
 
