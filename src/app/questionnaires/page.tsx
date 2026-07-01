@@ -7,7 +7,7 @@ import { CheckCircle2, ClipboardPaste, FileUp, Link2, MessageSquare, Plus, Refre
 import DataTable, { type TableColumn } from "@/components/grc/DataTable";
 import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
-import type { GRCQuestionnaireRun, GRCQuestionnaireRunResponse, GRCQuestionnaireRunsResponse, GRCVendor, GRCVendorsResponse } from "@/lib/grc";
+import type { GRCQuestionnaireAssignment, GRCQuestionnaireCitation, GRCQuestionnaireRun, GRCQuestionnaireRunAnswer, GRCQuestionnaireRunEvidenceGap, GRCQuestionnaireRunResponse, GRCQuestionnaireRunsResponse, GRCVendor, GRCVendorsResponse } from "@/lib/grc";
 import { grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
 import { inferQuestionnaireIntakeFormat, initialQuestionnaireRowID, isQuestionnaireBinaryIntakeFormat, primaryAnswerForRun, questionnaireDirectionLabel, questionnaireQueueRows, questionnaireRollups, questionnaireStateIntent, suggestQuestionnaireVendor, type QuestionnaireQueueRow } from "@/lib/questionnaires";
@@ -139,6 +139,8 @@ export default function QuestionnairesPage() {
   const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
   const selectedQuestion = questionnaireQuestionForRun(selectedRun, selectedAnswer?.question_id ?? selectedRow?.questionID);
   const selectedQuestionID = selectedAnswer?.question_id ?? selectedRow?.questionID ?? null;
+  const selectedGap = primaryGapForAssignment(selectedAnswer);
+  const selectedSlotID = selectedGap?.slot_id || firstOpenEvidenceSlotID(selectedAnswer);
   const selectedSlotMapping = joinMappingList(selectedQuestion?.required_evidence_slots ?? answerEvidenceSlotIDs(selectedAnswer));
   const selectedControlMapping = joinMappingList(selectedQuestion?.mapped_controls ?? selectedAnswer?.controls);
   const selectedMappingOwner = selectedQuestion?.owner_id ?? "";
@@ -429,6 +431,8 @@ export default function QuestionnairesPage() {
       await actionMutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/assignments`, {
         tenant_id: tenantID || undefined,
         question_id: selectedQuestionID || undefined,
+        gap_id: selectedGap?.id || undefined,
+        slot_id: selectedSlotID || undefined,
         owner_id: assignmentOwner,
         team: assignmentTeam,
         reason: assignmentReason,
@@ -873,6 +877,8 @@ function QuestionnaireDetail({
   const intakeFacts = questionnaireIntakeFacts(run);
   const linkedVendorURN = run.vendor_urn ?? "";
   const linkedVendorName = linkedVendor?.name || (linkedVendorURN ? shortEntity(linkedVendorURN) : "");
+  const assignmentGap = primaryGapForAssignment(answer);
+  const assignmentSlotID = assignmentGap?.slot_id || firstOpenEvidenceSlotID(answer);
   return (
     <Panel
       title="Answer detail"
@@ -1012,7 +1018,7 @@ function QuestionnaireDetail({
               {(answer?.citations ?? []).map((citation) => (
                 <div key={citation.id} className="rounded-md border border-[color:var(--border)] p-3 text-[12px]">
                   <div className="font-medium text-[var(--text-primary)]">{citation.label || shortEntity(citation.id)}</div>
-                  <div className="mt-1 text-[var(--text-muted)]">{citation.source || "source"} · {citation.freshness_status || answer?.freshness?.status || "unknown"}</div>
+                  <div className="mt-1 text-[var(--text-muted)]">{citationDetail(citation, answer?.freshness?.status)}</div>
                 </div>
               ))}
             </div>
@@ -1029,6 +1035,7 @@ function QuestionnaireDetail({
             <input aria-label="Assignment team" value={assignmentTeam} onChange={(event) => onAssignmentTeamChange(event.target.value)} className={inputClass} placeholder="team" />
             <button type="submit" disabled={actionSaving || (!assignmentOwner.trim() && !assignmentTeam.trim())} className="secondary-button inline-flex items-center justify-center gap-2 px-3 py-1.5 text-[12px]"><UserPlus className="h-3.5 w-3.5" />Assign</button>
             <input aria-label="Assignment note" value={assignmentReason} onChange={(event) => onAssignmentReasonChange(event.target.value)} className={`${inputClass} sm:col-span-3`} placeholder="what the owner needs to provide" />
+            {(assignmentGap || assignmentSlotID) && <div className="sm:col-span-3 text-[12px] text-[var(--text-muted)]">Assigning {assignmentGap ? humanize(assignmentGap.code) : humanize(assignmentSlotID)}.</div>}
           </form>
           <form onSubmit={onSubmitDecision} className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <select aria-label="Decision" value={decisionState} onChange={(event) => onDecisionStateChange(event.target.value)} className={inputClass}>
@@ -1068,7 +1075,7 @@ function QuestionnaireDetail({
                       <span className="font-medium text-[var(--text-primary)]">{assignment.owner_id || assignment.team || "Unassigned"}</span>
                       <Badge value={assignment.status} />
                     </div>
-                    <div className="mt-1 text-[var(--text-muted)]">{assignment.reason || assignment.question_id || "No reason"}</div>
+                    <div className="mt-1 text-[var(--text-muted)]">{assignmentDetail(assignment)}</div>
                   </div>
                 ))}
               </div>
@@ -1207,7 +1214,7 @@ function VendorPicker({
   );
 }
 
-function GapList({ gaps }: { gaps: Array<{ id: string; code: string; reason?: string; slot_id?: string }> }) {
+function GapList({ gaps }: { gaps: GRCQuestionnaireRunEvidenceGap[] }) {
   if (gaps.length === 0) return <EmptyDetail label="No blockers recorded." />;
   return (
     <div className="space-y-2">
@@ -1215,11 +1222,42 @@ function GapList({ gaps }: { gaps: Array<{ id: string; code: string; reason?: st
         <div key={gap.id} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
           <div className="font-medium">{humanize(gap.code)}</div>
           <div className="mt-1">{gap.reason || gap.slot_id || "Reviewer follow-up required."}</div>
+          <div className="mt-1 text-amber-800/80 dark:text-amber-100/80">{gapDetail(gap)}</div>
         </div>
       ))}
     </div>
   );
 }
+
+const primaryGapForAssignment = (answer?: GRCQuestionnaireRunAnswer | null) =>
+  [...(answer?.missing_evidence ?? []), ...(answer?.conflicts ?? [])][0] ?? null;
+
+const firstOpenEvidenceSlotID = (answer?: GRCQuestionnaireRunAnswer | null) =>
+  (answer?.evidence_slots ?? []).find((slot) => slot.state !== "satisfied")?.id ?? "";
+
+const citationDetail = (citation: GRCQuestionnaireCitation, fallbackFreshness?: string) =>
+  [
+    citation.source || "source",
+    citation.evidence_type ? humanize(citation.evidence_type) : "",
+    citation.resource_urn ? shortEntity(citation.resource_urn) : shortEntity(citation.evidence_packet_id || citation.evidence_id || ""),
+    citation.freshness_status || fallbackFreshness || "unknown",
+  ].filter(Boolean).join(" · ");
+
+const gapDetail = (gap: GRCQuestionnaireRunEvidenceGap) =>
+  [
+    gap.slot_id ? `Slot ${humanize(gap.slot_id)}` : "",
+    gap.control_id ? `Control ${gap.control_id}` : "",
+    gap.evidence_packet_id ? `Packet ${shortEntity(gap.evidence_packet_id)}` : "",
+    gap.review_state ? humanize(gap.review_state) : "",
+  ].filter(Boolean).join(" · ");
+
+const assignmentDetail = (assignment: GRCQuestionnaireAssignment) =>
+  [
+    assignment.reason,
+    assignment.gap_id ? `Gap ${shortEntity(assignment.gap_id)}` : "",
+    assignment.slot_id ? `Slot ${humanize(assignment.slot_id)}` : "",
+    assignment.question_id ? `Question ${shortEntity(assignment.question_id)}` : "",
+  ].filter(Boolean).join(" · ") || "No reason";
 
 function EmptyDetail({ label }: { label: string }) {
   return <div className="rounded-md border border-dashed border-[color:var(--border)] p-3 text-[12px] text-[var(--text-muted)]">{label}</div>;

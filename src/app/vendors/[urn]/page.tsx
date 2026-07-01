@@ -36,7 +36,11 @@ import {
   GRCVendorMonitoringSignal,
   GRCVendorObligation,
   GRCVendorPacket,
+  GRCQuestionnaireAssignment,
+  GRCQuestionnaireCitation,
   GRCQuestionnaireRun,
+  GRCQuestionnaireRunAnswer,
+  GRCQuestionnaireRunEvidenceGap,
   GRCQuestionnaireRunResponse,
   GRCQuestionnaireRunsResponse,
   GRCVendorRelatedRecord,
@@ -273,6 +277,8 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
   const selectedRun = selectedRow ? runs.find((run) => run.run_id === selectedRow.runID) ?? null : null;
   const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
   const selectedQuestionID = selectedAnswer?.question_id ?? selectedRow?.questionID ?? null;
+  const selectedGap = primaryQuestionnaireGap(selectedAnswer);
+  const selectedSlotID = selectedGap?.slot_id || firstOpenQuestionnaireSlotID(selectedAnswer);
   const queueHref = useMemo(() => {
     const params = new URLSearchParams({ direction: "vendor_review", vendor_urn: vendorURN });
     if (tenantID) params.set("tenant_id", tenantID);
@@ -312,6 +318,8 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
       await mutation.mutate(`/grc/questionnaire-runs/${encodeURIComponent(selectedRun.run_id)}/assignments`, {
         tenant_id: tenantID || undefined,
         question_id: selectedQuestionID || undefined,
+        gap_id: selectedGap?.id || undefined,
+        slot_id: selectedSlotID || undefined,
         owner_id: assignmentOwner,
         team: assignmentTeam,
         reason: assignmentReason,
@@ -491,6 +499,8 @@ function QuestionnaireRunDetail({
   const decisions = run.decisions ?? [];
   const comments = run.comments ?? [];
   const timeline = run.timeline ?? [];
+  const assignmentGap = primaryQuestionnaireGap(answer);
+  const assignmentSlotID = assignmentGap?.slot_id || firstOpenQuestionnaireSlotID(answer);
 
   return (
     <div className="space-y-5">
@@ -551,7 +561,7 @@ function QuestionnaireRunDetail({
               {citations.map((citation) => (
                 <div key={citation.id} className="rounded-md border border-[color:var(--border)] p-3 text-[12px]">
                   <div className="font-semibold text-[var(--text-primary)]">{citation.label || shortEntity(citation.id)}</div>
-                  <div className="mt-1 text-[var(--text-muted)]">{citation.source || "source"} | {citation.freshness_status || answer?.freshness?.status || "unknown"}</div>
+                  <div className="mt-1 text-[var(--text-muted)]">{questionnaireCitationDetail(citation, answer?.freshness?.status)}</div>
                 </div>
               ))}
             </div>
@@ -566,6 +576,7 @@ function QuestionnaireRunDetail({
               <div key={gap.id} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
                 <div className="font-semibold">{humanize(gap.code)}</div>
                 <div className="mt-1">{gap.reason || gap.slot_id || "Reviewer follow-up required."}</div>
+                <div className="mt-1 text-amber-800/80 dark:text-amber-100/80">{questionnaireGapDetail(gap)}</div>
               </div>
             ))}
           </div>
@@ -578,6 +589,9 @@ function QuestionnaireRunDetail({
           <input value={assignmentOwner} onChange={(event) => onAssignmentOwnerChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment owner" />
           <input value={assignmentTeam} onChange={(event) => onAssignmentTeamChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment team" />
           <input value={assignmentReason} onChange={(event) => onAssignmentReasonChange(event.target.value)} className="control-input w-full px-3 py-1.5 text-[13px]" aria-label="Assignment reason" />
+          {(assignmentGap || assignmentSlotID) && (
+            <div className="text-[12px] text-[var(--text-muted)]">Assigning {assignmentGap ? humanize(assignmentGap.code) : humanize(assignmentSlotID)}.</div>
+          )}
           <button type="submit" disabled={actionSaving || (!assignmentOwner.trim() && !assignmentTeam.trim())} className="secondary-button inline-flex w-full items-center justify-center gap-2 px-3 py-1.5 text-[13px]">
             <UserPlus className="h-4 w-4" aria-hidden="true" />
             Assign
@@ -624,7 +638,7 @@ function QuestionnaireRunDetail({
                     <span className="font-semibold text-[var(--text-primary)]">{assignment.owner_id || assignment.team || "Unassigned"}</span>
                     <Badge value={assignment.status} />
                   </div>
-                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{assignment.reason || assignment.question_id || "No reason"}</div>
+                  <div className="mt-1 text-[12px] text-[var(--text-muted)]">{questionnaireAssignmentDetail(assignment)}</div>
                 </div>
               ))}
             </div>
@@ -694,6 +708,36 @@ function QuestionnaireSection({ children, title }: { children: ReactNode; title:
 function QuestionnaireEmpty({ label }: { label: string }) {
   return <div className="rounded-md border border-dashed border-[color:var(--border-strong)] p-4 text-[13px] text-[var(--text-muted)]">{label}</div>;
 }
+
+const primaryQuestionnaireGap = (answer?: GRCQuestionnaireRunAnswer | null) =>
+  [...(answer?.missing_evidence ?? []), ...(answer?.conflicts ?? [])][0] ?? null;
+
+const firstOpenQuestionnaireSlotID = (answer?: GRCQuestionnaireRunAnswer | null) =>
+  (answer?.evidence_slots ?? []).find((slot) => slot.state !== "satisfied")?.id ?? "";
+
+const questionnaireCitationDetail = (citation: GRCQuestionnaireCitation, fallbackFreshness?: string) =>
+  [
+    citation.source || "source",
+    citation.evidence_type ? humanize(citation.evidence_type) : "",
+    citation.resource_urn ? shortEntity(citation.resource_urn) : shortEntity(citation.evidence_packet_id || citation.evidence_id || ""),
+    citation.freshness_status || fallbackFreshness || "unknown",
+  ].filter(Boolean).join(" · ");
+
+const questionnaireGapDetail = (gap: GRCQuestionnaireRunEvidenceGap) =>
+  [
+    gap.slot_id ? `Slot ${humanize(gap.slot_id)}` : "",
+    gap.control_id ? `Control ${gap.control_id}` : "",
+    gap.evidence_packet_id ? `Packet ${shortEntity(gap.evidence_packet_id)}` : "",
+    gap.review_state ? humanize(gap.review_state) : "",
+  ].filter(Boolean).join(" · ");
+
+const questionnaireAssignmentDetail = (assignment: GRCQuestionnaireAssignment) =>
+  [
+    assignment.reason,
+    assignment.gap_id ? `Gap ${shortEntity(assignment.gap_id)}` : "",
+    assignment.slot_id ? `Slot ${humanize(assignment.slot_id)}` : "",
+    assignment.question_id ? `Question ${shortEntity(assignment.question_id)}` : "",
+  ].filter(Boolean).join(" · ") || "No reason";
 
 const questionnaireIntentClass = (intent: "neutral" | "danger" | "warning" | "success") => {
   switch (intent) {

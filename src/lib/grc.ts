@@ -1518,8 +1518,10 @@ export type GRCQuestionnaireCitation = {
   id: string;
   label?: string;
   source?: string;
+  resource_urn?: string;
   evidence_packet_id?: string;
   evidence_id?: string;
+  evidence_type?: string;
   control_id?: string;
   freshness_status?: string;
   observed_at?: string;
@@ -1533,6 +1535,7 @@ export type GRCQuestionnaireRunEvidenceGap = {
   slot_id?: string;
   control_id?: string;
   evidence_packet_id?: string;
+  review_state?: string;
 };
 
 export type GRCQuestionnaireFreshness = {
@@ -1566,6 +1569,8 @@ export type GRCQuestionnaireRunAnswer = {
 export type GRCQuestionnaireAssignment = {
   id: string;
   question_id?: string;
+  gap_id?: string;
+  slot_id?: string;
   team?: string;
   owner_id?: string;
   status: string;
