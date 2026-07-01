@@ -140,7 +140,7 @@ export default function QuestionnairesPage() {
   const selectedQuestion = questionnaireQuestionForRun(selectedRun, selectedAnswer?.question_id ?? selectedRow?.questionID);
   const selectedQuestionID = selectedAnswer?.question_id ?? selectedRow?.questionID ?? null;
   const selectedGap = primaryGapForAssignment(selectedAnswer);
-  const selectedSlotID = selectedGap?.slot_id || firstOpenEvidenceSlotID(selectedAnswer);
+  const selectedSlotID = selectedGap ? selectedGap.slot_id || "" : firstOpenEvidenceSlotID(selectedAnswer);
   const selectedSlotMapping = joinMappingList(selectedQuestion?.required_evidence_slots ?? answerEvidenceSlotIDs(selectedAnswer));
   const selectedControlMapping = joinMappingList(selectedQuestion?.mapped_controls ?? selectedAnswer?.controls);
   const selectedMappingOwner = selectedQuestion?.owner_id ?? "";
@@ -878,7 +878,7 @@ function QuestionnaireDetail({
   const linkedVendorURN = run.vendor_urn ?? "";
   const linkedVendorName = linkedVendor?.name || (linkedVendorURN ? shortEntity(linkedVendorURN) : "");
   const assignmentGap = primaryGapForAssignment(answer);
-  const assignmentSlotID = assignmentGap?.slot_id || firstOpenEvidenceSlotID(answer);
+  const assignmentSlotID = assignmentGap ? assignmentGap.slot_id || "" : firstOpenEvidenceSlotID(answer);
   return (
     <Panel
       title="Answer detail"

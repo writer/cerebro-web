@@ -278,7 +278,7 @@ function QuestionnaireReviewsPanel({ tenantID, vendorURN }: { tenantID: string; 
   const selectedAnswer = primaryAnswerForRun(selectedRun, selectedRow?.questionID);
   const selectedQuestionID = selectedAnswer?.question_id ?? selectedRow?.questionID ?? null;
   const selectedGap = primaryQuestionnaireGap(selectedAnswer);
-  const selectedSlotID = selectedGap?.slot_id || firstOpenQuestionnaireSlotID(selectedAnswer);
+  const selectedSlotID = selectedGap ? selectedGap.slot_id || "" : firstOpenQuestionnaireSlotID(selectedAnswer);
   const queueHref = useMemo(() => {
     const params = new URLSearchParams({ direction: "vendor_review", vendor_urn: vendorURN });
     if (tenantID) params.set("tenant_id", tenantID);
@@ -500,7 +500,7 @@ function QuestionnaireRunDetail({
   const comments = run.comments ?? [];
   const timeline = run.timeline ?? [];
   const assignmentGap = primaryQuestionnaireGap(answer);
-  const assignmentSlotID = assignmentGap?.slot_id || firstOpenQuestionnaireSlotID(answer);
+  const assignmentSlotID = assignmentGap ? assignmentGap.slot_id || "" : firstOpenQuestionnaireSlotID(answer);
 
   return (
     <div className="space-y-5">
