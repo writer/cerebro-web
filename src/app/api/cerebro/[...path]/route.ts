@@ -115,6 +115,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         method: "GET",
         headers: upstreamHeaders,
         cache: "no-store",
+        signal: request.signal,
       });
     } catch (error) {
       const stale = cacheKey ? readCerebroProxyCache(cacheKey, true) : null;
@@ -261,6 +262,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       headers: headersWithTrace(headers, span),
       body,
       cache: "no-store",
+      signal: request.signal,
     });
   } catch (error) {
     return tracedProxyError(error, span);
@@ -344,6 +346,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       headers: headersWithTrace(headers, span),
       body,
       cache: "no-store",
+      signal: request.signal,
     });
   } catch (error) {
     return tracedProxyError(error, span);
@@ -405,6 +408,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       headers: headersWithTrace(headers, span),
       body,
       cache: "no-store",
+      signal: request.signal,
     });
   } catch (error) {
     return tracedProxyError(error, span);
@@ -458,6 +462,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       method: "DELETE",
       headers: headersWithTrace(headers, span),
       cache: "no-store",
+      signal: request.signal,
     });
   } catch (error) {
     return tracedProxyError(error, span);

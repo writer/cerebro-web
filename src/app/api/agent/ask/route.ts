@@ -18,6 +18,7 @@ import {
   normalizeAskError,
   normalizeAskModel,
 } from "@/lib/ask";
+import { ASK_AGENT_FALLBACK_STATUS } from "@/lib/ask-agent-status";
 import { aperioResponseCandidateHint } from "@/lib/aperio-response-candidate-hints";
 import {
   authorizationErrorResponse,
@@ -158,6 +159,27 @@ export async function POST(request: NextRequest) {
           component: "agent-ask-route",
           operation: canRunAgent ? "agent_stream" : "legacy_stream",
         });
+        if (canRunAgent && isAgentStartupConfigurationError(error)) {
+          span.annotate({
+            agent_startup_configuration_fallback: true,
+          });
+          try {
+            await streamLegacyAsk(controller, request, payload, span);
+            streamStatus = "completed";
+          } catch (fallbackError) {
+            streamStatus = "failed";
+            span.captureException(fallbackError, {
+              component: "agent-ask-route",
+              operation: "legacy_stream_after_agent_startup_error",
+            });
+            controller.enqueue(sse("error", normalizeAskError(
+              "agent_fallback_failed",
+              "Ask could not run. Retry the request in a moment.",
+              true,
+            )));
+          }
+          return;
+        }
         controller.enqueue(sse("error", normalizeAskError(
           "agent_exception",
           error instanceof Error ? error.message : "Cerebro agent failed",
@@ -303,18 +325,7 @@ async function streamLegacyAsk(
   payload: NormalizedAgentRequest,
   span: WebSpan,
 ) {
-  const missingAgentConfig = [
-    process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY",
-    getMcpUrl() ? "" : "CEREBRO_MCP_URL",
-  ].filter(Boolean);
-  controller.enqueue(sse("agent_status", {
-    stage: "fallback",
-    label: "Using the existing Ask pipeline",
-    detail: missingAgentConfig.length
-      ? `${missingAgentConfig.join(" and ")} not configured for the MCP agent.`
-      : "Graph Ask is handling this request.",
-    mode: "legacy",
-  }));
+  controller.enqueue(sse("agent_status", ASK_AGENT_FALLBACK_STATUS));
 
   const response = await fetchCerebro(buildCerebroUrl("grc/ask"), {
     method: "POST",
@@ -326,6 +337,7 @@ async function streamLegacyAsk(
     }, span),
     body: JSON.stringify(legacyAskPayload(payload)),
     cache: "no-store",
+    signal: request.signal,
   });
 
   if (!response.ok || !response.body) {
@@ -406,6 +418,11 @@ const legacyAskFailure = (status: number, body: string) => {
     message: body.trim() ? "Graph Ask returned an unexpected error." : `Ask request failed (${status}).`,
     retryable: status >= 500,
   };
+};
+
+const isAgentStartupConfigurationError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /\b(api key|credential|authentication|model provider|not configured|missing configuration)\b/i.test(message);
 };
 
 const getMcpUrl = () => {

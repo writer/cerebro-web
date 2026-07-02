@@ -50,6 +50,9 @@ describe("product UI contract", () => {
     const source = readProjectFile("src/components/Topbar.tsx");
 
     expect(source).toContain("useCurrentUser");
+    expect(source).toContain("topbarRef");
+    expect(source).toContain('event.key === "Escape"');
+    expect(source).toContain('document.addEventListener("pointerdown"');
     expect(source).toContain("identityPosture");
     expect(source).toContain("identity.initials");
     expect(source).toContain("View identity contract");
@@ -118,5 +121,11 @@ describe("product UI contract", () => {
     expect(overviewSource).toContain("dashboardBackedReadiness");
     expect(overviewSource).not.toContain("sampled dashboard values");
     expect(overviewSource).not.toContain("sampled total");
+  });
+
+  it("keeps graph zoom on the Cytoscape default wheel behavior", () => {
+    const graphSource = readProjectFile("src/components/grc/GraphViewer.tsx");
+
+    expect(graphSource).not.toContain("wheelSensitivity");
   });
 });

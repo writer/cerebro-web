@@ -8,7 +8,7 @@ import { cacheGRCMetadata } from "@/lib/grc-metadata-cache";
 
 const GRC_QUERY_CACHE_TTL_MS = 30_000;
 const GRC_QUERY_CACHE_MAX_ENTRIES = 200;
-const DEFAULT_GRC_QUERY_TIMEOUT_MS = 30_000;
+const DEFAULT_GRC_QUERY_TIMEOUT_MS = 12_000;
 const DEFAULT_GRC_FORM_MUTATION_TIMEOUT_MS = 120_000;
 
 export const DASHBOARD_FINDING_LIMIT = 12;
@@ -65,25 +65,30 @@ const withFreshCacheHeaders = (init: RequestInit) => {
   return { ...init, headers };
 };
 
-const abortable = async <T,>(promise: Promise<T>, signal?: AbortSignal) => {
-  if (!signal) {
-    return promise;
-  }
-  if (signal.aborted) {
-    throw new DOMException("Aborted", "AbortError");
-  }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
-  });
-};
+const timedAbortSignal = (parentSignal: AbortSignal | undefined, timeoutMs: number) => {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const abortFromParent = () => controller.abort();
 
-const timeoutPromise = async <T,>(promise: Promise<T>, path: string, timeoutMs: number) =>
-  new Promise<T>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error(grcTimeoutMessage(path, timeoutMs))), timeoutMs);
-    promise.then(resolve, reject).finally(() => window.clearTimeout(timeout));
-  });
+  if (parentSignal?.aborted) {
+    controller.abort();
+  } else {
+    parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    clear: () => {
+      window.clearTimeout(timeout);
+      parentSignal?.removeEventListener("abort", abortFromParent);
+    },
+  };
+};
 
 const durationLabel = (durationMs: number | null | undefined) => {
   if (typeof durationMs !== "number" || !Number.isFinite(durationMs)) return "";
@@ -310,16 +315,19 @@ export function useGRCQuery<T>(path: string | null) {
     setLoading(!hasFreshCache);
     setError(null);
     let response;
+    const request = timedAbortSignal(signal, GRC_QUERY_TIMEOUT_MS);
     try {
-      response = await abortable(timeoutPromise(fetchCachedGRC<T>(path, apiKey, force), path, GRC_QUERY_TIMEOUT_MS), signal);
+      response = await fetchCachedGRC<T>(path, apiKey, force, { signal: request.signal });
     } catch (error) {
       if (signal?.aborted || currentRequestID !== requestID.current) {
         return;
       }
-      setError(error instanceof Error ? error.message : grcResponseErrorMessage(path, 0, null, Math.round(performance.now() - startedAt)));
+      setError(request.timedOut() ? grcTimeoutMessage(path, GRC_QUERY_TIMEOUT_MS) : error instanceof Error ? error.message : grcResponseErrorMessage(path, 0, null, Math.round(performance.now() - startedAt)));
       setLoading(false);
       setDurationMs(Math.round(performance.now() - startedAt));
       return;
+    } finally {
+      request.clear();
     }
     if (currentRequestID !== requestID.current) {
       return;

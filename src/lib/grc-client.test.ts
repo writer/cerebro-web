@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { downloadGRCExport, grcEntityImpactPath, grcExportFilename, grcResponseErrorMessage, grcTimeoutMessage } from "./grc-client";
+import { downloadGRCExport, grcEntityImpactPath, grcExportFilename, GRC_QUERY_TIMEOUT_MS, grcResponseErrorMessage, grcTimeoutMessage } from "./grc-client";
 
 describe("grc client error copy", () => {
   it("includes status, endpoint, elapsed time, and upstream text", () => {
@@ -18,6 +18,13 @@ describe("grc client error copy", () => {
   it("formats client-side timeouts as unavailable API errors", () => {
     expect(grcTimeoutMessage("/grc/evidence", 30_000)).toBe(
       "Cerebro request timed out after 30s for /grc/evidence",
+    );
+  });
+
+  it("keeps default query waits short enough to show recovery state", () => {
+    expect(GRC_QUERY_TIMEOUT_MS).toBe(12_000);
+    expect(grcTimeoutMessage("/grc/control-packets", GRC_QUERY_TIMEOUT_MS)).toBe(
+      "Cerebro request timed out after 12s for /grc/control-packets",
     );
   });
 });

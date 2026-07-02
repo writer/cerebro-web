@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
-import { fetchCachedGRC, grcPath } from "@/lib/grc-client";
+import { fetchCachedGRC, grcPath, grcTimeoutMessage } from "@/lib/grc-client";
 import {
   displayDate,
   GRCDashboard,
@@ -73,6 +73,8 @@ const emptyLoadState: LiveSearchLoadState = {
 };
 
 const LIVE_SEARCH_CACHE_TTL_MS = 60_000;
+export const LIVE_SEARCH_TIMEOUT_MS = 8_000;
+export const LIVE_SEARCH_UNAVAILABLE_COPY = "Live search is unavailable. Page search actions still work.";
 
 const fallbackSharedDashboard: SharedDashboardState = {
   owner: "",
@@ -337,15 +339,25 @@ export function useLiveSearchCommands(query: string, isOpen: boolean) {
       }));
 
       if (!shared.request) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), LIVE_SEARCH_TIMEOUT_MS);
         const request = fetchCachedGRC<GRCDashboard>(
           grcPath("/grc/dashboard", { limit: 100 }),
           requestOwner,
+          false,
+          { signal: controller.signal },
         ).then((response) => {
           if (!response.ok) {
             throw new Error(errorMessage(response.data, response.status));
           }
           return response.data;
+        }).catch((error: unknown) => {
+          if (controller.signal.aborted) {
+            throw new Error(grcTimeoutMessage("/grc/dashboard", LIVE_SEARCH_TIMEOUT_MS));
+          }
+          throw error;
         }).finally(() => {
+          window.clearTimeout(timeout);
           if (shared.request === request) {
             shared.request = null;
           }
@@ -370,7 +382,7 @@ export function useLiveSearchCommands(query: string, isOpen: boolean) {
         setLoadState((current) => ({
           dashboard: current.dashboard,
           loading: false,
-          error: dashboard.message,
+          error: LIVE_SEARCH_UNAVAILABLE_COPY,
           fetchedAt: current.fetchedAt,
         }));
         return;
