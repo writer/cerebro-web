@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useApiKey } from "@/components/providers";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { cacheGRCMetadata } from "@/lib/grc-metadata-cache";
+import { runtimeStateForQuery } from "@/lib/runtime-state";
 
 const GRC_QUERY_CACHE_TTL_MS = 30_000;
 const GRC_QUERY_CACHE_MAX_ENTRIES = 200;
@@ -297,6 +298,7 @@ export function useGRCQuery<T>(path: string | null) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [durationMs, setDurationMs] = useState<number | null>(null);
+  const [lastSuccessfulAt, setLastSuccessfulAt] = useState<number | null>(null);
   const requestID = useRef(0);
 
   const load = useCallback(async (signal?: AbortSignal, force = false) => {
@@ -305,6 +307,7 @@ export function useGRCQuery<T>(path: string | null) {
       setError(null);
       setLoading(false);
       setDurationMs(null);
+      setLastSuccessfulAt(null);
       return;
     }
     const currentRequestID = requestID.current + 1;
@@ -340,6 +343,7 @@ export function useGRCQuery<T>(path: string | null) {
       return;
     }
     setData(response.data);
+    setLastSuccessfulAt(Date.now());
     setLoading(false);
   }, [apiKey, path]);
 
@@ -354,5 +358,12 @@ export function useGRCQuery<T>(path: string | null) {
     };
   }, [load]);
 
-  return { data, error, loading, durationMs, reload };
+  const state = runtimeStateForQuery({
+    data,
+    enabled: Boolean(path),
+    error,
+    loading,
+  });
+
+  return { data, error, loading, durationMs, lastSuccessfulAt, reload, state };
 }

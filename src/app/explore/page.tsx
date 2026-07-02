@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AskAboutLink from "@/components/ask/AskAboutLink";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
-import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
+import { DataStateBanner, EmptyBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import { useApiKey } from "@/components/providers";
 import { GRCEntityImpact, GRCFinding, shortEntity } from "@/lib/grc";
 import { fetchCachedGRC, grcEntityImpactPath, grcPath, grcResponseErrorMessage, grcTimeoutMessage, GRC_QUERY_TIMEOUT_MS, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
@@ -20,7 +20,7 @@ import {
   toGRCGraph,
 } from "@/lib/graph-explore";
 import { useQueryParamState } from "@/lib/query-params";
-import { metricValueForState, runtimeStateForError } from "@/lib/runtime-state";
+import { metricValueForState, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
 
 type FindingsResponse = { findings: GRCFinding[]; generated_at: string };
 
@@ -60,6 +60,7 @@ export default function ExplorePage() {
   const [expandNotice, setExpandNotice] = useState<{ type: "success" | "info"; message: string } | null>(null);
   const [recentlyDiscoveredURNs, setRecentlyDiscoveredURNs] = useState<Set<string>>(new Set());
   const [reloadToken, setReloadToken] = useState(0);
+  const [lastGraphLoadedAt, setLastGraphLoadedAt] = useState<number | null>(null);
   const loadKeyRef = useRef("");
 
   const seedSuggestions = useMemo(() => {
@@ -117,6 +118,7 @@ export default function ExplorePage() {
           return;
         }
         setState(mergeNeighborhood(emptyExploreState(seed), seed, response.data?.graph));
+        setLastGraphLoadedAt(Date.now());
         setRecentlyDiscoveredURNs(new Set(graphNodeURNs(response.data?.graph)));
       } catch (err) {
         if (isCancelled()) return;
@@ -175,6 +177,7 @@ export default function ExplorePage() {
       const discovered = new Set([target, ...graphNodeURNs(response.data?.graph)]);
       setRecentlyDiscoveredURNs(discovered);
       setState(next);
+      setLastGraphLoadedAt(Date.now());
       setExpandNotice({
         type: addedNodes > 0 || addedRelations > 0 ? "success" : "info",
         message: addedNodes > 0 || addedRelations > 0
@@ -226,9 +229,9 @@ export default function ExplorePage() {
   const loadError = fallbackFindings.error || error;
   const runtimeState = runtimeStateForError(loadError);
   const apiUnavailable = runtimeState === "unavailable";
+  const graphDataState: RuntimeState = loading && !graph?.root ? "loading" : loadError && graph?.root ? "stale" : loadError ? runtimeState : "ready";
   const showUnavailableState = Boolean(loadError && apiUnavailable && !graph?.root);
-  const showHardError = Boolean(loadError && !showUnavailableState);
-  const metricState = showUnavailableState ? runtimeState : "ready";
+  const metricState = graphDataState === "stale" ? "ready" : graphDataState;
   const showEmpty = !selectedSeed && !loading && !loadError;
 
   return (
@@ -275,9 +278,14 @@ export default function ExplorePage() {
         <div className="mt-2 text-[12px] text-slate-500">Select a node in the graph, then choose <span className="font-medium text-slate-700">Expand neighbors</span> to grow the view or <span className="font-medium text-slate-700">Remove</span> to prune it.</div>
       </div>
 
-      {loading && <LoadingBlock label="Loading graph..." />}
-      {showUnavailableState && <ErrorBlock error={loadError || "Unable to load graph."} onRetry={retryExplore} recoveryDetail="Graph data will appear when the API is reachable." />}
-      {showHardError && <ErrorBlock error={loadError || "Unable to load graph."} onRetry={retryExplore} />}
+      <DataStateBanner
+        state={graphDataState}
+        subject="Graph data"
+        error={loadError}
+        lastSuccessfulAt={lastGraphLoadedAt ?? fallbackFindings.lastSuccessfulAt}
+        onRetry={retryExplore}
+        detail={graphDataState === "loading" ? "Loading graph data." : showUnavailableState ? "Graph data will appear when the API is reachable." : undefined}
+      />
       {expandNotice && (
         <div className={`rounded-lg border px-4 py-3 text-[13px] ${
           expandNotice.type === "success"

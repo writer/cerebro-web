@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { FileText, GitBranch, Link2, PackageCheck, RefreshCw, Search, ShieldCheck } from "lucide-react";
 
 import DataTable, { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
-import { AppliedFilterChips, ErrorBlock, LoadingBlock, PageHeader, ResultLimitNotice } from "@/components/grc/Primitives";
+import { AppliedFilterChips, DataStateBanner, PageHeader, ResultLimitNotice } from "@/components/grc/Primitives";
 import { evidencePacketMetrics, evidencePacketReadinessLabel, evidenceReviewState } from "@/lib/evidence-packets";
 import { countLabel } from "@/lib/format";
 import type { GRCCollectionSource, GRCControlPosture, GRCEvidence, GRCEvidenceItemRecord, GRCEvidenceLineage, GRCListMeta, GRCEvidencePacketsResponse, GRCEvidenceRequest, GRCQuestionnaireEvidenceAnswer } from "@/lib/grc";
@@ -14,7 +14,7 @@ import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { useGRCFilterState } from "@/lib/grc-filters";
 import { GRC_WORKLIST_LIMIT, grcBoundedRows, grcLoadedRows } from "@/lib/grc-list";
 import { useQueryParamState } from "@/lib/query-params";
-import { metricDetailForState, metricValueForState, runtimeStateDescription, runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
+import { metricDetailForState, metricValueForState, runtimeStateDescription, type RuntimeState } from "@/lib/runtime-state";
 
 type EvidenceResponse = { evidence: GRCEvidence[]; meta?: GRCListMeta; generated_at: string };
 type EvidenceStat = {
@@ -91,13 +91,11 @@ export default function EvidencePage() {
     }) : null,
     [debouncedTenantID, shouldLoadPackaged],
   );
-  const { data, error, loading, reload } = useGRCQuery<EvidenceResponse>(path);
-  const { data: packagedData, error: packagedError, loading: packagedLoading, reload: reloadPackaged } = useGRCQuery<GRCEvidencePacketsResponse>(packagedPath);
-  const isInitialLoading = loading && !data;
+  const { data, error, loading, lastSuccessfulAt, reload, state: queryState } = useGRCQuery<EvidenceResponse>(path);
+  const { data: packagedData, error: packagedError, loading: packagedLoading, lastSuccessfulAt: packagedLastSuccessfulAt, reload: reloadPackaged, state: packagedQueryState } = useGRCQuery<GRCEvidencePacketsResponse>(packagedPath);
   const isRefreshing = loading && Boolean(data);
-  const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
-  const packagedMetricState: RuntimeState = !shouldLoadPackaged ? "empty" : packagedError ? runtimeStateForError(packagedError) : packagedLoading && !packagedData ? "loading" : "ready";
+  const metricState: RuntimeState = queryState === "stale" ? "ready" : queryState === "empty" ? "ready" : queryState;
+  const packagedMetricState: RuntimeState = packagedQueryState === "stale" ? "ready" : packagedQueryState;
   const boundedEvidence = useMemo(
     () => grcBoundedRows({ rows: data?.evidence, limit: GRC_WORKLIST_LIMIT, meta: data?.meta }),
     [data?.evidence, data?.meta],
@@ -345,6 +343,14 @@ export default function EvidencePage() {
             </button>
           </div>
           <EvidenceWorkflowStats blockedLabel="Package records did not load." stats={workflowStats} pendingLabel="Loading package records..." />
+          <DataStateBanner
+            state={packagedQueryState}
+            subject="Package records"
+            error={packagedError}
+            lastSuccessfulAt={packagedLastSuccessfulAt}
+            onRetry={() => void reloadPackaged()}
+            detail={packagedQueryState === "loading" ? "Loading package records." : packagedQueryState === "unavailable" ? "Package records will appear when graph data is reachable." : undefined}
+          />
           {packagedError && <p className="text-[13px] text-[var(--text-muted)]">{packagedData ? "Showing the last loaded packaged evidence records; refresh will update when the endpoint is reachable." : "Packaged evidence records will appear when this endpoint is available."}</p>}
           {packagedData && (
             <div className="grid gap-4 xl:grid-cols-2">
@@ -437,10 +443,18 @@ export default function EvidencePage() {
         </section>
       )}
 
-      {activeSection === "register" && isInitialLoading && <LoadingBlock label="Loading evidence..." />}
-      {activeSection === "register" && error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Evidence will appear when the API is reachable." />}
+      {activeSection === "register" && (
+        <DataStateBanner
+          state={queryState}
+          subject="Evidence"
+          error={error}
+          lastSuccessfulAt={lastSuccessfulAt}
+          onRetry={() => void reload()}
+          detail={queryState === "loading" ? "Loading evidence." : queryState === "unavailable" ? "Evidence will appear when graph data is reachable." : undefined}
+        />
+      )}
 
-      {activeSection === "register" && data && !error && (
+      {activeSection === "register" && data && (
         <section className="overflow-hidden rounded-lg border border-[color:var(--border)] bg-[var(--surface)]">
           <div className="grid xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="min-w-0">

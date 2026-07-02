@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Check, Settings2, Share2, UsersRound } from "lucide-react";
 
 import { API_BASE } from "@/lib/api";
@@ -14,6 +14,7 @@ import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 import { buildNotifications, notificationSignatures, reportRunNotifications, unreadNotifications, type NotificationIntent } from "@/lib/notifications";
 import { authorizationRoleLabelsForUser, effectiveAuthorizationPermissionsForUser } from "@/lib/rbac";
 import type { ReportRunListResponse } from "@/lib/report-schedules";
+import { usePopoverDismissal } from "@/lib/use-popover-dismissal";
 import { HOME_SECTION_IDS, HOME_SECTION_LABELS, userPreferencesShareURL, type DisplayDensity, type ThemePreference, type UserPreferences } from "@/lib/user-preferences";
 
 type ConsoleConfig = {
@@ -194,32 +195,12 @@ export default function Topbar() {
   const hasDangerUnread = unread.some((notification) => notification.intent === "danger");
   const markAllNotificationsRead = () => persistReadSignatures(notificationSignatures(notifications));
   const popoverOpen = showConnection || showIdentity || showNotifications;
-
-  useEffect(() => {
-    if (!popoverOpen) return;
-    const closePopovers = () => {
-      setShowConnection(false);
-      setShowIdentity(false);
-      setShowNotifications(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closePopovers();
-      }
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && !topbarRef.current?.contains(target)) {
-        closePopovers();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [popoverOpen]);
+  const closePopovers = useCallback(() => {
+    setShowConnection(false);
+    setShowIdentity(false);
+    setShowNotifications(false);
+  }, []);
+  usePopoverDismissal({ containerRef: topbarRef, enabled: popoverOpen, onDismiss: closePopovers });
 
   return (
     <header ref={topbarRef} className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">

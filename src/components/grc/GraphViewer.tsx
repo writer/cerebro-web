@@ -367,6 +367,30 @@ const withQueryParams = (path: string, params: Record<string, string | undefined
   return queryString ? `${path}?${queryString}` : path;
 };
 
+export const graphHiddenScopeCopy = ({
+  filteredEdges,
+  filteredNodes,
+  hiddenEdges,
+  hiddenNodes,
+}: {
+  filteredEdges: number;
+  filteredNodes: number;
+  hiddenEdges: number;
+  hiddenNodes: number;
+}) => {
+  const copy: string[] = [];
+  if (hiddenNodes > 0) {
+    copy.push(`${hiddenNodes} node${hiddenNodes === 1 ? "" : "s"} hidden by cap`);
+  }
+  if (hiddenEdges > 0) {
+    copy.push(`${hiddenEdges} edge${hiddenEdges === 1 ? "" : "s"} hidden by cap`);
+  }
+  if (filteredNodes > 0 || filteredEdges > 0) {
+    copy.push(`${filteredNodes} node${filteredNodes === 1 ? "" : "s"} and ${filteredEdges} edge${filteredEdges === 1 ? "" : "s"} hidden by filters`);
+  }
+  return copy;
+};
+
 export type GraphViewerProps = {
   graph?: GRCGraph;
   onExpandNode?: (urn: string) => void;
@@ -616,6 +640,12 @@ export default function GraphViewer({
   const fitGraph = () => {
     if (cyRef.current) fitGraphViewport(cyRef.current);
   };
+  const hiddenScopeCopy = graphHiddenScopeCopy({
+    filteredEdges: view.filteredEdges,
+    filteredNodes: view.filteredNodes,
+    hiddenEdges: model.hiddenEdges,
+    hiddenNodes: model.hiddenNodes,
+  });
 
   return (
     <div className="surface-panel overflow-hidden">
@@ -623,9 +653,11 @@ export default function GraphViewer({
         <span className="font-semibold text-[var(--text-primary)]">{view.nodes.length} of {model.totalNodes} nodes</span>
         <span className="text-[var(--text-muted)]">{view.edges.length} of {model.totalEdges} edges</span>
         <span className="text-[var(--text-muted)]">Root: <span className="font-semibold text-[var(--primary)]">{graph.root.label}</span></span>
-        {model.hiddenNodes > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">{model.hiddenNodes} hidden by cap</span>}
-        {model.hiddenEdges > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">{model.hiddenEdges} hidden edges</span>}
-        {(view.filteredNodes > 0 || view.filteredEdges > 0) && <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[var(--text-muted)]">{view.filteredNodes} filtered</span>}
+        {hiddenScopeCopy.map((copy) => (
+          <span key={copy} className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">
+            {copy}
+          </span>
+        ))}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {model.typeCounts.map(([type, count]) => (
             <span key={type} className="rounded-full border border-[color:var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[var(--text-muted)]">
@@ -636,7 +668,7 @@ export default function GraphViewer({
       </div>
 
       <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0">
+        <div className="min-w-0 overflow-x-auto">
           <div className="flex flex-wrap gap-2 border-b border-[color:var(--border)] px-4 py-3">
             <input
               value={query}
@@ -667,7 +699,7 @@ export default function GraphViewer({
           </div>
           <div
             ref={containerRef}
-            className="h-[640px] min-w-[820px] bg-[var(--surface)]"
+            className="h-[640px] min-w-[640px] bg-[var(--surface)]"
             role="img"
             aria-label={`Impact graph with ${view.nodes.length} nodes and ${view.edges.length} edges`}
           />

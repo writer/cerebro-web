@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
-import { AppliedFilterChips, ErrorBlock, LoadingBlock, MetricCard, PageHeader, ResultLimitNotice, RiskBadge } from "@/components/grc/Primitives";
+import { AppliedFilterChips, DataStateBanner, MetricCard, PageHeader, ResultLimitNotice, RiskBadge } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { countLabel } from "@/lib/format";
 import { filterRiskInboxFindings } from "@/lib/findings-filter";
@@ -15,7 +15,7 @@ import { GRC_FILTERED_EXPORT_LIMIT, GRC_WORKLIST_LIMIT, grcBoundedRows } from "@
 import { useApiKey } from "@/components/providers";
 import { frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
-import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
+import type { RuntimeState } from "@/lib/runtime-state";
 
 type FindingsResponse = { findings: GRCFinding[]; meta?: GRCListMeta; generated_at: string };
 
@@ -64,11 +64,10 @@ export default function RiskInboxPage() {
     () => grcPath("/grc/findings", { ...findingRequestParams, limit: RISK_INBOX_LIST_LIMIT }),
     [findingRequestParams],
   );
-  const { data, error, loading, reload } = useGRCQuery<FindingsResponse>(path);
+  const { data, error, lastSuccessfulAt, reload, state: queryState } = useGRCQuery<FindingsResponse>(path);
   const { apiKey } = useApiKey();
   const [exportState, setExportState] = useState<"idle" | "working" | "failed">("idle");
-  const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : loading && !data ? "loading" : "ready";
+  const metricState: RuntimeState = queryState === "stale" ? "ready" : queryState === "empty" ? "ready" : queryState;
   const boundedFindingRows = useMemo(
     () => grcBoundedRows({ rows: data?.findings, limit: RISK_INBOX_LIST_LIMIT, meta: data?.meta }),
     [data?.findings, data?.meta],
@@ -266,9 +265,15 @@ export default function RiskInboxPage() {
         </div>
       )}
 
-      {loading && <LoadingBlock label="Loading findings..." />}
-      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Findings will appear when the API is reachable." />}
-      {!loading && !error && (
+      <DataStateBanner
+        state={queryState}
+        subject="Findings"
+        error={error}
+        lastSuccessfulAt={lastSuccessfulAt}
+        onRetry={() => void reload()}
+        detail={queryState === "loading" ? "Loading findings." : queryState === "unavailable" ? "Findings will appear when graph data is reachable." : undefined}
+      />
+      {data && (
         <div>
           {selectedCount > 0 && (
             <div className="sticky top-2 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5">

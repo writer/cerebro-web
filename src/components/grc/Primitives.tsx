@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
 import type { GRCFinding, GRCListMeta } from "@/lib/grc";
 
-import { API_BASE } from "@/lib/api";
 import { productErrorCopy } from "@/lib/cerebro-errors";
 import { humanize, riskLevelFromScore } from "@/lib/grc";
 import { grcLoadedRowsCopy } from "@/lib/grc-list";
@@ -15,13 +13,9 @@ import {
   metricValueForState,
   runtimeStateDescription,
   runtimeStateForError,
-  runtimeStateLabel,
+  runtimeStateTimestamp,
   type RuntimeState,
 } from "@/lib/runtime-state";
-
-type ConsoleConfig = {
-  apiBase: string;
-};
 
 export function Badge({ value, tone = "status" }: { value: string; tone?: "severity" | "status" }) {
   const className = badgeClassFor(value, tone);
@@ -299,6 +293,100 @@ export function LoadingBlock({ label = "Loading..." }: { label?: string }) {
   );
 }
 
+export function DataStateBanner({
+  className = "",
+  detail,
+  error,
+  lastSuccessfulAt,
+  onRetry,
+  state,
+  subject = "Graph data",
+}: {
+  className?: string;
+  detail?: string;
+  error?: string | null;
+  lastSuccessfulAt?: number | null;
+  onRetry?: () => void;
+  state: RuntimeState;
+  subject?: string;
+}) {
+  if (state === "ready" || state === "empty") return null;
+
+  const lastLoaded = runtimeStateTimestamp(lastSuccessfulAt);
+  const stateCopy: Record<RuntimeState, { label: string; description: string }> = {
+    empty: { label: "No data", description: "No matching records were found." },
+    error: { label: `Unable to load ${subject.toLowerCase()}`, description: detail || productErrorCopy(error, "This view could not load.") },
+    loading: { label: `Loading ${subject.toLowerCase()}`, description: detail || "Fetching the latest records for this view." },
+    partial: { label: `${subject} partially loaded`, description: detail || "Some records loaded, but one or more backing checks did not complete." },
+    "permission-denied": { label: `${subject} access unavailable`, description: detail || runtimeStateDescription("permission-denied") },
+    ready: { label: "Ready", description: "Data is current for this view." },
+    stale: {
+      label: `${subject} did not refresh`,
+      description: detail || (lastLoaded ? `Showing last loaded results from ${lastLoaded}.` : runtimeStateDescription("stale")),
+    },
+    unavailable: { label: `${subject} unavailable`, description: detail || runtimeStateDescription("unavailable") },
+  };
+  const toneClasses: Record<RuntimeState, string> = {
+    empty: "border-[color:var(--border)] bg-[var(--surface-muted)] text-[var(--text-muted)]",
+    error: "border-red-200 bg-red-50 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-100",
+    loading: "border-[color:var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)]",
+    partial: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
+    "permission-denied": "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
+    ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    stale: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
+    unavailable: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
+  };
+  const showHealth = state !== "loading";
+  const copy = stateCopy[state];
+
+  return (
+    <div data-grc-data-state={state} className={`rounded-lg border px-4 py-3 text-[13px] ${toneClasses[state]} ${className}`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true">
+            {state === "loading" ? (
+              <>
+                <circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" />
+                <path className="opacity-75" strokeLinecap="round" strokeLinejoin="round" d="M12 3a9 9 0 0 1 9 9" />
+              </>
+            ) : state === "permission-denied" ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5A2.25 2.25 0 0 0 19.5 19.5v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            )}
+          </svg>
+          <div className="min-w-0">
+            <div className="font-semibold">{copy.label}</div>
+            <div className="mt-1 leading-5 opacity-85">{copy.description}</div>
+            {lastLoaded && state !== "stale" && (
+              <div className="mt-2 text-[12px] opacity-75">Last loaded {lastLoaded}</div>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {onRetry && state !== "loading" && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 rounded-md border border-current/25 bg-white/80 px-3 py-1.5 text-[12px] font-medium transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15"
+            >
+              Retry
+            </button>
+          )}
+          {showHealth && (
+            <Link
+              href="/developer#quick-status"
+              className="inline-flex items-center gap-1.5 rounded-md border border-current/25 bg-white/80 px-3 py-1.5 text-[12px] font-medium transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15"
+            >
+              Health
+            </Link>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RuntimeRecoveryBlock({
   detail,
   onRetry,
@@ -308,79 +396,7 @@ export function RuntimeRecoveryBlock({
   onRetry?: () => void;
   state: RuntimeState;
 }) {
-  const [apiBase, setApiBase] = useState(API_BASE);
-  const checkedAt = useState(() => new Date())[0];
-  const apiUnavailable = state === "unavailable";
-
-  useEffect(() => {
-    if (!apiUnavailable) return;
-    let mounted = true;
-    const loadConfig = async () => {
-      try {
-        const response = await fetch("/api/config", { cache: "no-store" });
-        if (!response.ok) return;
-        const config = (await response.json()) as ConsoleConfig;
-        if (mounted && config.apiBase) setApiBase(config.apiBase);
-      } catch {
-        return;
-      }
-    };
-    void loadConfig();
-    return () => { mounted = false; };
-  }, [apiUnavailable]);
-
-  return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 gap-3">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true">
-            {state === "permission-denied" ? (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5A2.25 2.25 0 0 0 19.5 19.5v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-            )}
-          </svg>
-          <div className="min-w-0">
-            <div className="font-semibold">{runtimeStateLabel(state)}</div>
-            <div className="mt-1 leading-5 text-amber-900/80 dark:text-amber-100/80">{runtimeStateDescription(state, detail)}</div>
-            <div className="mt-3 grid gap-2 text-[12px] text-amber-900/75 dark:text-amber-100/75 md:grid-cols-[auto_minmax(0,1fr)]">
-              <span>Last checked</span>
-              <span className="font-mono">{checkedAt.toLocaleTimeString()}</span>
-              {apiUnavailable && (
-                <>
-                  <span>API base</span>
-                  <span className="break-all font-mono">{apiBase}</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {onRetry && (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-950 transition hover:border-amber-400 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50 dark:hover:bg-amber-500/20"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M20.49 9.023A8.25 8.25 0 1 0 21.75 13.5" />
-              </svg>
-              Retry
-            </button>
-          )}
-          <Link
-            href="/developer#quick-status"
-            className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-950 transition hover:border-amber-400 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50 dark:hover:bg-amber-500/20"
-          >
-            Health
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H18m0 0v4.5M18 6l-7.5 7.5M6 8.25v9A1.75 1.75 0 0 0 7.75 19h8.5A1.75 1.75 0 0 0 18 17.25v-3" />
-            </svg>
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+  return <DataStateBanner state={state} onRetry={onRetry} detail={detail} />;
 }
 
 export function ErrorBlock({

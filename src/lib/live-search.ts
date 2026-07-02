@@ -74,7 +74,7 @@ const emptyLoadState: LiveSearchLoadState = {
 
 const LIVE_SEARCH_CACHE_TTL_MS = 60_000;
 export const LIVE_SEARCH_TIMEOUT_MS = 8_000;
-export const LIVE_SEARCH_UNAVAILABLE_COPY = "Live search is unavailable. Page search actions still work.";
+export const LIVE_SEARCH_UNAVAILABLE_COPY = "Page actions are ready. Live search is unavailable.";
 
 const fallbackSharedDashboard: SharedDashboardState = {
   owner: "",
