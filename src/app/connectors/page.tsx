@@ -18,6 +18,7 @@ import {
 
 import { AppliedFilterChips, Badge, EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice } from "@/components/grc/Primitives";
 import { extractRecords, withQuery } from "@/lib/cerebro-data";
+import { useConnectorLibraryQuery } from "@/lib/connector-library-query";
 import { useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { grcBoundedRows } from "@/lib/grc-list";
 import { displayDate, shortEntity } from "@/lib/grc";
@@ -26,7 +27,6 @@ import {
   ConnectorCatalogEntry,
   ConnectorDefinition,
   ConnectorDefinitionListResponse,
-  ConnectorLibraryResponse,
   connectorDefinitionBlockingChecks,
   connectorDefinitionStatus,
   connectorDefinitionValidationLabel,
@@ -664,7 +664,7 @@ export default function ConnectorsPage() {
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
+  const libraryQuery = useConnectorLibraryQuery({ tenantID: debouncedTenantID, view: "full" });
   const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: debouncedTenantID }));
 
   const boundedSourceRuntimeRows = useMemo(

@@ -33,8 +33,18 @@ export type ConnectorCatalogEntry = {
   request_access_action?: string;
 };
 
+export type ConnectorLibraryPage = {
+  total?: number;
+  returned?: number;
+  limit?: number;
+  has_more?: boolean;
+  next_cursor?: string;
+};
+
 export type ConnectorLibraryResponse = {
   connectors?: ConnectorCatalogEntry[];
+  view?: string;
+  page?: ConnectorLibraryPage;
   generated_at?: string;
   tenant_id?: string;
   runtime_store?: string;
