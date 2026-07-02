@@ -16,7 +16,7 @@ describe("GitHub Actions runtime pins", () => {
       "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0",
     );
     expect(workflowText).toContain(
-      "actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0",
+      "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0",
     );
     expect(workflowText).not.toContain("actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020");
     expect(workflowText).not.toContain("actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff");
