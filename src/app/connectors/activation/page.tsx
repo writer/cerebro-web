@@ -772,7 +772,7 @@ function SourceReadinessContent() {
       setTenantID(responseTenantID);
     }
   }, [definitionsQuery.data?.tenant_id, scopedTenantID, selectedDefinition?.tenant_id, setTenantID]);
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID, limit: GRC_WORKLIST_LIMIT }));
+  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID, view: "full", limit: GRC_WORKLIST_LIMIT }));
   const detailQuery = useGRCQuery<ConnectorDetailResponse>(
     selectedDefinition?.source_id ? withQuery(`/connectors/${encodeURIComponent(selectedDefinition.source_id)}`, { tenant_id: scopedTenantID }) : null,
   );

@@ -254,7 +254,7 @@ function ConnectorBuilderContent() {
   const draft = draftOverride ?? loadedDefinition ?? defaultDraft;
   const scopedTenantID = draft.tenant_id.trim();
   const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(scopedTenantID ? withQuery("/connector-definitions", { tenant_id: scopedTenantID }) : null);
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID }));
+  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: scopedTenantID, view: "full", limit: 1 }));
   const definitions = useMemo(() => definitionsQuery.data?.definitions ?? [], [definitionsQuery.data?.definitions]);
   const credentialStores = normalizeCredentialStores(libraryQuery.data ?? undefined);
   const availableStores = credentialStores.filter((store) => store.available);

@@ -610,7 +610,7 @@ export function ConnectorDetailContent({ setupOnly = false }: { setupOnly?: bool
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
 
   const detailQuery = useGRCQuery<ConnectorDetailResponse>(withQuery(`/connectors/${encodeURIComponent(sourceID)}`, { tenant_id: debouncedTenantID, limit: GRC_DETAIL_LIMIT }));
-  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID }));
+  const libraryQuery = useGRCQuery<ConnectorLibraryResponse>(withQuery("/connectors", { tenant_id: debouncedTenantID, view: "full", limit: 1 }));
 
   const credentialStores = useMemo(() => normalizeCredentialStores(libraryQuery.data), [libraryQuery.data]);
   const connector = detailQuery.data?.connector;
