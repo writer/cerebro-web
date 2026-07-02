@@ -170,7 +170,7 @@ export default function CommandPalette() {
         {query.trim().length >= 2 && (
           <div className="border-t border-[color:var(--border)] px-4 py-2 text-[12px] text-[var(--text-muted)]">
             {liveSearch.loading && "Searching live data..."}
-            {!liveSearch.loading && liveSearch.error && `Live search unavailable: ${liveSearch.error}`}
+            {!liveSearch.loading && liveSearch.error && liveSearch.error}
             {!liveSearch.loading && !liveSearch.error && liveSearch.searched && `${liveSearch.commands.length} live result${liveSearch.commands.length === 1 ? "" : "s"}`}
           </div>
         )}

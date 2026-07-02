@@ -534,7 +534,6 @@ export default function GraphViewer({
       style: graphStyles(cytoscapeColors()),
       minZoom: 0.18,
       maxZoom: 3,
-      wheelSensitivity: 0.18,
       boxSelectionEnabled: true,
       autoungrabify: false,
     });

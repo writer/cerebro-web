@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Check, Settings2, Share2, UsersRound } from "lucide-react";
 
 import { API_BASE } from "@/lib/api";
@@ -50,6 +50,7 @@ const intentDotClass = (intent: NotificationIntent) =>
 type ShareStatus = "idle" | "ready" | "copied" | "failed";
 
 export default function Topbar() {
+  const topbarRef = useRef<HTMLElement>(null);
   const { apiKey, setApiKey } = useApiKey();
   const { openCommandPalette } = useCommandPalette();
   const { error: userError, loading: userLoading, user } = useCurrentUser();
@@ -192,9 +193,36 @@ export default function Topbar() {
   const unreadCount = unread.length;
   const hasDangerUnread = unread.some((notification) => notification.intent === "danger");
   const markAllNotificationsRead = () => persistReadSignatures(notificationSignatures(notifications));
+  const popoverOpen = showConnection || showIdentity || showNotifications;
+
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const closePopovers = () => {
+      setShowConnection(false);
+      setShowIdentity(false);
+      setShowNotifications(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePopovers();
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !topbarRef.current?.contains(target)) {
+        closePopovers();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [popoverOpen]);
 
   return (
-    <header className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
+    <header ref={topbarRef} className="relative flex h-16 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[var(--surface)] px-6 max-md:px-3">
       <div className="min-w-[180px] max-md:hidden" />
 
       <div className="w-[min(28rem,20vw)] min-w-[180px] max-md:min-w-0 max-md:flex-1">

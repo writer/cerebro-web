@@ -100,6 +100,26 @@ describe("cerebro proxy cache headers", () => {
     expect(output).not.toContain("Bearer secret-token");
     expect(output).not.toContain(`${queryKey}=secret`);
   });
+
+  it("aborts upstream fetches when the caller signal aborts", async () => {
+    let upstreamSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (_target: URL | RequestInfo, init?: RequestInit) => {
+      upstreamSignal = init?.signal;
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    }));
+    const caller = new AbortController();
+    const request = fetchCerebro(new URL("https://api.example.com/grc/findings"), {
+      signal: caller.signal,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    caller.abort();
+
+    await expect(request).rejects.toThrow("Cerebro API request timed out");
+    expect(upstreamSignal?.aborted).toBe(true);
+  });
 });
 
 const captureStderr = async (fn: () => Promise<void>) => {

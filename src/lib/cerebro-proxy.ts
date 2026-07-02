@@ -254,6 +254,13 @@ export const fetchCerebro = async (target: URL, init: RequestInit = {}) => {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
+    const parentSignal = init.signal;
+    const abortFromParent = () => controller.abort();
+    if (parentSignal?.aborted) {
+      controller.abort();
+    } else {
+      parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+    }
     const timeout = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
 
     try {
@@ -306,6 +313,7 @@ export const fetchCerebro = async (target: URL, init: RequestInit = {}) => {
       });
       throw proxyError;
     } finally {
+      parentSignal?.removeEventListener("abort", abortFromParent);
       clearTimeout(timeout);
     }
   }
