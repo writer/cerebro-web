@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, type ReactNode } from "react";
 
 import { useApiKey, useUserPreferences } from "@/components/providers";
-import { AttentionBanner, ErrorBlock, LoadingBlock, PageHeader, RiskBadge } from "@/components/grc/Primitives";
+import { AttentionBanner, DataStateBanner, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import {
   displayDate,
@@ -558,8 +558,14 @@ export default function Home() {
         }
       />
 
-      {dashboard.loading && <LoadingBlock label="Loading risks, controls, evidence, and sources..." />}
-      {dashboard.error && <ErrorBlock error={dashboard.error} onRetry={() => void dashboard.reload()} recoveryDetail="Risk, evidence, and source health will appear when the API is reachable." />}
+      <DataStateBanner
+        state={dashboard.state}
+        subject="Graph data"
+        error={dashboard.error}
+        lastSuccessfulAt={dashboard.lastSuccessfulAt}
+        onRetry={() => void dashboard.reload()}
+        detail={dashboard.state === "loading" ? "Loading risks, controls, evidence, and sources." : undefined}
+      />
 
       {data && summary && homeMetrics && (
         <>

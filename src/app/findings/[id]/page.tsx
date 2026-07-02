@@ -8,7 +8,7 @@ import AskAboutLink from "@/components/ask/AskAboutLink";
 import { CoverageMetadata } from "@/components/connectors/CoverageMetadata";
 import { useApiKey } from "@/components/providers";
 import GraphViewer from "@/components/grc/LazyGraphViewer";
-import { Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel, ResultLimitNotice, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
+import { Badge, DataStateBanner, MetricCard, PageHeader, Panel, ResultLimitNotice, RiskBadge, RiskBreakdown, SeverityDot } from "@/components/grc/Primitives";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { aperioResponseActionCandidates, aperioResponseOwner } from "@/lib/aperio-response-actions";
 import { pluralize } from "@/lib/format";
@@ -497,7 +497,7 @@ export default function FindingDetailPage() {
   const [resolveReason, setResolveReason] = useState("");
   const [suppressReason, setSuppressReason] = useState("");
 
-  const { data, error, loading, reload } = useGRCQuery<GRCAuditPacket>(
+  const { data, error, lastSuccessfulAt, reload, state: queryState } = useGRCQuery<GRCAuditPacket>(
     findingID ? grcPath(`/grc/audit-packets/${encodeURIComponent(findingID)}`, { limit: GRC_DETAIL_LIMIT }) : null,
   );
 
@@ -693,8 +693,14 @@ export default function FindingDetailPage() {
         }
       />
 
-      {loading && <LoadingBlock label="Loading finding..." />}
-      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Finding details will appear when the API is reachable." />}
+      <DataStateBanner
+        state={queryState}
+        subject="Finding details"
+        error={error}
+        lastSuccessfulAt={lastSuccessfulAt}
+        onRetry={() => void reload()}
+        detail={queryState === "loading" ? "Loading finding details." : queryState === "unavailable" ? "Finding details will appear when graph data is reachable." : undefined}
+      />
 
       {finding && (
         <>

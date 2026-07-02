@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/grc/Primitives";
 import AskInput from "@/components/ask/AskInput";
 import AskThread from "@/components/ask/AskThread";
 import SavedQuestions, { type SavedQuestionDraft } from "@/components/ask/SavedQuestions";
+import type { AskAgentReadiness } from "@/lib/ask-agent-status";
 import {
   type AskHistoryEntry,
   type AskRequest,
@@ -40,6 +41,8 @@ function AskPageInner() {
   const searchParams = useSearchParams();
   const [turns, setTurns] = useState<AskTurnState[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+  const [readiness, setReadiness] = useState<AskAgentReadiness | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const autoFiredRef = useRef(false);
 
@@ -159,6 +162,28 @@ function AskPageInner() {
     useGRCMutation();
   const [saveDraft, setSaveDraft] = useState<SavedQuestionDraft | null>(null);
   const savedQueries = savedQueriesQuery.data?.queries ?? [];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadReadiness = async () => {
+      setReadinessLoading(true);
+      try {
+        const response = await fetch("/api/agent/ask/status", { cache: "no-store", signal: controller.signal });
+        if (!response.ok) return;
+        setReadiness(await response.json() as AskAgentReadiness);
+      } catch {
+        if (!controller.signal.aborted) {
+          setReadiness(null);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setReadinessLoading(false);
+        }
+      }
+    };
+    void loadReadiness();
+    return () => controller.abort();
+  }, []);
 
   const requestSaveQuestion = useCallback(
     (input: SavedQuestionDraft) => {
@@ -282,6 +307,8 @@ function AskPageInner() {
         disabled={Boolean(activeTurnId)}
         initialScopeUrn={seededScope}
         onSaveQuestion={requestSaveQuestion}
+        readiness={readiness}
+        readinessLoading={readinessLoading}
       />
 
       <SavedQuestions

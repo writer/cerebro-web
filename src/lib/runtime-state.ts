@@ -52,6 +52,7 @@ export const runtimeStateCopy: Record<RuntimeState, RuntimeStateCopy> = {
     tone: "warning",
   },
   stale: {
+    actionLabel: "Retry",
     description: "The latest data could not be refreshed.",
     label: "Stale data",
     tone: "warning",
@@ -68,6 +69,31 @@ export function runtimeStateForError(error: string | null | undefined): RuntimeS
   if (isApiUnavailableError(error)) return "unavailable";
   if (/\b(401|403|unauthorized|forbidden|permission)\b/i.test(error)) return "permission-denied";
   return "error";
+}
+
+export function runtimeStateForQuery({
+  data,
+  enabled = true,
+  error,
+  loading,
+}: {
+  data: unknown;
+  enabled?: boolean;
+  error?: string | null;
+  loading?: boolean;
+}): RuntimeState {
+  if (!enabled) return "empty";
+  const hasData = data !== null && data !== undefined;
+  if (loading && !hasData) return "loading";
+  if (error && hasData) return "stale";
+  if (error) return runtimeStateForError(error);
+  if (hasData) return "ready";
+  return loading ? "loading" : "empty";
+}
+
+export function runtimeStateTimestamp(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  return new Date(value).toLocaleTimeString();
 }
 
 export function runtimeStateLabel(state: RuntimeState) {

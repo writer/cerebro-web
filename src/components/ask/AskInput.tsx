@@ -2,6 +2,7 @@
 
 import { type FormEvent, type KeyboardEvent, useState } from "react";
 
+import type { AskAgentReadiness } from "@/lib/ask-agent-status";
 import { askModelOptions, defaultAskModel } from "@/lib/ask";
 
 type Props = {
@@ -9,6 +10,8 @@ type Props = {
   disabled?: boolean;
   initialScopeUrn?: string;
   onSaveQuestion?: (input: { question: string; model: string; tenantId: string; scopeUrn: string }) => void;
+  readiness?: AskAgentReadiness | null;
+  readinessLoading?: boolean;
 };
 
 export default function AskInput({
@@ -16,6 +19,8 @@ export default function AskInput({
   disabled = false,
   initialScopeUrn = "",
   onSaveQuestion,
+  readiness,
+  readinessLoading = false,
 }: Props) {
   const [question, setQuestion] = useState("");
   const [model, setModel] = useState(defaultAskModel);
@@ -48,18 +53,26 @@ export default function AskInput({
 
   return (
     <form onSubmit={onFormSubmit} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Ask a question</div>
           <p className="mt-1 text-[13px] text-slate-500">
             Use a concrete risk, owner, evidence item, source, or affected asset.
           </p>
         </div>
-        {disabled && (
-          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
-            Generating
-          </span>
-        )}
+        <div className="flex flex-col items-end gap-2 text-right">
+          {disabled && (
+            <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+              Generating
+            </span>
+          )}
+          <div className="max-w-sm rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[12px] text-slate-600">
+            <div className="font-semibold text-slate-800">
+              {readinessLoading ? "Checking Ask path" : readiness?.label ?? "Ask path unavailable"}
+            </div>
+            <div className="mt-0.5">{readinessLoading ? "Checking which path will handle the next question." : readiness?.detail ?? "Retry after the Ask status check completes."}</div>
+          </div>
+        </div>
       </div>
       <textarea
         value={question}
@@ -67,38 +80,38 @@ export default function AskInput({
         onKeyDown={onKeyDown}
         rows={3}
         disabled={disabled}
-            placeholder="Which risks changed? Who owns them? Which evidence is missing?"
+        placeholder="Which risks changed? Who owns them? Which evidence is missing?"
         className="mt-3 w-full resize-none border-0 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
       />
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-slate-500">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <label className="flex min-w-0 items-center gap-2 text-slate-500 max-sm:w-full max-sm:flex-col max-sm:items-start">
             <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Tenant</span>
             <input
               value={tenantId}
               onChange={(event) => setTenantId(event.target.value)}
               placeholder="writer"
               disabled={disabled}
-              className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 disabled:opacity-60"
+              className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 disabled:opacity-60 max-sm:w-full"
             />
           </label>
-          <label className="flex items-center gap-2 text-slate-500">
+          <label className="flex min-w-0 items-center gap-2 text-slate-500 max-sm:w-full max-sm:flex-col max-sm:items-start">
             <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Scope URN</span>
             <input
               value={scopeUrn}
               onChange={(event) => setScopeUrn(event.target.value)}
               placeholder="urn:cerebro:..."
               disabled={disabled}
-              className="w-72 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 disabled:opacity-60"
+              className="w-72 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400/30 disabled:opacity-60 max-sm:w-full"
             />
           </label>
-          <label className="flex items-center gap-2 text-slate-500">
+          <label className="flex min-w-0 items-center gap-2 text-slate-500 max-sm:w-full max-sm:flex-col max-sm:items-start">
             <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Model</span>
             <select
               value={model}
               onChange={(event) => setModel(event.target.value)}
               disabled={disabled}
-              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 disabled:opacity-60"
+              className="max-w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 disabled:opacity-60 max-sm:w-full"
             >
               {askModelOptions.map((option) => (
                 <option key={option.id} value={option.id}>

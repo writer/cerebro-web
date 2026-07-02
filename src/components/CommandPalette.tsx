@@ -88,7 +88,7 @@ export default function CommandPalette() {
     const orderedNavigation = filtered
       .slice()
       .sort((left, right) => left.label.localeCompare(right.label));
-    return [...liveSearch.commands, ...generated, ...orderedNavigation];
+    return [...generated, ...orderedNavigation, ...liveSearch.commands];
   }, [askGraph, liveSearch.commands, query]);
 
   useEffect(() => {
@@ -169,7 +169,7 @@ export default function CommandPalette() {
 
         {query.trim().length >= 2 && (
           <div className="border-t border-[color:var(--border)] px-4 py-2 text-[12px] text-[var(--text-muted)]">
-            {liveSearch.loading && "Searching live data..."}
+            {liveSearch.loading && "Page actions are ready. Searching live data..."}
             {!liveSearch.loading && liveSearch.error && liveSearch.error}
             {!liveSearch.loading && !liveSearch.error && liveSearch.searched && `${liveSearch.commands.length} live result${liveSearch.commands.length === 1 ? "" : "s"}`}
           </div>

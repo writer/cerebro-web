@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
 import { useApiKey } from "@/components/providers";
-import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, DataStateBanner, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
 import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
@@ -13,7 +13,7 @@ import { useGRCFilterState } from "@/lib/grc-filters";
 import { GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { controlMatchesFrameworkSegment, frameworkOptionLabel, isUpcomingGRCFramework, supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { useQueryParamState } from "@/lib/query-params";
-import { runtimeStateForError, type RuntimeState } from "@/lib/runtime-state";
+import type { RuntimeState } from "@/lib/runtime-state";
 
 const DEFAULT_CONTROL_PROFILE_ID = "soc2-security-core";
 const CONTROL_PROFILE_OPTIONS = [
@@ -104,7 +104,7 @@ export default function ControlsPage() {
   const [selectedControlKey, setSelectedControlKey] = useState<string | null>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const selectedProfileID = profileID.trim() || DEFAULT_CONTROL_PROFILE_ID;
-  const { data, error, loading, reload } = useGRCQuery<GRCControlEvidencePacketResponse>(
+  const { data, error, loading, lastSuccessfulAt, reload, state: queryState } = useGRCQuery<GRCControlEvidencePacketResponse>(
     grcPath("/grc/control-packets", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID, limit: GRC_WORKLIST_LIMIT }),
   );
   const { apiKey } = useApiKey();
@@ -118,10 +118,8 @@ export default function ControlsPage() {
     );
     setExportState(result.ok ? "idle" : "failed");
   }, [apiKey, debouncedTenantID]);
-  const isInitialLoading = loading && !data;
   const isRefreshing = loading && Boolean(data);
-  const runtimeState = runtimeStateForError(error);
-  const metricState: RuntimeState = error ? runtimeState : isInitialLoading ? "loading" : "ready";
+  const metricState: RuntimeState = queryState === "stale" ? "ready" : queryState === "empty" ? "ready" : queryState;
   const boundedControlRows = useMemo(
     () => grcBoundedRows({ rows: data?.controls, limit: GRC_WORKLIST_LIMIT, total: data?.packet?.summary?.total }),
     [data?.controls, data?.packet?.summary?.total],
@@ -310,7 +308,7 @@ export default function ControlsPage() {
         <MetricCard label="Open Findings" value={selectedUpcomingFramework ? "N/A" : openFindings} detail={selectedUpcomingFramework ? "not measured" : `${critical} critical`} intent={selectedUpcomingFramework ? "neutral" : openFindings > 0 ? "warning" : "success"} state={metricState} />
       </div>
 
-      {data && !error && queueControls.length > 0 && (
+      {data && queueControls.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
             <div>
@@ -384,10 +382,16 @@ export default function ControlsPage() {
         </div>
       )}
 
-      {isInitialLoading && <LoadingBlock label="Loading controls..." />}
-      {error && <ErrorBlock error={error} onRetry={() => void reload()} recoveryDetail="Controls will appear when the API is reachable." />}
+      <DataStateBanner
+        state={queryState}
+        subject="Controls"
+        error={error}
+        lastSuccessfulAt={lastSuccessfulAt}
+        onRetry={() => void reload()}
+        detail={queryState === "loading" ? "Loading controls." : queryState === "unavailable" ? "Controls will appear when graph data is reachable." : undefined}
+      />
 
-      {data && !error && (
+      {data && (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <WorklistTable
             title="Control register"

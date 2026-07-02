@@ -48,11 +48,13 @@ describe("product UI contract", () => {
 
   it("keeps the topbar avatar bound to current user identity", () => {
     const source = readProjectFile("src/components/Topbar.tsx");
+    const dismissalSource = readProjectFile("src/lib/use-popover-dismissal.ts");
 
     expect(source).toContain("useCurrentUser");
     expect(source).toContain("topbarRef");
-    expect(source).toContain('event.key === "Escape"');
-    expect(source).toContain('document.addEventListener("pointerdown"');
+    expect(source).toContain("usePopoverDismissal");
+    expect(dismissalSource).toContain('event.key === "Escape"');
+    expect(dismissalSource).toContain('document.addEventListener("pointerdown"');
     expect(source).toContain("identityPosture");
     expect(source).toContain("identity.initials");
     expect(source).toContain("View identity contract");
@@ -76,19 +78,24 @@ describe("product UI contract", () => {
     expect(identityPanelSource).toContain("Write Stamps");
     expect(identityPanelSource).toContain("currentUserWriteFieldForPath");
     expect(statusSource).toContain("Runtime Health");
+    expect(primitivesSource).toContain("DataStateBanner");
+    expect(primitivesSource).toContain("data-grc-data-state");
     expect(primitivesSource).toContain("RuntimeRecoveryBlock");
     expect(primitivesSource).toContain("/developer#quick-status");
     expect(runtimeStateSource).toContain("API unavailable");
+    expect(runtimeStateSource).toContain("runtimeStateForQuery");
     expect(runtimeStateSource).toContain("metricDetailForState");
   });
 
   it("keeps data-page metrics and filters tied to runtime state", () => {
     const queryParamSource = readProjectFile("src/lib/query-params.ts");
     const primitivesSource = readProjectFile("src/components/grc/Primitives.tsx");
-    const pages = [
+    const bannerPages = [
       "src/app/evidence/page.tsx",
       "src/app/controls/page.tsx",
       "src/app/risk-inbox/page.tsx",
+    ];
+    const runtimePages = [
       "src/app/connectors/page.tsx",
     ];
 
@@ -96,11 +103,24 @@ describe("product UI contract", () => {
     expect(primitivesSource).toContain("AppliedFilterChips");
     expect(primitivesSource).toContain("state?: RuntimeState");
 
-    for (const page of pages) {
+    for (const page of bannerPages) {
+      const source = readProjectFile(page);
+      expect(source).toContain("AppliedFilterChips");
+      expect(source).toContain("DataStateBanner");
+      expect(source).toContain("queryState");
+      expect(source).toContain("lastSuccessfulAt");
+      expect(source).toMatch(/state(?:=\{|:)\s*metricState/);
+    }
+
+    for (const page of runtimePages) {
       const source = readProjectFile(page);
       expect(source).toContain("AppliedFilterChips");
       expect(source).toContain("runtimeStateForError");
       expect(source).toMatch(/state(?:=\{|:)\s*metricState/);
+    }
+
+    for (const page of ["src/app/page.tsx", "src/app/explore/page.tsx", "src/app/findings/[id]/page.tsx"]) {
+      expect(readProjectFile(page)).toContain("DataStateBanner");
     }
 
     const inventorySource = readProjectFile("src/app/inventory/page.tsx");
@@ -111,6 +131,25 @@ describe("product UI contract", () => {
     const reportsSource = readProjectFile("src/app/reports/page.tsx");
     expect(reportsSource).toContain("AppliedFilterChips");
     expect(reportsSource).not.toContain("applyScope");
+  });
+
+  it("keeps Ask readiness public-safe and visible before a question runs", () => {
+    const routeSource = readProjectFile("src/app/api/agent/ask/status/route.ts");
+    const pageSource = readProjectFile("src/app/ask/page.tsx");
+    const inputSource = readProjectFile("src/components/ask/AskInput.tsx");
+
+    expect(routeSource).toContain("askAgentReadiness");
+    expect(routeSource).toContain("NextResponse.json");
+    expect(pageSource).toContain("/api/agent/ask/status");
+    expect(inputSource).toContain("Checking Ask path");
+    expect(inputSource).not.toMatch(/env|token|credential|not configured/i);
+  });
+
+  it("keeps command palette page actions ahead of unavailable live search", () => {
+    const source = readProjectFile("src/components/CommandPalette.tsx");
+
+    expect(source).toContain("return [...generated, ...orderedNavigation, ...liveSearch.commands]");
+    expect(source).toContain("Page actions are ready. Searching live data...");
   });
 
   it("keeps overview audit readiness fallbacks dashboard-backed instead of sample-labeled", () => {
