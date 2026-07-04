@@ -7,14 +7,15 @@ import { useState } from "react";
 import DataTable, { type TableColumn } from "@/components/grc/DataTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import {
+  auditStatusLedgerStateLabel,
   auditWorkflowStateLabel,
   auditEvidenceDecisionLabel,
   auditEvidenceScopeLabel,
   auditEvidenceVisibilityLabel,
   auditPackageStateLabel,
   type AuditExportManifestRow,
-  type AuditPriorityWorkRow,
   type AuditReadinessRow,
+  type AuditStatusLedgerRow,
   type AuditorQuestionRow,
   type ControlOwnerRow,
   type EvidenceCurationRow,
@@ -139,7 +140,7 @@ const manifestColumns: TableColumn<AuditExportManifestRow>[] = [
   { key: "state", label: "State", render: (_value, row) => <Badge value={row.state} />, sortValue: (row) => statusNeedsAttention(row.state) ? 0 : 1 },
 ];
 
-const priorityColumns: TableColumn<AuditPriorityWorkRow>[] = [
+const statusLedgerColumns: TableColumn<AuditStatusLedgerRow>[] = [
   { key: "area", label: "Area", render: (_value, row) => <Badge value={row.area} /> },
   {
     key: "title",
@@ -152,8 +153,14 @@ const priorityColumns: TableColumn<AuditPriorityWorkRow>[] = [
     ),
   },
   { key: "owner", label: "Owner" },
-  { key: "state", label: "State", render: (_value, row) => <Badge value={row.state} />, sortValue: (row) => row.rank },
+  { key: "reviewer", label: "Reviewer" },
+  { key: "state", label: "State", render: (_value, row) => <Badge value={auditStatusLedgerStateLabel(row.state)} />, sortValue: (row) => row.rank },
   { key: "action", label: "Action" },
+  {
+    key: "proof",
+    label: "Proof",
+    render: (_value, row) => <div className="min-w-[14rem] line-clamp-2">{row.proof}</div>,
+  },
 ];
 
 const controlColumns: TableColumn<ControlOwnerRow>[] = [
@@ -219,7 +226,7 @@ const exceptionColumns: TableColumn<ScopeExceptionRow>[] = [
 ];
 
 export default function AuditPackagesPage() {
-  const [exportAcknowledged, setExportAcknowledged] = useState(false);
+  const [exportAcknowledgedScopeKey, setExportAcknowledgedScopeKey] = useState<string | null>(null);
   const {
     clear: clearFilters,
     controlID,
@@ -247,12 +254,12 @@ export default function AuditPackagesPage() {
     loading,
     metadata,
     ownerRows,
-    priorityRows,
     readinessRows,
     reload,
     selectedProfileID,
     snapshotID,
     sourceRows,
+    statusLedgerRows,
     summary,
     teamRows,
   } = view;
@@ -264,6 +271,8 @@ export default function AuditPackagesPage() {
   ];
   const packetBlockerRows = readinessRows.filter((row) => row.state !== "ready");
   const exportHref = `/api/cerebro${grcPath("/grc/control-packets/export", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID })}`;
+  const packetScopeKey = `${debouncedTenantID}:${selectedProfileID}:${framework}:${controlID}`;
+  const exportAcknowledged = exportAcknowledgedScopeKey === packetScopeKey;
   const canExport = packetBlockerRows.length === 0 || exportAcknowledged;
 
   return (
@@ -322,18 +331,19 @@ export default function AuditPackagesPage() {
         <MetricCard label="Exclusions" value={summary.exclusions} detail="packet scope" intent={summary.exclusions > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
       </div>
 
-      <section id="priority-work">
-        <Panel title="Priority work">
+      <section id="packet-status-ledger">
+        <Panel title="Packet status ledger">
           <DataTable
-            rows={priorityRows}
-            columns={priorityColumns}
+            key={`status-ledger:${packetScopeKey}`}
+            rows={statusLedgerRows}
+            columns={statusLedgerColumns}
             defaultSort={{ key: "state" }}
             emptyMessage="No packet work is queued for this scope."
-            filterKeys={["area", "title", "detail", "owner", "state", "action"]}
+            filterKeys={["area", "title", "detail", "owner", "reviewer", "state", "action", "proof"]}
             getRowHref={(row) => row.href}
             getRowKey={(row) => row.id}
             pageSize={8}
-            resultNoun="work items"
+            resultNoun="ledger rows"
             showSearch={false}
           />
         </Panel>
@@ -382,7 +392,7 @@ export default function AuditPackagesPage() {
                   <input
                     type="checkbox"
                     checked={exportAcknowledged}
-                    onChange={(event) => setExportAcknowledged(event.target.checked)}
+                    onChange={(event) => setExportAcknowledgedScopeKey(event.target.checked ? packetScopeKey : null)}
                     className="h-4 w-4 rounded border-[color:var(--border)]"
                   />
                   I reviewed the packet blockers
@@ -430,13 +440,13 @@ export default function AuditPackagesPage() {
         </section>
       </div>
 
-      <section id="auditor-questions">
-        <Panel title="Auditor questions">
+      <section id="reviewer-questions">
+        <Panel title="Reviewer questions">
           <DataTable
             rows={auditorQuestionRows}
             columns={auditorQuestionColumns}
             defaultSort={{ key: "status" }}
-            emptyMessage="No auditor questions are queued for this packet."
+            emptyMessage="No reviewer questions are queued for this packet."
             filterKeys={["area", "question", "owner", "source", "status"]}
             getRowKey={(row) => row.id}
             pageSize={10}
