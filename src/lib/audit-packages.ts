@@ -421,7 +421,7 @@ export const buildSourceTrustRows = ({
 }): SourceTrustRow[] => {
   const collectionRows = (evidencePackets?.collection_sources ?? []).map((source) => ({
     id: `${source.source_id || source.runtime_id}:${source.runtime_id}`,
-    action: normalized(source.status) === "collected" ? "Use for package" : "Refresh source",
+    action: normalized(source.status) === "collected" ? "Use in packet" : "Refresh source",
     evidence: source.evidence_item_count,
     findings: source.finding_count,
     lastSynced: source.last_synced_at || "Not observed",
@@ -432,7 +432,7 @@ export const buildSourceTrustRows = ({
 
   return (dashboard?.connectors ?? []).slice(0, limit).map((connector) => ({
     id: connector.runtime_id,
-    action: connectorIsStale(connector) ? "Repair source" : "Use for package",
+    action: connectorIsStale(connector) ? "Repair source" : "Use in packet",
     evidence: 0,
     findings: 0,
     lastSynced: connector.last_synced_at || connector.checkpoint_watermark || "Not observed",
@@ -445,13 +445,13 @@ export const buildScopeExceptionRows = (metadata?: GRCReportMetadata | null, lim
   const exclusions = metadata?.scope?.exclusions;
   if (!exclusions || exclusions.total === 0) return [];
   const rows: ScopeExceptionRow[] = [
-    ...(exclusions.excluded_families ?? []).map((value) => ({ kind: "Family", reason: "Excluded from package scope", value })),
-    ...(exclusions.excluded_asset_classes ?? []).map((value) => ({ kind: "Asset class", reason: "Excluded from package scope", value })),
-    ...(exclusions.excluded_kinds ?? []).map((value) => ({ kind: "Kind", reason: "Excluded from package scope", value })),
-    ...(exclusions.excluded_resource_urns ?? []).map((value) => ({ kind: "Resource", reason: "Excluded from package scope", value })),
+    ...(exclusions.excluded_families ?? []).map((value) => ({ kind: "Family", reason: "Excluded from packet scope", value })),
+    ...(exclusions.excluded_asset_classes ?? []).map((value) => ({ kind: "Asset class", reason: "Excluded from packet scope", value })),
+    ...(exclusions.excluded_kinds ?? []).map((value) => ({ kind: "Kind", reason: "Excluded from packet scope", value })),
+    ...(exclusions.excluded_resource_urns ?? []).map((value) => ({ kind: "Resource", reason: "Excluded from packet scope", value })),
     ...(exclusions.excluded_resources ?? []).map((value) => ({
       kind: value.type || "Resource",
-      reason: value.reason || "Excluded from package scope",
+      reason: value.reason || "Excluded from packet scope",
       value: value.urn || value.id || value.type || "Excluded resource",
     })),
   ].map((row, index) => ({ id: `${row.kind}:${row.value}:${index}`, ...row }));
@@ -510,7 +510,7 @@ export const buildAuditReadinessRows = (
       detail: `${summary.missingEvidence} missing, ${summary.staleEvidence} stale`,
       owner: "Control owners",
       state: evidenceGaps > 0 ? "blocked" : "ready",
-      title: "Evidence package",
+      title: "Evidence set",
     },
     {
       id: "controls",
@@ -538,11 +538,11 @@ export const buildAuditReadinessRows = (
     },
     {
       id: "snapshot",
-      action: snapshotReady ? "Share snapshot" : "Approve package",
+      action: snapshotReady ? "Share snapshot" : "Approve snapshot",
       detail: generatedAt ? `Generated ${generatedAt}` : `Snapshot ${snapshotID}`,
       owner: "Audit lead",
       state: snapshotReady ? "ready" : "waiting",
-      title: "Auditor snapshot",
+      title: "Shared snapshot",
     },
   ];
 };
@@ -623,9 +623,9 @@ export const buildAuditPriorityWorkRows = ({
   const readinessWork = readinessRows
     .filter((row) => row.state !== "ready")
     .map((row) => ({
-      id: `readiness:${row.id}`,
+      id: `packet:${row.id}`,
       action: row.action,
-      area: "Readiness",
+      area: "Packet gate",
       detail: row.detail,
       owner: row.owner,
       rank: workflowRank(row.state),

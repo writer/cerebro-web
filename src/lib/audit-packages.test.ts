@@ -145,11 +145,11 @@ describe("audit package helpers", () => {
     }), "snapshot-123", "");
 
     expect(rows).toEqual([
-      expect.objectContaining({ action: "Collect evidence", id: "evidence", state: "blocked" }),
+      expect.objectContaining({ action: "Collect evidence", id: "evidence", state: "blocked", title: "Evidence set" }),
       expect.objectContaining({ action: "Resolve controls", id: "controls", state: "blocked" }),
       expect.objectContaining({ action: "Complete reviews", id: "reviews", state: "needs_review" }),
       expect.objectContaining({ action: "Refresh sources", id: "sources", state: "blocked" }),
-      expect.objectContaining({ action: "Approve package", detail: "Snapshot snapshot-123", id: "snapshot", state: "waiting" }),
+      expect.objectContaining({ action: "Approve snapshot", detail: "Snapshot snapshot-123", id: "snapshot", state: "waiting", title: "Shared snapshot" }),
     ]);
 
     expect(buildAuditReadinessRows(summary(), "snapshot-456", "2026-01-01T00:00:00Z").at(-1)).toMatchObject({
@@ -210,7 +210,7 @@ describe("audit package helpers", () => {
         status: "failed",
       },
       {
-        action: "Use for package",
+        action: "Use in packet",
         evidence: 4,
         findings: 1,
         id: "github:runtime-2",
@@ -353,7 +353,7 @@ describe("audit package helpers", () => {
 
     const rows = buildAuditPriorityWorkRows({ auditorQuestionRows, ownerRows, readinessRows, limit: 8 });
 
-    expect(rows[0]).toMatchObject({ area: "Readiness", state: "Blocked", title: "Control status" });
+    expect(rows[0]).toMatchObject({ area: "Packet gate", state: "Blocked", title: "Control status" });
     expect(rows.map((row) => row.area)).toContain("Control");
     expect(rows.map((row) => row.area)).toContain("Evidence");
     expect(rows).toHaveLength(8);
