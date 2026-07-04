@@ -98,7 +98,12 @@ describe("GRC page helpers", () => {
     const checks = buildReadinessChecks({ summary: summary() });
 
     expect(checks.map((check) => check.label)).toEqual(["Source gaps", "Failing controls", "Evidence gaps"]);
-    expect(checks.map((check) => check.href)).toEqual(["/connectors", "/controls", "/evidence"]);
+    expect(checks.map((check) => check.action)).toEqual(["Refresh sources", "Resolve controls", "Collect evidence"]);
+    expect(checks.map((check) => check.href)).toEqual([
+      "/reports/audit-packages#source-freshness",
+      "/reports/audit-packages#control-owner-queue",
+      "/reports/audit-packages#evidence-review",
+    ]);
     expect(checks.map((check) => check.label)).not.toContain("Tests mapped");
   });
 
@@ -114,6 +119,8 @@ describe("GRC page helpers", () => {
       }),
     })).toEqual([
       expect.objectContaining({
+        action: "Open packet",
+        href: "/reports/audit-packages",
         label: "Packet ready",
         status: "ready",
         value: "Clear",

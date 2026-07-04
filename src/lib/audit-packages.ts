@@ -4,8 +4,10 @@ import type {
   GRCControl,
   GRCControlEvidencePacketResponse,
   GRCControlPacketControl,
+  GRCEvidenceItemRecord,
   GRCEvidencePacketsResponse,
   GRCEvidenceRequest,
+  GRCPackagedEvidencePacket,
   GRCFramework,
   GRCReportMetadata,
 } from "@/lib/grc";
@@ -39,6 +41,7 @@ export type AuditPackageSummary = {
 export type AuditWorkflowState = "blocked" | "needs_review" | "ready" | "waiting";
 
 export type EvidenceCurationRow = {
+  collectedAt?: string;
   id: string;
   controlID: string;
   decision: AuditEvidenceDecision;
@@ -48,8 +51,10 @@ export type EvidenceCurationRow = {
   reason: string;
   review: string;
   source: string;
+  sourceID?: string;
   status: string;
   title: string;
+  runtimeID?: string;
 };
 
 export type ControlOwnerRow = {
@@ -133,6 +138,7 @@ export type AuditPriorityWorkRow = {
   action: string;
   area: string;
   detail: string;
+  href: string;
   owner: string;
   rank: number;
   state: string;
@@ -151,6 +157,38 @@ const connectorIsStale = (connector: GRCConnector) => {
   const status = normalized(connector.status);
   const freshness = normalized(connector.freshness || connector.watermark_freshness);
   return status !== "healthy" || (freshness !== "" && freshness !== "fresh" && freshness !== "current");
+};
+
+const firstDefined = (...values: Array<string | undefined>) =>
+  values.find((value) => value && value.trim() !== "");
+
+const packetGateHref = (id: string) => {
+  switch (id) {
+    case "controls":
+      return "#control-owner-queue";
+    case "evidence":
+      return "#evidence-review";
+    case "reviews":
+      return "#auditor-questions";
+    case "snapshot":
+      return "#shared-snapshot";
+    case "sources":
+      return "#source-freshness";
+    default:
+      return "#packet-checklist";
+  }
+};
+
+const citedEvidenceItem = (
+  packet: GRCPackagedEvidencePacket | undefined,
+  evidenceItemByID: Map<string, GRCEvidenceItemRecord>,
+) => {
+  const evidenceIDs = packet?.citations?.evidence_ids ?? [];
+  for (const evidenceID of evidenceIDs) {
+    const item = evidenceItemByID.get(evidenceID);
+    if (item) return item;
+  }
+  return undefined;
 };
 
 export const auditEvidenceDecision = (input: {
@@ -347,7 +385,12 @@ export const buildEvidenceCurationRows = ({
   const requests = evidencePackets?.evidence_requests ?? [];
   if (requests.length > 0) {
     const packetSummaries = new Map<string, { count: number; reason?: string }>();
+    const evidenceItems = evidencePackets?.evidence_items ?? [];
+    const evidenceItemByID = new Map(evidenceItems.map((item) => [item.id, item]));
+    const packetsByRequestID = new Map<string, GRCPackagedEvidencePacket[]>();
+    const packetsByID = new Map<string, GRCPackagedEvidencePacket>();
     (evidencePackets?.evidence_packets ?? []).forEach((packet) => {
+      packetsByID.set(packet.id, packet);
       const requestID = packet.request_id;
       if (!requestID) return;
       const current = packetSummaries.get(requestID) ?? { count: 0 };
@@ -355,8 +398,31 @@ export const buildEvidenceCurationRows = ({
         count: current.count + 1,
         reason: current.reason ?? firstPresent(packet.reason, packet.review?.reason, packet.freshness?.reason),
       });
+      const packets = packetsByRequestID.get(requestID) ?? [];
+      packets.push(packet);
+      packetsByRequestID.set(requestID, packets);
     });
+    const itemForRequest = (request: GRCEvidenceRequest) => {
+      const packetIDs = request.evidence_packet_ids ?? [];
+      const packets = [
+        ...(packetsByRequestID.get(request.id) ?? []),
+        ...packetIDs.map((packetID) => packetsByID.get(packetID)).filter((packet): packet is GRCPackagedEvidencePacket => Boolean(packet)),
+      ];
+      for (const packet of packets) {
+        const item = citedEvidenceItem(packet, evidenceItemByID);
+        if (item) return { item, packet };
+      }
+      const item = evidenceItems.find((candidate) =>
+        candidate.evidence_request_ids?.includes(request.id) ||
+        candidate.evidence_packet_ids?.some((packetID) => packetIDs.includes(packetID)),
+      );
+      return { item, packet: packets[0] };
+    };
     return requests.slice(0, limit).map((request: GRCEvidenceRequest) => {
+      const { item, packet } = itemForRequest(request);
+      const sourceID = firstDefined(item?.source_id, packet?.source);
+      const runtimeID = item?.runtime_id;
+      const collectedAt = firstDefined(item?.last_observed_at, item?.created_at, packet?.observed_at, packet?.freshness?.observed_at);
       const packetSummary = packetSummaries.get(request.id);
       const packets = packetSummary?.count ?? request.evidence_packet_ids?.length ?? 0;
       const decision = auditEvidenceDecision({
@@ -364,18 +430,19 @@ export const buildEvidenceCurationRows = ({
         reviewStatus: request.review_status,
         status: request.status,
       });
-      const source = request.accepted_from?.join(", ") || "Any source";
-
+      const freshness = request.freshness_sla || "Not set";
+      const source = request.accepted_from?.join(", ") || sourceID || runtimeID || "Any source";
       return {
+        collectedAt,
         id: request.id,
         controlID: request.control_id,
         decision,
-        freshness: request.freshness_sla || "Not set",
+        freshness,
         packets,
         quality: request.quality || "unknown",
         reason: evidenceReason({
           decision,
-          freshness: request.freshness_sla || "Not set",
+          freshness,
           packetCount: packets,
           packetReason: packetSummary?.reason,
           quality: request.quality,
@@ -385,8 +452,10 @@ export const buildEvidenceCurationRows = ({
         }),
         review: request.review_status || "needs_review",
         source,
+        sourceID,
         status: request.status || "candidate",
         title: request.title || request.id,
+        runtimeID,
       };
     });
   }
@@ -715,6 +784,7 @@ export const buildAuditPriorityWorkRows = ({
       action: row.action,
       area: "Packet gate",
       detail: row.detail,
+      href: packetGateHref(row.id),
       owner: row.owner,
       rank: workflowRank(row.state),
       state: auditWorkflowStateLabel(row.state),
@@ -725,6 +795,7 @@ export const buildAuditPriorityWorkRows = ({
     action: row.action,
     area: "Control",
     detail: row.title,
+    href: "#control-owner-queue",
     owner: row.owner,
     rank: controlOwnerRank(row),
     state: row.status,
@@ -735,6 +806,7 @@ export const buildAuditPriorityWorkRows = ({
     action: "Answer question",
     area: row.area,
     detail: row.source,
+    href: "#auditor-questions",
     owner: row.owner,
     rank: questionRank(row),
     state: row.status,

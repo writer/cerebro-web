@@ -333,6 +333,55 @@ describe("audit package helpers", () => {
     expect(rows[2]).toMatchObject({ owner: "Jira", status: "Repair source" });
   });
 
+  it("adds source provenance to evidence curation rows", () => {
+    const rows = buildEvidenceCurationRows({
+      evidencePackets: {
+        evidence_requests: [
+          {
+            id: "request-1",
+            control_id: "CC6.1",
+            required: true,
+            status: "ready",
+            quality: "ready",
+            review_status: "accepted",
+            title: "MFA evidence",
+            evidence_packet_ids: ["packet-1"],
+          },
+        ],
+        evidence_packets: [
+          {
+            id: "packet-1",
+            request_id: "request-1",
+            status: "ready",
+            quality: "ready",
+            source: "okta-runtime",
+            observed_at: "2026-01-02T00:00:00.000Z",
+            citations: { evidence_ids: ["evidence-1"] },
+            freshness: { status: "fresh", observed_at: "2026-01-02T00:00:00.000Z" },
+            export_artifact: { format: "markdown" },
+          },
+        ],
+        evidence_items: [
+          {
+            id: "evidence-1",
+            runtime_id: "okta-runtime",
+            source_id: "okta",
+            last_observed_at: "2026-01-03T00:00:00.000Z",
+            evidence_request_ids: ["request-1"],
+            evidence_packet_ids: ["packet-1"],
+          },
+        ],
+      } as GRCEvidencePacketsResponse,
+    });
+
+    expect(rows[0]).toMatchObject({
+      collectedAt: "2026-01-03T00:00:00.000Z",
+      runtimeID: "okta-runtime",
+      sourceID: "okta",
+      title: "MFA evidence",
+    });
+  });
+
   it("builds an export manifest with action states for package records", () => {
     const rows = buildAuditExportManifestRows({
       generatedAt: "",
@@ -460,6 +509,12 @@ describe("audit package helpers", () => {
     const rows = buildAuditPriorityWorkRows({ auditorQuestionRows, ownerRows, readinessRows, limit: 8 });
 
     expect(rows[0]).toMatchObject({ area: "Packet gate", state: "Blocked", title: "Control status" });
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ href: "#control-owner-queue", id: "packet:controls" }),
+      expect.objectContaining({ href: "#evidence-review", id: "packet:evidence" }),
+      expect.objectContaining({ href: "#source-freshness", id: "packet:sources" }),
+      expect.objectContaining({ href: "#auditor-questions", id: "question:evidence:request-1" }),
+    ]));
     expect(rows.map((row) => row.area)).toContain("Control");
     expect(rows.map((row) => row.area)).toContain("Evidence");
     expect(rows).toHaveLength(8);
