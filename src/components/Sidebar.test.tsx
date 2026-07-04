@@ -33,23 +33,21 @@ describe("isSidebarLinkActive", () => {
     expect(missingIcons).toEqual([]);
   });
 
-  it("groups compliance routes under GRC", () => {
+  it("groups core compliance routes under Compliance", () => {
     const grcGroup = sidebarNavGroups.find((group) => group.id === "grc");
     const hrefs = grcGroup?.links.map((link) => link.href);
 
+    expect(grcGroup?.label).toBe("Compliance");
     expect(grcGroup?.href).toBe("/grc");
     expect(hrefs).toEqual([
       "/controls",
       "/evidence",
-      "/policies",
       "/frameworks",
-      "/questionnaires",
       "/reports",
-      "/reports/audit-packages",
     ]);
   });
 
-  it("keeps issues, GRC, and Ask in the visible sidebar", () => {
+  it("keeps issues, Compliance, and Ask in the visible sidebar", () => {
     const sidebarHrefs = sidebarNavLinks.map((link) => link.href);
 
     expect(sidebarPrimaryLinks.map((link) => link.href)).toEqual(["/", "/risk-inbox"]);

@@ -26,7 +26,7 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Compliance",
     href: "/grc",
-    description: "Readiness, issues, controls, evidence, policies, questionnaires, and reports.",
+    description: "Packet blockers, control issues, evidence gaps, source freshness, and framework status.",
     section: "Operator",
     keywords: ["grc", "compliance", "readiness", "audit", "framework", "control", "test", "evidence", "policy", "questionnaire", "report", ...supportedGRCFrameworkNames],
   },
@@ -68,7 +68,7 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Frameworks",
     href: "/frameworks",
-    description: "Framework directory, SOC 2 tracking, maturity, gaps, planning, and exports.",
+    description: "Framework status, failing controls, evidence gaps, and packet exports.",
     section: "Operator",
     keywords: ["soc2", "iso", "framework", "catalog", "maturity", "gap", "planning", "export", ...supportedGRCFrameworkNames],
   },
@@ -117,7 +117,7 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Reports",
     href: "/reports",
-    description: "Build audit packets with evidence, controls, and impact proof.",
+    description: "Create control evidence packets with mapped evidence and affected assets.",
     section: "Operator",
     keywords: ["audit packet", "export", "report", "evidence"],
   },

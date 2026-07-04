@@ -10,10 +10,14 @@ const CerebroAgentPanel = dynamic(() => import("@/components/agent/CerebroAgentP
   loading: () => null,
 });
 
+const denseRouteLabels = new Set(["Compliance", "Controls", "Evidence", "Frameworks", "Reports", "Issues"]);
+
 export default function CerebroAgentPanelShell() {
   const { activeTurnId, isOpen, openAgent, pageContext, turns } = useCerebroAgent();
   const activeTurn = turns.find((turn) => turn.id === activeTurnId);
-  const quietLauncher = !activeTurn && (pageContext.pageState === "api_unavailable" || pageContext.pageState === "empty");
+  const densePage = pageContext.routeLabel ? denseRouteLabels.has(pageContext.routeLabel) : false;
+  const quietLauncher = !activeTurn && (densePage || pageContext.pageState === "api_unavailable" || pageContext.pageState === "empty");
+  const launcherPosition = quietLauncher && densePage ? "bottom-16 left-5 right-auto" : "bottom-5 right-5";
 
   if (isOpen) {
     return <CerebroAgentPanel />;
@@ -23,7 +27,7 @@ export default function CerebroAgentPanelShell() {
     <button
       type="button"
       onClick={() => openAgent()}
-      className={`agent-surface agent-launcher fixed bottom-5 right-5 z-40 hidden items-center gap-3 rounded-lg border border-slate-200 bg-white text-left shadow-[0_18px_45px_rgba(15,23,42,0.15)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_22px_55px_rgba(15,23,42,0.18)] sm:flex ${quietLauncher ? "w-[58px] justify-center px-2.5 py-2.5" : "w-[234px] px-3 py-3"}`}
+      className={`agent-surface agent-launcher fixed z-40 hidden items-center gap-3 rounded-lg border border-slate-200 bg-white text-left shadow-[0_18px_45px_rgba(15,23,42,0.15)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_22px_55px_rgba(15,23,42,0.18)] sm:flex ${launcherPosition} ${quietLauncher ? "w-[58px] justify-center px-2.5 py-2.5" : "w-[234px] px-3 py-3"}`}
       aria-label="Open Ask"
       title={quietLauncher ? `Ask about ${pageContext.routeLabel ?? "this page"}` : undefined}
     >
