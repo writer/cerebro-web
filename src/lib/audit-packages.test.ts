@@ -8,13 +8,14 @@ import {
   buildAuditPriorityWorkRows,
   buildAuditReadinessRows,
   buildAuditorQuestionRows,
+  buildEvidenceCurationRows,
   buildScopeExceptionRows,
   type AuditPackageSummary,
   type ControlOwnerRow,
   type EvidenceCurationRow,
   type SourceTrustRow,
 } from "@/lib/audit-packages";
-import type { GRCControlEvidencePacketResponse } from "@/lib/grc";
+import type { GRCControlEvidencePacketResponse, GRCEvidencePacketsResponse } from "@/lib/grc";
 
 const packet = (overrides: Partial<GRCControlEvidencePacketResponse> = {}): GRCControlEvidencePacketResponse => ({
   profile: { id: "baseline", name: "Baseline" },
@@ -158,6 +159,107 @@ describe("audit package helpers", () => {
     });
   });
 
+  it("carries packet reasons into evidence review rows", () => {
+    const rows = buildEvidenceCurationRows({
+      evidencePackets: {
+        evidence_requests: [
+          {
+            control_id: "SOC 2 CC6.1",
+            evidence_packet_ids: ["packet-1"],
+            id: "request-1",
+            quality: "ready",
+            required: true,
+            review_status: "accepted",
+            status: "ready",
+            title: "Access review",
+          },
+        ],
+        evidence_packets: [
+          {
+            citations: {},
+            export_artifact: { format: "markdown" },
+            freshness: { status: "fresh" },
+            id: "packet-1",
+            reason: "Runtime export includes the control test and source event.",
+            request_id: "request-1",
+            status: "ready",
+          },
+        ],
+      } as GRCEvidencePacketsResponse,
+    });
+
+    expect(rows[0]).toMatchObject({
+      decision: "accepted",
+      packets: 1,
+      reason: "Runtime export includes the control test and source event.",
+    });
+  });
+
+  it("derives evidence reasons when packet records do not provide one", () => {
+    const rows = buildEvidenceCurationRows({
+      evidencePackets: {
+        evidence_requests: [
+          {
+            control_id: "SOC 2 CC6.1",
+            id: "request-missing",
+            quality: "missing",
+            required: true,
+            review_status: "needs_review",
+            status: "missing",
+            title: "Access review",
+          },
+          {
+            accepted_from: ["runtime"],
+            control_id: "SOC 2 CC7.2",
+            evidence_packet_ids: ["packet-stale"],
+            freshness_sla: "30d",
+            id: "request-stale",
+            quality: "stale",
+            required: true,
+            review_status: "needs_review",
+            status: "stale",
+            title: "Log evidence",
+          },
+          {
+            accepted_from: ["upload"],
+            control_id: "SOC 2 CC8.1",
+            evidence_packet_ids: ["packet-review"],
+            id: "request-review",
+            quality: "ready",
+            required: true,
+            review_status: "needs_review",
+            status: "ready",
+            title: "Change record",
+          },
+        ],
+        evidence_packets: [
+          {
+            citations: {},
+            export_artifact: { format: "markdown" },
+            freshness: { status: "stale" },
+            id: "packet-stale",
+            request_id: "request-stale",
+            status: "needs_review",
+          },
+          {
+            citations: {},
+            export_artifact: { format: "markdown" },
+            freshness: { status: "fresh" },
+            id: "packet-review",
+            request_id: "request-review",
+            status: "needs_review",
+          },
+        ],
+      } as GRCEvidencePacketsResponse,
+    });
+
+    expect(rows.map((row) => row.reason)).toEqual([
+      "No packet is attached to this request.",
+      "Evidence is stale against 30d freshness.",
+      "Reviewer decision is pending.",
+    ]);
+  });
+
   it("queues auditor questions from evidence gaps, owner work, and stale sources", () => {
     const evidenceRows: EvidenceCurationRow[] = [
       {
@@ -167,6 +269,7 @@ describe("audit package helpers", () => {
         id: "request-1",
         packets: 1,
         quality: "ready",
+        reason: "Reviewer decision is pending.",
         review: "manual_review",
         source: "GitHub",
         status: "needs_review",
@@ -179,6 +282,7 @@ describe("audit package helpers", () => {
         id: "request-2",
         packets: 1,
         quality: "ready",
+        reason: "1 packet accepted from AWS.",
         review: "accepted",
         source: "AWS",
         status: "ready",
@@ -224,6 +328,7 @@ describe("audit package helpers", () => {
 
     expect(rows.map((row) => row.area)).toEqual(["Evidence", "Control", "Source"]);
     expect(rows[0]).toMatchObject({ owner: "GitHub", status: "Needs review" });
+    expect(rows[0].source).toBe("Access review: Reviewer decision is pending.");
     expect(rows[1].question).toContain("SOC 2 CC6.1");
     expect(rows[2]).toMatchObject({ owner: "Jira", status: "Repair source" });
   });
@@ -341,6 +446,7 @@ describe("audit package helpers", () => {
           id: "request-1",
           packets: 1,
           quality: "ready",
+          reason: "Reviewer decision is pending.",
           review: "manual_review",
           source: "GitHub",
           status: "needs_review",
