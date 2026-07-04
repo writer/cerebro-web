@@ -1,17 +1,33 @@
 "use client";
 
+import {
+  flexRender,
+  getCoreRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type OnChangeFn,
+  type Row as TableRowModel,
+  type SortingState,
+} from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { countLabel } from "@/lib/format";
 import type { GRCListMeta } from "@/lib/grc";
 import { grcLoadedRowsCopy } from "@/lib/grc-list";
 
+type SortValue = boolean | Date | number | string | null | undefined;
+
 export type TableColumn<Row extends object = Record<string, unknown>> = {
   key: string;
   label?: string;
+  enableSorting?: boolean;
   render?: (value: unknown, row: Row) => ReactNode;
+  sortValue?: (row: Row) => SortValue;
 };
 
 export const formatValue = (value: unknown) => {
@@ -78,6 +94,7 @@ export type DataTableProps<Row extends object = Record<string, unknown>> = {
   searchPlaceholder?: string;
   filterKeys?: string[];
   pageSize?: number;
+  virtualizationThreshold?: number;
   getRowHref?: (row: Row) => string | undefined;
   getRowKey?: (row: Row, index: number) => string;
   onRowClick?: (row: Row) => void;
@@ -92,6 +109,26 @@ export type DataTableProps<Row extends object = Record<string, unknown>> = {
 const rowValue = <Row extends object>(row: Row, key: string) =>
   (row as Record<string, unknown>)[key];
 
+const ROW_LINK_COLUMN_ID = "__cerebro_row_link";
+const ROW_ACTIONS_COLUMN_ID = "__cerebro_row_actions";
+const DEFAULT_VIRTUALIZATION_THRESHOLD = 30;
+
+const compareRowValues = <Row extends object>(
+  left: TableRowModel<Row>,
+  right: TableRowModel<Row>,
+  columnID: string,
+) =>
+  valueText(left.getValue(columnID)).localeCompare(valueText(right.getValue(columnID)), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+
+const ariaSortFor = (direction: false | "asc" | "desc") => {
+  if (direction === "asc") return "ascending";
+  if (direction === "desc") return "descending";
+  return "none";
+};
+
 export default function DataTable<Row extends object = Record<string, unknown>>({
   rows,
   columns,
@@ -99,6 +136,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   searchPlaceholder = "Filter loaded rows",
   filterKeys,
   pageSize = 10,
+  virtualizationThreshold = DEFAULT_VIRTUALIZATION_THRESHOLD,
   getRowHref,
   getRowKey,
   onRowClick,
@@ -111,9 +149,13 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
 }: DataTableProps<Row>) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const sourceRows = useMemo(() => rows ?? [], [rows]);
+  const safePageSize = Math.max(1, pageSize);
   const resolvedColumns = useMemo<TableColumn<Row>[]>(
-    () => columns ?? Object.keys(rows?.[0] ?? {}).slice(0, 6).map((key) => ({ key })),
-    [columns, rows],
+    () => columns ?? Object.keys(sourceRows?.[0] ?? {}).slice(0, 6).map((key) => ({ key })),
+    [columns, sourceRows],
   );
   const searchableKeys = useMemo(
     () => filterKeys ?? resolvedColumns.map((column) => column.key),
@@ -121,26 +163,105 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   );
   const rowSearchText = useMemo(
     () =>
-      (rows ?? []).map((row) =>
+      sourceRows.map((row) =>
         searchableKeys.map((key) => valueText(rowValue(row, key))).join("\n").toLowerCase(),
       ),
-    [rows, searchableKeys],
+    [sourceRows, searchableKeys],
   );
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) {
-      return rows ?? [];
+      return sourceRows;
     }
-    return (rows ?? []).filter((_row, index) =>
+    return sourceRows.filter((_row, index) =>
       rowSearchText[index]?.includes(normalizedQuery),
     );
-  }, [query, rows, rowSearchText]);
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  }, [query, sourceRows, rowSearchText]);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / safePageSize));
   const currentPage = Math.min(page, totalPages);
-  const pageStart = (currentPage - 1) * pageSize;
-  const visibleRows = filteredRows.slice(pageStart, pageStart + pageSize);
+  const pageStart = (currentPage - 1) * safePageSize;
+  const tanstackColumns = useMemo<ColumnDef<Row>[]>(
+    () => [
+      ...resolvedColumns.map<ColumnDef<Row>>((column) => ({
+        id: column.key,
+        accessorFn: (row) => column.sortValue?.(row) ?? rowValue(row, column.key),
+        cell: ({ row }) => {
+          const value = rowValue(row.original, column.key);
+          return column.render ? column.render(value, row.original) : formatValue(value);
+        },
+        enableSorting: column.enableSorting ?? true,
+        header: column.label ?? column.key,
+        sortingFn: compareRowValues,
+      })),
+      ...(getRowHref
+        ? [{
+            id: ROW_LINK_COLUMN_ID,
+            cell: ({ row }) => {
+              const href = getRowHref(row.original);
+              return href ? (
+                <Link className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300" href={href}>
+                  Open
+                </Link>
+              ) : (
+                <span className="text-[var(--text-muted)]">—</span>
+              );
+            },
+            enableSorting: false,
+            header: "Link",
+          } satisfies ColumnDef<Row>]
+        : []),
+      ...(rowActions
+        ? [{
+            id: ROW_ACTIONS_COLUMN_ID,
+            cell: ({ row }) => rowActions(row.original),
+            enableSorting: false,
+            header: "",
+          } satisfies ColumnDef<Row>]
+        : []),
+    ],
+    [getRowHref, resolvedColumns, rowActions],
+  );
+  const handleSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
+    setSorting((current) => (typeof updater === "function" ? updater(current) : updater));
+    setPage(1);
+  }, []);
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table owns the shared row model; its instance is rendered locally.
+  const table = useReactTable({
+    columns: tanstackColumns,
+    data: filteredRows,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getRowId: (row, index) => getRowKey?.(row, index) ?? String(rowValue(row, "id") ?? index),
+    getSortedRowModel: getSortedRowModel(),
+    onSortingChange: handleSortingChange,
+    state: {
+      pagination: {
+        pageIndex: currentPage - 1,
+        pageSize: safePageSize,
+      },
+      sorting,
+    },
+  });
+  const tableRows = table.getRowModel().rows;
+  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
+    count: tableRows.length,
+    estimateSize: () => 44,
+    getScrollElement: () => tableScrollRef.current,
+    overscan: 6,
+    useFlushSync: false,
+  });
+  const shouldVirtualizeRows = tableRows.length >= virtualizationThreshold;
+  const virtualRows = shouldVirtualizeRows ? rowVirtualizer.getVirtualItems() : [];
+  const rowsToRender = shouldVirtualizeRows && virtualRows.length > 0
+    ? virtualRows.map((virtualRow) => ({ tableRow: tableRows[virtualRow.index], virtualIndex: virtualRow.index }))
+    : tableRows.map((tableRow, index) => ({ tableRow, virtualIndex: index }));
+  const topSpacerHeight = shouldVirtualizeRows && virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const bottomSpacerHeight = shouldVirtualizeRows && virtualRows.length > 0
+    ? Math.max(0, rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end)
+    : 0;
+  const columnCount = table.getVisibleLeafColumns().length;
   const resultCopy = grcLoadedRowsCopy({
-    loaded: rows?.length ?? 0,
+    loaded: sourceRows.length,
     limit: resultLimit,
     meta: resultMeta,
     noun: resultNoun,
@@ -148,7 +269,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   const queryActive = query.trim().length > 0;
   const filteredCopy = `Matched ${filteredRows.length.toLocaleString()} loaded ${resultNoun}`;
 
-  if (!rows || rows.length === 0) {
+  if (!rows || sourceRows.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-4 text-xs text-[var(--text-muted)]">
         {emptyMessage}
@@ -173,7 +294,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
           {totalPages > 1 && (
             <span>
               {" "}Rows {filteredRows.length === 0 ? 0 : pageStart + 1}-
-              {Math.min(pageStart + pageSize, filteredRows.length)}
+              {Math.min(pageStart + safePageSize, filteredRows.length)}
             </span>
           )}
         </div>
@@ -183,28 +304,54 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
           No rows match the current filter.
         </div>
       ) : (
-        <div className={tableContainerClassName}>
+        <div ref={tableScrollRef} className={tableContainerClassName}>
           <table className="w-full text-left text-xs text-[var(--text-secondary)]">
             <thead className="border-b border-[color:var(--border)] bg-[var(--surface-muted)] text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-              <tr>
-                {resolvedColumns.map((column) => (
-                  <th key={column.key} className="px-3 py-2 font-semibold">
-                    {column.label ?? column.key}
-                  </th>
-                ))}
-                {getRowHref && <th className="px-3 py-2 font-semibold">Link</th>}
-                {rowActions && <th className="px-3 py-2 font-semibold"></th>}
-              </tr>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    const sortDirection = header.column.getIsSorted();
+                    return (
+                      <th key={header.id} aria-sort={header.column.getCanSort() ? ariaSortFor(sortDirection) : undefined} className="px-3 py-2 font-semibold">
+                        {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                          <button
+                            type="button"
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="flex w-full items-center gap-1 text-left font-semibold uppercase text-inherit hover:text-[var(--text-primary)]"
+                          >
+                            <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                            {sortDirection && (
+                              <span aria-hidden="true" className="text-[10px]">
+                                {sortDirection === "asc" ? "▲" : "▼"}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        )}
+                      </th>
+                    );
+                  })}
+                </tr>
+              ))}
             </thead>
             <tbody>
-              {visibleRows.map((row, index) => {
-                const href = getRowHref?.(row);
-                const key = getRowKey?.(row, pageStart + index) ?? String(rowValue(row, "id") ?? `${pageStart}-${index}`);
-                const selected = selectedRowKey !== undefined && selectedRowKey !== null && key === selectedRowKey;
+              {topSpacerHeight > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={columnCount} style={{ height: topSpacerHeight }} />
+                </tr>
+              )}
+              {rowsToRender.map(({ tableRow, virtualIndex }) => {
+                const row = tableRow.original;
+                const selected = selectedRowKey !== undefined && selectedRowKey !== null && tableRow.id === selectedRowKey;
                 const activateRow = () => onRowClick?.(row);
                 return (
                   <tr
-                    key={key}
+                    key={tableRow.id}
+                    ref={shouldVirtualizeRows ? (element) => {
+                      if (element) rowVirtualizer.measureElement(element);
+                    } : undefined}
+                    data-index={shouldVirtualizeRows ? virtualIndex : undefined}
                     onClick={onRowClick ? activateRow : undefined}
                     onKeyDown={onRowClick ? (event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -216,32 +363,19 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
                     aria-selected={selected || undefined}
                     className={`border-b border-[color:var(--border)] hover:bg-[var(--surface-muted)] ${onRowClick ? "cursor-pointer" : ""} ${selected ? "bg-indigo-50/70 dark:bg-indigo-500/15" : ""}`}
                   >
-                    {resolvedColumns.map((column) => (
-                      <td key={column.key} className="px-3 py-2">
-                        {column.render
-                          ? column.render(rowValue(row, column.key), row)
-                          : formatValue(rowValue(row, column.key))}
+                    {tableRow.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className={`px-3 py-2 ${cell.column.id === ROW_ACTIONS_COLUMN_ID ? "text-right" : ""}`}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
-                    {getRowHref && (
-                      <td className="px-3 py-2">
-                        {href ? (
-                          <Link className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300" href={href}>
-                            Open
-                          </Link>
-                        ) : (
-                          <span className="text-[var(--text-muted)]">—</span>
-                        )}
-                      </td>
-                    )}
-                    {rowActions && (
-                      <td className="px-3 py-2 text-right">
-                        {rowActions(row)}
-                      </td>
-                    )}
                   </tr>
                 );
               })}
+              {bottomSpacerHeight > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={columnCount} style={{ height: bottomSpacerHeight }} />
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

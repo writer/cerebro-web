@@ -88,6 +88,8 @@ describe("product UI contract", () => {
   });
 
   it("keeps data-page metrics and filters tied to runtime state", () => {
+    const dataTableSource = readProjectFile("src/components/grc/DataTable.tsx");
+    const layoutSource = readProjectFile("src/app/layout.tsx");
     const queryParamSource = readProjectFile("src/lib/query-params.ts");
     const primitivesSource = readProjectFile("src/components/grc/Primitives.tsx");
     const bannerPages = [
@@ -99,7 +101,12 @@ describe("product UI contract", () => {
       "src/app/connectors/page.tsx",
     ];
 
-    expect(queryParamSource).toContain("window.history.replaceState");
+    expect(layoutSource).toContain("NuqsAdapter");
+    expect(queryParamSource).toContain("useQueryState");
+    expect(queryParamSource).toContain("parseAsString.withDefault");
+    expect(queryParamSource).not.toContain("window.history.replaceState");
+    expect(dataTableSource).toContain("useReactTable");
+    expect(dataTableSource).toContain("useVirtualizer");
     expect(primitivesSource).toContain("AppliedFilterChips");
     expect(primitivesSource).toContain("state?: RuntimeState");
 
@@ -141,6 +148,7 @@ describe("product UI contract", () => {
     expect(routeSource).toContain("askAgentReadiness");
     expect(routeSource).toContain("NextResponse.json");
     expect(pageSource).toContain("/api/agent/ask/status");
+    expect(inputSource).toContain("useForm");
     expect(inputSource).toContain("Checking Ask path");
     expect(inputSource).not.toMatch(/env|token|credential|not configured/i);
   });
