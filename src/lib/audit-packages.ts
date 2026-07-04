@@ -1,15 +1,16 @@
-import type {
-  GRCDashboard,
-  GRCConnector,
-  GRCControl,
-  GRCControlEvidencePacketResponse,
-  GRCControlPacketControl,
-  GRCEvidenceItemRecord,
-  GRCEvidencePacketsResponse,
-  GRCEvidenceRequest,
-  GRCPackagedEvidencePacket,
-  GRCFramework,
-  GRCReportMetadata,
+import {
+  displayDate,
+  type GRCDashboard,
+  type GRCConnector,
+  type GRCControl,
+  type GRCControlEvidencePacketResponse,
+  type GRCControlPacketControl,
+  type GRCEvidenceItemRecord,
+  type GRCEvidencePacketsResponse,
+  type GRCEvidenceRequest,
+  type GRCPackagedEvidencePacket,
+  type GRCFramework,
+  type GRCReportMetadata,
 } from "@/lib/grc";
 
 export type AuditPackageState = "draft" | "needs_evidence" | "needs_review" | "approved" | "published" | "stale";
@@ -153,6 +154,29 @@ export type AuditPriorityWorkRow = {
   title: string;
 };
 
+export type AuditStatusLedgerState =
+  | "blocked"
+  | "excluded"
+  | "internal_only"
+  | "needs_owner"
+  | "needs_review"
+  | "ready"
+  | "waiting";
+
+export type AuditStatusLedgerRow = {
+  id: string;
+  action: string;
+  area: string;
+  detail: string;
+  href: string;
+  owner: string;
+  proof: string;
+  rank: number;
+  reviewer: string;
+  state: AuditStatusLedgerState;
+  title: string;
+};
+
 const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
 
 const statusCount = (packet: GRCControlEvidencePacketResponse | null | undefined, status: string) =>
@@ -177,7 +201,7 @@ const packetGateHref = (id: string) => {
     case "evidence":
       return "#evidence-review";
     case "reviews":
-      return "#auditor-questions";
+      return "#reviewer-questions";
     case "snapshot":
       return "#shared-snapshot";
     case "sources":
@@ -310,7 +334,7 @@ export const auditEvidenceVisibilityLabel = (visibility: AuditEvidenceVisibility
     case "needs_reviewer":
       return "Needs reviewer";
     case "ready_for_auditor":
-      return "Ready for auditor";
+      return "Ready to share";
   }
 };
 
@@ -344,7 +368,31 @@ export const auditWorkflowStateLabel = (state: AuditWorkflowState) => {
   }
 };
 
+export const auditStatusLedgerStateLabel = (state: AuditStatusLedgerState) => {
+  switch (state) {
+    case "blocked":
+      return "Blocked";
+    case "excluded":
+      return "Excluded";
+    case "internal_only":
+      return "Internal only";
+    case "needs_owner":
+      return "Needs owner";
+    case "needs_review":
+      return "Needs review";
+    case "ready":
+      return "Ready to share";
+    case "waiting":
+      return "Waiting";
+  }
+};
+
 const packetCountLabel = (count: number) => `${count.toLocaleString()} ${count === 1 ? "packet" : "packets"}`;
+const findingCountLabel = (count: number) => `${count.toLocaleString()} ${count === 1 ? "finding" : "findings"}`;
+const generatedPrefix = "Generated ";
+
+const readableWorkflowDetail = (detail: string) =>
+  detail.startsWith(generatedPrefix) ? `${generatedPrefix}${displayDate(detail.slice(generatedPrefix.length))}` : detail;
 
 const evidenceReason = ({
   decision,
@@ -755,6 +803,51 @@ const controlOwnerRank = (row: ControlOwnerRow) => {
 const questionRank = (row: AuditorQuestionRow) =>
   /blocked|failed|missing|needs|overdue|rejected|stale/i.test(row.status) ? 2 : 5;
 
+const sourceNeedsAttention = (status: string) =>
+  !["collected", "current", "fresh", "healthy", "ready"].includes(normalized(status));
+
+const auditStatusLedgerRank = (state: AuditStatusLedgerState) => {
+  switch (state) {
+    case "blocked":
+      return 0;
+    case "needs_owner":
+      return 1;
+    case "needs_review":
+      return 2;
+    case "waiting":
+      return 3;
+    case "internal_only":
+      return 6;
+    case "excluded":
+      return 7;
+    case "ready":
+      return 9;
+  }
+};
+
+const ledgerStateForWorkflow = (state: AuditWorkflowState): AuditStatusLedgerState =>
+  state === "ready" ? "ready" : state;
+
+const evidenceLedgerState = (row: EvidenceCurationRow): AuditStatusLedgerState => {
+  if (row.visibility === "needs_owner") return "needs_owner";
+  if (row.decision === "needs_replacement" || row.decision === "rejected") return "blocked";
+  if (row.visibility === "needs_reviewer" || row.decision === "needs_review") return "needs_review";
+  if (row.visibility === "internal_only") return "internal_only";
+  if (row.visibility === "excluded") return "excluded";
+  return "ready";
+};
+
+const evidenceLedgerAction = (row: EvidenceCurationRow) => {
+  const state = evidenceLedgerState(row);
+  if (state === "needs_owner") return "Assign evidence owner";
+  if (row.decision === "rejected") return "Replace rejected evidence";
+  if (row.decision === "needs_replacement") return "Replace evidence";
+  if (state === "needs_review") return "Review evidence";
+  if (state === "internal_only") return "Keep out of shared snapshot";
+  if (state === "excluded") return "Document exclusion";
+  return "Keep current";
+};
+
 export const buildActionableControlOwnerRows = (ownerRows: ControlOwnerRow[], limit = 12): ControlOwnerRow[] =>
   ownerRows
     .filter((row) => controlOwnerRank(row) < 9)
@@ -765,6 +858,118 @@ export const buildActionableControlOwnerRows = (ownerRows: ControlOwnerRow[], li
       left.control.localeCompare(right.control),
     )
     .slice(0, limit);
+
+export const buildAuditStatusLedgerRows = ({
+  evidenceRows,
+  ownerRows,
+  readinessRows,
+  snapshotID,
+  sourceRows,
+  limit = 12,
+}: {
+  evidenceRows: EvidenceCurationRow[];
+  ownerRows: ControlOwnerRow[];
+  readinessRows: AuditReadinessRow[];
+  snapshotID: string;
+  sourceRows: SourceTrustRow[];
+  limit?: number;
+}): AuditStatusLedgerRow[] => {
+  const readinessWork = readinessRows
+    .filter((row) => row.state !== "ready")
+    .map((row) => {
+      const state = ledgerStateForWorkflow(row.state);
+      const detail = readableWorkflowDetail(row.detail);
+      return {
+        id: `gate:${row.id}`,
+        action: row.action,
+        area: "Packet gate",
+        detail,
+        href: packetGateHref(row.id),
+        owner: row.owner,
+        proof: detail,
+        rank: auditStatusLedgerRank(state),
+        reviewer: row.id === "snapshot" ? "Packet reviewers" : "Evidence reviewers",
+        state,
+        title: row.title,
+      };
+    });
+
+  const evidenceWork = evidenceRows
+    .map((row) => ({ row, state: evidenceLedgerState(row) }))
+    .filter(({ state }) => state !== "ready")
+    .map(({ row, state }) => ({
+      id: `evidence:${row.id}`,
+      action: evidenceLedgerAction(row),
+      area: "Evidence",
+      detail: row.controlID,
+      href: "#evidence-review",
+      owner: state === "needs_owner" ? "Audit lead" : row.owner,
+      proof: row.reason,
+      rank: auditStatusLedgerRank(state),
+      reviewer: row.reviewer,
+      state,
+      title: row.title,
+    }));
+
+  const controlWork = buildActionableControlOwnerRows(ownerRows, limit).map((row) => {
+    const ownerMissing = normalized(row.owner) === "unassigned";
+    const needsReview = /manual_review|needs_review/i.test(row.status);
+    const state: AuditStatusLedgerState = ownerMissing ? "needs_owner" : needsReview ? "needs_review" : "blocked";
+    return {
+      id: `control:${row.id}`,
+      action: row.action,
+      area: "Control",
+      detail: row.title,
+      href: "#control-owner-queue",
+      owner: ownerMissing ? "Audit lead" : row.owner,
+      proof: `${row.evidence} evidence, ${findingCountLabel(row.findings)}`,
+      rank: auditStatusLedgerRank(state) + controlOwnerRank(row) / 10,
+      reviewer: "Control reviewers",
+      state,
+      title: row.control,
+    };
+  });
+
+  const sourceWork = sourceRows
+    .filter((row) => sourceNeedsAttention(row.status))
+    .map((row) => ({
+      id: `source:${row.id}`,
+      action: row.action,
+      area: "Source",
+      detail: row.source,
+      href: "#source-freshness",
+      owner: row.source,
+      proof: `Last synced ${displayDate(row.lastSynced)}`,
+      rank: auditStatusLedgerRank("blocked"),
+      reviewer: "Source reviewers",
+      state: "blocked" as AuditStatusLedgerState,
+      title: row.source,
+    }));
+
+  const workRows = [...readinessWork, ...evidenceWork, ...controlWork, ...sourceWork]
+    .sort((left, right) =>
+      left.rank - right.rank ||
+      left.area.localeCompare(right.area) ||
+      left.title.localeCompare(right.title),
+    )
+    .slice(0, limit);
+
+  if (workRows.length > 0) return workRows;
+
+  return [{
+    id: "snapshot:ready",
+    action: "Share snapshot",
+    area: "Snapshot",
+    detail: `Snapshot ${snapshotID}`,
+    href: "#shared-snapshot",
+    owner: "Audit lead",
+    proof: "All packet gates are ready.",
+    rank: auditStatusLedgerRank("ready"),
+    reviewer: "Packet reviewers",
+    state: "ready",
+    title: "Shared snapshot",
+  }];
+};
 
 export const buildAuditReadinessRows = (
   summary: AuditPackageSummary,
@@ -852,12 +1057,12 @@ export const buildAuditorQuestionRows = ({
       status: row.action,
     }));
   const sourceQuestions = sourceRows
-    .filter((row) => !["collected", "current", "fresh", "healthy", "ready"].includes(normalized(row.status)))
+    .filter((row) => sourceNeedsAttention(row.status))
     .map((row) => ({
       id: `source:${row.id}`,
       area: "Source",
       owner: row.source,
-      question: `Can ${row.source} be refreshed before auditor review?`,
+      question: `Can ${row.source} be refreshed before packet review?`,
       source: row.lastSynced,
       status: row.action,
     }));
@@ -922,7 +1127,7 @@ export const buildAuditPriorityWorkRows = ({
     action: "Answer question",
     area: row.area,
     detail: row.source,
-    href: "#auditor-questions",
+    href: "#reviewer-questions",
     owner: row.owner,
     rank: questionRank(row),
     state: row.status,

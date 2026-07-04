@@ -9,6 +9,7 @@ import {
   buildAuditPackageSummary,
   buildAuditPriorityWorkRows,
   buildAuditReadinessRows,
+  buildAuditStatusLedgerRows,
   buildAuditorQuestionRows,
   buildEvidenceCurationRows,
   buildScopeExceptionRows,
@@ -62,7 +63,7 @@ describe("audit package helpers", () => {
     expect(auditEvidenceDecision({ status: "ready_for_auditor" })).toBe("included");
   });
 
-  it("separates evidence scope from auditor visibility", () => {
+  it("separates evidence scope from review visibility", () => {
     expect(auditEvidenceScope("excluded")).toBe("excluded");
     expect(auditEvidenceScope("internal_only")).toBe("internal_only");
     expect(auditEvidenceScope("accepted")).toBe("included");
@@ -364,7 +365,7 @@ describe("audit package helpers", () => {
     ]);
   });
 
-  it("queues auditor questions from evidence gaps, owner work, and stale sources", () => {
+  it("queues reviewer questions from evidence gaps, owner work, and stale sources", () => {
     const evidenceRows: EvidenceCurationRow[] = [
       {
         controlID: "SOC 2 CC6.1",
@@ -576,7 +577,7 @@ describe("audit package helpers", () => {
     ]);
   });
 
-  it("builds priority work rows from readiness, owner, and auditor queues", () => {
+  it("builds priority work rows from readiness, owner, and reviewer queues", () => {
     const readinessRows = buildAuditReadinessRows(summary({
       failingControls: 1,
       missingEvidence: 1,
@@ -629,10 +630,136 @@ describe("audit package helpers", () => {
       expect.objectContaining({ href: "#control-owner-queue", id: "packet:controls" }),
       expect.objectContaining({ href: "#evidence-review", id: "packet:evidence" }),
       expect.objectContaining({ href: "#source-freshness", id: "packet:sources" }),
-      expect.objectContaining({ href: "#auditor-questions", id: "question:evidence:request-1" }),
+      expect.objectContaining({ href: "#reviewer-questions", id: "question:evidence:request-1" }),
     ]));
     expect(rows.map((row) => row.area)).toContain("Control");
     expect(rows.map((row) => row.area)).toContain("Evidence");
     expect(rows).toHaveLength(8);
+  });
+
+  it("builds a packet status ledger from gates, evidence, controls, and sources", () => {
+    const readinessRows = buildAuditReadinessRows(summary({
+      failingControls: 1,
+      missingEvidence: 1,
+      openReviews: 1,
+      staleSources: 1,
+      state: "needs_review",
+    }), "snapshot-123", "");
+    const evidenceRows: EvidenceCurationRow[] = [
+      {
+        controlID: "SOC 2 CC6.1",
+        decision: "needs_review",
+        freshness: "7d",
+        id: "request-review",
+        packets: 1,
+        owner: "Security",
+        quality: "ready",
+        reason: "Reviewer decision is pending.",
+        review: "manual_review",
+        reviewer: "Unassigned",
+        source: "GitHub",
+        scope: "included",
+        status: "needs_review",
+        title: "Access review",
+        visibility: "needs_reviewer",
+      },
+      {
+        controlID: "SOC 2 CC7.1",
+        decision: "included",
+        freshness: "30d",
+        id: "request-owner",
+        packets: 1,
+        owner: "Unassigned",
+        quality: "ready",
+        reason: "1 packet accepted from AWS.",
+        review: "accepted",
+        reviewer: "reviewer@example.com",
+        source: "AWS",
+        scope: "included",
+        status: "ready",
+        title: "Cloud logs",
+        visibility: "needs_owner",
+      },
+    ];
+    const ownerRows: ControlOwnerRow[] = [
+      {
+        action: "Add evidence",
+        control: "SOC 2 CC6.1",
+        evidence: "0/1",
+        findings: 0,
+        id: "soc2:cc6.1",
+        missing: 1,
+        owner: "Security",
+        stale: 0,
+        status: "failing",
+        title: "Logical access",
+      },
+    ];
+    const sourceRows: SourceTrustRow[] = [
+      {
+        action: "Repair source",
+        evidence: 0,
+        findings: 0,
+        id: "jira:runtime-1",
+        lastSynced: "2026-01-01T00:00:00Z",
+        source: "Jira",
+        status: "failed",
+      },
+    ];
+
+    const rows = buildAuditStatusLedgerRows({
+      evidenceRows,
+      ownerRows,
+      readinessRows,
+      snapshotID: "snapshot-123",
+      sourceRows,
+      limit: 20,
+    });
+
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ area: "Packet gate", href: "#control-owner-queue", id: "gate:controls", state: "blocked" }),
+      expect.objectContaining({ action: "Assign evidence owner", href: "#evidence-review", id: "evidence:request-owner", owner: "Audit lead", state: "needs_owner" }),
+      expect.objectContaining({ action: "Review evidence", id: "evidence:request-review", state: "needs_review" }),
+      expect.objectContaining({ href: "#source-freshness", id: "source:jira:runtime-1", state: "blocked" }),
+    ]));
+    expect(rows[0].rank).toBeLessThanOrEqual(rows[1].rank);
+  });
+
+  it("returns a ready snapshot ledger row when no packet work is queued", () => {
+    const rows = buildAuditStatusLedgerRows({
+      evidenceRows: [
+        {
+          controlID: "SOC 2 CC6.1",
+          decision: "accepted",
+          freshness: "30d",
+          id: "request-ready",
+          packets: 1,
+          owner: "Security",
+          quality: "ready",
+          reason: "1 packet accepted from AWS.",
+          review: "accepted",
+          reviewer: "reviewer@example.com",
+          source: "AWS",
+          scope: "included",
+          status: "ready",
+          title: "Cloud logs",
+          visibility: "ready_for_auditor",
+        },
+      ],
+      ownerRows: [],
+      readinessRows: buildAuditReadinessRows(summary(), "snapshot-456", "2026-01-01T00:00:00Z"),
+      snapshotID: "snapshot-456",
+      sourceRows: [],
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        action: "Share snapshot",
+        href: "#shared-snapshot",
+        id: "snapshot:ready",
+        proof: "All packet gates are ready.",
+        state: "ready",
+      }),
+    ]);
   });
 });

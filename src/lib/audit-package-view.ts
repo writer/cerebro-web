@@ -8,7 +8,7 @@ import {
   buildAuditExportManifestRows,
   buildAuditReadinessRows,
   buildAuditPackageSummary,
-  buildAuditPriorityWorkRows,
+  buildAuditStatusLedgerRows,
   buildAuditorQuestionRows,
   buildControlOwnerRows,
   buildEvidenceCurationRows,
@@ -172,9 +172,16 @@ export function useAuditPackageView({
     () => buildAuditExportManifestRows({ generatedAt, snapshotID, summary }),
     [generatedAt, snapshotID, summary],
   );
-  const priorityRows = useMemo(
-    () => buildAuditPriorityWorkRows({ auditorQuestionRows, ownerRows: actionableOwnerRows, readinessRows, limit: 8 }),
-    [actionableOwnerRows, auditorQuestionRows, readinessRows],
+  const statusLedgerRows = useMemo(
+    () => buildAuditStatusLedgerRows({
+      evidenceRows,
+      ownerRows: actionableOwnerRows,
+      readinessRows,
+      snapshotID,
+      sourceRows,
+      limit: 12,
+    }),
+    [actionableOwnerRows, evidenceRows, readinessRows, snapshotID, sourceRows],
   );
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
@@ -207,12 +214,12 @@ export function useAuditPackageView({
     loading,
     metadata,
     ownerRows,
-    priorityRows,
     readinessRows,
     reload,
     selectedProfileID,
     snapshotID,
     sourceRows,
+    statusLedgerRows,
     summary,
     teamRows,
   };
