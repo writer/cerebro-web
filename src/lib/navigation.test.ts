@@ -30,6 +30,15 @@ describe("navigation entries", () => {
     expect(hrefs).toContain("/credential-stores");
   });
 
+  it("uses operator labels for issues and compliance", () => {
+    expect(operatorNavLinks.find((entry) => entry.href === "/risk-inbox")).toMatchObject({
+      label: "Issues",
+    });
+    expect(operatorNavLinks.find((entry) => entry.href === "/grc")).toMatchObject({
+      label: "Compliance",
+    });
+  });
+
   it("keeps members discoverable outside the sidebar", () => {
     expect(navigationEntries.find((entry) => entry.href === "/identity")).toMatchObject({
       label: "Members",
