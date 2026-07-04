@@ -23,6 +23,7 @@ describe("navigation entries", () => {
     const hrefs = operatorNavLinks.map((e) => e.href);
     expect(hrefs).toContain("/");
     expect(hrefs).toContain("/risk-inbox");
+    expect(hrefs).toContain("/grc");
     expect(hrefs).toContain("/ask");
     expect(hrefs).toContain("/controls");
     expect(hrefs).toContain("/connectors");

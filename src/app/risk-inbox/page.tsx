@@ -1,15 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
 import FindingTable from "@/components/grc/FindingTable";
-import { AppliedFilterChips, DataStateBanner, MetricCard, PageHeader, ResultLimitNotice, RiskBadge } from "@/components/grc/Primitives";
+import { AppliedFilterChips, Badge, DataStateBanner, MetricCard, PageHeader, ResultLimitNotice, RiskBadge, SeverityDot } from "@/components/grc/Primitives";
+import ReviewDrawer from "@/components/grc/ReviewDrawer";
 import { fetchCerebro } from "@/lib/cerebro-client";
 import { countLabel } from "@/lib/format";
 import { filterRiskInboxFindings } from "@/lib/findings-filter";
 import { downloadFindingsCSV } from "@/lib/findings-export";
 import { FINDING_DISPOSITION_OPTIONS, FindingDisposition, triageBatchesByTenant } from "@/lib/finding-triage";
-import { GRCFinding, GRCListMeta } from "@/lib/grc";
+import { displayDate, GRCFinding, GRCListMeta, humanize, shortEntity } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCMutation, useGRCQuery } from "@/lib/grc-client";
 import { GRC_FILTERED_EXPORT_LIMIT, GRC_WORKLIST_LIMIT, grcBoundedRows } from "@/lib/grc-list";
 import { useApiKey } from "@/components/providers";
@@ -114,9 +116,14 @@ export default function RiskInboxPage() {
     [loadedFindings],
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [previewFindingId, setPreviewFindingId] = useState<string | null>(null);
   const selectedUpcomingFramework = isUpcomingGRCFramework(framework);
   const { mutate, saving, error: mutationError, setError: setMutationError } = useGRCMutation();
   const selectedCount = useMemo(() => findings.reduce((count, f) => (selectedIds.has(f.id) ? count + 1 : count), 0), [findings, selectedIds]);
+  const previewFinding = useMemo(
+    () => findings.find((finding) => finding.id === previewFindingId) ?? null,
+    [findings, previewFindingId],
+  );
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -320,9 +327,156 @@ export default function RiskInboxPage() {
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
+            onPreviewFinding={(finding) => setPreviewFindingId(finding.id)}
           />
         </div>
       )}
+      <FindingReviewDrawer finding={previewFinding} onClose={() => setPreviewFindingId(null)} />
     </div>
+  );
+}
+
+function FindingReviewDrawer({
+  finding,
+  onClose,
+}: {
+  finding: GRCFinding | null;
+  onClose: () => void;
+}) {
+  const entity = finding?.entity || finding?.resource_urns?.[0] || "";
+  const controls = finding?.controls ?? [];
+  const sourceCoverage = finding?.source_coverage_refs ?? [];
+
+  return (
+    <ReviewDrawer
+      open={Boolean(finding)}
+      onClose={onClose}
+      title={finding?.title ?? "Finding review"}
+      subtitle={finding ? finding.id : undefined}
+      footer={finding && (
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="primary-button px-3 py-1.5 text-[12px]">Open finding</Link>
+          {entity && <Link href={`/explore?root_urn=${encodeURIComponent(entity)}`} className="secondary-button px-3 py-1.5 text-[12px]">Relationships</Link>}
+          {entity && <Link href={`/impact?root_urn=${encodeURIComponent(entity)}`} className="secondary-button px-3 py-1.5 text-[12px]">Affected assets</Link>}
+        </div>
+      )}
+    >
+      {finding && (
+        <div className="space-y-5">
+          <section>
+            <div className="flex flex-wrap items-center gap-2">
+              <RiskBadge score={finding.risk_score} />
+              <span className="inline-flex items-center gap-1.5">
+                <SeverityDot severity={finding.severity} />
+                <Badge value={finding.severity} tone="severity" />
+              </span>
+              <Badge value={finding.status} />
+              {finding.disposition && <Badge value={finding.disposition} />}
+            </div>
+            <p className="mt-3 text-[13px] leading-5 text-[var(--text-secondary)]">
+              {finding.risk_statement || finding.summary || "No risk statement returned."}
+            </p>
+          </section>
+
+          <section className="grid gap-3 border-t border-[color:var(--border)] pt-4 sm:grid-cols-2">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Owner</div>
+              <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{finding.owner || "Unassigned"}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">SLA</div>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Badge value={finding.sla_status} />
+                <span className="text-[12px] text-[var(--text-muted)]">{finding.due_at ? displayDate(finding.due_at) : "No due date"}</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Entity</div>
+              <div className="mt-1 truncate font-mono text-[12px] text-[var(--text-primary)]">{entity ? shortEntity(entity) : "No entity"}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Evidence</div>
+              <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{countLabel(finding.evidence_count, "item")}</div>
+            </div>
+          </section>
+
+          <section className="border-t border-[color:var(--border)] pt-4">
+            <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Source context</h3>
+            <dl className="mt-3 grid gap-3 text-[12px] sm:grid-cols-2">
+              <div>
+                <dt className="text-[var(--text-muted)]">Source</dt>
+                <dd className="mt-1 truncate text-[var(--text-primary)]">{finding.source_id || "Not returned"}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Runtime</dt>
+                <dd className="mt-1 truncate text-[var(--text-primary)]">{finding.runtime_id || "Not returned"}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Rule</dt>
+                <dd className="mt-1 truncate text-[var(--text-primary)]">{finding.rule_id || "Not returned"}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Last seen</dt>
+                <dd className="mt-1 text-[var(--text-primary)]">{displayDate(finding.last_observed_at)}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="border-t border-[color:var(--border)] pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Mapped controls</h3>
+              <span className="text-[11px] text-[var(--text-muted)]">{controls.length.toLocaleString()} total</span>
+            </div>
+            {controls.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {controls.slice(0, 8).map((control) => (
+                  <Link
+                    key={`${control.framework_name}:${control.control_id}`}
+                    href={`/controls?framework=${encodeURIComponent(control.framework_name)}&control=${encodeURIComponent(control.control_id)}`}
+                    className="rounded-md border border-[color:var(--border)] px-2 py-1 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]"
+                  >
+                    {control.framework_name} {control.control_id}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[13px] text-[var(--text-muted)]">No mapped controls returned.</p>
+            )}
+          </section>
+
+          <section className="border-t border-[color:var(--border)] pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Coverage</h3>
+              <span className="text-[11px] text-[var(--text-muted)]">{sourceCoverage.length.toLocaleString()} refs</span>
+            </div>
+            {sourceCoverage.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {sourceCoverage.slice(0, 5).map((coverage, index) => (
+                  <div key={`${coverage.source_id ?? "source"}:${coverage.dimension_id ?? index}`} className="rounded-md bg-[var(--surface-muted)] px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12px] font-medium text-[var(--text-primary)]">{coverage.source_id || "Source"}</span>
+                      {coverage.support_level && <Badge value={coverage.support_level} />}
+                      {coverage.high_value && <Badge value="high_value" />}
+                    </div>
+                    <div className="mt-1 text-[12px] text-[var(--text-muted)]">
+                      {[coverage.dimension_type, coverage.dimension_id, coverage.evidence_types?.map(humanize).join(", ")].filter(Boolean).join(" - ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[13px] text-[var(--text-muted)]">No source coverage refs returned.</p>
+            )}
+          </section>
+
+          {finding.remediation_intent && (
+            <section className="border-t border-[color:var(--border)] pt-4">
+              <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Remediation</h3>
+              <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">{finding.remediation_intent}</p>
+            </section>
+          )}
+        </div>
+      )}
+    </ReviewDrawer>
   );
 }

@@ -117,6 +117,7 @@ export const informationAreas: InformationArea[] = [
     },
     primaryRoutes: [
       { href: "/", label: "Home", detail: "Audit readiness, control posture, and proof coverage." },
+      { href: "/grc", label: "GRC", detail: "Frameworks, controls, evidence, policies, questionnaires, and reports." },
       { href: "/controls", label: "Controls", detail: "Control status, mapped findings, and evidence gaps." },
       { href: "/policies", label: "Policies", detail: "Policy versions, approvals, attestations, exceptions, and mappings." },
       { href: "/frameworks", label: "Frameworks", detail: "Framework readiness, maturity, gaps, planning, and exports." },

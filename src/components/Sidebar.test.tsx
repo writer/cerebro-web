@@ -37,6 +37,7 @@ describe("isSidebarLinkActive", () => {
     const grcGroup = sidebarNavGroups.find((group) => group.id === "grc");
     const hrefs = grcGroup?.links.map((link) => link.href);
 
+    expect(grcGroup?.href).toBe("/grc");
     expect(hrefs).toEqual([
       "/frameworks",
       "/controls",
@@ -45,6 +46,13 @@ describe("isSidebarLinkActive", () => {
       "/questionnaires",
       "/reports",
     ]);
+  });
+
+  it("keeps the GRC overview in the visible sidebar", () => {
+    const sidebarHrefs = sidebarNavLinks.map((link) => link.href);
+
+    expect(sidebarHrefs).toContain("/grc");
+    expect(hasSidebarIcon("/grc")).toBe(true);
   });
 
   it("keeps trend pages outside the visible sidebar", () => {

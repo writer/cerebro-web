@@ -51,6 +51,7 @@ export default function FindingTable({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
+  onPreviewFinding,
 }: {
   findings: GRCFinding[];
   empty?: string;
@@ -59,6 +60,7 @@ export default function FindingTable({
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: (ids: string[], selected: boolean) => void;
+  onPreviewFinding?: (finding: GRCFinding) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("risk_score");
@@ -179,37 +181,48 @@ export default function FindingTable({
               <td className="text-center tabular-nums">{finding.evidence_count}</td>
               <td className="text-[var(--text-muted)]">{displayDate(finding.last_observed_at)}</td>
               <td>
-                <AskAboutLink
-                  question={`Why is ${finding.title} risky and which entities are affected?`}
-                  scopeUrn={finding.entity}
-                  title="Ask about this finding"
-                  context={{
-                    route: "/risk-inbox",
-                    routeLabel: "Risks",
-                    title: finding.title,
-                    findingId: finding.id,
-                    rule_id: finding.rule_id,
-                    runtime_id: finding.runtime_id,
-                    source_id: finding.source_id,
-                    severity: finding.severity,
-                    status: finding.status,
-                    aperio_finding_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "finding")?.external_id,
-                    aperio_incident_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "incident")?.external_id,
-                    oauth_app_id: finding.attributes?.oauthAppId ?? finding.attributes?.oauth_app_id,
-                    oauth_grant_id: finding.attributes?.oauthGrantId ?? finding.attributes?.oauth_grant_id,
-                    aperio_response_owner: aperioResponseOwner(finding),
-                    response_action_candidates: aperioResponseActionCandidates(finding),
-                    chips: [
-                      { label: "Finding", value: finding.id },
-                      finding.rule_id ? { label: "Rule", value: finding.rule_id } : null,
-                      finding.source_id ? { label: "Source", value: finding.source_id } : null,
-                    ].filter(Boolean) as { label: string; value: string }[],
-                  }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 text-[var(--text-muted)] transition hover:text-[var(--primary)]">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                  </svg>
-                </AskAboutLink>
+                <div className="flex items-center justify-end gap-2">
+                  {onPreviewFinding && (
+                    <button
+                      type="button"
+                      onClick={() => onPreviewFinding(finding)}
+                      className="rounded-md border border-[color:var(--border)] px-2 py-1 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]"
+                    >
+                      Review
+                    </button>
+                  )}
+                  <AskAboutLink
+                    question={`Why is ${finding.title} risky and which entities are affected?`}
+                    scopeUrn={finding.entity}
+                    title="Ask about this finding"
+                    context={{
+                      route: "/risk-inbox",
+                      routeLabel: "Risks",
+                      title: finding.title,
+                      findingId: finding.id,
+                      rule_id: finding.rule_id,
+                      runtime_id: finding.runtime_id,
+                      source_id: finding.source_id,
+                      severity: finding.severity,
+                      status: finding.status,
+                      aperio_finding_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "finding")?.external_id,
+                      aperio_incident_id: finding.external_refs?.find((ref) => ref.system === "aperio" && ref.kind === "incident")?.external_id,
+                      oauth_app_id: finding.attributes?.oauthAppId ?? finding.attributes?.oauth_app_id,
+                      oauth_grant_id: finding.attributes?.oauthGrantId ?? finding.attributes?.oauth_grant_id,
+                      aperio_response_owner: aperioResponseOwner(finding),
+                      response_action_candidates: aperioResponseActionCandidates(finding),
+                      chips: [
+                        { label: "Finding", value: finding.id },
+                        finding.rule_id ? { label: "Rule", value: finding.rule_id } : null,
+                        finding.source_id ? { label: "Source", value: finding.source_id } : null,
+                      ].filter(Boolean) as { label: string; value: string }[],
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 text-[var(--text-muted)] transition hover:text-[var(--primary)]">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                  </AskAboutLink>
+                </div>
               </td>
             </tr>
           ))}
