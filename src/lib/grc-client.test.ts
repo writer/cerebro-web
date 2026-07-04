@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { downloadGRCExport, grcEntityImpactPath, grcExportFilename, GRC_QUERY_TIMEOUT_MS, grcResponseErrorMessage, grcTimeoutMessage } from "./grc-client";
+import { downloadGRCExport, grcEntityImpactPath, grcExportFilename, grcPath, grcQueryKey, GRC_QUERY_TIMEOUT_MS, grcResponseErrorMessage, grcTimeoutMessage } from "./grc-client";
 
 describe("grc client error copy", () => {
   it("includes status, endpoint, elapsed time, and upstream text", () => {
@@ -30,6 +30,15 @@ describe("grc client error copy", () => {
 });
 
 describe("grc client paths", () => {
+  it("omits empty query parameters from GRC proxy paths", () => {
+    expect(grcPath("/grc/control-packets", {
+      control: "",
+      framework: "SOC 2",
+      limit: 25,
+      tenant_id: undefined,
+    })).toBe("/grc/control-packets?framework=SOC+2&limit=25");
+  });
+
   it("encodes impact root URNs inside the proxy path segment", () => {
     const path = grcEntityImpactPath("urn:cerebro:writer:github_code_repository:writer/cerebro", {
       tenant_id: "writer",
@@ -39,6 +48,17 @@ describe("grc client paths", () => {
     expect(path).toBe(
       "/grc/entities/urn%3Acerebro%3Awriter%3Agithub_code_repository%3Awriter%2Fcerebro/impact?tenant_id=writer&limit=50",
     );
+  });
+});
+
+describe("grc query keys", () => {
+  it("scopes TanStack Query cache entries by API key and path", () => {
+    expect(grcQueryKey("/grc/dashboard?limit=10", "key-a")).toEqual(["grc", "key-a", "/grc/dashboard?limit=10"]);
+    expect(grcQueryKey("/grc/dashboard?limit=10", "key-b")).not.toEqual(grcQueryKey("/grc/dashboard?limit=10", "key-a"));
+  });
+
+  it("uses a stable disabled key for inactive queries", () => {
+    expect(grcQueryKey(null)).toEqual(["grc", "", "disabled"]);
   });
 });
 
