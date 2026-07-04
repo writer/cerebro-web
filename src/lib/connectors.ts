@@ -31,6 +31,36 @@ export type ConnectorCatalogEntry = {
   requestable_reason?: string;
   request_access_url?: string;
   request_access_action?: string;
+  priority?: number;
+  priority_tier?: "urgent" | "high" | "standard" | "backlog" | string;
+  priority_reasons?: string[];
+  catalog_path?: string;
+  package_path?: string;
+  missing_families?: string[];
+  existing_references?: string[];
+  search_queries?: string[];
+  next_action?: string;
+  has_provider_api_contract?: boolean;
+  has_provider_api_mapping?: boolean;
+  has_provider_api_proof?: boolean;
+  provider_api_status?: string;
+  provider_api_basis?: string;
+  provider_api_verified_at?: string;
+  provider_api_transport?: string;
+  provider_api_auth?: string;
+  provider_api_auth_mechanics?: string;
+  provider_api_base_url?: string;
+  provider_api_endpoint?: string;
+  provider_api_spec_url?: string;
+  provider_api_spec_kind?: string;
+  provider_api_references?: string[];
+  provider_api_auth_evidence?: string[];
+  provider_api_scope_evidence?: string[];
+  provider_api_mapped_families?: string[];
+  provider_api_missing_families?: string[];
+  provider_api_proof_score?: number;
+  provider_api_proof_level?: string;
+  provider_api_proof_gaps?: string[];
 };
 
 export type ConnectorLibraryPage = {
@@ -1761,9 +1791,33 @@ export const connectorSearchText = (connector: ConnectorCatalogEntry) =>
     connector.request_access_action,
     connector.auth_model,
     connector.verification_endpoint,
+    connector.priority_tier,
+    connector.catalog_path,
+    connector.package_path,
+    connector.next_action,
+    connector.provider_api_status,
+    connector.provider_api_basis,
+    connector.provider_api_transport,
+    connector.provider_api_auth,
+    connector.provider_api_auth_mechanics,
+    connector.provider_api_base_url,
+    connector.provider_api_endpoint,
+    connector.provider_api_spec_url,
+    connector.provider_api_spec_kind,
+    connector.provider_api_proof_level,
     connector.integration_depth?.level,
     connector.integration_depth?.score,
     connectorRuntimeSurfaceLabel(connector),
+    ...(connector.priority_reasons ?? []),
+    ...(connector.missing_families ?? []),
+    ...(connector.existing_references ?? []),
+    ...(connector.search_queries ?? []),
+    ...(connector.provider_api_references ?? []),
+    ...(connector.provider_api_auth_evidence ?? []),
+    ...(connector.provider_api_scope_evidence ?? []),
+    ...(connector.provider_api_mapped_families ?? []),
+    ...(connector.provider_api_missing_families ?? []),
+    ...(connector.provider_api_proof_gaps ?? []),
     ...(connector.emitted_kinds ?? []),
     ...(connector.catalog_categories ?? []),
     ...(connector.resource_families ?? []).flatMap((family) => [

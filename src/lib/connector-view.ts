@@ -18,6 +18,33 @@ export type ConnectorCard = ConnectorCatalogEntry & {
   nextAction: string;
 };
 
+export type ProviderAPIProofState = "needs_discovery" | "needs_mapping" | "needs_proof" | "verified";
+
+export type ProviderAPIProofQueueItem = {
+  sourceID: string;
+  displayName: string;
+  state: ProviderAPIProofState;
+  label: string;
+  detail: string;
+  priority: number;
+  score: number | null;
+  tier: string;
+  missing: string[];
+  reasons: string[];
+  references: string[];
+  href: string;
+};
+
+export type ProviderAPIProofMetrics = {
+  total: number;
+  needsAction: number;
+  needsDiscovery: number;
+  needsMapping: number;
+  needsProof: number;
+  verified: number;
+  averageScore: number | null;
+};
+
 export const readinessOrder: SourceReadiness[] = ["bad", "needs_refresh", "poor", "healthy", "not_configured"];
 
 export const readinessLabels: Record<ReadinessFilter, string> = {
@@ -53,8 +80,199 @@ export const readinessRowClass: Record<SourceReadiness, string> = {
   not_configured: "border-l-zinc-400",
 };
 
+const providerAPIStateLabels: Record<ProviderAPIProofState, string> = {
+  needs_discovery: "Find API source",
+  needs_mapping: "Map runtime families",
+  needs_proof: "Add proof",
+  verified: "Verified",
+};
+
+const providerAPIStateSort: Record<ProviderAPIProofState, number> = {
+  needs_discovery: 0,
+  needs_mapping: 1,
+  needs_proof: 2,
+  verified: 3,
+};
+
+const providerAPITierScore: Record<string, number> = {
+  urgent: 90,
+  high: 70,
+  standard: 45,
+  backlog: 20,
+};
+
 const runtimeAttentionCount = (source: SourceCoverageSummary) =>
   source.degraded + source.stale + source.unknown + source.graph_failed + source.graph_behind + source.cursor_pending;
+
+const normalizedStrings = (items?: string[]) =>
+  (items ?? []).map((item) => item.trim()).filter(Boolean);
+
+const positiveNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
+
+const proofScoreFor = (card: Pick<ConnectorCatalogEntry, "provider_api_proof_score">) =>
+  typeof card.provider_api_proof_score === "number" && Number.isFinite(card.provider_api_proof_score)
+    ? Math.max(0, Math.min(100, Math.round(card.provider_api_proof_score)))
+    : null;
+
+const providerAPIMissingFamilies = (card: Pick<ConnectorCatalogEntry, "provider_api_missing_families" | "missing_families">) =>
+  normalizedStrings(card.provider_api_missing_families).length > 0
+    ? normalizedStrings(card.provider_api_missing_families)
+    : normalizedStrings(card.missing_families);
+
+const providerAPIProofGaps = (card: Pick<ConnectorCatalogEntry, "provider_api_proof_gaps">) =>
+  normalizedStrings(card.provider_api_proof_gaps);
+
+const providerAPIReferences = (card: Pick<ConnectorCatalogEntry, "provider_api_references" | "existing_references" | "provider_api_spec_url">) =>
+  [
+    ...normalizedStrings(card.provider_api_references),
+    ...normalizedStrings(card.existing_references),
+    card.provider_api_spec_url?.trim(),
+  ].filter((value): value is string => Boolean(value));
+
+const providerAPIEvidenceCount = (
+  card: Pick<ConnectorCatalogEntry, "provider_api_references" | "existing_references" | "provider_api_spec_url" | "provider_api_auth_evidence" | "provider_api_scope_evidence">,
+) =>
+  providerAPIReferences(card).length +
+  normalizedStrings(card.provider_api_auth_evidence).length +
+  normalizedStrings(card.provider_api_scope_evidence).length;
+
+const providerAPIHasContract = (
+  card: Pick<ConnectorCatalogEntry, "has_provider_api_contract" | "provider_api_status" | "provider_api_spec_url" | "provider_api_references" | "existing_references">,
+) =>
+  Boolean(card.has_provider_api_contract || card.provider_api_status || providerAPIReferences(card).length > 0);
+
+const providerAPIHasMapping = (
+  card: Pick<ConnectorCatalogEntry, "has_provider_api_mapping" | "provider_api_mapped_families">,
+) =>
+  Boolean(card.has_provider_api_mapping || normalizedStrings(card.provider_api_mapped_families).length > 0);
+
+const providerAPIBasePriority = (card: Pick<ConnectorCatalogEntry, "priority" | "priority_tier">) => {
+  const priority = positiveNumber(card.priority);
+  if (priority > 0) return priority;
+  const tier = card.priority_tier?.trim().toLowerCase();
+  return tier ? providerAPITierScore[tier] ?? 0 : 0;
+};
+
+const providerAPIProofApplies = (card: ConnectorCatalogEntry | ConnectorCard) =>
+  Boolean(
+    providerAPIHasContract(card) ||
+    providerAPIHasMapping(card) ||
+    card.has_provider_api_proof ||
+    proofScoreFor(card) !== null ||
+    providerAPIBasePriority(card) > 0 ||
+    normalizedStrings(card.priority_reasons).length > 0 ||
+    normalizedStrings(card.search_queries).length > 0 ||
+    normalizedStrings(card.provider_api_auth_evidence).length > 0 ||
+    normalizedStrings(card.provider_api_scope_evidence).length > 0 ||
+    normalizedStrings(card.provider_api_missing_families).length > 0 ||
+    normalizedStrings(card.provider_api_proof_gaps).length > 0 ||
+    Boolean(card.catalog_path?.trim() || card.package_path?.trim() || card.next_action?.trim()),
+  );
+
+export function providerAPIProofState(card: ConnectorCatalogEntry | ConnectorCard): ProviderAPIProofState {
+  const hasContract = providerAPIHasContract(card);
+  if (!hasContract) return "needs_discovery";
+
+  const missingFamilies = providerAPIMissingFamilies(card);
+  if (!providerAPIHasMapping(card) || missingFamilies.length > 0) return "needs_mapping";
+
+  const proofGaps = providerAPIProofGaps(card);
+  const score = proofScoreFor(card);
+  const hasProof = Boolean(card.has_provider_api_proof || score === 100);
+  if (!hasProof || proofGaps.length > 0 || (score !== null && score < 100) || providerAPIEvidenceCount(card) === 0) {
+    return "needs_proof";
+  }
+  return "verified";
+}
+
+export function providerAPIProofStateLabel(state: ProviderAPIProofState) {
+  return providerAPIStateLabels[state];
+}
+
+export function providerAPIProofStateIntent(state: ProviderAPIProofState): "neutral" | "danger" | "warning" | "success" {
+  if (state === "needs_discovery") return "danger";
+  if (state === "needs_mapping" || state === "needs_proof") return "warning";
+  return "success";
+}
+
+export function providerAPIProofDetail(card: ConnectorCatalogEntry | ConnectorCard, state = providerAPIProofState(card)) {
+  const missingFamilies = providerAPIMissingFamilies(card);
+  const proofGaps = providerAPIProofGaps(card);
+  if (state === "needs_discovery") {
+    return card.next_action || "Find provider API documentation, auth details, and a machine-readable spec or reference.";
+  }
+  if (state === "needs_mapping") {
+    return missingFamilies.length > 0
+      ? `${missingFamilies.length} runtime families need method or operation mapping.`
+      : "Map runtime families to documented provider API methods.";
+  }
+  if (state === "needs_proof") {
+    return proofGaps[0] || "Attach spec, auth, scope, and fixture evidence for the mapped API surface.";
+  }
+  return "Provider API proof is current.";
+}
+
+export function providerAPIProofMetrics(cards: Array<ConnectorCatalogEntry | ConnectorCard>): ProviderAPIProofMetrics {
+  const scopedCards = cards.filter(providerAPIProofApplies);
+  const metrics: ProviderAPIProofMetrics = {
+    total: scopedCards.length,
+    needsAction: 0,
+    needsDiscovery: 0,
+    needsMapping: 0,
+    needsProof: 0,
+    verified: 0,
+    averageScore: null,
+  };
+  const scores: number[] = [];
+  scopedCards.forEach((card) => {
+    const state = providerAPIProofState(card);
+    if (state === "needs_discovery") metrics.needsDiscovery += 1;
+    else if (state === "needs_mapping") metrics.needsMapping += 1;
+    else if (state === "needs_proof") metrics.needsProof += 1;
+    else metrics.verified += 1;
+    const score = proofScoreFor(card);
+    if (score !== null) scores.push(score);
+  });
+  metrics.needsAction = metrics.needsDiscovery + metrics.needsMapping + metrics.needsProof;
+  metrics.averageScore = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null;
+  return metrics;
+}
+
+export function providerAPIProofQueue(
+  cards: ConnectorCard[],
+  { limit = 6, tenantID = "" }: { limit?: number; tenantID?: string } = {},
+): ProviderAPIProofQueueItem[] {
+  return cards
+    .filter(providerAPIProofApplies)
+    .map((card) => {
+      const state = providerAPIProofState(card);
+      const score = proofScoreFor(card);
+      const missing = state === "needs_proof" ? providerAPIProofGaps(card) : providerAPIMissingFamilies(card);
+      const priority = providerAPIBasePriority(card) + missing.length * 4 + (score === null ? 0 : 100 - score);
+      return {
+        sourceID: card.source_id,
+        displayName: connectorDisplayName(card),
+        state,
+        label: providerAPIProofStateLabel(state),
+        detail: providerAPIProofDetail(card, state),
+        priority,
+        score,
+        tier: card.priority_tier?.trim() || (priority >= 90 ? "urgent" : priority >= 70 ? "high" : priority >= 40 ? "standard" : "backlog"),
+        missing,
+        reasons: normalizedStrings(card.priority_reasons),
+        references: providerAPIReferences(card),
+        href: connectorPath(card.source_id, { tenant_id: tenantID }),
+      } satisfies ProviderAPIProofQueueItem;
+    })
+    .filter((item) => item.state !== "verified")
+    .sort((left, right) =>
+      providerAPIStateSort[left.state] - providerAPIStateSort[right.state] ||
+      right.priority - left.priority ||
+      (left.score ?? 101) - (right.score ?? 101) ||
+      left.displayName.localeCompare(right.displayName),
+    )
+    .slice(0, limit);
+}
 
 export function compactConnectorStatus(card: ConnectorCatalogEntry | ConnectorCard): SourceReadiness {
   const cardWithCoverage = card as ConnectorCard;
@@ -199,8 +417,6 @@ export type ConnectorResourceTypeStats = {
   highValueResourceTypes: number;
   coverageItems: number;
 };
-
-const positiveNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
 
 export function connectorProjectionTemplate(family: ConnectorCatalogResourceFamily) {
   return family.projection_template?.trim() || family.projection?.template?.trim() || "";
