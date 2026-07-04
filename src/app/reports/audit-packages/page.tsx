@@ -299,7 +299,7 @@ export default function AuditPackagesPage() {
           rows={priorityRows}
           columns={priorityColumns}
           defaultSort={{ key: "state" }}
-          emptyMessage="No package work is queued for this scope."
+          emptyMessage="No packet work is queued for this scope."
           filterKeys={["area", "title", "detail", "owner", "state", "action"]}
           getRowKey={(row) => row.id}
           pageSize={8}
