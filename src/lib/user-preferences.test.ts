@@ -23,7 +23,6 @@ describe("user preferences", () => {
         evidenceAutoLoad: true,
         sections: {
           reviewNow: false,
-          destinations: false,
         },
       },
       display: {
@@ -34,8 +33,8 @@ describe("user preferences", () => {
 
     expect(preferences.homepage.evidenceAutoLoad).toBe(true);
     expect(preferences.homepage.sections.reviewNow).toBe(false);
-    expect(preferences.homepage.sections.destinations).toBe(false);
     expect(preferences.homepage.sections.programHealth).toBe(true);
+    expect(preferences.homepage.sections).not.toHaveProperty("destinations");
     expect(preferences.display).toEqual({ density: "compact", theme: "dark" });
   });
 
@@ -52,7 +51,7 @@ describe("user preferences", () => {
       homepage: {
         evidenceAutoLoad: true,
         sections: {
-          destinations: false,
+          programHealth: false,
         },
       },
       display: {

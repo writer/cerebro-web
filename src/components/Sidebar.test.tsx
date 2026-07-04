@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { operatorNavLinks, utilityLinks } from "@/lib/navigation";
+import { operatorNavLinks } from "@/lib/navigation";
 
-import { hasSidebarIcon, isSidebarLinkActive } from "./Sidebar";
+import { hasSidebarIcon, isSidebarLinkActive, sidebarNavGroups, sidebarNavLinks } from "./Sidebar";
 
 const links = [
   { href: "/trends" },
@@ -26,10 +26,34 @@ describe("isSidebarLinkActive", () => {
   });
 
   it("has icons for visible sidebar routes", () => {
-    const missingIcons = [...operatorNavLinks, ...utilityLinks]
+    const missingIcons = sidebarNavLinks
       .filter((link) => !hasSidebarIcon(link.href))
       .map((link) => link.href);
 
     expect(missingIcons).toEqual([]);
+  });
+
+  it("groups compliance routes under GRC", () => {
+    const grcGroup = sidebarNavGroups.find((group) => group.id === "grc");
+    const hrefs = grcGroup?.links.map((link) => link.href);
+
+    expect(hrefs).toEqual([
+      "/frameworks",
+      "/controls",
+      "/policies",
+      "/evidence",
+      "/questionnaires",
+      "/reports",
+    ]);
+  });
+
+  it("keeps trend pages outside the visible sidebar", () => {
+    const sidebarHrefs = sidebarNavLinks.map((link) => link.href);
+    const operatorHrefs = operatorNavLinks.map((link) => link.href);
+
+    expect(operatorHrefs).toContain("/trends");
+    expect(operatorHrefs).toContain("/trends/dashboards");
+    expect(sidebarHrefs).not.toContain("/trends");
+    expect(sidebarHrefs).not.toContain("/trends/dashboards");
   });
 });
