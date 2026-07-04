@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useApiKey, useUserPreferences } from "@/components/providers";
 import { AttentionBanner, DataStateBanner, PageHeader, RiskBadge } from "@/components/grc/Primitives";
@@ -48,7 +48,6 @@ type HomeMetrics = {
   controlTotal: number;
   coverageBlindSpotCount: number;
   criticalOrHighFindings: number;
-  criticalRiskCount: number;
   evidenceIssues: number;
   missingEvidenceItems: number;
   passingControls: number;
@@ -434,26 +433,6 @@ function ProgramHealthPanel({
   );
 }
 
-function DestinationCard({
-  detail,
-  href,
-  label,
-  value,
-}: {
-  detail: string;
-  href: string;
-  label: string;
-  value: ReactNode;
-}) {
-  return (
-    <Link href={href} className="surface-panel block p-4 transition hover:border-[color:var(--ring)] hover:shadow-[var(--shadow-sm)]">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
-      <div className="mt-2 text-xl font-semibold text-[var(--text-primary)]">{value}</div>
-      <div className="mt-1.5 text-[12px] leading-5 text-[var(--text-muted)]">{detail}</div>
-    </Link>
-  );
-}
-
 export default function Home() {
   const { preferences } = useUserPreferences();
   const visibleSections = preferences.homepage.sections;
@@ -463,19 +442,6 @@ export default function Home() {
   const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
   const readiness = readinessQuery.data?.summary;
   const priorityFindings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
-  const priorityMetrics = useMemo(() => {
-    let criticalRisk = 0;
-    let riskTotal = 0;
-    let scored = 0;
-    priorityFindings.forEach((finding) => {
-      const score = finding.risk_score;
-      if (typeof score !== "number") return;
-      scored += 1;
-      riskTotal += score;
-      if (score >= 85) criticalRisk += 1;
-    });
-    return { averageRisk: scored === 0 ? 0 : Math.round(riskTotal / scored), criticalRisk };
-  }, [priorityFindings]);
   const { apiKey } = useApiKey();
 
   useEffect(() => {
@@ -508,7 +474,6 @@ export default function Home() {
     controlTotal,
     coverageBlindSpotCount,
     criticalOrHighFindings,
-    criticalRiskCount: priorityMetrics.criticalRisk,
     evidenceIssues,
     missingEvidenceItems,
     passingControls,
@@ -525,8 +490,7 @@ export default function Home() {
   const pageDescription = homeMetrics
     ? pageSummary(homeMetrics)
     : "Risks, controls, evidence, reports, and source health.";
-  const readinessLabel = readiness ? humanize(readiness.status) : dashboardBackedReadiness ? "current counts" : "loading";
-  const reportPacketDetail = readiness ? `Packet ${readinessLabel.toLowerCase()}` : dashboardBackedReadiness ? "Using current control counts" : "Loading readiness";
+  const readinessLabel = readiness ? humanize(readiness.status) : "current counts";
 
   const reload = () => {
     void dashboard.reload();
@@ -540,21 +504,13 @@ export default function Home() {
         title="Home"
         description={pageDescription}
         action={
-          <div className="flex items-center gap-2">
-            <Link
-              href="/risk-inbox"
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600"
-            >
-              View risks
-            </Link>
-            <button
-              type="button"
-              onClick={reload}
-              className="rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600"
-            >
-              Refresh
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={reload}
+            className="secondary-button px-3 py-1.5 text-[13px]"
+          >
+            Refresh
+          </button>
         }
       />
 
@@ -599,34 +555,6 @@ export default function Home() {
             </AttentionBanner>
           )}
 
-          {visibleSections.destinations && (
-            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Key pages">
-              <DestinationCard
-                href="/risk-inbox"
-                label="Risks"
-                value={<RiskBadge score={priorityMetrics.averageRisk} />}
-                detail={`${summary.open_findings} open, ${summary.overdue_findings} overdue`}
-              />
-              <DestinationCard
-                href="/controls"
-                label="Controls"
-                value={summary.controls_failing}
-                detail={`${passingControls} passing across ${controlTotal} tracked controls`}
-              />
-              <DestinationCard
-                href="/reports"
-                label="Reports"
-                value={`${Math.round(homeMetrics.auditReadinessScore)}%`}
-                detail={reportPacketDetail}
-              />
-              <DestinationCard
-                href="/connectors"
-                label="Sources"
-                value={summary.stale_connectors + coverageBlindSpotCount}
-                detail={`${countLabel(summary.stale_connectors, "stale source")}, ${countLabel(coverageBlindSpotCount, "coverage gap")}`}
-              />
-            </section>
-          )}
         </>
       )}
     </div>

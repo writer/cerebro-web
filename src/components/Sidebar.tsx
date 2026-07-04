@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
 
-import { useCommandPalette, useSidebar } from "@/components/providers";
+import { useSidebar } from "@/components/providers";
 import { appVersionLabel } from "@/lib/app-version";
-import { operatorNavLinks, utilityLinks } from "@/lib/navigation";
+import { operatorNavLinks, utilityLinks, type NavigationEntry } from "@/lib/navigation";
 
-const icons: Record<string, React.ReactNode> = {
+const icons: Record<string, ReactNode> = {
   "/": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />,
   "/risk-inbox": <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />,
   "/trends": <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />,
@@ -31,7 +32,47 @@ const icons: Record<string, React.ReactNode> = {
   "/developer": <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />,
 };
 
-const sidebarNavLinks = [...operatorNavLinks, ...utilityLinks];
+type SidebarNavGroup = {
+  iconHref: string;
+  id: string;
+  label: string;
+  links: NavigationEntry[];
+};
+
+const linksFor = (hrefs: string[]) =>
+  hrefs.flatMap((href) => {
+    const link = operatorNavLinks.find((entry) => entry.href === href);
+    return link ? [link] : [];
+  });
+
+export const sidebarPrimaryLinks = linksFor(["/", "/risk-inbox", "/ask"]);
+
+export const sidebarNavGroups: SidebarNavGroup[] = [
+  {
+    id: "grc",
+    label: "GRC",
+    iconHref: "/frameworks",
+    links: linksFor(["/frameworks", "/controls", "/policies", "/evidence", "/questionnaires", "/reports"]),
+  },
+  {
+    id: "assets",
+    label: "Assets",
+    iconHref: "/inventory",
+    links: linksFor(["/inventory", "/vendors", "/impact", "/credential-stores"]),
+  },
+  {
+    id: "sources",
+    label: "Sources",
+    iconHref: "/connectors",
+    links: linksFor(["/connectors", "/explore"]),
+  },
+];
+
+export const sidebarNavLinks = [
+  ...sidebarPrimaryLinks,
+  ...sidebarNavGroups.flatMap((group) => group.links),
+  ...utilityLinks,
+];
 
 export function hasSidebarIcon(href: string) {
   return Boolean(icons[href]);
@@ -72,13 +113,18 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { openCommandPalette } = useCommandPalette();
   const { collapsed, toggleSidebar } = useSidebar();
-  const visibleSidebarLinks = sidebarNavLinks;
 
-  const isActive = (href: string) => isSidebarLinkActive(pathname, href, visibleSidebarLinks);
+  const isActive = (href: string) => isSidebarLinkActive(pathname, href, sidebarNavLinks);
+  const activeGroupIds = useMemo(
+    () => new Set(sidebarNavGroups.filter((group) => group.links.some((link) => isSidebarLinkActive(pathname, link.href, sidebarNavLinks))).map((group) => group.id)),
+    [pathname],
+  );
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  const renderLink = (link: { href: string; label: string }) => {
+  const isGroupOpen = (group: SidebarNavGroup) => openGroups[group.id] ?? activeGroupIds.has(group.id);
+
+  const renderLink = (link: { href: string; label: string }, nested = false) => {
     const active = isActive(link.href);
     return (
       <Link
@@ -89,11 +135,47 @@ export default function Sidebar() {
           active
             ? "bg-[var(--nav-active)] text-[var(--sidebar-active)] shadow-[var(--shadow-sm)] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:rounded-full before:bg-[var(--sidebar-active)]"
             : "text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)]"
-        } ${collapsed ? "justify-center" : "max-md:justify-center"}`}
+        } ${nested && !collapsed ? "pl-8" : ""} ${collapsed ? "justify-center" : "max-md:justify-center"}`}
       >
         <NavIcon href={link.href} />
         {!collapsed && <span className="max-md:hidden">{link.label}</span>}
       </Link>
+    );
+  };
+
+  const renderGroup = (group: SidebarNavGroup) => {
+    const active = activeGroupIds.has(group.id);
+    const open = isGroupOpen(group);
+    return (
+      <div key={group.id} className="space-y-0.5">
+        <button
+          type="button"
+          onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !open }))}
+          aria-expanded={open}
+          title={group.label}
+          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[8px] text-[13px] font-medium transition ${
+            active
+              ? "bg-[var(--surface-muted)] text-[var(--text-primary)]"
+              : "text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)]"
+          } ${collapsed ? "justify-center" : "max-md:justify-center"}`}
+        >
+          <NavIcon href={group.iconHref} />
+          {!collapsed && <span className="max-md:hidden">{group.label}</span>}
+          {!collapsed && (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.7}
+              stroke="currentColor"
+              className={`ml-auto h-3.5 w-3.5 text-[var(--sidebar-muted)] transition max-md:hidden ${open ? "rotate-90" : ""}`}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+          )}
+        </button>
+        {open && <div className="space-y-0.5">{group.links.map((link) => renderLink(link, true))}</div>}
+      </div>
     );
   };
 
@@ -110,42 +192,14 @@ export default function Sidebar() {
         )}
       </div>
 
-      {!collapsed && (
-        <div className="space-y-3 px-3 pb-3 max-md:hidden">
-          <button
-            type="button"
-            onClick={openCommandPalette}
-            className="flex w-full items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[var(--surface)] px-3 py-[8px] text-[13px] text-[var(--text-muted)] shadow-[var(--shadow-sm)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-            </svg>
-            Search...
-            <kbd className="ml-auto rounded border border-[color:var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-muted)]">⌘K</kbd>
-          </button>
-        </div>
-      )}
-
-      <div className={`${collapsed ? "flex" : "hidden max-md:flex"} flex-col items-center gap-2 pb-3`}>
-          <button
-            type="button"
-            onClick={openCommandPalette}
-            title="Search (⌘K)"
-            className="rounded-md p-2 text-[var(--sidebar-muted)] transition hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)]"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-[18px] w-[18px]">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-            </svg>
-          </button>
-        </div>
-
       <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? "px-1.5" : "px-3 max-md:px-1.5"}`}>
-        {operatorNavLinks.map(renderLink)}
+        {sidebarPrimaryLinks.map((link) => renderLink(link))}
+        {sidebarNavGroups.map(renderGroup)}
 
         {collapsed && utilityLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
         {!collapsed && utilityLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
         {!collapsed && <div className="my-3 hidden border-t border-[color:var(--border)] max-md:block" />}
-        {utilityLinks.map(renderLink)}
+        {utilityLinks.map((link) => renderLink(link))}
       </nav>
 
       <div className="flex items-center justify-between border-t border-[color:var(--border)] px-3 py-2.5">
