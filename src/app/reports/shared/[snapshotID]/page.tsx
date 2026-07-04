@@ -23,7 +23,7 @@ import { grcPath, useGRCQuery } from "@/lib/grc-client";
 const buttonClass = "inline-flex items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]";
 
 const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
-  { key: "decision", label: "Decision", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} /> },
+  { key: "decision", label: "Packet use", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} /> },
   {
     key: "title",
     label: "Evidence",
@@ -37,7 +37,7 @@ const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
   { key: "controlID", label: "Control", render: (_value, row) => <span className="font-mono text-[12px]">{row.controlID}</span> },
   { key: "quality", label: "Quality", render: (_value, row) => <Badge value={row.quality} /> },
   { key: "freshness", label: "Freshness" },
-  { key: "packets", label: "Packets" },
+  { key: "packets", label: "Attachments" },
 ];
 
 const exceptionColumns: TableColumn<ScopeExceptionRow>[] = [
@@ -86,13 +86,13 @@ export default function SharedAuditPackagePage() {
     <div className="space-y-6">
       <PageHeader
         contractId="external-audit-review"
-        title="External review"
-        description="Approved package snapshot with share-safe evidence, scope, and provenance."
+        title="Shared snapshot"
+        description="Approved evidence, packet state, source records, and scope exclusions for review."
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Link href="/reports/audit-packages" className={buttonClass}>
               <ArrowLeft className="h-3.5 w-3.5" />
-              Audit packages
+              Packet review
             </Link>
             <a href={`/api/cerebro${grcPath("/grc/control-packets/export", { format: "markdown" })}`} className={buttonClass}>
               <Download className="h-3.5 w-3.5" />
@@ -106,23 +106,23 @@ export default function SharedAuditPackagePage() {
         }
       />
 
-      {loading && !loaded && <LoadingBlock label="Loading review package..." />}
+      {loading && !loaded && <LoadingBlock label="Loading shared snapshot..." />}
       {errors.map((error) => (
-        <ErrorBlock key={error} error={error} onRetry={reload} recoveryDetail="The review snapshot will load when the package API is reachable." />
+        <ErrorBlock key={error} error={error} onRetry={reload} recoveryDetail="The shared snapshot will load when the packet API is reachable." />
       ))}
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Snapshot" value={shortEntity(snapshotID)} detail={generatedAt ? `Generated ${displayDate(generatedAt)}` : "No generated time"} state={loading && !loaded ? "loading" : "ready"} />
-        <MetricCard label="State" value={auditPackageStateLabel(summary.state)} detail={`${summary.readinessScore}/100 readiness`} intent={summary.state === "approved" || summary.state === "published" ? "success" : "warning"} state={loading && !loaded ? "loading" : "ready"} />
+        <MetricCard label="Packet state" value={auditPackageStateLabel(summary.state)} detail={`${summary.readinessScore}/100 export score`} intent={summary.state === "approved" || summary.state === "published" ? "success" : "warning"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Controls" value={summary.controls} detail={`${summary.failingControls} failing`} intent={summary.failingControls > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Evidence" value={evidenceRows.length || summary.evidenceItems} detail={`${summary.exclusions} exclusions`} state={loading && !loaded ? "loading" : "ready"} />
       </div>
 
-      <Panel title="Package summary">
+      <Panel title="Snapshot summary">
         <div className="grid gap-4 md:grid-cols-3">
-          <SummaryBox label="Profile" value={controlPacketQuery.data?.profile.name || controlPacketQuery.data?.profile.id || "Control package"} />
-          <SummaryBox label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "Share-safe"} />
-          <SummaryBox label="Provenance" value={metadata?.provenance?.packet_version || metadata?.provenance?.report_type || "Packet"} />
+          <SummaryBox label="Profile" value={controlPacketQuery.data?.profile.name || controlPacketQuery.data?.profile.id || "Control packet"} />
+          <SummaryBox label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "External"} />
+          <SummaryBox label="Packet source" value={metadata?.provenance?.packet_version || metadata?.provenance?.report_type || "Packet"} />
         </div>
         {metadata?.readiness?.summary && (
           <p className="mt-4 rounded-lg bg-[var(--surface-muted)] px-4 py-3 text-[13px] leading-5 text-[var(--text-secondary)]">
@@ -144,12 +144,12 @@ export default function SharedAuditPackagePage() {
         />
       </Panel>
 
-      <Panel title="Scope">
+      <Panel title="Scope exclusions">
         {exceptionRows.length > 0 ? (
           <DataTable
             rows={exceptionRows}
             columns={exceptionColumns}
-            emptyMessage="No package exclusions are configured."
+            emptyMessage="No scope exclusions are configured."
             filterKeys={["kind", "value", "reason"]}
             getRowKey={(row) => row.id}
             pageSize={8}
@@ -158,7 +158,7 @@ export default function SharedAuditPackagePage() {
           />
         ) : (
           <div className="rounded-lg border border-dashed border-[color:var(--border-strong)] px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">
-            No exclusions are configured for this package snapshot.
+            No exclusions are configured for this snapshot.
           </div>
         )}
       </Panel>

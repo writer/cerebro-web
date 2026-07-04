@@ -484,14 +484,14 @@ export default function GRCPage() {
             </button>
           }
         >
-          Program readiness is unavailable; showing current control counts.
+          Packet status is unavailable; showing current control counts.
         </AttentionBanner>
       )}
 
       {dashboard.data && (
         <>
           <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard label="Packet" value={`${Math.round(summary.score)}%`} detail={readinessSource} intent={summary.score >= 80 ? "success" : summary.score >= 50 ? "warning" : "danger"} state={metricState} />
+            <MetricCard label="Packet score" value={`${Math.round(summary.score)}%`} detail={readinessSource} intent={summary.score >= 80 ? "success" : summary.score >= 50 ? "warning" : "danger"} state={metricState} />
             <MetricCard label="Open issues" value={issueItems.length} detail={`${summary.critical_findings} critical, ${summary.high_findings} high`} intent={issueItems.length > 0 ? "warning" : "success"} state={metricState} />
             <MetricCard label="Evidence issues" value={evidenceIssues} detail={`${summary.missing_evidence_items} missing, ${summary.stale_evidence_items} stale`} intent={metricIntent(evidenceIssues)} state={metricState} />
             <MetricCard label="Source issues" value={sourceIssues} detail={`${summary.stale_connectors} stale, ${summary.coverage_blind_spots} coverage gaps`} intent={metricIntent(sourceIssues)} state={metricState} />

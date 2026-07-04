@@ -4,18 +4,17 @@ import dynamic from "next/dynamic";
 import { ArrowUpRight, LoaderCircle, MessageSquare } from "lucide-react";
 
 import { useCerebroAgent } from "@/components/agent/CerebroAgentProvider";
+import { isDenseAgentRouteLabel } from "@/components/agent/dense-routes";
 
 const CerebroAgentPanel = dynamic(() => import("@/components/agent/CerebroAgentPanel"), {
   ssr: false,
   loading: () => null,
 });
 
-const denseRouteLabels = new Set(["Compliance", "Controls", "Evidence", "Frameworks", "Reports", "Issues"]);
-
 export default function CerebroAgentPanelShell() {
   const { activeTurnId, isOpen, openAgent, pageContext, turns } = useCerebroAgent();
   const activeTurn = turns.find((turn) => turn.id === activeTurnId);
-  const densePage = pageContext.routeLabel ? denseRouteLabels.has(pageContext.routeLabel) : false;
+  const densePage = isDenseAgentRouteLabel(pageContext.routeLabel);
   const quietLauncher = !activeTurn && (densePage || pageContext.pageState === "api_unavailable" || pageContext.pageState === "empty");
   const launcherPosition = quietLauncher && densePage ? "bottom-16 left-5 right-auto" : "bottom-5 right-5";
 
