@@ -35,6 +35,17 @@ const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
     ),
   },
   { key: "controlID", label: "Control", render: (_value, row) => <span className="font-mono text-[12px]">{row.controlID}</span> },
+  {
+    key: "sourceID",
+    label: "Source",
+    render: (_value, row) => (
+      <div className="min-w-[10rem]">
+        <div className="font-mono text-[12px] text-[var(--text-primary)]">{shortEntity(row.sourceID || row.source)}</div>
+        <div className="mt-0.5 font-mono text-[11px] text-[var(--text-muted)]">{row.runtimeID ? shortEntity(row.runtimeID) : "No runtime"}</div>
+      </div>
+    ),
+  },
+  { key: "collectedAt", label: "Collected", render: (_value, row) => displayDate(row.collectedAt) },
   { key: "quality", label: "Quality", render: (_value, row) => <Badge value={row.quality} /> },
   { key: "freshness", label: "Freshness" },
   { key: "packets", label: "Attachments" },
@@ -121,8 +132,11 @@ export default function SharedAuditPackagePage() {
       <Panel title="Snapshot summary">
         <div className="grid gap-4 md:grid-cols-3">
           <SummaryBox label="Profile" value={controlPacketQuery.data?.profile.name || controlPacketQuery.data?.profile.id || "Control packet"} />
-          <SummaryBox label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "External"} />
+          <SummaryBox label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "Review copy"} />
           <SummaryBox label="Packet source" value={metadata?.provenance?.packet_version || metadata?.provenance?.report_type || "Packet"} />
+          <SummaryBox label="Generated" value={generatedAt ? displayDate(generatedAt) : "No generated time"} />
+          <SummaryBox label="Sources" value={String(metadata?.provenance?.source_ids?.length ?? summary.sourceCount)} />
+          <SummaryBox label="Runtimes" value={String(metadata?.provenance?.runtime_count ?? 0)} />
         </div>
         {metadata?.readiness?.summary && (
           <p className="mt-4 rounded-lg bg-[var(--surface-muted)] px-4 py-3 text-[13px] leading-5 text-[var(--text-secondary)]">
@@ -136,7 +150,7 @@ export default function SharedAuditPackagePage() {
           rows={evidenceRows}
           columns={evidenceColumns}
           emptyMessage="No approved evidence is available in this snapshot."
-          filterKeys={["id", "title", "controlID", "decision", "quality", "freshness"]}
+          filterKeys={["id", "title", "controlID", "decision", "quality", "freshness", "source", "sourceID", "runtimeID", "collectedAt"]}
           getRowKey={(row) => row.id}
           pageSize={12}
           resultLimit={50}

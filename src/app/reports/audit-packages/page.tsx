@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, Download, FileCheck2, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import DataTable, { type TableColumn } from "@/components/grc/DataTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
@@ -27,6 +28,7 @@ import { grcPath } from "@/lib/grc-client";
 const inputClass = "mt-1 w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)]";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]";
 const buttonClass = "inline-flex items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]";
+const disabledButtonClass = "inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-muted)] opacity-70";
 
 const decisionRank = (decision: EvidenceCurationRow["decision"]) => ({
   needs_replacement: 0,
@@ -200,6 +202,7 @@ const exceptionColumns: TableColumn<ScopeExceptionRow>[] = [
 ];
 
 export default function AuditPackagesPage() {
+  const [exportAcknowledged, setExportAcknowledged] = useState(false);
   const {
     clear: clearFilters,
     controlID,
@@ -242,6 +245,9 @@ export default function AuditPackagesPage() {
     { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Control", value: controlID, onClear: () => setControlID("") },
   ];
+  const packetBlockerRows = readinessRows.filter((row) => row.state !== "ready");
+  const exportHref = `/api/cerebro${grcPath("/grc/control-packets/export", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID })}`;
+  const canExport = packetBlockerRows.length === 0 || exportAcknowledged;
 
   return (
     <div className="space-y-6">
@@ -299,141 +305,178 @@ export default function AuditPackagesPage() {
         <MetricCard label="Exclusions" value={summary.exclusions} detail="packet scope" intent={summary.exclusions > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
       </div>
 
-      <Panel title="Priority work">
-        <DataTable
-          rows={priorityRows}
-          columns={priorityColumns}
-          defaultSort={{ key: "state" }}
-          emptyMessage="No packet work is queued for this scope."
-          filterKeys={["area", "title", "detail", "owner", "state", "action"]}
-          getRowKey={(row) => row.id}
-          pageSize={8}
-          resultNoun="work items"
-          showSearch={false}
-        />
-      </Panel>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel
-          title="Packet checklist"
-          action={
-            <div className="flex flex-wrap gap-2">
-              <Link href={`/reports?report_type=control&profile=${encodeURIComponent(selectedProfileID)}${framework ? `&framework=${encodeURIComponent(framework)}` : ""}${controlID ? `&control=${encodeURIComponent(controlID)}` : ""}`} className={buttonClass}>
-                <FileCheck2 className="h-3.5 w-3.5" />
-                Open packet
-              </Link>
-              <a href={`/api/cerebro${grcPath("/grc/control-packets/export", { tenant_id: debouncedTenantID, profile: selectedProfileID, framework, control: controlID })}`} className={buttonClass}>
-                <Download className="h-3.5 w-3.5" />
-                Export
-              </a>
-            </div>
-          }
-        >
+      <section id="priority-work">
+        <Panel title="Priority work">
           <DataTable
-            rows={readinessRows}
-            columns={readinessColumns}
+            rows={priorityRows}
+            columns={priorityColumns}
             defaultSort={{ key: "state" }}
-            emptyMessage="No packet checks are available."
-            filterKeys={["title", "state", "owner", "action"]}
+            emptyMessage="No packet work is queued for this scope."
+            filterKeys={["area", "title", "detail", "owner", "state", "action"]}
+            getRowHref={(row) => row.href}
             getRowKey={(row) => row.id}
-            pageSize={5}
-            resultNoun="packet checks"
+            pageSize={8}
+            resultNoun="work items"
             showSearch={false}
           />
         </Panel>
+      </section>
 
-        <Panel
-          title="Shared snapshot"
-          action={
-            <Link href={`/reports/shared/${encodeURIComponent(snapshotID)}`} className={buttonClass}>
-              <ArrowUpRight className="h-3.5 w-3.5" />
-              Open snapshot
-            </Link>
-          }
-        >
-          <div className="space-y-4 text-[13px] text-[var(--text-secondary)]">
-            <div className="rounded-lg bg-[var(--surface-muted)] p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Snapshot</div>
-              <div className="mt-2 font-mono text-[12px] text-[var(--text-primary)]">{snapshotID}</div>
-              <div className="mt-2 text-[12px] text-[var(--text-muted)]">Redacted identifiers, approved evidence, scope exclusions, and packet source records.</div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <SmallStat label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "External"} />
-              <SmallStat label="Runtimes" value={metadata?.provenance?.runtime_count ?? 0} />
-              <SmallStat label="Sources" value={metadata?.provenance?.source_ids?.length ?? summary.sourceCount} />
-              <SmallStat label="Exclusions" value={summary.exclusions} />
-            </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section id="packet-checklist">
+          <Panel
+            title="Packet checklist"
+            action={
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/reports?report_type=control&profile=${encodeURIComponent(selectedProfileID)}${framework ? `&framework=${encodeURIComponent(framework)}` : ""}${controlID ? `&control=${encodeURIComponent(controlID)}` : ""}`} className={buttonClass}>
+                  <FileCheck2 className="h-3.5 w-3.5" />
+                  Open packet
+                </Link>
+                {canExport ? (
+                  <a href={exportHref} className={buttonClass}>
+                    <Download className="h-3.5 w-3.5" />
+                    Export
+                  </a>
+                ) : (
+                  <span className={disabledButtonClass} aria-disabled="true">
+                    <Download className="h-3.5 w-3.5" />
+                    Export
+                  </span>
+                )}
+              </div>
+            }
+          >
             <DataTable
-              rows={exportManifestRows}
-              columns={manifestColumns}
+              rows={readinessRows}
+              columns={readinessColumns}
               defaultSort={{ key: "state" }}
-              emptyMessage="No export manifest records are available."
-              filterKeys={["label", "state", "value"]}
+              emptyMessage="No packet checks are available."
+              filterKeys={["title", "state", "owner", "action"]}
               getRowKey={(row) => row.id}
-              pageSize={6}
-              resultNoun="manifest records"
+              pageSize={5}
+              resultNoun="packet checks"
               showSearch={false}
             />
-          </div>
-        </Panel>
+            {packetBlockerRows.length > 0 && (
+              <div className="mt-4 rounded-lg border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-[13px] text-[var(--text-secondary)]">
+                <div className="font-semibold text-[var(--text-primary)]">Export has {packetBlockerRows.length} {packetBlockerRows.length === 1 ? "blocker" : "blockers"}</div>
+                <p className="mt-1 text-[12px] leading-5 text-[var(--text-muted)]">Export after you review the current blocker state for this packet.</p>
+                <label className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[var(--text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={exportAcknowledged}
+                    onChange={(event) => setExportAcknowledged(event.target.checked)}
+                    className="h-4 w-4 rounded border-[color:var(--border)]"
+                  />
+                  I reviewed the packet blockers
+                </label>
+              </div>
+            )}
+          </Panel>
+        </section>
+
+        <section id="shared-snapshot">
+          <Panel
+            title="Shared snapshot"
+            action={
+              <Link href={`/reports/shared/${encodeURIComponent(snapshotID)}`} className={buttonClass}>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+                Open snapshot
+              </Link>
+            }
+          >
+            <div className="space-y-4 text-[13px] text-[var(--text-secondary)]">
+              <div className="rounded-lg bg-[var(--surface-muted)] p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Snapshot</div>
+                <div className="mt-2 font-mono text-[12px] text-[var(--text-primary)]">{snapshotID}</div>
+                <div className="mt-2 text-[12px] text-[var(--text-muted)]">Redacted identifiers, approved evidence, scope exclusions, and packet source records.</div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <SmallStat label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "Review copy"} />
+                <SmallStat label="Runtimes" value={metadata?.provenance?.runtime_count ?? 0} />
+                <SmallStat label="Sources" value={metadata?.provenance?.source_ids?.length ?? summary.sourceCount} />
+                <SmallStat label="Exclusions" value={summary.exclusions} />
+              </div>
+              <DataTable
+                rows={exportManifestRows}
+                columns={manifestColumns}
+                defaultSort={{ key: "state" }}
+                emptyMessage="No export manifest records are available."
+                filterKeys={["label", "state", "value"]}
+                getRowKey={(row) => row.id}
+                pageSize={6}
+                resultNoun="manifest records"
+                showSearch={false}
+              />
+            </div>
+          </Panel>
+        </section>
       </div>
 
-      <Panel title="Auditor questions">
-        <DataTable
-          rows={auditorQuestionRows}
-          columns={auditorQuestionColumns}
-          defaultSort={{ key: "status" }}
-          emptyMessage="No auditor questions are queued for this packet."
-          filterKeys={["area", "question", "owner", "source", "status"]}
-          getRowKey={(row) => row.id}
-          pageSize={10}
-          resultNoun="questions"
-        />
-      </Panel>
+      <section id="auditor-questions">
+        <Panel title="Auditor questions">
+          <DataTable
+            rows={auditorQuestionRows}
+            columns={auditorQuestionColumns}
+            defaultSort={{ key: "status" }}
+            emptyMessage="No auditor questions are queued for this packet."
+            filterKeys={["area", "question", "owner", "source", "status"]}
+            getRowKey={(row) => row.id}
+            pageSize={10}
+            resultNoun="questions"
+          />
+        </Panel>
+      </section>
 
-      <Panel title="Evidence review">
-        <DataTable
-          rows={evidenceRows}
-          columns={evidenceColumns}
-          emptyMessage="No evidence requests or expectations are available for this packet."
-          filterKeys={["id", "title", "controlID", "decision", "reason", "status", "quality", "review", "source"]}
-          getRowKey={(row) => row.id}
-          pageSize={10}
-          resultLimit={25}
-          resultNoun="evidence requests"
-          defaultSort={{ key: "decision" }}
-        />
-      </Panel>
+      <section id="evidence-review">
+        <Panel title="Evidence review">
+          <DataTable
+            rows={evidenceRows}
+            columns={evidenceColumns}
+            emptyMessage="No evidence requests or expectations are available for this packet."
+            filterKeys={["id", "title", "controlID", "decision", "reason", "status", "quality", "review", "source"]}
+            getRowKey={(row) => row.id}
+            pageSize={10}
+            resultLimit={25}
+            resultNoun="evidence requests"
+            defaultSort={{ key: "decision" }}
+          />
+        </Panel>
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Control status">
-          <DataTable
-            rows={ownerRows}
-            columns={controlColumns}
-            emptyMessage="No controls are available for this packet."
-            filterKeys={["control", "title", "owner", "status", "action"]}
-            getRowHref={(row) => `/controls/detail?profile=${encodeURIComponent(selectedProfileID)}&control=${encodeURIComponent(row.control.split(" ").slice(1).join(" "))}`}
-            getRowKey={(row) => row.id}
-            pageSize={8}
-            resultLimit={25}
-            resultNoun="controls"
-            defaultSort={{ key: "missing", desc: true }}
-          />
-        </Panel>
+        <section id="control-status">
+          <Panel title="Control status">
+            <DataTable
+              rows={ownerRows}
+              columns={controlColumns}
+              emptyMessage="No controls are available for this packet."
+              filterKeys={["control", "title", "owner", "status", "action"]}
+              getRowHref={(row) => `/controls/detail?profile=${encodeURIComponent(selectedProfileID)}&control=${encodeURIComponent(row.control.split(" ").slice(1).join(" "))}`}
+              getRowKey={(row) => row.id}
+              pageSize={8}
+              resultLimit={25}
+              resultNoun="controls"
+              defaultSort={{ key: "missing", desc: true }}
+            />
+          </Panel>
+        </section>
 
-        <Panel title="Control owner queue">
-          <DataTable
-            rows={actionableOwnerRows}
-            columns={controlColumns}
-            emptyMessage="No owner work items are available."
-            filterKeys={["control", "title", "owner", "status", "action"]}
-            getRowKey={(row) => row.id}
-            pageSize={8}
-            resultLimit={25}
-            resultNoun="owner items"
-            defaultSort={{ key: "missing", desc: true }}
-          />
-        </Panel>
+        <section id="control-owner-queue">
+          <Panel title="Control owner queue">
+            <DataTable
+              rows={actionableOwnerRows}
+              columns={controlColumns}
+              emptyMessage="No owner work items are available."
+              filterKeys={["control", "title", "owner", "status", "action"]}
+              getRowKey={(row) => row.id}
+              pageSize={8}
+              resultLimit={25}
+              resultNoun="owner items"
+              defaultSort={{ key: "missing", desc: true }}
+            />
+          </Panel>
+        </section>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -493,20 +536,22 @@ export default function AuditPackagesPage() {
           />
         </Panel>
 
-        <Panel title="Source freshness">
-          <DataTable
-            rows={sourceRows}
-            columns={sourceColumns}
-            emptyMessage="No source freshness records are available."
-            filterKeys={["source", "status", "action"]}
-            getRowKey={(row) => row.id}
-            getRowHref={(row) => `/connectors?source_id=${encodeURIComponent(row.source)}`}
-            pageSize={8}
-            resultLimit={25}
-            resultNoun="sources"
-            defaultSort={{ key: "status" }}
-          />
-        </Panel>
+        <section id="source-freshness">
+          <Panel title="Source freshness">
+            <DataTable
+              rows={sourceRows}
+              columns={sourceColumns}
+              emptyMessage="No source freshness records are available."
+              filterKeys={["source", "status", "action"]}
+              getRowKey={(row) => row.id}
+              getRowHref={(row) => `/connectors?source_id=${encodeURIComponent(row.source)}`}
+              pageSize={8}
+              resultLimit={25}
+              resultNoun="sources"
+              defaultSort={{ key: "status" }}
+            />
+          </Panel>
+        </section>
       </div>
 
       <Panel title="Scope exclusions">

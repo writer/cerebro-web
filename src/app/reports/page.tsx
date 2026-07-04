@@ -308,6 +308,7 @@ export default function ReportsPage() {
               body={displayReportBody}
               exportHref={exportHref}
               copyState={copyState}
+              redactionMode={effectiveRedactionMode}
               onCopy={() => void copyReport()}
               onDownload={downloadReport}
             />
@@ -457,25 +458,28 @@ function PacketActions({
   body,
   exportHref,
   copyState,
+  redactionMode,
   onCopy,
   onDownload,
 }: {
   body: string;
   exportHref: string;
   copyState: CopyState;
+  redactionMode: ReportRedactionMode;
   onCopy: () => void;
   onDownload: () => void;
 }) {
   const disabled = body.trim() === "";
+  const modeLabel = redactionMode === "internal" ? "internal" : "review copy";
   return (
     <>
       <button type="button" disabled={disabled} onClick={onCopy} className={buttonClass}>
         <Copy className="h-3.5 w-3.5" />
-        {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
+        {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : `Copy ${modeLabel}`}
       </button>
       <button type="button" disabled={disabled} onClick={onDownload} className={buttonClass}>
         <Download className="h-3.5 w-3.5" />
-        Download
+        Download {modeLabel}
       </button>
       {exportHref && (
         <a href={exportHref} className={buttonClass}>
@@ -755,6 +759,12 @@ function ReportBodyPanel({
   onRedactionModeChange: (mode: ReportRedactionMode) => void;
   sidecar: ReactNode;
 }) {
+  const modeLabel = redactionMode === "internal" ? "Internal" : "Review copy";
+  const modeDetail = redactionMode === "internal"
+    ? "Copy and download include internal identifiers."
+    : rawBody !== body
+      ? "Copy and download use the redacted packet body."
+      : "Copy and download use this packet body.";
   return (
     <Panel
       title={title}
@@ -780,10 +790,11 @@ function ReportBodyPanel({
               {metadata.readiness.summary}
             </div>
           )}
+          <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-[13px] text-[var(--text-secondary)]">
+            <span className="font-semibold text-[var(--text-primary)]">{modeLabel}</span>
+            <span className="ml-2 text-[12px] text-[var(--text-muted)]">{modeDetail}</span>
+          </div>
           <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-lg border border-[color:var(--border)] bg-slate-950 p-4 font-mono text-[12px] leading-6 text-slate-100">{body}</pre>
-          {redactionMode === "share_safe" && rawBody !== body && (
-            <div className="text-[12px] text-[var(--text-muted)]">Sensitive identifiers are redacted in this preview and in copy/download actions.</div>
-          )}
         </div>
         {sidecar}
       </div>

@@ -37,6 +37,7 @@ type IssueQueueItem = {
 };
 
 type ReadinessCheck = {
+  action: string;
   detail: string;
   href: string;
   label: string;
@@ -217,8 +218,9 @@ export const buildReadinessChecks = ({
 
   if (sourceIssues > 0) {
     checks.push({
+      action: "Refresh sources",
       detail: `${countLabel(summary.coverage_blind_spots, "coverage gap")}, ${countLabel(summary.stale_connectors, "stale source")}`,
-      href: "/connectors",
+      href: "/reports/audit-packages#source-freshness",
       label: "Source gaps",
       status: "needs_attention",
       tone: "warning",
@@ -228,8 +230,9 @@ export const buildReadinessChecks = ({
 
   if (summary.failing_controls > 0 || summary.manual_review_controls > 0) {
     checks.push({
+      action: "Resolve controls",
       detail: `${countLabel(summary.failing_controls, "failing control")}, ${countLabel(summary.manual_review_controls, "manual review")}`,
-      href: "/controls",
+      href: "/reports/audit-packages#control-owner-queue",
       label: "Failing controls",
       status: "needs_attention",
       tone: "warning",
@@ -239,8 +242,9 @@ export const buildReadinessChecks = ({
 
   if (evidenceIssues > 0) {
     checks.push({
+      action: "Collect evidence",
       detail: `${summary.missing_evidence_items.toLocaleString()} missing, ${summary.stale_evidence_items.toLocaleString()} stale`,
-      href: "/evidence",
+      href: "/reports/audit-packages#evidence-review",
       label: "Evidence gaps",
       status: "needs_attention",
       tone: "warning",
@@ -250,8 +254,9 @@ export const buildReadinessChecks = ({
 
   if (checks.length === 0) {
     checks.push({
+      action: "Open packet",
       detail: "No failing controls, missing evidence, stale evidence, or source gaps.",
-      href: "/reports",
+      href: "/reports/audit-packages",
       label: "Packet ready",
       status: "ready",
       tone: "success",
@@ -276,7 +281,8 @@ function ReadinessChecksPanel({ checks }: { checks: ReadinessCheck[] }) {
               </div>
             </div>
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">{step.value}</div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12px] font-medium text-[var(--primary)]">{step.action}</span>
               <Badge value={step.status} />
             </div>
           </Link>
