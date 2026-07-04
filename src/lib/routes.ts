@@ -24,6 +24,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["findings", "risk", "sla", "triage", "owner", "framework", ...supportedGRCFrameworkNames],
   },
   {
+    label: "GRC",
+    href: "/grc",
+    description: "Frameworks, controls, evidence, policies, questionnaires, and reports.",
+    section: "Operator",
+    keywords: ["grc", "compliance", "audit", "framework", "control", "evidence", "policy", "questionnaire", "report", ...supportedGRCFrameworkNames],
+  },
+  {
     label: "Trends",
     href: "/trends",
     description: "Finding flow over time: opened versus closed and the running open backlog.",

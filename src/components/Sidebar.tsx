@@ -11,6 +11,7 @@ import { operatorNavLinks, utilityLinks, type NavigationEntry } from "@/lib/navi
 const icons: Record<string, ReactNode> = {
   "/": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />,
   "/risk-inbox": <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />,
+  "/grc": <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M4.5 6.75h15M4.5 12h2.25m10.5 0h2.25M4.5 17.25h15M6.75 3.75h10.5A2.25 2.25 0 0 1 19.5 6v12A2.25 2.25 0 0 1 17.25 20.25H6.75A2.25 2.25 0 0 1 4.5 18V6A2.25 2.25 0 0 1 6.75 3.75Z" />,
   "/trends": <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />,
   "/trends/dashboards": <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25A2.25 2.25 0 0 1 6 3h12a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 18 21H6a2.25 2.25 0 0 1-2.25-2.25V5.25ZM7.5 8.25h3.75m-3.75 3h3.75m-3.75 3h3.75m3-6h2.25m-2.25 3h2.25m-2.25 3h2.25" />,
   "/ask": <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />,
@@ -33,6 +34,7 @@ const icons: Record<string, ReactNode> = {
 };
 
 type SidebarNavGroup = {
+  href?: string;
   iconHref: string;
   id: string;
   label: string;
@@ -51,7 +53,8 @@ export const sidebarNavGroups: SidebarNavGroup[] = [
   {
     id: "grc",
     label: "GRC",
-    iconHref: "/frameworks",
+    href: "/grc",
+    iconHref: "/grc",
     links: linksFor(["/frameworks", "/controls", "/policies", "/evidence", "/questionnaires", "/reports"]),
   },
   {
@@ -70,7 +73,10 @@ export const sidebarNavGroups: SidebarNavGroup[] = [
 
 export const sidebarNavLinks = [
   ...sidebarPrimaryLinks,
-  ...sidebarNavGroups.flatMap((group) => group.links),
+  ...sidebarNavGroups.flatMap((group) => {
+    const parent = group.href ? linksFor([group.href]) : [];
+    return [...parent, ...group.links];
+  }),
   ...utilityLinks,
 ];
 
@@ -117,7 +123,10 @@ export default function Sidebar() {
 
   const isActive = (href: string) => isSidebarLinkActive(pathname, href, sidebarNavLinks);
   const activeGroupIds = useMemo(
-    () => new Set(sidebarNavGroups.filter((group) => group.links.some((link) => isSidebarLinkActive(pathname, link.href, sidebarNavLinks))).map((group) => group.id)),
+    () => new Set(sidebarNavGroups.filter((group) => {
+      if (group.href && isSidebarLinkActive(pathname, group.href, sidebarNavLinks)) return true;
+      return group.links.some((link) => isSidebarLinkActive(pathname, link.href, sidebarNavLinks));
+    }).map((group) => group.id)),
     [pathname],
   );
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -146,22 +155,43 @@ export default function Sidebar() {
   const renderGroup = (group: SidebarNavGroup) => {
     const active = activeGroupIds.has(group.id);
     const open = isGroupOpen(group);
+    const groupHref = group.href;
+    if (collapsed && groupHref) {
+      return renderLink({ href: groupHref, label: group.label });
+    }
     return (
       <div key={group.id} className="space-y-0.5">
-        <button
-          type="button"
-          onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !open }))}
-          aria-expanded={open}
-          title={group.label}
-          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[8px] text-[13px] font-medium transition ${
+        <div
+          className={`flex w-full items-center gap-1 rounded-lg px-2.5 py-[8px] text-[13px] font-medium transition ${
             active
               ? "bg-[var(--surface-muted)] text-[var(--text-primary)]"
               : "text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)]"
-          } ${collapsed ? "justify-center" : "max-md:justify-center"}`}
+          } max-md:justify-center`}
         >
-          <NavIcon href={group.iconHref} />
-          {!collapsed && <span className="max-md:hidden">{group.label}</span>}
-          {!collapsed && (
+          {groupHref ? (
+            <Link href={groupHref} title={group.label} className="flex min-w-0 flex-1 items-center gap-2.5">
+              <NavIcon href={group.iconHref} />
+              <span className="max-md:hidden">{group.label}</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !open }))}
+              aria-expanded={open}
+              title={group.label}
+              className="flex min-w-0 flex-1 items-center gap-2.5"
+            >
+              <NavIcon href={group.iconHref} />
+              <span className="max-md:hidden">{group.label}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !open }))}
+            aria-expanded={open}
+            aria-label={`${open ? "Collapse" : "Expand"} ${group.label}`}
+            className="ml-auto rounded p-0.5 text-[var(--sidebar-muted)] transition hover:bg-[var(--sidebar-hover)] hover:text-[var(--text-primary)] max-md:hidden"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
@@ -172,8 +202,8 @@ export default function Sidebar() {
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
             </svg>
-          )}
-        </button>
+          </button>
+        </div>
         {open && <div className="space-y-0.5">{group.links.map((link) => renderLink(link, true))}</div>}
       </div>
     );

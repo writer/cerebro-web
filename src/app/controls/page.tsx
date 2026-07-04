@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import { type TableColumn, WorklistTable } from "@/components/grc/DataTable";
 import { useApiKey } from "@/components/providers";
 import { AppliedFilterChips, Badge, DataStateBanner, MetricCard, PageHeader, RiskBadge } from "@/components/grc/Primitives";
+import ReviewDrawer from "@/components/grc/ReviewDrawer";
 import { countLabel } from "@/lib/format";
 import { displayDate, GRCControl, GRCControlEvidencePacketResponse, GRCFinding, riskSort } from "@/lib/grc";
 import { downloadGRCExport, grcExportFilename, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
@@ -102,6 +103,7 @@ export default function ControlsPage() {
   const [framework, setFramework] = useQueryParamState("framework");
   const [controlID, setControlID] = useQueryParamState("control");
   const [selectedControlKey, setSelectedControlKey] = useState<string | null>(null);
+  const [reviewControlKey, setReviewControlKey] = useState<string | null>(null);
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const selectedProfileID = profileID.trim() || DEFAULT_CONTROL_PROFILE_ID;
   const { data, error, loading, lastSuccessfulAt, reload, state: queryState } = useGRCQuery<GRCControlEvidencePacketResponse>(
@@ -146,6 +148,7 @@ export default function ControlsPage() {
   const selectedUpcomingFramework = isUpcomingGRCFramework(framework);
   const selectedControl = controls.find((control) => controlKey(control) === selectedControlKey) ?? controls[0] ?? null;
   const selectedRegisterKey = selectedControl ? controlKey(selectedControl) : null;
+  const reviewControl = controls.find((control) => controlKey(control) === reviewControlKey) ?? null;
   const queueControls = useMemo(
     () => controls.slice().sort((left, right) => {
       const leftRank = workQueueRank(left);
@@ -370,6 +373,7 @@ export default function ControlsPage() {
                     <td className="px-3 py-3 text-[12px] text-slate-700">{controlRecommendation(control)}</td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-2">
+                        <button type="button" onClick={() => setReviewControlKey(controlKey(control))} className="rounded-md px-2 py-1 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50">Review</button>
                         <Link href={controlDetailHref(control)} className="rounded-md px-2 py-1 text-[12px] font-medium text-indigo-600 transition hover:bg-indigo-50">Detail</Link>
                         <Link href={auditPacketHref(control)} className="rounded-md px-2 py-1 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50">Packet</Link>
                       </div>
@@ -405,6 +409,18 @@ export default function ControlsPage() {
             getRowKey={(control) => controlKey(control)}
             selectedRowKey={selectedRegisterKey}
             onRowClick={(control) => setSelectedControlKey(controlKey(control))}
+            rowActions={(control) => (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReviewControlKey(controlKey(control));
+                }}
+                className="rounded-md border border-[color:var(--border)] px-2 py-1 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]"
+              >
+                Review
+              </button>
+            )}
             resultLimit={GRC_WORKLIST_LIMIT}
             resultMeta={controlListMeta}
             resultNoun="controls"
@@ -418,7 +434,141 @@ export default function ControlsPage() {
           />
         </div>
       )}
+      <ControlReviewDrawer
+        auditPacketHref={reviewControl ? auditPacketHref(reviewControl) : ""}
+        control={reviewControl}
+        controlDetailHref={reviewControl ? controlDetailHref(reviewControl) : ""}
+        onClose={() => setReviewControlKey(null)}
+      />
     </div>
+  );
+}
+
+function ControlReviewDrawer({
+  auditPacketHref,
+  control,
+  controlDetailHref,
+  onClose,
+}: {
+  auditPacketHref: string;
+  control: GRCControl | null;
+  controlDetailHref: string;
+  onClose: () => void;
+}) {
+  const dueAt = control ? earliestDueAt(control.findings) : undefined;
+  const findings = control ? (control.findings ?? []).slice().sort(riskSort) : [];
+  const visibleFindings = findings.slice(0, 5);
+  const progress = control ? evidenceProgress(control) : { current: 0, expected: 0, percent: 0 };
+  const auditContext = control?.audit_summary || control?.reasons?.[0] || "No audit summary returned.";
+
+  return (
+    <ReviewDrawer
+      open={Boolean(control)}
+      onClose={onClose}
+      title={control ? `${control.framework_name} ${control.control_id}` : "Control review"}
+      subtitle={control?.title || control?.family_name || undefined}
+      footer={control && (
+        <div className="flex flex-wrap gap-2">
+          <Link href={controlDetailHref} className="primary-button px-3 py-1.5 text-[12px]">Open detail</Link>
+          <Link href={auditPacketHref} className="secondary-button px-3 py-1.5 text-[12px]">Open packet</Link>
+        </div>
+      )}
+    >
+      {control && (
+        <div className="space-y-5">
+          <section>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge value={control.status} />
+              <Badge value={evidenceRequestState(control)} />
+              <Badge value={dueState(dueAt)} />
+            </div>
+            <p className="mt-3 text-[13px] leading-5 text-[var(--text-secondary)]">{controlRecommendation(control)}</p>
+          </section>
+
+          <section className="grid gap-3 border-t border-[color:var(--border)] pt-4 sm:grid-cols-2">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Owner</div>
+              <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{controlOwner(control)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Due</div>
+              <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{dueAt ? displayDate(dueAt) : "No due date"}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Findings</div>
+              <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{control.open_findings} open, {control.critical_findings} critical</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Evidence score</div>
+              <div className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{typeof control.evidence_score === "number" ? control.evidence_score : "Not scored"}</div>
+            </div>
+          </section>
+
+          <section className="border-t border-[color:var(--border)] pt-4">
+            <div className="flex items-center justify-between text-[12px]">
+              <h3 className="font-semibold text-[var(--text-primary)]">Evidence</h3>
+              <span className="text-[var(--text-muted)]">{progress.percent}% complete</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+              <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.max(0, Math.min(100, progress.percent))}%` }} />
+            </div>
+            <dl className="mt-3 grid grid-cols-3 gap-3 text-[12px]">
+              <div>
+                <dt className="text-[var(--text-muted)]">Attached</dt>
+                <dd className="font-medium text-[var(--text-primary)]">{progress.current}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Expected</dt>
+                <dd className="font-medium text-[var(--text-primary)]">{progress.expected || progress.current}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Stale</dt>
+                <dd className="font-medium text-[var(--text-primary)]">{control.stale_evidence_items ?? 0}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="border-t border-[color:var(--border)] pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Mapped findings</h3>
+              <span className="text-[11px] text-[var(--text-muted)]">{findings.length.toLocaleString()} total</span>
+            </div>
+            {visibleFindings.length > 0 ? (
+              <div className="mt-3 space-y-3">
+                {visibleFindings.map((finding) => (
+                  <div key={finding.id} className="rounded-md bg-[var(--surface-muted)] px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <RiskBadge score={finding.risk_score} />
+                      <Badge value={finding.severity} tone="severity" />
+                      <Badge value={finding.sla_status} />
+                    </div>
+                    <Link href={`/findings/${encodeURIComponent(finding.id)}`} className="mt-2 line-clamp-2 text-[12px] font-medium text-[var(--text-primary)] hover:text-[var(--primary)]">
+                      {finding.title}
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[13px] text-[var(--text-muted)]">No findings mapped to this control.</p>
+            )}
+          </section>
+
+          <section className="border-t border-[color:var(--border)] pt-4">
+            <h3 className="text-[12px] font-semibold text-[var(--text-primary)]">Audit context</h3>
+            <p className="mt-2 text-[13px] leading-5 text-[var(--text-secondary)]">{auditContext}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {control.evidence_quality && <Badge value={control.evidence_quality} />}
+              <span className="rounded-full border border-[color:var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+                {countLabel(control.evidence_expectations ?? 0, "expectation")}
+              </span>
+              <span className="rounded-full border border-[color:var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+                {countLabel(control.mapped_rules?.length ?? 0, "mapped rule")}
+              </span>
+            </div>
+          </section>
+        </div>
+      )}
+    </ReviewDrawer>
   );
 }
 
