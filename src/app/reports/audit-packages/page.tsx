@@ -9,6 +9,8 @@ import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHe
 import {
   auditWorkflowStateLabel,
   auditEvidenceDecisionLabel,
+  auditEvidenceScopeLabel,
+  auditEvidenceVisibilityLabel,
   auditPackageStateLabel,
   type AuditExportManifestRow,
   type AuditPriorityWorkRow,
@@ -41,6 +43,20 @@ const decisionRank = (decision: EvidenceCurationRow["decision"]) => ({
   excluded: 7,
 }[decision]);
 
+const scopeRank = (scope: EvidenceCurationRow["scope"]) => ({
+  included: 0,
+  internal_only: 1,
+  excluded: 2,
+}[scope]);
+
+const visibilityRank = (visibility: EvidenceCurationRow["visibility"]) => ({
+  needs_owner: 0,
+  needs_reviewer: 1,
+  ready_for_auditor: 2,
+  internal_only: 3,
+  excluded: 4,
+}[visibility]);
+
 const readinessRank = (state: AuditReadinessRow["state"]) => ({
   blocked: 0,
   needs_review: 1,
@@ -60,7 +76,8 @@ const manifestValue = (row: AuditExportManifestRow) =>
     : row.value;
 
 const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
-  { key: "decision", label: "Packet use", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} />, sortValue: (row) => decisionRank(row.decision) },
+  { key: "scope", label: "Scope", render: (_value, row) => <Badge value={auditEvidenceScopeLabel(row.scope)} />, sortValue: (row) => scopeRank(row.scope) },
+  { key: "visibility", label: "Visibility", render: (_value, row) => <Badge value={auditEvidenceVisibilityLabel(row.visibility)} />, sortValue: (row) => visibilityRank(row.visibility) },
   {
     key: "title",
     label: "Evidence",
@@ -72,15 +89,15 @@ const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
     ),
   },
   { key: "controlID", label: "Control", render: (_value, row) => <span className="font-mono text-[12px]">{row.controlID}</span> },
+  { key: "decision", label: "Packet state", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} />, sortValue: (row) => decisionRank(row.decision) },
   {
     key: "reason",
-    label: "Packet reason",
+    label: "Reason",
     render: (_value, row) => <div className="min-w-[16rem] line-clamp-2">{row.reason}</div>,
   },
-  { key: "status", label: "State", render: (_value, row) => <Badge value={row.status} /> },
-  { key: "quality", label: "Quality", render: (_value, row) => <Badge value={row.quality} /> },
-  { key: "review", label: "Review", render: (_value, row) => <Badge value={row.review} /> },
-  { key: "packets", label: "Attachments" },
+  { key: "owner", label: "Owner" },
+  { key: "reviewer", label: "Reviewer" },
+  { key: "packets", label: "Packets" },
   { key: "source", label: "Source" },
 ];
 
@@ -434,12 +451,12 @@ export default function AuditPackagesPage() {
             rows={evidenceRows}
             columns={evidenceColumns}
             emptyMessage="No evidence requests or expectations are available for this packet."
-            filterKeys={["id", "title", "controlID", "decision", "reason", "status", "quality", "review", "source"]}
+            filterKeys={["id", "title", "controlID", "decision", "reason", "status", "quality", "review", "source", "scope", "visibility", "owner", "reviewer"]}
             getRowKey={(row) => row.id}
             pageSize={10}
             resultLimit={25}
             resultNoun="evidence requests"
-            defaultSort={{ key: "decision" }}
+            defaultSort={{ key: "visibility" }}
           />
         </Panel>
       </section>

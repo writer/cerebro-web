@@ -24,6 +24,10 @@ export type AuditEvidenceDecision =
   | "accepted"
   | "rejected";
 
+export type AuditEvidenceScope = "included" | "excluded" | "internal_only";
+
+export type AuditEvidenceVisibility = "ready_for_auditor" | "needs_owner" | "needs_reviewer" | "internal_only" | "excluded";
+
 export type AuditPackageSummary = {
   state: AuditPackageState;
   readinessScore: number;
@@ -50,11 +54,15 @@ export type EvidenceCurationRow = {
   quality: string;
   reason: string;
   review: string;
+  reviewer: string;
   source: string;
   sourceID?: string;
+  scope: AuditEvidenceScope;
   status: string;
   title: string;
   runtimeID?: string;
+  visibility: AuditEvidenceVisibility;
+  owner: string;
 };
 
 export type ControlOwnerRow = {
@@ -204,17 +212,59 @@ export const auditEvidenceDecision = (input: {
   const freshness = normalized(input.freshnessStatus);
 
   if (reviewStatus === "rejected" || status === "rejected" || quality === "rejected") return "rejected";
-  if (reviewStatus === "accepted" || reviewStatus === "approved") return "accepted";
   if (status === "excluded" || status === "out_of_scope") return "excluded";
   if (status === "internal_only" || status === "internal") return "internal_only";
+  if (["accepted", "approved", "auditor_ready", "ready_for_auditor"].includes(reviewStatus)) return "accepted";
   if (["missing", "blocked", "failed"].includes(status) || ["missing", "stale", "expired"].includes(freshness) || quality === "stale") {
     return "needs_replacement";
   }
   if (input.manual || ["needs_review", "flagged", "manual_review"].includes(reviewStatus) || ["needs_review", "manual_review"].includes(status)) {
     return "needs_review";
   }
-  if (["ready", "satisfied", "passing", "collected"].includes(status) || ["ready", "valid"].includes(quality)) return "included";
+  if (["ready", "satisfied", "passing", "collected", "auditor_ready", "ready_for_auditor"].includes(status) || ["ready", "valid"].includes(quality)) return "included";
   return "candidate";
+};
+
+export const auditEvidenceScope = (decision: AuditEvidenceDecision): AuditEvidenceScope => {
+  if (decision === "excluded") return "excluded";
+  if (decision === "internal_only") return "internal_only";
+  return "included";
+};
+
+const firstPresent = (...values: Array<string | null | undefined>) =>
+  values.map((value) => value?.trim()).find((value): value is string => Boolean(value));
+
+const assignedValue = (value?: string) => {
+  const cleaned = firstPresent(value);
+  if (!cleaned) return undefined;
+  return ["none", "no owner", "unassigned", "unknown"].includes(normalized(cleaned)) ? undefined : cleaned;
+};
+
+export const auditEvidenceVisibility = ({
+  decision,
+  owner,
+  reviewStatus,
+  status,
+}: {
+  decision: AuditEvidenceDecision;
+  owner?: string;
+  reviewStatus?: string;
+  status?: string;
+}): AuditEvidenceVisibility => {
+  const scope = auditEvidenceScope(decision);
+  if (scope === "excluded") return "excluded";
+  if (scope === "internal_only") return "internal_only";
+  if (!assignedValue(owner)) return "needs_owner";
+
+  const review = normalized(reviewStatus);
+  const packetStatus = normalized(status);
+  if (["accepted", "approved", "auditor_ready", "ready_for_auditor"].includes(review) || decision === "accepted") {
+    return "ready_for_auditor";
+  }
+  if (decision === "included" && review === "" && ["passing", "ready", "satisfied"].includes(packetStatus)) {
+    return "ready_for_auditor";
+  }
+  return "needs_reviewer";
 };
 
 export const auditEvidenceDecisionLabel = (decision: AuditEvidenceDecision) => {
@@ -235,6 +285,32 @@ export const auditEvidenceDecisionLabel = (decision: AuditEvidenceDecision) => {
       return "Needs review";
     case "rejected":
       return "Rejected";
+  }
+};
+
+export const auditEvidenceScopeLabel = (scope: AuditEvidenceScope) => {
+  switch (scope) {
+    case "excluded":
+      return "Excluded";
+    case "included":
+      return "Included";
+    case "internal_only":
+      return "Internal only";
+  }
+};
+
+export const auditEvidenceVisibilityLabel = (visibility: AuditEvidenceVisibility) => {
+  switch (visibility) {
+    case "excluded":
+      return "Excluded";
+    case "internal_only":
+      return "Internal only";
+    case "needs_owner":
+      return "Needs owner";
+    case "needs_reviewer":
+      return "Needs reviewer";
+    case "ready_for_auditor":
+      return "Ready for auditor";
   }
 };
 
@@ -267,9 +343,6 @@ export const auditWorkflowStateLabel = (state: AuditWorkflowState) => {
       return "Waiting";
   }
 };
-
-const firstPresent = (...values: Array<string | null | undefined>) =>
-  values.map((value) => value?.trim()).find((value): value is string => Boolean(value));
 
 const packetCountLabel = (count: number) => `${count.toLocaleString()} ${count === 1 ? "packet" : "packets"}`;
 
@@ -384,7 +457,16 @@ export const buildEvidenceCurationRows = ({
 }): EvidenceCurationRow[] => {
   const requests = evidencePackets?.evidence_requests ?? [];
   if (requests.length > 0) {
-    const packetSummaries = new Map<string, { count: number; reason?: string }>();
+    const reviewSummaries = new Map<string, { reason?: string; reviewer?: string; status?: string }>();
+    (evidencePackets?.evidence_reviews ?? []).forEach((review) => {
+      const current = reviewSummaries.get(review.subject_id) ?? {};
+      reviewSummaries.set(review.subject_id, {
+        reason: current.reason ?? firstPresent(review.reason),
+        reviewer: current.reviewer ?? firstPresent(review.actor),
+        status: current.status ?? firstPresent(review.status),
+      });
+    });
+    const packetSummaries = new Map<string, { count: number; reason?: string; reviewer?: string; reviewStatus?: string }>();
     const evidenceItems = evidencePackets?.evidence_items ?? [];
     const evidenceItemByID = new Map(evidenceItems.map((item) => [item.id, item]));
     const packetsByRequestID = new Map<string, GRCPackagedEvidencePacket[]>();
@@ -394,9 +476,12 @@ export const buildEvidenceCurationRows = ({
       const requestID = packet.request_id;
       if (!requestID) return;
       const current = packetSummaries.get(requestID) ?? { count: 0 };
+      const reviewSummary = reviewSummaries.get(packet.id);
       packetSummaries.set(requestID, {
         count: current.count + 1,
-        reason: current.reason ?? firstPresent(packet.reason, packet.review?.reason, packet.freshness?.reason),
+        reason: current.reason ?? firstPresent(packet.reason, packet.review?.reason, reviewSummary?.reason, packet.freshness?.reason),
+        reviewer: current.reviewer ?? firstPresent(packet.review?.actor, reviewSummary?.reviewer),
+        reviewStatus: current.reviewStatus ?? firstPresent(packet.review?.status, reviewSummary?.status),
       });
       const packets = packetsByRequestID.get(requestID) ?? [];
       packets.push(packet);
@@ -424,14 +509,26 @@ export const buildEvidenceCurationRows = ({
       const runtimeID = item?.runtime_id;
       const collectedAt = firstDefined(item?.last_observed_at, item?.created_at, packet?.observed_at, packet?.freshness?.observed_at);
       const packetSummary = packetSummaries.get(request.id);
+      const requestReview = reviewSummaries.get(request.id);
       const packets = packetSummary?.count ?? request.evidence_packet_ids?.length ?? 0;
+      const review = request.review_status || packetSummary?.reviewStatus || requestReview?.status || "needs_review";
       const decision = auditEvidenceDecision({
         quality: request.quality,
-        reviewStatus: request.review_status,
+        reviewStatus: review,
         status: request.status,
       });
       const freshness = request.freshness_sla || "Not set";
       const source = request.accepted_from?.join(", ") || sourceID || runtimeID || "Any source";
+      const owner = assignedValue(request.owner_domain) ?? "Unassigned";
+      const reviewer = assignedValue(packetSummary?.reviewer ?? requestReview?.reviewer) ?? "Unassigned";
+      const scope = auditEvidenceScope(decision);
+      const visibility = auditEvidenceVisibility({
+        decision,
+        owner,
+        reviewStatus: review,
+        status: request.status,
+      });
+
       return {
         collectedAt,
         id: request.id,
@@ -444,18 +541,22 @@ export const buildEvidenceCurationRows = ({
           decision,
           freshness,
           packetCount: packets,
-          packetReason: packetSummary?.reason,
+          packetReason: packetSummary?.reason ?? requestReview?.reason,
           quality: request.quality,
-          review: request.review_status,
+          review,
           source,
           status: request.status,
         }),
-        review: request.review_status || "needs_review",
+        review,
+        reviewer,
         source,
         sourceID,
+        scope,
         status: request.status || "candidate",
         title: request.title || request.id,
         runtimeID,
+        visibility,
+        owner,
       };
     });
   }
@@ -470,6 +571,15 @@ export const buildEvidenceCurationRows = ({
       const freshness = expectation.freshness_sla || control.evidence.summary?.freshness_sla || "Not set";
       const packets = expectation.evidence_ids?.length ?? 0;
       const source = expectation.type || "Evidence";
+      const owner = assignedValue(control.control.owner_domain) ?? "Unassigned";
+      const review = expectation.status || "needs_review";
+      const scope = auditEvidenceScope(decision);
+      const visibility = auditEvidenceVisibility({
+        decision,
+        owner,
+        reviewStatus: review,
+        status: expectation.status,
+      });
 
       return {
         id: expectation.id,
@@ -486,10 +596,14 @@ export const buildEvidenceCurationRows = ({
           source,
           status: expectation.status,
         }),
-        review: expectation.status || "needs_review",
+        review,
+        reviewer: "Unassigned",
         source,
+        scope,
         status: expectation.status,
         title: expectation.title || expectation.id,
+        visibility,
+        owner,
       };
     }),
   ).slice(0, limit);
@@ -716,14 +830,16 @@ export const buildAuditorQuestionRows = ({
   limit?: number;
 }): AuditorQuestionRow[] => {
   const evidenceQuestions = evidenceRows
-    .filter((row) => ["needs_replacement", "needs_review", "rejected"].includes(row.decision))
+    .filter((row) => row.visibility === "needs_owner" || row.visibility === "needs_reviewer" || ["needs_replacement", "needs_review", "rejected"].includes(row.decision))
     .map((row) => ({
       id: `evidence:${row.id}`,
       area: "Evidence",
-      owner: row.source || "Evidence owner",
-      question: `Can this evidence be shared, refreshed, or replaced for ${row.controlID}?`,
+      owner: row.visibility === "needs_owner" ? "Audit lead" : row.source || "Evidence owner",
+      question: row.visibility === "needs_owner"
+        ? `Who owns this evidence for ${row.controlID}?`
+        : `Can this evidence be shared, refreshed, or replaced for ${row.controlID}?`,
       source: `${row.title}: ${row.reason}`,
-      status: auditEvidenceDecisionLabel(row.decision),
+      status: row.visibility === "needs_owner" ? auditEvidenceVisibilityLabel(row.visibility) : auditEvidenceDecisionLabel(row.decision),
     }));
   const controlQuestions = ownerRows
     .filter((row) => row.missing > 0 || row.stale > 0 || row.findings > 0)
