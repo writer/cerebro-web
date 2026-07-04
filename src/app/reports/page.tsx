@@ -115,7 +115,7 @@ const controlPacketColumns: TableColumn<GRCControlPacketControl>[] = [
     ),
   },
   { key: "status", label: "Status", render: (_value, control) => <Badge value={control.status} /> },
-  { key: "readiness", label: "Readiness", render: (_value, control) => control.audit_readiness ? `${control.audit_readiness.score}/100` : "—" },
+  { key: "readiness", label: "Packet score", render: (_value, control) => control.audit_readiness ? `${control.audit_readiness.score}/100` : "—" },
   { key: "evidence", label: "Evidence", render: (_value, control) => evidenceItemCount(control).toLocaleString() },
   { key: "findings", label: "Findings", render: (_value, control) => (control.findings?.length ?? 0).toLocaleString() },
   { key: "mapped_rules", label: "Rules", render: (_value, control) => (control.mapped_rules?.length ?? 0).toLocaleString() },
@@ -301,7 +301,7 @@ export default function ReportsPage() {
       <PageHeader
         contractId="reports"
         title="Reports"
-        description="Build audit packets with evidence, controls, impact proof, exclusions, and provenance."
+        description="Create control evidence packets and finding packets with mapped evidence, scope exclusions, and source records."
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <PacketActions
@@ -313,7 +313,7 @@ export default function ReportsPage() {
             />
             <Link href={`/reports/audit-packages?profile=${encodeURIComponent(selectedProfileID)}${framework ? `&framework=${encodeURIComponent(framework)}` : ""}${controlID ? `&control=${encodeURIComponent(controlID)}` : ""}`} className={buttonClass}>
               <ShieldCheck className="h-3.5 w-3.5" />
-              Audit packages
+              Review packets
             </Link>
             <Link href="/reports/schedules" className={buttonClass}>
               <CalendarClock className="h-3.5 w-3.5" />
@@ -589,14 +589,14 @@ function ControlPacketView({
   return (
     <>
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Readiness" value={isUpcoming ? "N/A" : readiness ? `${readiness.score}/100` : "—"} detail={isUpcoming ? "upcoming" : reportReadinessLabel(readiness?.status)} intent={isUpcoming ? "neutral" : reportReadinessIntent(readiness?.status)} state={state} />
+        <MetricCard label="Packet score" value={isUpcoming ? "N/A" : readiness ? `${readiness.score}/100` : "—"} detail={isUpcoming ? "upcoming" : reportReadinessLabel(readiness?.status)} intent={isUpcoming ? "neutral" : reportReadinessIntent(readiness?.status)} state={state} />
         <MetricCard label="Controls" value={isUpcoming ? "N/A" : packet.packet.summary.total} detail={isUpcoming ? "not measured" : packet.profile.name || packet.profile.id} state={state} />
         <MetricCard label="Open Findings" value={isUpcoming ? "N/A" : statusCount(packet, "failing")} detail={isUpcoming ? "not measured" : "mapped to controls"} intent={isUpcoming ? "neutral" : statusCount(packet, "failing") > 0 ? "danger" : "success"} state={state} />
         <MetricCard label="Evidence" value={isUpcoming ? "N/A" : evidenceCount} detail={isUpcoming ? "not measured" : `${packet.metadata?.scope?.exclusions?.total ?? 0} exclusions`} state={state} />
       </div>
 
       <ReportBodyPanel
-        title="Control Evidence Packet"
+        title="Control evidence packet"
         body={reportBody}
         rawBody={rawBody}
         metadata={packet.metadata}
@@ -608,7 +608,7 @@ function ControlPacketView({
       <ScopePanel metadata={packet.metadata} redactionMode={redactionMode} />
 
       {controls.length === 0 ? (
-        <Panel title="Control Readiness">
+        <Panel title="Control blockers">
           {isUpcoming ? (
             <div className="py-8 text-center text-[13px] text-violet-700">
               {upcomingFrameworkName} is upcoming. It is discoverable for planning, but not yet available for measured control evidence packets.
@@ -620,7 +620,7 @@ function ControlPacketView({
       ) : (
         <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
           <WorklistTable
-            title="Control readiness"
+            title="Control blockers"
             description={scopeCopy}
             rows={controls}
             columns={controlPacketColumns}
@@ -667,7 +667,7 @@ function ControlReadinessDetail({ control }: { control: GRCControlPacketControl 
         {control.audit_readiness?.summary || control.reasons?.[0] || "No packet blocker reported."}
       </p>
       <dl className="mt-4 space-y-2">
-        <DetailRow label="Readiness" value={control.audit_readiness ? `${control.audit_readiness.score}/100` : "—"} />
+        <DetailRow label="Packet score" value={control.audit_readiness ? `${control.audit_readiness.score}/100` : "—"} />
         <DetailRow label="Findings" value={String(control.findings?.length ?? 0)} />
         <DetailRow label="Evidence" value={String(evidenceItemCount(control))} />
         <DetailRow label="Mapped rules" value={String(control.mapped_rules?.length ?? 0)} />
@@ -713,14 +713,14 @@ function FindingPacketView({
   return (
     <>
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Readiness" value={readiness ? `${readiness.score}/100` : "—"} detail={reportReadinessLabel(readiness?.status)} intent={reportReadinessIntent(readiness?.status)} state={state} />
+        <MetricCard label="Packet score" value={readiness ? `${readiness.score}/100` : "—"} detail={reportReadinessLabel(readiness?.status)} intent={reportReadinessIntent(readiness?.status)} state={state} />
         <MetricCard label="Risk" value={<RiskBadge score={packet.finding.risk_score} />} detail={`L ${packet.finding.likelihood_score ?? "—"} / I ${packet.finding.impact_score ?? "—"}`} state={state} />
         <MetricCard label="Evidence" value={packet.evidence.length} detail="attached items" state={state} />
         <MetricCard label="Controls" value={(packet.controls ?? packet.finding.controls ?? []).length} detail={`${packet.metadata?.scope?.exclusions?.total ?? 0} exclusions`} state={state} />
       </div>
 
       <ReportBodyPanel
-        title="Finding Audit Packet"
+        title="Finding packet"
         body={reportBody}
         rawBody={rawBody}
         metadata={packet.metadata}
@@ -731,7 +731,7 @@ function FindingPacketView({
 
       <ScopePanel metadata={packet.metadata} redactionMode={redactionMode} />
 
-      <Panel title="Impact Proof">
+      <Panel title="Impact path">
         <GraphViewer graph={graph} />
       </Panel>
     </>
@@ -767,7 +767,7 @@ function ReportBodyPanel({
               onClick={() => onRedactionModeChange(mode)}
               className={`rounded px-2 py-1 text-[11px] font-medium ${redactionMode === mode ? "bg-white text-[var(--text-primary)] shadow-sm dark:bg-white/10" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
             >
-              {mode === "share_safe" ? "Share-safe" : "Internal"}
+              {mode === "share_safe" ? "Review copy" : "Internal"}
             </button>
           ))}
         </div>
@@ -827,7 +827,7 @@ function ReportMetadataPanel({ metadata, redactionMode }: { metadata?: GRCReport
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-[color:var(--border)] p-4">
-        <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Readiness</div>
+        <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]">Packet score</div>
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className="text-2xl font-semibold text-[var(--text-primary)]">{readiness ? `${readiness.score}/100` : "—"}</div>
           <Badge value={readiness?.status || "unknown"} />
@@ -864,7 +864,7 @@ function ScopePanel({ metadata, redactionMode }: { metadata?: GRCReportMetadata;
     ...(exclusions?.excluded_resource_urns ?? []),
   ].slice(0, 10);
   return (
-    <Panel title="Scope And Incremental Fetch">
+    <Panel title="Scope and source collection">
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Exclusions" value={exclusions?.total ?? 0} detail="collection scope" intent={(exclusions?.total ?? 0) > 0 ? "warning" : "success"} />
         <MetricCard label="Runtimes" value={metadata?.provenance?.runtime_count ?? 0} detail="supporting packet" />
@@ -910,11 +910,11 @@ function buildFindingReportBody(packet?: GRCAuditPacket | null) {
   const metadata = packet.metadata;
   const readiness = metadata?.readiness;
   return [
-    "# Finding Audit Packet",
+    "# Finding packet",
     "",
     `Finding: ${f.title}`,
     `Finding ID: ${f.id}`,
-    `Readiness: ${readiness ? `${reportReadinessLabel(readiness.status)} (${readiness.score}/100)` : "Not reported"}`,
+    `Packet score: ${readiness ? `${reportReadinessLabel(readiness.status)} (${readiness.score}/100)` : "Not reported"}`,
     `Risk score: ${f.risk_score ?? "Not scored"} (likelihood ${f.likelihood_score ?? "—"}, impact ${f.impact_score ?? "—"}, confidence ${f.confidence_score ?? "—"})`,
     `Risk drivers: ${(f.risk_reasons ?? []).join(", ") || "Not available"}`,
     `Severity: ${f.severity}`,
@@ -929,7 +929,7 @@ function buildFindingReportBody(packet?: GRCAuditPacket | null) {
     "Recommended action:",
     packet.recommended_action,
     "",
-    "Readiness blockers:",
+    "Packet blockers:",
     ...(readiness?.blockers?.length ? readiness.blockers.map((blocker) => `- ${blocker.label}: ${blocker.count ?? 1}`) : ["- None reported"]),
   ].join("\n");
 }
@@ -940,11 +940,11 @@ function buildControlReportBody(packet?: GRCControlEvidencePacketResponse | null
   const metadata = packet.metadata;
   const readiness = metadata?.readiness;
   return [
-    "# Control Evidence Packet",
+    "# Control evidence packet",
     "",
     `Profile: ${packet.profile.name || packet.profile.id}`,
     `Profile ID: ${packet.profile.id}`,
-    `Readiness: ${readiness ? `${reportReadinessLabel(readiness.status)} (${readiness.score}/100)` : "Not reported"}`,
+    `Packet score: ${readiness ? `${reportReadinessLabel(readiness.status)} (${readiness.score}/100)` : "Not reported"}`,
     `Controls: ${summary.total}`,
     `Failing: ${statusCount(packet, "failing")}`,
     `Missing evidence: ${statusCount(packet, "missing_evidence")}`,
@@ -955,7 +955,7 @@ function buildControlReportBody(packet?: GRCControlEvidencePacketResponse | null
     `Collection exclusions: ${metadata?.scope?.exclusions?.total ?? 0}`,
     `Incremental fetch scope: ${metadata?.scope?.incremental_fetch?.summary || "Not reported"}`,
     "",
-    "Readiness blockers:",
+    "Packet blockers:",
     ...(readiness?.blockers?.length ? readiness.blockers.map((blocker) => `- ${blocker.label}: ${blocker.count ?? 1}`) : ["- None reported"]),
     "",
     "Control details:",

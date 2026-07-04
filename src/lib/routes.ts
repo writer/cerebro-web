@@ -28,7 +28,7 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/grc",
     description: "Packet blockers, control issues, evidence gaps, source freshness, and framework status.",
     section: "Operator",
-    keywords: ["grc", "compliance", "readiness", "audit", "framework", "control", "test", "evidence", "policy", "questionnaire", "report", ...supportedGRCFrameworkNames],
+    keywords: ["grc", "compliance", "packet", "audit", "framework", "control", "test", "evidence", "policy", "questionnaire", "report", ...supportedGRCFrameworkNames],
   },
   {
     label: "Trends",
@@ -70,14 +70,14 @@ export const operatorNavLinks: NavigationEntry[] = [
     href: "/frameworks",
     description: "Framework status, failing controls, evidence gaps, and packet exports.",
     section: "Operator",
-    keywords: ["soc2", "iso", "framework", "catalog", "maturity", "gap", "planning", "export", ...supportedGRCFrameworkNames],
+    keywords: ["soc2", "iso", "framework", "catalog", "coverage", "gap", "planning", "export", ...supportedGRCFrameworkNames],
   },
   {
     label: "Evidence",
     href: "/evidence",
-    description: "Proof linked to findings, rules, runs, and affected assets.",
+    description: "Evidence linked to findings, rules, runs, and affected assets.",
     section: "Operator",
-    keywords: ["claims", "events", "proof", "audit"],
+    keywords: ["claims", "events", "evidence", "audit"],
   },
   {
     label: "Questionnaires",
@@ -117,16 +117,16 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Reports",
     href: "/reports",
-    description: "Create control evidence packets with mapped evidence and affected assets.",
+    description: "Create control evidence packets and finding packets with mapped evidence, scope exclusions, and source records.",
     section: "Operator",
     keywords: ["audit packet", "export", "report", "evidence"],
   },
   {
-    label: "Audit packages",
+    label: "Packet review",
     href: "/reports/audit-packages",
-    description: "Curate evidence, approve snapshots, and prepare external review packages.",
+    description: "Review packet blockers, evidence gaps, source freshness, and shared snapshots.",
     section: "Operator",
-    keywords: ["audit package", "external review", "evidence curation", "common controls", "snapshot", "scope", "exceptions"],
+    keywords: ["audit package", "packet review", "evidence review", "control owners", "snapshot", "scope", "exceptions"],
   },
   {
     label: "Sources",
@@ -138,7 +138,7 @@ export const operatorNavLinks: NavigationEntry[] = [
   {
     label: "Credential stores",
     href: "/credential-stores",
-    description: "Credential store readiness, default routing, accepted prefixes, and backend setup.",
+    description: "Credential store defaults, accepted reference formats, and setup status.",
     section: "Operator",
     keywords: ["credential stores", "credentials", "secret stores", "vault", "secrets", "resolver"],
   },
@@ -220,7 +220,7 @@ routeLabels["/developer/audit-log"] = "Audit log";
 routeLabels["/developer/evals"] = "Ask evals";
 routeLabels["/developer/security-producers"] = "Security producers";
 routeLabels["/controls/builder"] = "Control builder";
-routeLabels["/reports/shared"] = "External review";
+routeLabels["/reports/shared"] = "Shared snapshot";
 
 const matchesRoute = (pathname: string, route: string) =>
   pathname === route || (route !== "/" && pathname.startsWith(`${route}/`));

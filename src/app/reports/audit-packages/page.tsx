@@ -57,10 +57,10 @@ const manifestValue = (row: AuditExportManifestRow) =>
     : row.value;
 
 const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
-  { key: "decision", label: "Decision", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} />, sortValue: (row) => decisionRank(row.decision) },
+  { key: "decision", label: "Packet use", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} />, sortValue: (row) => decisionRank(row.decision) },
   {
     key: "title",
-    label: "Evidence request",
+    label: "Evidence",
     render: (_value, row) => (
       <div className="min-w-[18rem]">
         <div className="line-clamp-2 font-medium text-[var(--text-primary)]">{row.title}</div>
@@ -72,8 +72,8 @@ const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
   { key: "status", label: "State", render: (_value, row) => <Badge value={row.status} /> },
   { key: "quality", label: "Quality", render: (_value, row) => <Badge value={row.quality} /> },
   { key: "review", label: "Review", render: (_value, row) => <Badge value={row.review} /> },
-  { key: "packets", label: "Packets" },
-  { key: "source", label: "Accepted from" },
+  { key: "packets", label: "Attachments" },
+  { key: "source", label: "Source" },
 ];
 
 const readinessColumns: TableColumn<AuditReadinessRow>[] = [
@@ -155,10 +155,10 @@ const teamColumns: TableColumn<TeamQueueRow>[] = [
 const frameworkColumns: TableColumn<FrameworkCoverageRow>[] = [
   { key: "framework", label: "Framework", render: (_value, row) => <span className="font-medium text-[var(--text-primary)]">{row.framework}</span> },
   { key: "status", label: "State", render: (_value, row) => <Badge value={row.status} /> },
-  { key: "maturity", label: "Maturity", render: (_value, row) => row.maturity ? `${row.maturity}%` : "Planning" },
+  { key: "maturity", label: "Coverage", render: (_value, row) => row.maturity ? `${row.maturity}%` : "Planning" },
   { key: "controls", label: "Controls" },
   { key: "mapped", label: "Mapped" },
-  { key: "needsAction", label: "Needs action" },
+  { key: "needsAction", label: "Open gaps" },
 ];
 
 const sourceColumns: TableColumn<SourceTrustRow>[] = [
@@ -222,12 +222,12 @@ export default function AuditPackagesPage() {
     <div className="space-y-6">
       <PageHeader
         contractId="audit-packages"
-        title="Audit packages"
-        description="Curate control evidence, approve package snapshots, and hand off share-safe records for external review."
+        title="Packet review"
+        description="Review packet blockers, evidence gaps, source freshness, and shared snapshots."
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link href="/reports" className={buttonClass}>Reports</Link>
-            <Link href="/evidence?view=package" className={buttonClass}>Evidence workflow</Link>
+            <Link href="/reports" className={buttonClass}>Packet builder</Link>
+            <Link href="/evidence?view=package" className={buttonClass}>Evidence review</Link>
             <button type="button" onClick={reload} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-indigo-500 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-600">
               <RefreshCw className="h-3.5 w-3.5" />
               Refresh
@@ -236,7 +236,7 @@ export default function AuditPackagesPage() {
         }
       />
 
-      <Panel title="Package scope">
+      <Panel title="Packet filters">
         <div className="grid gap-3 md:grid-cols-4">
           <label className={labelClass}>Tenant<input value={tenantID} onChange={(event) => setTenantID(event.target.value)} placeholder="All tenants" className={inputClass} /></label>
           <label className={labelClass}>
@@ -258,25 +258,25 @@ export default function AuditPackagesPage() {
         <AppliedFilterChips filters={filterChips} onClearAll={clearFilters} />
       </Panel>
 
-      {loading && !loaded && <LoadingBlock label="Loading audit package data..." />}
+      {loading && !loaded && <LoadingBlock label="Loading packet records..." />}
       {errors.map((error) => (
-        <ErrorBlock key={error} error={error} onRetry={reload} recoveryDetail="Other package records remain available while this request recovers." />
+        <ErrorBlock key={error} error={error} onRetry={reload} recoveryDetail="Other packet records remain available while this request recovers." />
       ))}
 
       <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-8">
-        <MetricCard label="Package state" value={auditPackageStateLabel(summary.state)} detail={generatedAt ? `Generated ${displayDate(generatedAt)}` : "No package generated"} intent={summary.state === "approved" || summary.state === "published" ? "success" : summary.state === "needs_evidence" || summary.state === "stale" ? "warning" : "neutral"} state={loading && !loaded ? "loading" : "ready"} />
-        <MetricCard label="Readiness" value={`${summary.readinessScore}/100`} detail="package score" intent={summary.readinessScore >= 90 ? "success" : summary.readinessScore >= 70 ? "warning" : "danger"} state={loading && !loaded ? "loading" : "ready"} />
+        <MetricCard label="Packet state" value={auditPackageStateLabel(summary.state)} detail={generatedAt ? `Generated ${displayDate(generatedAt)}` : "No packet generated"} intent={summary.state === "approved" || summary.state === "published" ? "success" : summary.state === "needs_evidence" || summary.state === "stale" ? "warning" : "neutral"} state={loading && !loaded ? "loading" : "ready"} />
+        <MetricCard label="Packet score" value={`${summary.readinessScore}/100`} detail="export score" intent={summary.readinessScore >= 90 ? "success" : summary.readinessScore >= 70 ? "warning" : "danger"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Controls" value={summary.controls} detail={`${summary.failingControls} failing`} intent={summary.failingControls > 0 ? "danger" : "success"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Evidence" value={summary.evidenceItems} detail={`${summary.missingEvidence} missing`} intent={summary.missingEvidence > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Stale evidence" value={summary.staleEvidence} detail="needs refresh" intent={summary.staleEvidence > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Reviews" value={summary.openReviews} detail="open evidence reviews" intent={summary.openReviews > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Sources" value={summary.sourceCount} detail={`${summary.staleSources} stale`} intent={summary.staleSources > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
-        <MetricCard label="Exclusions" value={summary.exclusions} detail="package scope" intent={summary.exclusions > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
+        <MetricCard label="Exclusions" value={summary.exclusions} detail="packet scope" intent={summary.exclusions > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel
-          title="Audit package"
+          title="Packet checklist"
           action={
             <div className="flex flex-wrap gap-2">
               <Link href={`/reports?report_type=control&profile=${encodeURIComponent(selectedProfileID)}${framework ? `&framework=${encodeURIComponent(framework)}` : ""}${controlID ? `&control=${encodeURIComponent(controlID)}` : ""}`} className={buttonClass}>
@@ -294,17 +294,17 @@ export default function AuditPackagesPage() {
             rows={readinessRows}
             columns={readinessColumns}
             defaultSort={{ key: "state" }}
-            emptyMessage="No audit readiness checks are available."
+            emptyMessage="No packet checks are available."
             filterKeys={["title", "state", "owner", "action"]}
             getRowKey={(row) => row.id}
             pageSize={5}
-            resultNoun="readiness checks"
+            resultNoun="packet checks"
             showSearch={false}
           />
         </Panel>
 
         <Panel
-          title="External review"
+          title="Shared snapshot"
           action={
             <Link href={`/reports/shared/${encodeURIComponent(snapshotID)}`} className={buttonClass}>
               <ArrowUpRight className="h-3.5 w-3.5" />
@@ -316,11 +316,11 @@ export default function AuditPackagesPage() {
             <div className="rounded-lg bg-[var(--surface-muted)] p-4">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Snapshot</div>
               <div className="mt-2 font-mono text-[12px] text-[var(--text-primary)]">{snapshotID}</div>
-              <div className="mt-2 text-[12px] text-[var(--text-muted)]">Share-safe identifiers, approved evidence, scope, and package provenance.</div>
+              <div className="mt-2 text-[12px] text-[var(--text-muted)]">Redacted identifiers, approved evidence, scope exclusions, and packet source records.</div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <SmallStat label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "Share-safe"} />
-              <SmallStat label="Runtime count" value={metadata?.provenance?.runtime_count ?? 0} />
+              <SmallStat label="Redaction" value={metadata?.redaction?.default_mode === "internal" ? "Internal" : "External"} />
+              <SmallStat label="Runtimes" value={metadata?.provenance?.runtime_count ?? 0} />
               <SmallStat label="Sources" value={metadata?.provenance?.source_ids?.length ?? summary.sourceCount} />
               <SmallStat label="Exclusions" value={summary.exclusions} />
             </div>
@@ -344,7 +344,7 @@ export default function AuditPackagesPage() {
           rows={auditorQuestionRows}
           columns={auditorQuestionColumns}
           defaultSort={{ key: "status" }}
-          emptyMessage="No auditor questions are queued for this package."
+          emptyMessage="No auditor questions are queued for this packet."
           filterKeys={["area", "question", "owner", "source", "status"]}
           getRowKey={(row) => row.id}
           pageSize={10}
@@ -352,11 +352,11 @@ export default function AuditPackagesPage() {
         />
       </Panel>
 
-      <Panel title="Evidence curation">
+      <Panel title="Evidence review">
         <DataTable
           rows={evidenceRows}
           columns={evidenceColumns}
-          emptyMessage="No evidence requests or expectations are available for this package."
+          emptyMessage="No evidence requests or expectations are available for this packet."
           filterKeys={["id", "title", "controlID", "decision", "status", "quality", "review", "source"]}
           getRowKey={(row) => row.id}
           pageSize={10}
@@ -367,11 +367,11 @@ export default function AuditPackagesPage() {
       </Panel>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Common controls">
+        <Panel title="Control status">
           <DataTable
             rows={ownerRows}
             columns={controlColumns}
-            emptyMessage="No controls are available for this package."
+            emptyMessage="No controls are available for this packet."
             filterKeys={["control", "title", "owner", "status", "action"]}
             getRowHref={(row) => `/controls/detail?profile=${encodeURIComponent(selectedProfileID)}&control=${encodeURIComponent(row.control.split(" ").slice(1).join(" "))}`}
             getRowKey={(row) => row.id}
@@ -398,7 +398,7 @@ export default function AuditPackagesPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Team queues">
+        <Panel title="Team queue">
           <DataTable
             rows={teamRows}
             columns={teamColumns}
@@ -427,7 +427,7 @@ export default function AuditPackagesPage() {
             <InvestigationLink
               href={`/ask?question=${encodeURIComponent(`Which controls need evidence for ${framework || selectedProfileID}?`)}`}
               title="Ask about evidence"
-              detail="Ask for missing evidence, stale proof, owner gaps, or affected assets."
+              detail="Ask for missing evidence, stale evidence, owner gaps, or affected assets."
             />
             <InvestigationLink
               href="/trends/dashboards"
@@ -454,11 +454,11 @@ export default function AuditPackagesPage() {
           />
         </Panel>
 
-        <Panel title="Source trust">
+        <Panel title="Source freshness">
           <DataTable
             rows={sourceRows}
             columns={sourceColumns}
-            emptyMessage="No source trust records are available."
+            emptyMessage="No source freshness records are available."
             filterKeys={["source", "status", "action"]}
             getRowKey={(row) => row.id}
             getRowHref={(row) => `/connectors?source_id=${encodeURIComponent(row.source)}`}
@@ -470,7 +470,7 @@ export default function AuditPackagesPage() {
         </Panel>
       </div>
 
-      <Panel title="Scope and exceptions">
+      <Panel title="Scope exclusions">
         {exceptionRows.length > 0 ? (
           <DataTable
             rows={exceptionRows}
@@ -485,7 +485,7 @@ export default function AuditPackagesPage() {
           />
         ) : (
           <div className="rounded-lg border border-dashed border-[color:var(--border-strong)] px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">
-            No package exclusions are configured for this scope.
+            No packet exclusions are configured for this scope.
           </div>
         )}
       </Panel>
