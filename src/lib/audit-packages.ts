@@ -45,6 +45,7 @@ export type EvidenceCurationRow = {
   freshness: string;
   packets: number;
   quality: string;
+  reason: string;
   review: string;
   source: string;
   status: string;
@@ -229,6 +230,57 @@ export const auditWorkflowStateLabel = (state: AuditWorkflowState) => {
   }
 };
 
+const firstPresent = (...values: Array<string | null | undefined>) =>
+  values.map((value) => value?.trim()).find((value): value is string => Boolean(value));
+
+const packetCountLabel = (count: number) => `${count.toLocaleString()} ${count === 1 ? "packet" : "packets"}`;
+
+const evidenceReason = ({
+  decision,
+  freshness,
+  packetCount,
+  packetReason,
+  quality,
+  review,
+  source,
+  status,
+}: {
+  decision: AuditEvidenceDecision;
+  freshness?: string;
+  packetCount: number;
+  packetReason?: string;
+  quality?: string;
+  review?: string;
+  source?: string;
+  status?: string;
+}) => {
+  const suppliedReason = firstPresent(packetReason);
+  if (suppliedReason) return suppliedReason;
+
+  const normalizedStatus = normalized(status);
+  const normalizedQuality = normalized(quality);
+  const normalizedReview = normalized(review);
+  const freshnessLabel = firstPresent(freshness);
+  const sourceLabel = firstPresent(source);
+
+  if (decision === "rejected" || normalizedReview === "rejected") return "Reviewer rejected this packet.";
+  if (normalizedStatus === "missing" || (decision === "needs_replacement" && packetCount === 0)) return "No packet is attached to this request.";
+  if (normalizedStatus === "stale" || normalizedQuality === "stale" || decision === "needs_replacement") {
+    return freshnessLabel && freshnessLabel !== "Not set"
+      ? `Evidence is stale against ${freshnessLabel} freshness.`
+      : "Evidence is stale and needs replacement.";
+  }
+  if (decision === "needs_review" || ["manual_review", "needs_review"].includes(normalizedReview)) return "Reviewer decision is pending.";
+  if (decision === "excluded") return "Request is outside packet scope.";
+  if (decision === "internal_only") return "Packet is marked internal only.";
+  if (decision === "accepted" || decision === "included") {
+    return sourceLabel
+      ? `${packetCountLabel(packetCount)} accepted from ${sourceLabel}.`
+      : `${packetCountLabel(packetCount)} linked to this request.`;
+  }
+  return packetCount > 0 ? `${packetCountLabel(packetCount)} available for review.` : "No packet attachment is reported.";
+};
+
 export const buildAuditPackageSummary = ({
   controlPacket,
   dashboard,
@@ -294,47 +346,83 @@ export const buildEvidenceCurationRows = ({
 }): EvidenceCurationRow[] => {
   const requests = evidencePackets?.evidence_requests ?? [];
   if (requests.length > 0) {
-    const packetCounts = new Map<string, number>();
+    const packetSummaries = new Map<string, { count: number; reason?: string }>();
     (evidencePackets?.evidence_packets ?? []).forEach((packet) => {
       const requestID = packet.request_id;
       if (!requestID) return;
-      packetCounts.set(requestID, (packetCounts.get(requestID) ?? 0) + 1);
+      const current = packetSummaries.get(requestID) ?? { count: 0 };
+      packetSummaries.set(requestID, {
+        count: current.count + 1,
+        reason: current.reason ?? firstPresent(packet.reason, packet.review?.reason, packet.freshness?.reason),
+      });
     });
-    return requests.slice(0, limit).map((request: GRCEvidenceRequest) => ({
-      id: request.id,
-      controlID: request.control_id,
-      decision: auditEvidenceDecision({
+    return requests.slice(0, limit).map((request: GRCEvidenceRequest) => {
+      const packetSummary = packetSummaries.get(request.id);
+      const packets = packetSummary?.count ?? request.evidence_packet_ids?.length ?? 0;
+      const decision = auditEvidenceDecision({
         quality: request.quality,
         reviewStatus: request.review_status,
         status: request.status,
-      }),
-      freshness: request.freshness_sla || "Not set",
-      packets: packetCounts.get(request.id) ?? request.evidence_packet_ids?.length ?? 0,
-      quality: request.quality || "unknown",
-      review: request.review_status || "needs_review",
-      source: request.accepted_from?.join(", ") || "Any source",
-      status: request.status || "candidate",
-      title: request.title || request.id,
-    }));
+      });
+      const source = request.accepted_from?.join(", ") || "Any source";
+
+      return {
+        id: request.id,
+        controlID: request.control_id,
+        decision,
+        freshness: request.freshness_sla || "Not set",
+        packets,
+        quality: request.quality || "unknown",
+        reason: evidenceReason({
+          decision,
+          freshness: request.freshness_sla || "Not set",
+          packetCount: packets,
+          packetReason: packetSummary?.reason,
+          quality: request.quality,
+          review: request.review_status,
+          source,
+          status: request.status,
+        }),
+        review: request.review_status || "needs_review",
+        source,
+        status: request.status || "candidate",
+        title: request.title || request.id,
+      };
+    });
   }
 
   return (controlPacket?.packet.controls ?? []).flatMap((control) =>
-    (control.evidence.expectations ?? []).map((expectation) => ({
-      id: expectation.id,
-      controlID: `${control.control.framework_name} ${control.control.control_id}`,
-      decision: auditEvidenceDecision({
+    (control.evidence.expectations ?? []).map((expectation) => {
+      const decision = auditEvidenceDecision({
         freshnessStatus: expectation.status,
         quality: expectation.quality,
         status: expectation.status,
-      }),
-      freshness: expectation.freshness_sla || control.evidence.summary?.freshness_sla || "Not set",
-      packets: expectation.evidence_ids?.length ?? 0,
-      quality: expectation.quality || "unknown",
-      review: expectation.status || "needs_review",
-      source: expectation.type || "Evidence",
-      status: expectation.status,
-      title: expectation.title || expectation.id,
-    })),
+      });
+      const freshness = expectation.freshness_sla || control.evidence.summary?.freshness_sla || "Not set";
+      const packets = expectation.evidence_ids?.length ?? 0;
+      const source = expectation.type || "Evidence";
+
+      return {
+        id: expectation.id,
+        controlID: `${control.control.framework_name} ${control.control.control_id}`,
+        decision,
+        freshness,
+        packets,
+        quality: expectation.quality || "unknown",
+        reason: evidenceReason({
+          decision,
+          freshness,
+          packetCount: packets,
+          quality: expectation.quality,
+          source,
+          status: expectation.status,
+        }),
+        review: expectation.status || "needs_review",
+        source,
+        status: expectation.status,
+        title: expectation.title || expectation.id,
+      };
+    }),
   ).slice(0, limit);
 };
 
@@ -565,7 +653,7 @@ export const buildAuditorQuestionRows = ({
       area: "Evidence",
       owner: row.source || "Evidence owner",
       question: `Can this evidence be shared, refreshed, or replaced for ${row.controlID}?`,
-      source: row.title,
+      source: `${row.title}: ${row.reason}`,
       status: auditEvidenceDecisionLabel(row.decision),
     }));
   const controlQuestions = ownerRows

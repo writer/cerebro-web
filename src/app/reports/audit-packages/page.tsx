@@ -70,6 +70,11 @@ const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
     ),
   },
   { key: "controlID", label: "Control", render: (_value, row) => <span className="font-mono text-[12px]">{row.controlID}</span> },
+  {
+    key: "reason",
+    label: "Packet reason",
+    render: (_value, row) => <div className="min-w-[16rem] line-clamp-2">{row.reason}</div>,
+  },
   { key: "status", label: "State", render: (_value, row) => <Badge value={row.status} /> },
   { key: "quality", label: "Quality", render: (_value, row) => <Badge value={row.quality} /> },
   { key: "review", label: "Review", render: (_value, row) => <Badge value={row.review} /> },
@@ -391,7 +396,7 @@ export default function AuditPackagesPage() {
           rows={evidenceRows}
           columns={evidenceColumns}
           emptyMessage="No evidence requests or expectations are available for this packet."
-          filterKeys={["id", "title", "controlID", "decision", "status", "quality", "review", "source"]}
+          filterKeys={["id", "title", "controlID", "decision", "reason", "status", "quality", "review", "source"]}
           getRowKey={(row) => row.id}
           pageSize={10}
           resultLimit={25}
