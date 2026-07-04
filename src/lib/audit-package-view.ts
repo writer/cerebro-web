@@ -4,9 +4,11 @@ import { parseAsString, useQueryStates, type UrlKeys } from "nuqs";
 import { useCallback, useMemo } from "react";
 
 import {
+  buildActionableControlOwnerRows,
   buildAuditExportManifestRows,
   buildAuditReadinessRows,
   buildAuditPackageSummary,
+  buildAuditPriorityWorkRows,
   buildAuditorQuestionRows,
   buildControlOwnerRows,
   buildEvidenceCurationRows,
@@ -140,6 +142,7 @@ export function useAuditPackageView({
     () => buildControlOwnerRows(controlPacketQuery.data?.controls ?? dashboardQuery.data?.controls ?? [], 25),
     [controlPacketQuery.data?.controls, dashboardQuery.data?.controls],
   );
+  const actionableOwnerRows = useMemo(() => buildActionableControlOwnerRows(ownerRows, 25), [ownerRows]);
   const teamRows = useMemo(() => buildTeamQueueRows(dashboardQuery.data, 25), [dashboardQuery.data]);
   const frameworkRows = useMemo(() => buildFrameworkCoverageRows(frameworksQuery.data?.frameworks ?? [], 25), [frameworksQuery.data?.frameworks]);
   const sourceRows = useMemo(
@@ -169,6 +172,10 @@ export function useAuditPackageView({
     () => buildAuditExportManifestRows({ generatedAt, snapshotID, summary }),
     [generatedAt, snapshotID, summary],
   );
+  const priorityRows = useMemo(
+    () => buildAuditPriorityWorkRows({ auditorQuestionRows, ownerRows: actionableOwnerRows, readinessRows, limit: 8 }),
+    [actionableOwnerRows, auditorQuestionRows, readinessRows],
+  );
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
@@ -186,6 +193,7 @@ export function useAuditPackageView({
   };
 
   return {
+    actionableOwnerRows,
     auditorQuestionRows,
     debouncedTenantID,
     errors,
@@ -199,6 +207,7 @@ export function useAuditPackageView({
     loading,
     metadata,
     ownerRows,
+    priorityRows,
     readinessRows,
     reload,
     selectedProfileID,

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   auditEvidenceDecision,
+  buildActionableControlOwnerRows,
   buildAuditExportManifestRows,
   buildAuditPackageSummary,
+  buildAuditPriorityWorkRows,
   buildAuditReadinessRows,
   buildAuditorQuestionRows,
   buildScopeExceptionRows,
@@ -248,5 +250,112 @@ describe("audit package helpers", () => {
       expect.objectContaining({ id: "sources", state: "Refresh needed", value: 2 }),
       expect.objectContaining({ id: "scope", state: "Documented", value: 2 }),
     ]);
+  });
+
+  it("filters owner queue rows to controls that need action", () => {
+    const rows: ControlOwnerRow[] = [
+      {
+        action: "Keep current",
+        control: "ISO 27001 A.5.15",
+        evidence: "1/1",
+        findings: 1,
+        id: "iso:a.5.15",
+        missing: 0,
+        owner: "Platform",
+        stale: 0,
+        status: "passing",
+        title: "Access control",
+      },
+      {
+        action: "Keep current",
+        control: "SOC 2 CC7.1",
+        evidence: "1/1",
+        findings: 0,
+        id: "soc2:cc7.1",
+        missing: 0,
+        owner: "Security",
+        stale: 0,
+        status: "passing",
+        title: "Detection control",
+      },
+      {
+        action: "Refresh evidence",
+        control: "SOC 2 CC7.2",
+        evidence: "1/2",
+        findings: 0,
+        id: "soc2:cc7.2",
+        missing: 0,
+        owner: "AppSec",
+        stale: 1,
+        status: "manual_review",
+        title: "Monitoring control",
+      },
+      {
+        action: "Resolve mapped findings",
+        control: "SOC 2 CC6.1",
+        evidence: "0/1",
+        findings: 1,
+        id: "soc2:cc6.1",
+        missing: 1,
+        owner: "Security",
+        stale: 0,
+        status: "failing",
+        title: "Access control",
+      },
+    ];
+
+    expect(buildActionableControlOwnerRows(rows).map((row) => row.control)).toEqual([
+      "SOC 2 CC6.1",
+      "SOC 2 CC7.2",
+    ]);
+  });
+
+  it("builds priority work rows from readiness, owner, and auditor queues", () => {
+    const readinessRows = buildAuditReadinessRows(summary({
+      failingControls: 1,
+      missingEvidence: 1,
+      openReviews: 1,
+      staleSources: 1,
+      state: "needs_review",
+    }), "snapshot-123", "");
+    const ownerRows: ControlOwnerRow[] = [
+      {
+        action: "Add evidence",
+        control: "SOC 2 CC6.1",
+        evidence: "0/1",
+        findings: 0,
+        id: "soc2:cc6.1",
+        missing: 1,
+        owner: "Security",
+        stale: 0,
+        status: "failing",
+        title: "Logical access",
+      },
+    ];
+    const auditorQuestionRows = buildAuditorQuestionRows({
+      evidenceRows: [
+        {
+          controlID: "SOC 2 CC6.1",
+          decision: "needs_review",
+          freshness: "7d",
+          id: "request-1",
+          packets: 1,
+          quality: "ready",
+          review: "manual_review",
+          source: "GitHub",
+          status: "needs_review",
+          title: "Access review",
+        },
+      ],
+      ownerRows,
+      sourceRows: [],
+    });
+
+    const rows = buildAuditPriorityWorkRows({ auditorQuestionRows, ownerRows, readinessRows, limit: 8 });
+
+    expect(rows[0]).toMatchObject({ area: "Readiness", state: "Blocked", title: "Control status" });
+    expect(rows.map((row) => row.area)).toContain("Control");
+    expect(rows.map((row) => row.area)).toContain("Evidence");
+    expect(rows).toHaveLength(8);
   });
 });

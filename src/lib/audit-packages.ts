@@ -127,6 +127,17 @@ export type AuditExportManifestRow = {
   value: number | string;
 };
 
+export type AuditPriorityWorkRow = {
+  id: string;
+  action: string;
+  area: string;
+  detail: string;
+  owner: string;
+  rank: number;
+  state: string;
+  title: string;
+};
+
 const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
 
 const statusCount = (packet: GRCControlEvidencePacketResponse | null | undefined, status: string) =>
@@ -447,6 +458,43 @@ export const buildScopeExceptionRows = (metadata?: GRCReportMetadata | null, lim
   return rows.slice(0, limit);
 };
 
+const workflowRank = (state: AuditWorkflowState) => {
+  switch (state) {
+    case "blocked":
+      return 0;
+    case "needs_review":
+      return 1;
+    case "waiting":
+      return 3;
+    case "ready":
+      return 9;
+  }
+};
+
+const controlOwnerRank = (row: ControlOwnerRow) => {
+  const status = normalized(row.status);
+  const action = normalized(row.action);
+  if (row.missing > 0) return 1;
+  if (row.stale > 0) return 2;
+  if (["blocked", "failing", "manual_review", "needs_review"].includes(status)) return 3;
+  if (action !== "" && action !== "keep current") return 4;
+  return 9;
+};
+
+const questionRank = (row: AuditorQuestionRow) =>
+  /blocked|failed|missing|needs|overdue|rejected|stale/i.test(row.status) ? 2 : 5;
+
+export const buildActionableControlOwnerRows = (ownerRows: ControlOwnerRow[], limit = 12): ControlOwnerRow[] =>
+  ownerRows
+    .filter((row) => controlOwnerRank(row) < 9)
+    .slice()
+    .sort((left, right) =>
+      controlOwnerRank(left) - controlOwnerRank(right) ||
+      (right.missing + right.stale + right.findings) - (left.missing + left.stale + left.findings) ||
+      left.control.localeCompare(right.control),
+    )
+    .slice(0, limit);
+
 export const buildAuditReadinessRows = (
   summary: AuditPackageSummary,
   snapshotID: string,
@@ -560,3 +608,56 @@ export const buildAuditExportManifestRows = ({
   { id: "sources", label: "Sources", state: summary.staleSources > 0 ? "Refresh needed" : "Ready", value: summary.sourceCount },
   { id: "scope", label: "Scope exclusions", state: summary.exclusions > 0 ? "Documented" : "None", value: summary.exclusions },
 ];
+
+export const buildAuditPriorityWorkRows = ({
+  auditorQuestionRows,
+  ownerRows,
+  readinessRows,
+  limit = 8,
+}: {
+  auditorQuestionRows: AuditorQuestionRow[];
+  ownerRows: ControlOwnerRow[];
+  readinessRows: AuditReadinessRow[];
+  limit?: number;
+}): AuditPriorityWorkRow[] => {
+  const readinessWork = readinessRows
+    .filter((row) => row.state !== "ready")
+    .map((row) => ({
+      id: `readiness:${row.id}`,
+      action: row.action,
+      area: "Readiness",
+      detail: row.detail,
+      owner: row.owner,
+      rank: workflowRank(row.state),
+      state: auditWorkflowStateLabel(row.state),
+      title: row.title,
+    }));
+  const ownerWork = buildActionableControlOwnerRows(ownerRows, limit).map((row) => ({
+    id: `owner:${row.id}`,
+    action: row.action,
+    area: "Control",
+    detail: row.title,
+    owner: row.owner,
+    rank: controlOwnerRank(row),
+    state: row.status,
+    title: row.control,
+  }));
+  const questionWork = auditorQuestionRows.map((row) => ({
+    id: `question:${row.id}`,
+    action: "Answer question",
+    area: row.area,
+    detail: row.source,
+    owner: row.owner,
+    rank: questionRank(row),
+    state: row.status,
+    title: row.question,
+  }));
+
+  return [...readinessWork, ...ownerWork, ...questionWork]
+    .sort((left, right) =>
+      left.rank - right.rank ||
+      left.area.localeCompare(right.area) ||
+      left.title.localeCompare(right.title),
+    )
+    .slice(0, limit);
+};
