@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Copy, Download, FileDown, RefreshCw, Search } from "lucide-react";
+import { CalendarClock, Copy, Download, FileDown, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
@@ -311,6 +311,10 @@ export default function ReportsPage() {
               onCopy={() => void copyReport()}
               onDownload={downloadReport}
             />
+            <Link href={`/reports/audit-packages?profile=${encodeURIComponent(selectedProfileID)}${framework ? `&framework=${encodeURIComponent(framework)}` : ""}${controlID ? `&control=${encodeURIComponent(controlID)}` : ""}`} className={buttonClass}>
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Audit packages
+            </Link>
             <Link href="/reports/schedules" className={buttonClass}>
               <CalendarClock className="h-3.5 w-3.5" />
               Schedules

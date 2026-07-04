@@ -45,6 +45,7 @@ describe("isSidebarLinkActive", () => {
       "/frameworks",
       "/questionnaires",
       "/reports",
+      "/reports/audit-packages",
     ]);
   });
 

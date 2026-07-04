@@ -122,6 +122,13 @@ export const operatorNavLinks: NavigationEntry[] = [
     keywords: ["audit packet", "export", "report", "evidence"],
   },
   {
+    label: "Audit packages",
+    href: "/reports/audit-packages",
+    description: "Curate evidence, approve snapshots, and prepare external review packages.",
+    section: "Operator",
+    keywords: ["audit package", "external review", "evidence curation", "common controls", "snapshot", "scope", "exceptions"],
+  },
+  {
     label: "Sources",
     href: "/connectors",
     description: "Source setup, freshness, scope, and ingestion health.",
@@ -213,6 +220,7 @@ routeLabels["/developer/audit-log"] = "Audit log";
 routeLabels["/developer/evals"] = "Ask evals";
 routeLabels["/developer/security-producers"] = "Security producers";
 routeLabels["/controls/builder"] = "Control builder";
+routeLabels["/reports/shared"] = "External review";
 
 const matchesRoute = (pathname: string, route: string) =>
   pathname === route || (route !== "/" && pathname.startsWith(`${route}/`));

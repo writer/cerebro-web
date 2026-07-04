@@ -124,6 +124,7 @@ export const informationAreas: InformationArea[] = [
       { href: "/evidence", label: "Evidence", detail: "Evidence register linked to findings, rules, and graph roots." },
       { href: "/questionnaires", label: "Questionnaires", detail: "Customer and vendor answer queues, blockers, owners, approvals, and evidence gaps." },
       { href: "/reports", label: "Reports", detail: "Audit packs with controls, evidence, and impact proof." },
+      { href: "/reports/audit-packages", label: "Audit packages", detail: "Evidence curation, package snapshots, external review, and scope exceptions." },
     ],
     secondaryRoutes: [
       { href: "/trends/dashboards", label: "Dashboards", detail: "Saved compliance and trend widgets." },
@@ -203,6 +204,7 @@ export const informationAreas: InformationArea[] = [
       { href: "/trends", label: "Trends", detail: "Finding flow, backlog movement, and SLA pressure." },
       { href: "/trends/dashboards", label: "Dashboards", detail: "Saved scorecards and reusable widgets." },
       { href: "/reports", label: "Reports", detail: "Audit and program packs for review." },
+      { href: "/reports/audit-packages", label: "Audit packages", detail: "Package readiness, approved evidence, scope, and external review." },
       { href: "/impact", label: "Affected assets", detail: "High-risk entity impact and affected paths." },
     ],
     secondaryRoutes: [
