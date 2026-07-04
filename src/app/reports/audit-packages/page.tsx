@@ -2,20 +2,12 @@
 
 import { ArrowUpRight, Download, FileCheck2, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
 
 import DataTable, { type TableColumn } from "@/components/grc/DataTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import {
   auditEvidenceDecisionLabel,
   auditPackageStateLabel,
-  buildAuditPackageSummary,
-  buildControlOwnerRows,
-  buildEvidenceCurationRows,
-  buildFrameworkCoverageRows,
-  buildScopeExceptionRows,
-  buildSourceTrustRows,
-  buildTeamQueueRows,
   type ControlOwnerRow,
   type EvidenceCurationRow,
   type FrameworkCoverageRow,
@@ -23,26 +15,11 @@ import {
   type SourceTrustRow,
   type TeamQueueRow,
 } from "@/lib/audit-packages";
+import { CONTROL_PROFILE_OPTIONS, DEFAULT_CONTROL_PROFILE_ID, useAuditPackageView } from "@/lib/audit-package-view";
 import { countLabel } from "@/lib/format";
-import type { GRCDashboard, GRCControlEvidencePacketResponse, GRCEvidencePacketsResponse, GRCFrameworksResponse } from "@/lib/grc";
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
-import { supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
-import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
+import { grcPath } from "@/lib/grc-client";
 import { useQueryParamState } from "@/lib/query-params";
-
-const DEFAULT_CONTROL_PROFILE_ID = "soc2-security-core";
-const CONTROL_PROFILE_OPTIONS = [
-  "soc2-security-core",
-  "soc2-availability",
-  "iso-technology-controls",
-  "cloud-security-benchmarks",
-  "pci-operational-security",
-  "dora-operational-resilience",
-  "fedramp-rev5-core",
-  "nist-csf-20-core",
-  "privacy-ai-governance",
-];
 
 const inputClass = "mt-1 w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)]";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]";
@@ -135,80 +112,32 @@ export default function AuditPackagesPage() {
   const [profileID, setProfileID] = useQueryParamState("profile");
   const [framework, setFramework] = useQueryParamState("framework");
   const [controlID, setControlID] = useQueryParamState("control");
-  const debouncedTenantID = useDebouncedValue(tenantID.trim());
-  const selectedProfileID = profileID.trim() || DEFAULT_CONTROL_PROFILE_ID;
-
-  const controlPacketQuery = useGRCQuery<GRCControlEvidencePacketResponse>(
-    grcPath("/grc/control-packets", {
-      tenant_id: debouncedTenantID,
-      profile: selectedProfileID,
-      framework,
-      control: controlID,
-      limit: GRC_WORKLIST_LIMIT,
-    }),
-  );
-  const evidencePacketsQuery = useGRCQuery<GRCEvidencePacketsResponse>(
-    grcPath("/grc/evidence-packets", { tenant_id: debouncedTenantID, limit: GRC_WORKLIST_LIMIT }),
-  );
-  const dashboardQuery = useGRCQuery<GRCDashboard>(
-    grcPath("/grc/dashboard", { tenant_id: debouncedTenantID, limit: 100 }),
-  );
-  const frameworksQuery = useGRCQuery<GRCFrameworksResponse>(grcPath("/grc/frameworks", { tenant_id: debouncedTenantID }));
-
-  const summary = useMemo(
-    () => buildAuditPackageSummary({
-      controlPacket: controlPacketQuery.data,
-      dashboard: dashboardQuery.data,
-      evidencePackets: evidencePacketsQuery.data,
-    }),
-    [controlPacketQuery.data, dashboardQuery.data, evidencePacketsQuery.data],
-  );
-  const metadata = controlPacketQuery.data?.metadata ?? evidencePacketsQuery.data?.metadata;
-  const evidenceRows = useMemo(
-    () => buildEvidenceCurationRows({ controlPacket: controlPacketQuery.data, evidencePackets: evidencePacketsQuery.data, limit: 25 }),
-    [controlPacketQuery.data, evidencePacketsQuery.data],
-  );
-  const ownerRows = useMemo(
-    () => buildControlOwnerRows(controlPacketQuery.data?.controls ?? dashboardQuery.data?.controls ?? [], 25),
-    [controlPacketQuery.data?.controls, dashboardQuery.data?.controls],
-  );
-  const teamRows = useMemo(() => buildTeamQueueRows(dashboardQuery.data, 25), [dashboardQuery.data]);
-  const frameworkRows = useMemo(() => buildFrameworkCoverageRows(frameworksQuery.data?.frameworks ?? [], 25), [frameworksQuery.data?.frameworks]);
-  const sourceRows = useMemo(
-    () => buildSourceTrustRows({ dashboard: dashboardQuery.data, evidencePackets: evidencePacketsQuery.data, limit: 25 }),
-    [dashboardQuery.data, evidencePacketsQuery.data],
-  );
-  const exceptionRows = useMemo(() => buildScopeExceptionRows(metadata, 25), [metadata]);
-  const loaded = Boolean(controlPacketQuery.data || evidencePacketsQuery.data || dashboardQuery.data || frameworksQuery.data);
-  const loading = controlPacketQuery.loading || evidencePacketsQuery.loading || dashboardQuery.loading || frameworksQuery.loading;
-  const errors = [
-    controlPacketQuery.error,
-    evidencePacketsQuery.error,
-    dashboardQuery.error,
-    frameworksQuery.error,
-  ].filter((error): error is string => Boolean(error));
-  const snapshotID = evidencePacketsQuery.data?.snapshot?.id || controlPacketQuery.data?.packet.selection_id || `${selectedProfileID}-current`;
-  const generatedAt = evidencePacketsQuery.data?.generated_at || controlPacketQuery.data?.generated_at || dashboardQuery.data?.generated_at || "";
-  const frameworkOptions = useMemo(
-    () => Array.from(new Set([
-      ...supportedGRCFrameworkNames,
-      ...(frameworksQuery.data?.frameworks ?? []).map((item) => item.name),
-      ...(controlPacketQuery.data?.controls ?? []).map((control) => control.framework_name),
-    ].filter(Boolean))),
-    [controlPacketQuery.data?.controls, frameworksQuery.data?.frameworks],
-  );
+  const view = useAuditPackageView({ controlID, framework, profileID, tenantID });
+  const {
+    debouncedTenantID,
+    errors,
+    evidenceRows,
+    exceptionRows,
+    frameworkOptions,
+    frameworkRows,
+    generatedAt,
+    loaded,
+    loading,
+    metadata,
+    ownerRows,
+    reload,
+    selectedProfileID,
+    snapshotID,
+    sourceRows,
+    summary,
+    teamRows,
+  } = view;
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Profile", value: selectedProfileID === DEFAULT_CONTROL_PROFILE_ID && !profileID ? "" : selectedProfileID, onClear: () => setProfileID("") },
     { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Control", value: controlID, onClear: () => setControlID("") },
   ];
-  const reload = () => {
-    void controlPacketQuery.reload();
-    void evidencePacketsQuery.reload();
-    void dashboardQuery.reload();
-    void frameworksQuery.reload();
-  };
   const clearFilters = () => {
     setTenantID("");
     setProfileID("");

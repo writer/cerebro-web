@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
@@ -7,7 +8,7 @@ import { fetchCerebro } from "@/lib/cerebro-client";
 import { cacheGRCMetadata } from "@/lib/grc-metadata-cache";
 import { runtimeStateForQuery } from "@/lib/runtime-state";
 
-const GRC_QUERY_CACHE_TTL_MS = 30_000;
+export const GRC_QUERY_CACHE_TTL_MS = 30_000;
 const GRC_QUERY_CACHE_MAX_ENTRIES = 200;
 const DEFAULT_GRC_QUERY_TIMEOUT_MS = 12_000;
 const DEFAULT_GRC_FORM_MUTATION_TIMEOUT_MS = 120_000;
@@ -31,6 +32,9 @@ const grcQueryCache = new Map<string, CachedGRCResponse>();
 const grcQueryInflight = new Map<string, Promise<Awaited<ReturnType<typeof fetchCerebro>>>>();
 
 const grcQueryCacheKey = (path: string, apiKey?: string) => `${apiKey ?? ""}\n${path}`;
+
+export const grcQueryKey = (path: string | null, apiKey?: string) =>
+  ["grc", apiKey ?? "", path ?? "disabled"] as const;
 
 export const readCachedGRC = <T,>(path: string, apiKey?: string) => {
   const cached = grcQueryCache.get(grcQueryCacheKey(path, apiKey));
@@ -156,6 +160,41 @@ export const fetchCachedGRC = async <T,>(
     grcQueryInflight.set(key, request);
   }
   return request;
+};
+
+type GRCQueryPayload<T> = {
+  data: T;
+  durationMs: number;
+  successfulAt: number;
+};
+
+const fetchGRCQueryPayload = async <T,>(
+  path: string,
+  apiKey: string | undefined,
+  signal: AbortSignal | undefined,
+): Promise<GRCQueryPayload<T>> => {
+  const startedAt = performance.now();
+  const request = timedAbortSignal(signal, GRC_QUERY_TIMEOUT_MS);
+  try {
+    const response = await fetchCerebro<T>(path, apiKey, { signal: request.signal });
+    const durationMs = Math.round(performance.now() - startedAt);
+    if (!response.ok) {
+      throw new Error(grcResponseErrorMessage(path, response.status, response.data, durationMs));
+    }
+    cacheGRCMetadata(response.data);
+    return {
+      data: response.data,
+      durationMs,
+      successfulAt: Date.now(),
+    };
+  } catch (error) {
+    if (request.timedOut()) {
+      throw new Error(grcTimeoutMessage(path, GRC_QUERY_TIMEOUT_MS));
+    }
+    throw error;
+  } finally {
+    request.clear();
+  }
 };
 
 export const grcPath = (path: string, params: Record<string, string | number | undefined> = {}) => {
@@ -294,69 +333,21 @@ export function useGRCFormMutation<T = unknown>({ timeoutMs = GRC_FORM_MUTATION_
 
 export function useGRCQuery<T>(path: string | null) {
   const { apiKey } = useApiKey();
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [durationMs, setDurationMs] = useState<number | null>(null);
-  const [lastSuccessfulAt, setLastSuccessfulAt] = useState<number | null>(null);
-  const requestID = useRef(0);
-
-  const load = useCallback(async (signal?: AbortSignal, force = false) => {
-    if (!path) {
-      setData(null);
-      setError(null);
-      setLoading(false);
-      setDurationMs(null);
-      setLastSuccessfulAt(null);
-      return;
-    }
-    const currentRequestID = requestID.current + 1;
-    requestID.current = currentRequestID;
-    const startedAt = performance.now();
-    const cached = grcQueryCache.get(grcQueryCacheKey(path, apiKey));
-    const hasFreshCache = !force && cached && cached.expiresAt > Date.now();
-    setLoading(!hasFreshCache);
-    setError(null);
-    let response;
-    const request = timedAbortSignal(signal, GRC_QUERY_TIMEOUT_MS);
-    try {
-      response = await fetchCachedGRC<T>(path, apiKey, force, { signal: request.signal });
-    } catch (error) {
-      if (signal?.aborted || currentRequestID !== requestID.current) {
-        return;
-      }
-      setError(request.timedOut() ? grcTimeoutMessage(path, GRC_QUERY_TIMEOUT_MS) : error instanceof Error ? error.message : grcResponseErrorMessage(path, 0, null, Math.round(performance.now() - startedAt)));
-      setLoading(false);
-      setDurationMs(Math.round(performance.now() - startedAt));
-      return;
-    } finally {
-      request.clear();
-    }
-    if (currentRequestID !== requestID.current) {
-      return;
-    }
-    setDurationMs(Math.round(performance.now() - startedAt));
-    if (!response.ok) {
-      const message = grcResponseErrorMessage(path, response.status, response.data, Math.round(performance.now() - startedAt));
-      setError(message);
-      setLoading(false);
-      return;
-    }
-    setData(response.data);
-    setLastSuccessfulAt(Date.now());
-    setLoading(false);
-  }, [apiKey, path]);
-
-  const reload = useCallback(() => load(undefined, true), [load]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => void load(controller.signal, false), 0);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [load]);
+  const query = useQuery<GRCQueryPayload<T>, Error>({
+    enabled: Boolean(path),
+    queryFn: ({ signal }) => fetchGRCQueryPayload<T>(path ?? "", apiKey, signal),
+    queryKey: grcQueryKey(path, apiKey),
+    staleTime: GRC_QUERY_CACHE_TTL_MS,
+  });
+  const data = path ? query.data?.data ?? null : null;
+  const error = path && query.error ? query.error.message : null;
+  const loading = Boolean(path) && (query.isPending || query.isFetching);
+  const durationMs = path ? query.data?.durationMs ?? null : null;
+  const lastSuccessfulAt = path ? query.data?.successfulAt ?? null : null;
+  const { refetch } = query;
+  const reload = useCallback(async () => {
+    await refetch({ cancelRefetch: true });
+  }, [refetch]);
 
   const state = runtimeStateForQuery({
     data,

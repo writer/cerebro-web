@@ -1,5 +1,6 @@
 "use client";
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { fetchCerebro } from "@/lib/cerebro-client";
@@ -137,6 +138,25 @@ export function ApiKeyProvider({ children }: { children: React.ReactNode }) {
     <ApiKeyContext.Provider value={contextValue}>
       {children}
     </ApiKeyContext.Provider>
+  );
+}
+
+export function GRCQueryProvider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: 5 * 60_000,
+        refetchOnWindowFocus: false,
+        retry: false,
+        staleTime: 30_000,
+      },
+    },
+  }));
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
   );
 }
 
