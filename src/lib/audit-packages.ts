@@ -36,6 +36,8 @@ export type AuditPackageSummary = {
   exclusions: number;
 };
 
+export type AuditWorkflowState = "blocked" | "needs_review" | "ready" | "waiting";
+
 export type EvidenceCurationRow = {
   id: string;
   controlID: string;
@@ -98,6 +100,31 @@ export type ScopeExceptionRow = {
   kind: string;
   reason: string;
   value: string;
+};
+
+export type AuditReadinessRow = {
+  id: string;
+  action: string;
+  detail: string;
+  owner: string;
+  state: AuditWorkflowState;
+  title: string;
+};
+
+export type AuditorQuestionRow = {
+  id: string;
+  area: string;
+  owner: string;
+  question: string;
+  source: string;
+  status: string;
+};
+
+export type AuditExportManifestRow = {
+  id: string;
+  label: string;
+  state: string;
+  value: number | string;
 };
 
 const normalized = (value?: string) => (value ?? "").trim().toLowerCase();
@@ -175,6 +202,19 @@ export const auditPackageStateLabel = (state: AuditPackageState) => {
       return "Published";
     case "stale":
       return "Stale";
+  }
+};
+
+export const auditWorkflowStateLabel = (state: AuditWorkflowState) => {
+  switch (state) {
+    case "blocked":
+      return "Blocked";
+    case "needs_review":
+      return "Needs review";
+    case "ready":
+      return "Ready";
+    case "waiting":
+      return "Waiting";
   }
 };
 
@@ -406,3 +446,117 @@ export const buildScopeExceptionRows = (metadata?: GRCReportMetadata | null, lim
   ].map((row, index) => ({ id: `${row.kind}:${row.value}:${index}`, ...row }));
   return rows.slice(0, limit);
 };
+
+export const buildAuditReadinessRows = (
+  summary: AuditPackageSummary,
+  snapshotID: string,
+  generatedAt: string,
+): AuditReadinessRow[] => {
+  const evidenceGaps = summary.missingEvidence + summary.staleEvidence;
+  const snapshotReady = summary.state === "approved" || summary.state === "published";
+
+  return [
+    {
+      id: "evidence",
+      action: evidenceGaps > 0 ? "Collect evidence" : "Keep current",
+      detail: `${summary.missingEvidence} missing, ${summary.staleEvidence} stale`,
+      owner: "Control owners",
+      state: evidenceGaps > 0 ? "blocked" : "ready",
+      title: "Evidence package",
+    },
+    {
+      id: "controls",
+      action: summary.failingControls > 0 ? "Resolve controls" : "Keep current",
+      detail: `${summary.failingControls} failing of ${summary.controls} controls`,
+      owner: "Control owners",
+      state: summary.failingControls > 0 ? "blocked" : "ready",
+      title: "Control status",
+    },
+    {
+      id: "reviews",
+      action: summary.openReviews > 0 ? "Complete reviews" : "Keep current",
+      detail: `${summary.openReviews} open review records`,
+      owner: "Evidence reviewers",
+      state: summary.openReviews > 0 ? "needs_review" : "ready",
+      title: "Evidence review",
+    },
+    {
+      id: "sources",
+      action: summary.staleSources > 0 ? "Refresh sources" : "Keep current",
+      detail: `${summary.staleSources} stale of ${summary.sourceCount} sources`,
+      owner: "Source owners",
+      state: summary.staleSources > 0 ? "blocked" : "ready",
+      title: "Source freshness",
+    },
+    {
+      id: "snapshot",
+      action: snapshotReady ? "Share snapshot" : "Approve package",
+      detail: generatedAt ? `Generated ${generatedAt}` : `Snapshot ${snapshotID}`,
+      owner: "Audit lead",
+      state: snapshotReady ? "ready" : "waiting",
+      title: "Auditor snapshot",
+    },
+  ];
+};
+
+export const buildAuditorQuestionRows = ({
+  evidenceRows,
+  ownerRows,
+  sourceRows,
+  limit = 8,
+}: {
+  evidenceRows: EvidenceCurationRow[];
+  ownerRows: ControlOwnerRow[];
+  sourceRows: SourceTrustRow[];
+  limit?: number;
+}): AuditorQuestionRow[] => {
+  const evidenceQuestions = evidenceRows
+    .filter((row) => ["needs_replacement", "needs_review", "rejected"].includes(row.decision))
+    .map((row) => ({
+      id: `evidence:${row.id}`,
+      area: "Evidence",
+      owner: row.source || "Evidence owner",
+      question: `Can this evidence be shared, refreshed, or replaced for ${row.controlID}?`,
+      source: row.title,
+      status: auditEvidenceDecisionLabel(row.decision),
+    }));
+  const controlQuestions = ownerRows
+    .filter((row) => row.missing > 0 || row.stale > 0 || row.findings > 0)
+    .map((row) => ({
+      id: `control:${row.id}`,
+      area: "Control",
+      owner: row.owner,
+      question: `Which evidence or remediation closes ${row.control}?`,
+      source: row.title,
+      status: row.action,
+    }));
+  const sourceQuestions = sourceRows
+    .filter((row) => !["collected", "current", "fresh", "healthy", "ready"].includes(normalized(row.status)))
+    .map((row) => ({
+      id: `source:${row.id}`,
+      area: "Source",
+      owner: row.source,
+      question: `Can ${row.source} be refreshed before auditor review?`,
+      source: row.lastSynced,
+      status: row.action,
+    }));
+
+  return [...evidenceQuestions, ...controlQuestions, ...sourceQuestions].slice(0, limit);
+};
+
+export const buildAuditExportManifestRows = ({
+  generatedAt,
+  snapshotID,
+  summary,
+}: {
+  generatedAt: string;
+  snapshotID: string;
+  summary: AuditPackageSummary;
+}): AuditExportManifestRow[] => [
+  { id: "snapshot", label: "Snapshot", state: auditPackageStateLabel(summary.state), value: snapshotID },
+  { id: "generated", label: "Generated", state: generatedAt ? "Ready" : "Not generated", value: generatedAt || "Not generated" },
+  { id: "controls", label: "Controls", state: summary.failingControls > 0 ? "Action needed" : "Ready", value: summary.controls },
+  { id: "evidence", label: "Evidence", state: summary.missingEvidence > 0 ? "Missing evidence" : "Ready", value: summary.evidenceItems },
+  { id: "sources", label: "Sources", state: summary.staleSources > 0 ? "Refresh needed" : "Ready", value: summary.sourceCount },
+  { id: "scope", label: "Scope exclusions", state: summary.exclusions > 0 ? "Documented" : "None", value: summary.exclusions },
+];

@@ -2,8 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   auditEvidenceDecision,
+  buildAuditExportManifestRows,
   buildAuditPackageSummary,
+  buildAuditReadinessRows,
+  buildAuditorQuestionRows,
   buildScopeExceptionRows,
+  type AuditPackageSummary,
+  type ControlOwnerRow,
+  type EvidenceCurationRow,
+  type SourceTrustRow,
 } from "@/lib/audit-packages";
 import type { GRCControlEvidencePacketResponse } from "@/lib/grc";
 
@@ -24,6 +31,21 @@ const packet = (overrides: Partial<GRCControlEvidencePacketResponse> = {}): GRCC
   },
   controls: [],
   generated_at: "2026-01-01T00:00:00Z",
+  ...overrides,
+});
+
+const summary = (overrides: Partial<AuditPackageSummary> = {}): AuditPackageSummary => ({
+  controls: 4,
+  evidenceItems: 6,
+  exclusions: 0,
+  failingControls: 0,
+  missingEvidence: 0,
+  openReviews: 0,
+  readinessScore: 92,
+  sourceCount: 2,
+  staleEvidence: 0,
+  staleSources: 0,
+  state: "approved",
   ...overrides,
 });
 
@@ -109,5 +131,122 @@ describe("audit package helpers", () => {
       expect.objectContaining({ kind: "asset", reason: "Support asset", value: "asset-1" }),
     ]);
   });
-});
 
+  it("builds readiness rows that separate blocked, review, waiting, and ready work", () => {
+    const rows = buildAuditReadinessRows(summary({
+      failingControls: 1,
+      missingEvidence: 2,
+      openReviews: 1,
+      staleEvidence: 1,
+      staleSources: 1,
+      state: "needs_review",
+    }), "snapshot-123", "");
+
+    expect(rows).toEqual([
+      expect.objectContaining({ action: "Collect evidence", id: "evidence", state: "blocked" }),
+      expect.objectContaining({ action: "Resolve controls", id: "controls", state: "blocked" }),
+      expect.objectContaining({ action: "Complete reviews", id: "reviews", state: "needs_review" }),
+      expect.objectContaining({ action: "Refresh sources", id: "sources", state: "blocked" }),
+      expect.objectContaining({ action: "Approve package", detail: "Snapshot snapshot-123", id: "snapshot", state: "waiting" }),
+    ]);
+
+    expect(buildAuditReadinessRows(summary(), "snapshot-456", "2026-01-01T00:00:00Z").at(-1)).toMatchObject({
+      action: "Share snapshot",
+      state: "ready",
+    });
+  });
+
+  it("queues auditor questions from evidence gaps, owner work, and stale sources", () => {
+    const evidenceRows: EvidenceCurationRow[] = [
+      {
+        controlID: "SOC 2 CC6.1",
+        decision: "needs_review",
+        freshness: "7d",
+        id: "request-1",
+        packets: 1,
+        quality: "ready",
+        review: "manual_review",
+        source: "GitHub",
+        status: "needs_review",
+        title: "Access review",
+      },
+      {
+        controlID: "SOC 2 CC7.1",
+        decision: "included",
+        freshness: "30d",
+        id: "request-2",
+        packets: 1,
+        quality: "ready",
+        review: "accepted",
+        source: "AWS",
+        status: "ready",
+        title: "Cloud logs",
+      },
+    ];
+    const ownerRows: ControlOwnerRow[] = [
+      {
+        action: "Add evidence",
+        control: "SOC 2 CC6.1",
+        evidence: "0/1",
+        findings: 0,
+        id: "soc2:cc6.1",
+        missing: 1,
+        owner: "Security",
+        stale: 0,
+        status: "failing",
+        title: "Logical access",
+      },
+    ];
+    const sourceRows: SourceTrustRow[] = [
+      {
+        action: "Repair source",
+        evidence: 0,
+        findings: 0,
+        id: "jira:runtime-1",
+        lastSynced: "2026-01-01T00:00:00Z",
+        source: "Jira",
+        status: "failed",
+      },
+      {
+        action: "Use for package",
+        evidence: 4,
+        findings: 1,
+        id: "github:runtime-2",
+        lastSynced: "2026-01-01T00:00:00Z",
+        source: "GitHub",
+        status: "healthy",
+      },
+    ];
+
+    const rows = buildAuditorQuestionRows({ evidenceRows, ownerRows, sourceRows });
+
+    expect(rows.map((row) => row.area)).toEqual(["Evidence", "Control", "Source"]);
+    expect(rows[0]).toMatchObject({ owner: "GitHub", status: "Needs review" });
+    expect(rows[1].question).toContain("SOC 2 CC6.1");
+    expect(rows[2]).toMatchObject({ owner: "Jira", status: "Repair source" });
+  });
+
+  it("builds an export manifest with action states for package records", () => {
+    const rows = buildAuditExportManifestRows({
+      generatedAt: "",
+      snapshotID: "snapshot-123",
+      summary: summary({
+        evidenceItems: 8,
+        exclusions: 2,
+        failingControls: 1,
+        missingEvidence: 1,
+        staleSources: 1,
+        state: "stale",
+      }),
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ id: "snapshot", state: "Stale", value: "snapshot-123" }),
+      expect.objectContaining({ id: "generated", state: "Not generated", value: "Not generated" }),
+      expect.objectContaining({ id: "controls", state: "Action needed", value: 4 }),
+      expect.objectContaining({ id: "evidence", state: "Missing evidence", value: 8 }),
+      expect.objectContaining({ id: "sources", state: "Refresh needed", value: 2 }),
+      expect.objectContaining({ id: "scope", state: "Documented", value: 2 }),
+    ]);
+  });
+});

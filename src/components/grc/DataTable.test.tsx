@@ -51,4 +51,39 @@ describe("DataTable", () => {
 
     expect(renderedNames()).toEqual(["Alpha", "Beta"]);
   });
+
+  it("applies a default sort before the first operator action", async () => {
+    await act(async () => {
+      root.render(
+        <DataTable
+          columns={[{ key: "name", label: "Name" }]}
+          defaultSort={{ key: "name" }}
+          pageSize={10}
+          rows={[
+            { id: "beta", name: "Beta" },
+            { id: "alpha", name: "Alpha" },
+          ]}
+        />,
+      );
+    });
+
+    expect(renderedNames()).toEqual(["Alpha", "Beta"]);
+    expect(container.querySelector("th[aria-sort='ascending']")).not.toBeNull();
+  });
+
+  it("can render table presets without a search input", async () => {
+    await act(async () => {
+      root.render(
+        <DataTable
+          columns={[{ key: "name", label: "Name" }]}
+          pageSize={10}
+          rows={[{ id: "alpha", name: "Alpha" }]}
+          showSearch={false}
+        />,
+      );
+    });
+
+    expect(container.querySelector("input")).toBeNull();
+    expect(renderedNames()).toEqual(["Alpha"]);
+  });
 });
