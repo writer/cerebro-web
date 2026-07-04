@@ -22,23 +22,21 @@ import type { RuntimeState } from "@/lib/runtime-state";
 
 type IssueQueueItem = {
   action: string;
+  assignee: string;
+  dueLabel: string;
   detail: string;
   href: string;
   id: string;
   owner: string;
+  severity?: string;
+  slaStatus: string;
+  source: string;
   status: string;
   title: string;
   type: string;
 };
 
-type ProgramScopeLink = {
-  detail: string;
-  href: string;
-  label: string;
-  meta: string;
-};
-
-type RoadmapStep = {
+type ReadinessCheck = {
   detail: string;
   href: string;
   label: string;
@@ -68,6 +66,15 @@ const workItemDetail = (item: GRCProgramWorkItem) => {
   return parts.join(", ") || item.action || "Review required";
 };
 
+const compactDate = (value?: string) => {
+  if (!value) return "No due date";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(timestamp));
+};
+
+const dueCopy = (dueLabel: string) => dueLabel === "No due date" ? dueLabel : `Due ${dueLabel}`;
+
 const workItemType = (item: GRCProgramWorkItem) => {
   if (item.kind === "finding") return "Issue";
   if (item.kind === "control") return "Control";
@@ -76,6 +83,8 @@ const workItemType = (item: GRCProgramWorkItem) => {
 
 const fallbackQueueItem = (control: GRCControl): IssueQueueItem => ({
   action: control.status === "failing" ? "Open control" : "Review evidence",
+  assignee: "Unassigned",
+  dueLabel: "No due date",
   detail: [
     control.open_findings ? countLabel(control.open_findings, "open finding") : "",
     control.missing_evidence_items ? countLabel(control.missing_evidence_items, "missing evidence item") : "",
@@ -84,6 +93,8 @@ const fallbackQueueItem = (control: GRCControl): IssueQueueItem => ({
   href: controlHref(control),
   id: `${control.framework_name}:${control.control_id}`,
   owner: control.owner_domain || "Unassigned",
+  slaStatus: "not_set",
+  source: control.framework_name,
   status: control.status,
   title: `${control.framework_name} ${control.control_id}`,
   type: "Control",
@@ -105,15 +116,20 @@ const fallbackControlRank = (control: GRCControl) => {
   ] as const;
 };
 
-const buildIssueQueue = (readinessData: GRCProgramReadiness | null | undefined, controls: GRCControl[]) => {
+export const buildIssueQueue = (readinessData: GRCProgramReadiness | null | undefined, controls: GRCControl[]) => {
   const readinessItems = readinessData?.work_items ?? [];
   if (readinessItems.length > 0) {
     return readinessItems.slice(0, 10).map((item): IssueQueueItem => ({
       action: item.action || "Open item",
+      assignee: item.assignee || "Unassigned",
+      dueLabel: compactDate(item.due_at),
       detail: workItemDetail(item),
       href: workItemHref(item),
       id: item.id,
       owner: item.owner_domain || "Unassigned",
+      severity: item.severity,
+      slaStatus: item.sla_status || "not_set",
+      source: item.source_id || item.framework_name || "No source",
       status: item.status,
       title: item.title,
       type: workItemType(item),
@@ -176,51 +192,12 @@ const controlSummaryFromDashboard = (controls: GRCControl[]): GRCProgramReadines
   return summary;
 };
 
-const programScopeLinks = (summary: GRCProgramReadinessSummary, frameworks: GRCProgramFramework[]): ProgramScopeLink[] => [
-  {
-    detail: `${frameworks.length.toLocaleString()} tracked frameworks`,
-    href: "/frameworks",
-    label: "Frameworks",
-    meta: "scope and maturity",
-  },
-  {
-    detail: `${summary.failing_controls.toLocaleString()} failing, ${summary.manual_review_controls.toLocaleString()} manual review`,
-    href: "/controls",
-    label: "Controls",
-    meta: `${summary.controls.toLocaleString()} controls`,
-  },
-  {
-    detail: `${summary.missing_evidence_items.toLocaleString()} missing, ${summary.stale_evidence_items.toLocaleString()} stale`,
-    href: "/evidence",
-    label: "Evidence",
-    meta: `${summary.evidence_items.toLocaleString()} items`,
-  },
-  {
-    detail: "Policy versions, approvals, attestations, and exceptions",
-    href: "/policies",
-    label: "Policies",
-    meta: "governance records",
-  },
-  {
-    detail: "Questionnaires with owners, blockers, approvals, and evidence gaps",
-    href: "/questionnaires",
-    label: "Questionnaires",
-    meta: "customer and vendor reviews",
-  },
-  {
-    detail: "Audit packets, report readiness, scope, and exports",
-    href: "/reports",
-    label: "Reports",
-    meta: "shareable packets",
-  },
-];
-
 const appRouteOrFallback = (href: string | undefined, fallback: string) => {
   if (!href || href.startsWith("/grc/")) return fallback;
   return href;
 };
 
-const stepToneClass: Record<RoadmapStep["tone"], string> = {
+const stepToneClass: Record<ReadinessCheck["tone"], string> = {
   danger: "bg-red-500",
   warning: "bg-amber-500",
   success: "bg-emerald-500",
@@ -229,82 +206,72 @@ const stepToneClass: Record<RoadmapStep["tone"], string> = {
 
 const metricIntent = (count: number) => count > 0 ? "warning" : "success";
 
-const totalMappedTests = (controls: GRCControl[]) => {
-  const rules = new Set<string>();
-  controls.forEach((control) => (control.mapped_rules ?? []).forEach((rule) => rules.add(rule)));
-  return rules.size;
-};
-
-const totalEvidenceExpectations = (controls: GRCControl[]) =>
-  controls.reduce((total, control) => total + (control.evidence_expectations ?? 0), 0);
-
-const buildRoadmap = ({
-  dashboardControls,
-  proofBundle,
+export const buildReadinessChecks = ({
   summary,
 }: {
-  dashboardControls: GRCControl[];
-  proofBundle?: GRCProgramProofBundle;
   summary: GRCProgramReadinessSummary;
-}): RoadmapStep[] => {
+}): ReadinessCheck[] => {
   const evidenceIssues = summary.missing_evidence_items + summary.stale_evidence_items;
   const sourceIssues = summary.stale_connectors + summary.coverage_blind_spots;
-  const mappedTests = totalMappedTests(dashboardControls);
+  const checks: ReadinessCheck[] = [];
 
-  return [
-    {
+  if (sourceIssues > 0) {
+    checks.push({
       detail: `${countLabel(summary.coverage_blind_spots, "coverage gap")}, ${countLabel(summary.stale_connectors, "stale source")}`,
       href: "/connectors",
-      label: "Program scope",
-      status: sourceIssues > 0 ? "needs_attention" : "ready",
-      tone: sourceIssues > 0 ? "warning" : "success",
-      value: `${summary.connectors.toLocaleString()} sources`,
-    },
-    {
-      detail: `${summary.passing_controls.toLocaleString()} of ${summary.controls.toLocaleString()} passing`,
+      label: "Source gaps",
+      status: "needs_attention",
+      tone: "warning",
+      value: sourceIssues.toLocaleString(),
+    });
+  }
+
+  if (summary.failing_controls > 0 || summary.manual_review_controls > 0) {
+    checks.push({
+      detail: `${countLabel(summary.failing_controls, "failing control")}, ${countLabel(summary.manual_review_controls, "manual review")}`,
       href: "/controls",
-      label: "Controls monitored",
-      status: summary.failing_controls > 0 ? "needs_attention" : "ready",
-      tone: summary.failing_controls > 0 ? "warning" : "success",
-      value: `${summary.failing_controls.toLocaleString()} failing`,
-    },
-    {
-      detail: `${mappedTests.toLocaleString()} mapped tests, ${summary.manual_review_controls.toLocaleString()} manual reviews`,
-      href: "/controls",
-      label: "Tests mapped",
-      status: mappedTests > 0 ? "ready" : "needs_mapping",
-      tone: mappedTests > 0 ? "success" : "warning",
-      value: mappedTests.toLocaleString(),
-    },
-    {
+      label: "Failing controls",
+      status: "needs_attention",
+      tone: "warning",
+      value: summary.failing_controls.toLocaleString(),
+    });
+  }
+
+  if (evidenceIssues > 0) {
+    checks.push({
       detail: `${summary.missing_evidence_items.toLocaleString()} missing, ${summary.stale_evidence_items.toLocaleString()} stale`,
       href: "/evidence",
-      label: "Evidence ready",
-      status: evidenceIssues > 0 ? "needs_attention" : "ready",
-      tone: evidenceIssues > 0 ? "warning" : "success",
+      label: "Evidence gaps",
+      status: "needs_attention",
+      tone: "warning",
       value: evidenceIssues.toLocaleString(),
-    },
-    {
-      detail: proofBundle ? `Generated ${displayDate(proofBundle.generated_at)}` : "Report readiness appears after program readiness loads.",
-      href: appRouteOrFallback(proofBundle?.reports_path, "/reports"),
-      label: "Audit packet",
-      status: proofBundle?.status ?? "pending",
-      tone: proofBundle && proofBundle.score >= 80 ? "success" : "warning",
-      value: proofBundle ? `${proofBundle.score}/100` : "Pending",
-    },
-  ];
+    });
+  }
+
+  if (checks.length === 0) {
+    checks.push({
+      detail: "No failing controls, missing evidence, stale evidence, or source gaps.",
+      href: "/reports",
+      label: "Packet ready",
+      status: "ready",
+      tone: "success",
+      value: "Clear",
+    });
+  }
+
+  return checks;
 };
 
-function ReadinessRoadmap({ steps }: { steps: RoadmapStep[] }) {
+function ReadinessChecksPanel({ checks }: { checks: ReadinessCheck[] }) {
   return (
-    <Panel title="Readiness roadmap" action={<Link href="/reports" className="secondary-button px-3 py-1.5 text-[12px]">Open reports</Link>}>
+    <Panel title="Packet blockers">
       <div className="divide-y divide-[color:var(--border)]">
-        {steps.map((step) => (
-          <Link key={step.label} href={step.href} className="grid gap-3 py-3 transition hover:bg-[var(--surface-muted)] sm:grid-cols-[minmax(0,1fr)_112px_132px]">
+        {checks.map((step) => (
+          <Link key={step.label} href={step.href} className="grid gap-3 py-3 transition hover:bg-[var(--surface-muted)] sm:grid-cols-[minmax(0,1fr)_92px_132px]">
             <div className="flex min-w-0 gap-3">
               <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${stepToneClass[step.tone]}`} aria-hidden="true" />
               <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{step.label}</div>
+                <div className="text-[13px] font-semibold text-[var(--text-primary)]">{step.label}</div>
                 <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--text-muted)]">{step.detail}</div>
               </div>
             </div>
@@ -321,29 +288,39 @@ function ReadinessRoadmap({ steps }: { steps: RoadmapStep[] }) {
 
 function IssueQueuePanel({ items }: { items: IssueQueueItem[] }) {
   return (
-    <Panel title="Issues due" action={<Link href="/risk-inbox" className="secondary-button px-3 py-1.5 text-[12px]">Open issues</Link>}>
+    <Panel title="Open control issues" action={<Link href="/risk-inbox" className="secondary-button px-3 py-1.5 text-[12px]">View issue queue</Link>}>
       {items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[color:var(--border-strong)] px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">
-          No control, evidence, or source issues need review.
+          No control, evidence, or source issues are blocking the packet.
         </div>
       ) : (
         <div className="divide-y divide-[color:var(--border)]">
           {items.map((item) => (
-            <Link key={item.id} href={item.href} className="grid gap-3 py-3 transition hover:bg-[var(--surface-muted)] sm:grid-cols-[108px_minmax(0,1fr)_150px_112px]">
-              <div>
-                <Badge value={item.type} />
-              </div>
+            <Link key={item.id} href={item.href} className="grid gap-3 py-3 transition hover:bg-[var(--surface-muted)] md:grid-cols-[minmax(0,1fr)_150px_132px_80px]">
               <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{item.title}</div>
-                <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--text-muted)]">{item.detail}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge value={item.type} />
+                  {item.severity && <Badge value={item.severity} tone="severity" />}
+                  <div className="text-[13px] font-semibold text-[var(--text-primary)]">{item.title}</div>
+                </div>
+                <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--text-muted)]">
+                  {item.detail}
+                </div>
               </div>
               <div className="min-w-0 text-[12px]">
                 <div className="truncate font-medium text-[var(--text-primary)]">{item.owner}</div>
-                <div className="mt-1"><Badge value={item.status} /></div>
+                <div className="mt-1 truncate text-[var(--text-muted)]">Assignee: {item.assignee}</div>
               </div>
-              <div className="flex items-center justify-between gap-2 text-[12px] font-medium text-[var(--primary)] sm:justify-end">
-                <span>{item.action}</span>
-                <span aria-hidden="true">&gt;</span>
+              <div className="min-w-0 text-[12px]">
+                <div className="font-medium text-[var(--text-primary)]">{dueCopy(item.dueLabel)}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <Badge value={item.slaStatus} />
+                  <span className="truncate text-[var(--text-muted)]">{item.source}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-[12px] font-medium text-[var(--primary)] md:justify-end">
+                <span className="sr-only">{item.action}</span>
+                <span aria-hidden="true">Open</span>
               </div>
             </Link>
           ))}
@@ -363,7 +340,7 @@ function AuditPacketPanel({
   const blockers = proofBundle?.readiness.blockers ?? summary.readiness_blockers ?? [];
 
   return (
-    <Panel title="Audit packet">
+    <Panel title="Control evidence packet">
       {proofBundle ? (
         <div className="space-y-4">
           <div>
@@ -372,22 +349,22 @@ function AuditPacketPanel({
               <Badge value={proofBundle.status} />
             </div>
             <p className="mt-2 text-[13px] leading-5 text-[var(--text-muted)]">
-              {proofBundle.description || "Evidence packet and report readiness for the selected control profile."}
+              {proofBundle.description || `${countLabel(summary.missing_evidence_items, "missing evidence item")}, ${countLabel(summary.stale_evidence_items, "stale evidence item")}.`}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 text-[12px]">
-            <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
-              <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">Score</div>
+          <div className="grid gap-3 text-[12px] sm:grid-cols-2">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">Packet status</div>
               <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{proofBundle.score}/100</div>
             </div>
-            <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+            <div>
               <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">Generated</div>
               <div className="mt-1 font-medium text-[var(--text-primary)]">{displayDate(proofBundle.generated_at)}</div>
             </div>
           </div>
           {blockers.length > 0 && (
             <div className="rounded-lg border border-[color:var(--border)] px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Open blockers</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Packet blockers</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {blockers.slice(0, 4).map((blocker) => (
                   <span key={`${blocker.code}:${blocker.label}`} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[12px] text-[var(--text-secondary)]">
@@ -398,94 +375,15 @@ function AuditPacketPanel({
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            <Link href={appRouteOrFallback(proofBundle.reports_path, "/reports")} className="primary-button px-3 py-1.5 text-[12px]">Open reports</Link>
-            <Link href={appRouteOrFallback(proofBundle.control_packet_path, "/controls")} className="secondary-button px-3 py-1.5 text-[12px]">Open controls</Link>
+            <Link href={appRouteOrFallback(proofBundle.export_path, "/reports")} className="primary-button px-3 py-1.5 text-[12px]">Export packet</Link>
+            <Link href={appRouteOrFallback(proofBundle.reports_path, "/reports")} className="secondary-button px-3 py-1.5 text-[12px]">Open packet</Link>
           </div>
         </div>
       ) : (
         <div className="text-[13px] leading-5 text-[var(--text-muted)]">
-          Report readiness appears after program readiness loads.
+          Loading packet status.
         </div>
       )}
-    </Panel>
-  );
-}
-
-function StatusLine({
-  detail,
-  href,
-  label,
-  value,
-}: {
-  detail: string;
-  href: string;
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <Link href={href} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md px-2 py-2.5 transition hover:bg-[var(--surface-muted)]">
-      <div className="min-w-0">
-        <div className="text-[12px] font-medium text-[var(--text-primary)]">{label}</div>
-        <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]">{detail}</div>
-      </div>
-      <div className="text-[16px] font-semibold text-[var(--text-primary)]">{value}</div>
-    </Link>
-  );
-}
-
-function ControlsTestsPanel({
-  controls,
-  summary,
-}: {
-  controls: GRCControl[];
-  summary: GRCProgramReadinessSummary;
-}) {
-  const mappedTests = totalMappedTests(controls);
-  const evidenceExpectations = totalEvidenceExpectations(controls);
-
-  return (
-    <Panel title="Controls and tests" action={<Link href="/controls" className="secondary-button px-3 py-1.5 text-[12px]">Open controls</Link>}>
-      <div className="divide-y divide-[color:var(--border)]">
-        <StatusLine
-          href="/controls"
-          label="Controls"
-          value={`${summary.passing_controls}/${summary.controls}`}
-          detail={`${countLabel(summary.failing_controls, "failing control")}, ${countLabel(summary.manual_review_controls, "manual review")}`}
-        />
-        <StatusLine
-          href="/controls"
-          label="Mapped tests"
-          value={mappedTests}
-          detail={`${countLabel(controls.filter((control) => (control.mapped_rules ?? []).length > 0).length, "control")} with mapped tests`}
-        />
-        <StatusLine
-          href="/evidence"
-          label="Evidence expectations"
-          value={evidenceExpectations}
-          detail={`${countLabel(summary.evidence_items, "evidence item")} attached`}
-        />
-      </div>
-    </Panel>
-  );
-}
-
-function ProgramScopePanel({ records }: { records: ProgramScopeLink[] }) {
-  return (
-    <Panel title="Program scope">
-      <div className="grid gap-3 md:grid-cols-2">
-        {records.map((record) => (
-          <Link key={record.href} href={record.href} className="rounded-lg border border-[color:var(--border)] px-4 py-3 transition hover:border-[color:var(--ring)] hover:bg-[var(--surface-muted)]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[13px] font-semibold text-[var(--text-primary)]">{record.label}</div>
-                <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-[var(--text-muted)]">{record.detail}</div>
-              </div>
-              <span className="shrink-0 text-[18px] leading-none text-[var(--text-muted)]" aria-hidden="true">&gt;</span>
-            </div>
-            <div className="mt-3 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)]">{record.meta}</div>
-          </Link>
-        ))}
-      </div>
     </Panel>
   );
 }
@@ -493,6 +391,7 @@ function ProgramScopePanel({ records }: { records: ProgramScopeLink[] }) {
 function FrameworkPosturePanel({ frameworks }: { frameworks: GRCProgramFramework[] }) {
   const sorted = frameworks
     .slice()
+    .filter((framework) => framework.status !== "ready" || framework.failing_controls > 0 || framework.missing_evidence_controls > 0 || framework.stale_evidence_controls > 0)
     .sort((left, right) => left.score - right.score || right.failing_controls - left.failing_controls)
     .slice(0, 6);
 
@@ -505,7 +404,7 @@ function FrameworkPosturePanel({ frameworks }: { frameworks: GRCProgramFramework
           <Link
             key={`${framework.framework_name}:${framework.framework_id ?? ""}`}
             href={`/frameworks/${frameworkRouteSegment({ id: framework.framework_id, name: framework.framework_name })}`}
-            className="grid gap-3 py-3 transition hover:bg-[var(--surface-muted)] sm:grid-cols-[minmax(0,1fr)_92px_140px]"
+            className="grid gap-3 py-3 transition hover:bg-[var(--surface-muted)] sm:grid-cols-[minmax(0,1fr)_92px_160px]"
           >
             <div className="min-w-0">
               <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{framework.framework_name}</div>
@@ -514,7 +413,7 @@ function FrameworkPosturePanel({ frameworks }: { frameworks: GRCProgramFramework
               </div>
             </div>
             <div className="text-[13px] font-semibold text-[var(--text-primary)]">{Math.round(framework.score)}%</div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge value={framework.status} />
               {framework.failing_controls > 0 && (
                 <span className="text-[12px] text-[var(--text-muted)]">{framework.failing_controls} failing</span>
@@ -535,18 +434,16 @@ export default function GRCPage() {
   const summary = readinessQuery.data?.summary ?? fallbackSummary;
   const frameworks = useMemo(() => readinessQuery.data?.frameworks ?? [], [readinessQuery.data?.frameworks]);
   const issueItems = useMemo(() => buildIssueQueue(readinessQuery.data, dashboardControls), [dashboardControls, readinessQuery.data]);
-  const scopeLinks = useMemo(() => programScopeLinks(summary, frameworks), [frameworks, summary]);
-  const roadmap = useMemo(
-    () => buildRoadmap({ dashboardControls, proofBundle: readinessQuery.data?.proof_bundle, summary }),
-    [dashboardControls, readinessQuery.data?.proof_bundle, summary],
-  );
+  const readinessChecks = useMemo(() => buildReadinessChecks({ summary }), [summary]);
   const metricState: RuntimeState = dashboard.state === "stale" || dashboard.state === "empty" ? "ready" : dashboard.state;
   const evidenceIssues = summary.missing_evidence_items + summary.stale_evidence_items;
   const sourceIssues = summary.stale_connectors + summary.coverage_blind_spots;
+  const packetBlockers = summary.readiness_blockers?.reduce((total, blocker) => total + (blocker.count ?? 1), 0) ?? issueItems.length;
+  const packetBlockerVerb = packetBlockers === 1 ? "affects" : "affect";
   const readinessSource = readinessQuery.data ? humanize(summary.status) : "current counts";
   const pageDescription = dashboard.data
-    ? `${Math.round(summary.score)}% readiness. ${countLabel(issueItems.length, "issue")} due, ${countLabel(summary.failing_controls, "failing control")}, ${countLabel(evidenceIssues, "evidence issue")}.`
-    : "Readiness, issues, controls, evidence, policies, questionnaires, and reports.";
+    ? `${countLabel(packetBlockers, "blocker")} ${packetBlockerVerb} packet export. ${countLabel(summary.failing_controls, "failing control")}, ${countLabel(evidenceIssues, "evidence issue")}, ${countLabel(sourceIssues, "source issue")}.`
+    : "Open control issues, packet status, evidence gaps, and source freshness.";
 
   const reload = () => {
     void dashboard.reload();
@@ -561,7 +458,6 @@ export default function GRCPage() {
         description={pageDescription}
         action={
           <div className="flex items-center gap-2">
-            <Link href="/reports" className="secondary-button px-3 py-1.5 text-[13px]">Reports</Link>
             <button type="button" onClick={reload} className="secondary-button px-3 py-1.5 text-[13px]">Refresh</button>
           </div>
         }
@@ -595,25 +491,20 @@ export default function GRCPage() {
       {dashboard.data && (
         <>
           <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard label="Readiness" value={`${Math.round(summary.score)}%`} detail={readinessSource} intent={summary.score >= 80 ? "success" : summary.score >= 50 ? "warning" : "danger"} state={metricState} />
+            <MetricCard label="Packet" value={`${Math.round(summary.score)}%`} detail={readinessSource} intent={summary.score >= 80 ? "success" : summary.score >= 50 ? "warning" : "danger"} state={metricState} />
             <MetricCard label="Open issues" value={issueItems.length} detail={`${summary.critical_findings} critical, ${summary.high_findings} high`} intent={issueItems.length > 0 ? "warning" : "success"} state={metricState} />
             <MetricCard label="Evidence issues" value={evidenceIssues} detail={`${summary.missing_evidence_items} missing, ${summary.stale_evidence_items} stale`} intent={metricIntent(evidenceIssues)} state={metricState} />
             <MetricCard label="Source issues" value={sourceIssues} detail={`${summary.stale_connectors} stale, ${summary.coverage_blind_spots} coverage gaps`} intent={metricIntent(sourceIssues)} state={metricState} />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <ReadinessRoadmap steps={roadmap} />
-            <AuditPacketPanel proofBundle={readinessQuery.data?.proof_bundle} summary={summary} />
-          </div>
-
           <IssueQueuePanel items={issueItems} />
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <FrameworkPosturePanel frameworks={frameworks} />
-            <ControlsTestsPanel controls={dashboardControls} summary={summary} />
+            <ReadinessChecksPanel checks={readinessChecks} />
+            <AuditPacketPanel proofBundle={readinessQuery.data?.proof_bundle} summary={summary} />
           </div>
 
-          <ProgramScopePanel records={scopeLinks} />
+          <FrameworkPosturePanel frameworks={frameworks} />
         </>
       )}
     </div>

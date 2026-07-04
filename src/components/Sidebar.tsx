@@ -54,10 +54,10 @@ export const sidebarSupportLinks = linksFor(["/ask"]);
 export const sidebarNavGroups: SidebarNavGroup[] = [
   {
     id: "grc",
-    label: "GRC",
+    label: "Compliance",
     href: "/grc",
     iconHref: "/grc",
-    links: linksFor(["/controls", "/evidence", "/policies", "/frameworks", "/questionnaires", "/reports", "/reports/audit-packages"]),
+    links: linksFor(["/controls", "/evidence", "/frameworks", "/reports"]),
   },
   {
     id: "assets",

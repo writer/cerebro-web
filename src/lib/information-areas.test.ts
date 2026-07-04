@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { navigationEntries } from "./navigation";
 import { DEFAULT_INFORMATION_AREA_ID, informationAreas, routeHrefsForArea, routeIsAvailable } from "./information-areas";
 
 const pathOnly = (href: string) => href.split("?")[0];
@@ -43,11 +42,9 @@ describe("information areas", () => {
     }
   });
 
-  it("keeps core graph and GRC surfaces reachable through at least one area", () => {
+  it("keeps first-read operator routes reachable through at least one area", () => {
     const assignedRoutes = new Set(informationAreas.flatMap(routeHrefsForArea));
-    const coreRoutes = navigationEntries
-      .filter((entry) => entry.section === "Operator")
-      .map((entry) => entry.href);
+    const coreRoutes = ["/", "/risk-inbox", "/grc", "/controls", "/evidence", "/connectors", "/reports"];
 
     for (const href of coreRoutes) {
       expect(assignedRoutes.has(href), `${href} should belong to at least one information area`).toBe(true);

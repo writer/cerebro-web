@@ -946,7 +946,12 @@ export type GRCProgramWorkItem = {
   control_id?: string;
   status: string;
   action: string;
+  assignee?: string;
+  due_at?: string;
   owner_domain?: string;
+  severity?: string;
+  sla_status?: string;
+  source_id?: string;
   open_findings?: number;
   critical_findings?: number;
   missing_evidence_items?: number;
