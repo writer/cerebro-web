@@ -10,6 +10,7 @@ import {
   auditEvidenceDecisionLabel,
   auditPackageStateLabel,
   type AuditExportManifestRow,
+  type AuditPriorityWorkRow,
   type AuditReadinessRow,
   type AuditorQuestionRow,
   type ControlOwnerRow,
@@ -114,6 +115,23 @@ const manifestColumns: TableColumn<AuditExportManifestRow>[] = [
   { key: "state", label: "State", render: (_value, row) => <Badge value={row.state} />, sortValue: (row) => statusNeedsAttention(row.state) ? 0 : 1 },
 ];
 
+const priorityColumns: TableColumn<AuditPriorityWorkRow>[] = [
+  { key: "area", label: "Area", render: (_value, row) => <Badge value={row.area} /> },
+  {
+    key: "title",
+    label: "Work item",
+    render: (_value, row) => (
+      <div className="min-w-[18rem]">
+        <div className="line-clamp-2 font-medium text-[var(--text-primary)]">{row.title}</div>
+        <div className="mt-0.5 line-clamp-1 text-[12px] text-[var(--text-muted)]">{row.detail}</div>
+      </div>
+    ),
+  },
+  { key: "owner", label: "Owner" },
+  { key: "state", label: "State", render: (_value, row) => <Badge value={row.state} />, sortValue: (row) => row.rank },
+  { key: "action", label: "Action" },
+];
+
 const controlColumns: TableColumn<ControlOwnerRow>[] = [
   {
     key: "control",
@@ -190,6 +208,7 @@ export default function AuditPackagesPage() {
   } = useAuditPackageParams();
   const view = useAuditPackageView({ controlID, framework, profileID, tenantID });
   const {
+    actionableOwnerRows,
     auditorQuestionRows,
     debouncedTenantID,
     errors,
@@ -203,6 +222,7 @@ export default function AuditPackagesPage() {
     loading,
     metadata,
     ownerRows,
+    priorityRows,
     readinessRows,
     reload,
     selectedProfileID,
@@ -273,6 +293,20 @@ export default function AuditPackagesPage() {
         <MetricCard label="Sources" value={summary.sourceCount} detail={`${summary.staleSources} stale`} intent={summary.staleSources > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
         <MetricCard label="Exclusions" value={summary.exclusions} detail="package scope" intent={summary.exclusions > 0 ? "warning" : "success"} state={loading && !loaded ? "loading" : "ready"} />
       </div>
+
+      <Panel title="Priority work">
+        <DataTable
+          rows={priorityRows}
+          columns={priorityColumns}
+          defaultSort={{ key: "state" }}
+          emptyMessage="No package work is queued for this scope."
+          filterKeys={["area", "title", "detail", "owner", "state", "action"]}
+          getRowKey={(row) => row.id}
+          pageSize={8}
+          resultNoun="work items"
+          showSearch={false}
+        />
+      </Panel>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel
@@ -384,7 +418,7 @@ export default function AuditPackagesPage() {
 
         <Panel title="Control owner queue">
           <DataTable
-            rows={ownerRows}
+            rows={actionableOwnerRows}
             columns={controlColumns}
             emptyMessage="No owner work items are available."
             filterKeys={["control", "title", "owner", "status", "action"]}

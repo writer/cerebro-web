@@ -86,4 +86,23 @@ describe("DataTable", () => {
     expect(container.querySelector("input")).toBeNull();
     expect(renderedNames()).toEqual(["Alpha"]);
   });
+
+  it("ignores a default sort key that is not present in the table columns", async () => {
+    await act(async () => {
+      root.render(
+        <DataTable
+          columns={[{ key: "name", label: "Name" }]}
+          defaultSort={{ key: "missing" }}
+          pageSize={10}
+          rows={[
+            { id: "beta", name: "Beta" },
+            { id: "alpha", name: "Alpha" },
+          ]}
+        />,
+      );
+    });
+
+    expect(container.querySelector("th[aria-sort='ascending']")).toBeNull();
+    expect(renderedNames()).toEqual(["Beta", "Alpha"]);
+  });
 });

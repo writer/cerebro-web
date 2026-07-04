@@ -232,10 +232,21 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
     ],
     [getRowHref, resolvedColumns, rowActions],
   );
+  const sortableColumnIDs = useMemo(
+    () => new Set(tanstackColumns.map((column) => String(column.id)).filter((id) => id !== "undefined")),
+    [tanstackColumns],
+  );
+  const validSorting = useMemo(
+    () => sorting.filter((sort) => sortableColumnIDs.has(sort.id)),
+    [sortableColumnIDs, sorting],
+  );
   const handleSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
-    setSorting((current) => (typeof updater === "function" ? updater(current) : updater));
+    setSorting((current) => {
+      const currentValidSorting = current.filter((sort) => sortableColumnIDs.has(sort.id));
+      return typeof updater === "function" ? updater(currentValidSorting) : updater;
+    });
     setPage(1);
-  }, []);
+  }, [sortableColumnIDs]);
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table owns the shared row model; its instance is rendered locally.
   const table = useReactTable({
     columns: tanstackColumns,
@@ -250,7 +261,7 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
         pageIndex: currentPage - 1,
         pageSize: safePageSize,
       },
-      sorting,
+      sorting: validSorting,
     },
   });
   const tableRows = table.getRowModel().rows;
