@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { operatorNavLinks } from "@/lib/navigation";
 
-import { hasSidebarIcon, isSidebarLinkActive, sidebarNavGroups, sidebarNavLinks } from "./Sidebar";
+import { hasSidebarIcon, isSidebarLinkActive, sidebarNavGroups, sidebarNavLinks, sidebarPrimaryLinks, sidebarSupportLinks } from "./Sidebar";
 
 const links = [
   { href: "/trends" },
@@ -39,19 +39,21 @@ describe("isSidebarLinkActive", () => {
 
     expect(grcGroup?.href).toBe("/grc");
     expect(hrefs).toEqual([
-      "/frameworks",
       "/controls",
-      "/policies",
       "/evidence",
+      "/policies",
+      "/frameworks",
       "/questionnaires",
       "/reports",
     ]);
   });
 
-  it("keeps the GRC overview in the visible sidebar", () => {
+  it("keeps issues, GRC, and Ask in the visible sidebar", () => {
     const sidebarHrefs = sidebarNavLinks.map((link) => link.href);
 
+    expect(sidebarPrimaryLinks.map((link) => link.href)).toEqual(["/", "/risk-inbox"]);
     expect(sidebarHrefs).toContain("/grc");
+    expect(sidebarSupportLinks.map((link) => link.href)).toEqual(["/ask"]);
     expect(hasSidebarIcon("/grc")).toBe(true);
   });
 

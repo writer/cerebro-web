@@ -78,7 +78,7 @@ export const informationAreas: InformationArea[] = [
     },
     primaryRoutes: [
       { href: "/", label: "Home", detail: "Active risk, owners, evidence, and source attention." },
-      { href: "/risk-inbox", label: "Risks", detail: "Findings by severity, owner, evidence, SLA, and status." },
+      { href: "/risk-inbox", label: "Issues", detail: "Findings by severity, owner, evidence, SLA, and status." },
       { href: "/impact", label: "Affected assets", detail: "Impacted entities and risk paths." },
       { href: "/ask", label: "Ask", detail: "Ask investigation questions and review cited answers." },
       { href: "/inventory", label: "Inventory", detail: "Assets, owners, scope, vulnerabilities, and graph context." },
@@ -117,7 +117,7 @@ export const informationAreas: InformationArea[] = [
     },
     primaryRoutes: [
       { href: "/", label: "Home", detail: "Audit readiness, control posture, and proof coverage." },
-      { href: "/grc", label: "GRC", detail: "Frameworks, controls, evidence, policies, questionnaires, and reports." },
+      { href: "/grc", label: "Compliance", detail: "Readiness, issues, controls, evidence, policies, questionnaires, and reports." },
       { href: "/controls", label: "Controls", detail: "Control status, mapped findings, and evidence gaps." },
       { href: "/policies", label: "Policies", detail: "Policy versions, approvals, attestations, exceptions, and mappings." },
       { href: "/frameworks", label: "Frameworks", detail: "Framework readiness, maturity, gaps, planning, and exports." },
@@ -130,7 +130,7 @@ export const informationAreas: InformationArea[] = [
       { href: "/reports/schedules", label: "Report schedules", detail: "Recurring packet runs and recent scheduled outputs." },
       { href: "/controls/builder", label: "Control Builder", detail: "Custom control packs, coverage preview, and YAML export." },
       { href: "/connectors", label: "Sources", detail: "Source coverage and freshness for proof." },
-      { href: "/risk-inbox", label: "Risks", detail: "Findings that affect controls and framework posture." },
+      { href: "/risk-inbox", label: "Issues", detail: "Findings that affect controls and framework posture." },
     ],
   },
   {
@@ -207,7 +207,7 @@ export const informationAreas: InformationArea[] = [
     ],
     secondaryRoutes: [
       { href: "/frameworks", label: "Frameworks", detail: "Framework readiness and planning." },
-      { href: "/risk-inbox", label: "Risks", detail: "Priority findings behind the summary." },
+      { href: "/risk-inbox", label: "Issues", detail: "Priority findings behind the summary." },
       { href: "/ask", label: "Ask", detail: "Ask follow-up questions against the graph." },
     ],
   },

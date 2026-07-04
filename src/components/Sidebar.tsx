@@ -47,7 +47,8 @@ const linksFor = (hrefs: string[]) =>
     return link ? [link] : [];
   });
 
-export const sidebarPrimaryLinks = linksFor(["/", "/risk-inbox", "/ask"]);
+export const sidebarPrimaryLinks = linksFor(["/", "/risk-inbox"]);
+export const sidebarSupportLinks = linksFor(["/ask"]);
 
 export const sidebarNavGroups: SidebarNavGroup[] = [
   {
@@ -55,7 +56,7 @@ export const sidebarNavGroups: SidebarNavGroup[] = [
     label: "GRC",
     href: "/grc",
     iconHref: "/grc",
-    links: linksFor(["/frameworks", "/controls", "/policies", "/evidence", "/questionnaires", "/reports"]),
+    links: linksFor(["/controls", "/evidence", "/policies", "/frameworks", "/questionnaires", "/reports"]),
   },
   {
     id: "assets",
@@ -77,6 +78,7 @@ export const sidebarNavLinks = [
     const parent = group.href ? linksFor([group.href]) : [];
     return [...parent, ...group.links];
   }),
+  ...sidebarSupportLinks,
   ...utilityLinks,
 ];
 
@@ -225,6 +227,7 @@ export default function Sidebar() {
       <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? "px-1.5" : "px-3 max-md:px-1.5"}`}>
         {sidebarPrimaryLinks.map((link) => renderLink(link))}
         {sidebarNavGroups.map(renderGroup)}
+        {sidebarSupportLinks.map((link) => renderLink(link))}
 
         {collapsed && utilityLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
         {!collapsed && utilityLinks.length > 0 && <div className="my-3 border-t border-[color:var(--border)]" />}
