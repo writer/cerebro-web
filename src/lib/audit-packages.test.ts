@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   auditEvidenceDecision,
+  auditEvidenceScope,
+  auditEvidenceVisibility,
   buildActionableControlOwnerRows,
   buildAuditExportManifestRows,
   buildAuditPackageSummary,
@@ -57,6 +59,17 @@ describe("audit package helpers", () => {
     expect(auditEvidenceDecision({ status: "ready", quality: "stale" })).toBe("needs_replacement");
     expect(auditEvidenceDecision({ status: "ready", reviewStatus: "rejected" })).toBe("rejected");
     expect(auditEvidenceDecision({ status: "ready", quality: "ready" })).toBe("included");
+    expect(auditEvidenceDecision({ status: "ready_for_auditor" })).toBe("included");
+  });
+
+  it("separates evidence scope from auditor visibility", () => {
+    expect(auditEvidenceScope("excluded")).toBe("excluded");
+    expect(auditEvidenceScope("internal_only")).toBe("internal_only");
+    expect(auditEvidenceScope("accepted")).toBe("included");
+    expect(auditEvidenceVisibility({ decision: "accepted", owner: "Security", reviewStatus: "accepted", status: "ready" })).toBe("ready_for_auditor");
+    expect(auditEvidenceVisibility({ decision: "accepted", owner: "", reviewStatus: "accepted", status: "ready" })).toBe("needs_owner");
+    expect(auditEvidenceVisibility({ decision: "included", owner: "Security", reviewStatus: "needs_review", status: "ready" })).toBe("needs_reviewer");
+    expect(auditEvidenceVisibility({ decision: "internal_only", owner: "Security", status: "internal_only" })).toBe("internal_only");
   });
 
   it("marks packages with failing controls or missing evidence as needing evidence", () => {
@@ -170,6 +183,7 @@ describe("audit package helpers", () => {
             quality: "ready",
             required: true,
             review_status: "accepted",
+            owner_domain: "Security",
             status: "ready",
             title: "Access review",
           },
@@ -181,6 +195,7 @@ describe("audit package helpers", () => {
             freshness: { status: "fresh" },
             id: "packet-1",
             reason: "Runtime export includes the control test and source event.",
+            review: { id: "review-1", subject_id: "packet-1", status: "accepted", actor: "auditor@example.com" },
             request_id: "request-1",
             status: "ready",
           },
@@ -190,9 +205,98 @@ describe("audit package helpers", () => {
 
     expect(rows[0]).toMatchObject({
       decision: "accepted",
+      owner: "Security",
       packets: 1,
       reason: "Runtime export includes the control test and source event.",
+      reviewer: "auditor@example.com",
+      scope: "included",
+      visibility: "ready_for_auditor",
     });
+  });
+
+  it("carries visibility blockers and reviewers into evidence rows", () => {
+    const rows = buildEvidenceCurationRows({
+      evidencePackets: {
+        evidence_requests: [
+          {
+            control_id: "SOC 2 CC6.1",
+            evidence_packet_ids: ["packet-owner"],
+            id: "request-owner",
+            quality: "ready",
+            required: true,
+            review_status: "accepted",
+            status: "ready",
+            title: "Access review",
+          },
+          {
+            control_id: "SOC 2 CC7.2",
+            evidence_packet_ids: ["packet-review"],
+            id: "request-review",
+            owner_domain: "Security",
+            quality: "ready",
+            required: true,
+            review_status: "needs_review",
+            status: "ready",
+            title: "Log review",
+          },
+          {
+            control_id: "SOC 2 CC8.1",
+            evidence_packet_ids: ["packet-internal"],
+            id: "request-internal",
+            owner_domain: "Security",
+            quality: "ready",
+            required: true,
+            review_status: "accepted",
+            status: "internal_only",
+            title: "Internal memo",
+          },
+          {
+            control_id: "SOC 2 CC9.1",
+            id: "request-excluded",
+            owner_domain: "Security",
+            quality: "ready",
+            required: false,
+            review_status: "accepted",
+            status: "out_of_scope",
+            title: "Excluded evidence",
+          },
+        ],
+        evidence_packets: [
+          {
+            citations: {},
+            export_artifact: { format: "markdown" },
+            freshness: { status: "fresh" },
+            id: "packet-owner",
+            request_id: "request-owner",
+            status: "ready",
+          },
+          {
+            citations: {},
+            export_artifact: { format: "markdown" },
+            freshness: { status: "fresh" },
+            id: "packet-review",
+            request_id: "request-review",
+            review: { id: "review-2", subject_id: "packet-review", status: "needs_review", actor: "reviewer@example.com" },
+            status: "ready",
+          },
+          {
+            citations: {},
+            export_artifact: { format: "markdown" },
+            freshness: { status: "fresh" },
+            id: "packet-internal",
+            request_id: "request-internal",
+            status: "internal_only",
+          },
+        ],
+      } as GRCEvidencePacketsResponse,
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ id: "request-owner", owner: "Unassigned", scope: "included", visibility: "needs_owner" }),
+      expect.objectContaining({ id: "request-review", reviewer: "reviewer@example.com", scope: "included", visibility: "needs_reviewer" }),
+      expect.objectContaining({ id: "request-internal", scope: "internal_only", visibility: "internal_only" }),
+      expect.objectContaining({ id: "request-excluded", scope: "excluded", visibility: "excluded" }),
+    ]);
   });
 
   it("derives evidence reasons when packet records do not provide one", () => {
@@ -268,12 +372,16 @@ describe("audit package helpers", () => {
         freshness: "7d",
         id: "request-1",
         packets: 1,
+        owner: "Security",
         quality: "ready",
         reason: "Reviewer decision is pending.",
         review: "manual_review",
+        reviewer: "Unassigned",
         source: "GitHub",
+        scope: "included",
         status: "needs_review",
         title: "Access review",
+        visibility: "needs_reviewer",
       },
       {
         controlID: "SOC 2 CC7.1",
@@ -281,12 +389,16 @@ describe("audit package helpers", () => {
         freshness: "30d",
         id: "request-2",
         packets: 1,
+        owner: "Security",
         quality: "ready",
         reason: "1 packet accepted from AWS.",
         review: "accepted",
+        reviewer: "auditor@example.com",
         source: "AWS",
+        scope: "included",
         status: "ready",
         title: "Cloud logs",
+        visibility: "ready_for_auditor",
       },
     ];
     const ownerRows: ControlOwnerRow[] = [
@@ -494,12 +606,16 @@ describe("audit package helpers", () => {
           freshness: "7d",
           id: "request-1",
           packets: 1,
+          owner: "Security",
           quality: "ready",
           reason: "Reviewer decision is pending.",
           review: "manual_review",
+          reviewer: "Unassigned",
           source: "GitHub",
+          scope: "included",
           status: "needs_review",
           title: "Access review",
+          visibility: "needs_reviewer",
         },
       ],
       ownerRows,
