@@ -190,6 +190,13 @@ describe("connector catalog metadata", () => {
       runtime_executable: true,
       auth_model: "oauth_client_credentials",
       verification_endpoint: "/users",
+      priority_tier: "urgent",
+      priority_reasons: ["identity_family"],
+      missing_families: ["user_roles"],
+      provider_api_status: "mapped",
+      provider_api_auth_mechanics: "oauth scopes",
+      provider_api_spec_url: "auth0-provider-api-spec",
+      provider_api_proof_gaps: ["runtime_fixture_missing"],
       catalog_categories: ["identity"],
       resource_families: [
         {
@@ -256,6 +263,9 @@ describe("connector catalog metadata", () => {
     expect(connectorSearchText(connector)).toContain("catalog/identity.yaml");
     expect(connectorSearchText(connector)).toContain("identity_configuration");
     expect(connectorSearchText(connector)).toContain("soc 2 cc6.1");
+    expect(connectorSearchText(connector)).toContain("runtime_fixture_missing");
+    expect(connectorSearchText(connector)).toContain("user_roles");
+    expect(connectorSearchText(connector)).toContain("oauth scopes");
   });
 
   it("treats advertised connection methods as a live runtime surface", () => {

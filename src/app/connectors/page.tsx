@@ -54,6 +54,8 @@ import {
   connectorResourceTypeStats,
   connectorRuntimeTotal,
   filterConnectorCards,
+  providerAPIProofMetrics,
+  providerAPIProofQueue,
   readinessDescriptions,
   readinessLabels,
   readinessOrder,
@@ -540,6 +542,63 @@ function resourceTypeTotalsForCards(cards: ConnectorCard[]) {
   };
 }
 
+function ProviderAPIProofPanel({
+  items,
+  metrics,
+}: {
+  items: ReturnType<typeof providerAPIProofQueue>;
+  metrics: ReturnType<typeof providerAPIProofMetrics>;
+}) {
+  return (
+    <Panel title="API proof queue" action={<Badge value={`${metrics.needsAction} open`} />}>
+      <div className="grid grid-cols-3 gap-2">
+        <SourceSignal label="Needs action" value={metrics.needsAction} attention={metrics.needsAction > 0} />
+        <SourceSignal label="Verified" value={metrics.verified} />
+        <SourceSignal label="Avg score" value={metrics.averageScore === null ? "No score" : `${metrics.averageScore}/100`} attention={metrics.averageScore !== null && metrics.averageScore < 90} />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <SourceSignal label="Find API" value={metrics.needsDiscovery} attention={metrics.needsDiscovery > 0} />
+        <SourceSignal label="Map families" value={metrics.needsMapping} attention={metrics.needsMapping > 0} />
+        <SourceSignal label="Add proof" value={metrics.needsProof} attention={metrics.needsProof > 0} />
+      </div>
+      <div className="mt-3 space-y-2">
+        {items.map((item) => (
+          <Link key={item.sourceID} href={item.href} className="block rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-3 transition hover:border-[color:var(--border-strong)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{item.displayName}</div>
+                <div className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{item.detail}</div>
+              </div>
+              <div className="shrink-0 text-right">
+                <Badge value={item.label} />
+                <div className="mt-1 text-[11px] text-[var(--text-muted)]">{item.score === null ? item.tier : `${item.score}/100`}</div>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {item.missing.slice(0, 3).map((missing) => (
+                <span key={missing} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {connectorCapabilityLabel(missing)}
+                </span>
+              ))}
+              {item.missing.length > 3 && (
+                <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {item.missing.length - 3} more
+                </span>
+              )}
+              {item.missing.length === 0 && item.reasons.slice(0, 2).map((reason) => (
+                <span key={reason} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {connectorCapabilityLabel(reason)}
+                </span>
+              ))}
+            </div>
+          </Link>
+        ))}
+        {items.length === 0 && <EmptyBlock label="No API proof work in this source set." />}
+      </div>
+    </Panel>
+  );
+}
+
 function CatalogResourceTypesPanel({ cards, tenantID }: { cards: ConnectorCard[]; tenantID: string }) {
   const requestable = cards.filter((card) => !connectorSetupAllowed(card) && card.requestable);
   const runtimeReady = requestable.filter((card) => card.readiness_stage === "sourcegen_ready").length;
@@ -738,6 +797,8 @@ export default function ConnectorsPage() {
   const totalConnections = cards.reduce((sum, card) => sum + connectorRuntimeTotal(card), 0);
   const actionConnections = cards.reduce((sum, card) => sum + connectorAttentionTotal(card), 0);
   const resourceTypeTotals = resourceTypeTotalsForCards(cards);
+  const apiProofMetrics = useMemo(() => providerAPIProofMetrics(cards), [cards]);
+  const apiProofQueue = useMemo(() => providerAPIProofQueue(cards, { tenantID: debouncedTenantID }), [cards, debouncedTenantID]);
   const filterChips = [
     { label: "Tenant", value: tenantID, onClear: () => setTenantID("") },
     { label: "Source", value: sourceID, onClear: () => setSourceID("") },
@@ -796,7 +857,7 @@ export default function ConnectorsPage() {
         }
       />
 
-      <div className="hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-5">
+      <div className="hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-6">
         <MetricCard label="Available" value={cards.length} detail="library connectors" state={metricState} />
         <MetricCard label="Connected" value={connectedCards.length} detail={`${totalConnections} runtime mappings`} intent="success" state={metricState} />
         <div className="hidden md:block">
@@ -807,6 +868,9 @@ export default function ConnectorsPage() {
         </div>
         <div className="hidden md:block">
           <MetricCard label="Resource Types" value={resourceTypeTotals.sources} detail={`${resourceTypeTotals.resourceTypes} catalog-backed`} intent={resourceTypeTotals.sources > 0 ? "success" : "neutral"} state={metricState} />
+        </div>
+        <div className="hidden md:block">
+          <MetricCard label="API proof" value={apiProofMetrics.needsAction} detail="sources need proof work" intent={apiProofMetrics.needsAction > 0 ? "warning" : "success"} state={metricState} />
         </div>
       </div>
 
@@ -910,6 +974,7 @@ export default function ConnectorsPage() {
         </Panel>
 
         <div className="space-y-5">
+          <ProviderAPIProofPanel items={apiProofQueue} metrics={apiProofMetrics} />
           <CatalogResourceTypesPanel cards={cards} tenantID={debouncedTenantID} />
           <CustomConnectorPanel definitions={customDefinitions} error={definitionsQuery.error} onRetry={() => void definitionsQuery.reload()} tenantID={debouncedTenantID} />
           <ReadinessMix counts={readinessCounts} filter={readinessFilter} onFilter={setReadinessFilter} />

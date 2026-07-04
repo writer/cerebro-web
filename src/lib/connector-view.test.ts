@@ -13,6 +13,9 @@ import {
   connectorResourceFamilySchemaRef,
   connectorPrimaryAction,
   filterConnectorCards,
+  providerAPIProofMetrics,
+  providerAPIProofQueue,
+  providerAPIProofState,
 } from "./connector-view";
 import { connectorDisplayName } from "./connectors";
 
@@ -167,6 +170,106 @@ describe("connector view model", () => {
       distinctResourceTypes: 3,
       highValueResourceTypes: 2,
       coverageItems: 3,
+    });
+  });
+
+  it("classifies provider API proof work without treating docs as supported proof", () => {
+    expect(providerAPIProofState({
+      source_id: "docs-needed",
+      name: "Docs needed",
+      priority: 92,
+      priority_tier: "urgent",
+      missing_families: ["users"],
+    })).toBe("needs_discovery");
+    expect(providerAPIProofState({
+      source_id: "mapping-needed",
+      name: "Mapping needed",
+      has_provider_api_contract: true,
+      provider_api_references: ["provider-api-reference"],
+      provider_api_missing_families: ["groups"],
+    })).toBe("needs_mapping");
+    expect(providerAPIProofState({
+      source_id: "proof-needed",
+      name: "Proof needed",
+      has_provider_api_contract: true,
+      has_provider_api_mapping: true,
+      provider_api_references: ["provider-api-reference"],
+      provider_api_auth_evidence: ["oauth_scopes"],
+      provider_api_proof_score: 80,
+      provider_api_proof_gaps: ["runtime_fixture_missing"],
+    })).toBe("needs_proof");
+    expect(providerAPIProofState({
+      source_id: "verified",
+      name: "Verified",
+      has_provider_api_contract: true,
+      has_provider_api_mapping: true,
+      has_provider_api_proof: true,
+      provider_api_references: ["provider-api-reference"],
+      provider_api_auth_evidence: ["oauth_scopes"],
+      provider_api_scope_evidence: ["read:users"],
+      provider_api_proof_score: 100,
+    })).toBe("verified");
+  });
+
+  it("prioritizes provider API proof queue by actionable state and evidence risk", () => {
+    const cards = buildConnectorCards(
+      [
+        {
+          source_id: "unscoped",
+          name: "Unscoped source",
+        },
+        {
+          source_id: "verified",
+          name: "Verified source",
+          has_provider_api_contract: true,
+          has_provider_api_mapping: true,
+          has_provider_api_proof: true,
+          provider_api_references: ["provider-api-reference"],
+          provider_api_auth_evidence: ["api_key"],
+          provider_api_scope_evidence: ["read"],
+          provider_api_proof_score: 100,
+        },
+        {
+          source_id: "github",
+          name: "GitHub",
+          has_provider_api_contract: true,
+          has_provider_api_mapping: true,
+          provider_api_proof_score: 74,
+          provider_api_proof_gaps: ["scope_evidence_missing"],
+        },
+        {
+          source_id: "openai",
+          name: "OpenAI",
+          priority: 99,
+          priority_tier: "urgent",
+          priority_reasons: ["identity_family"],
+          missing_families: ["users", "groups", "service_accounts"],
+          next_action: "Find API reference.",
+        },
+        {
+          source_id: "jira",
+          name: "Jira",
+          has_provider_api_contract: true,
+          provider_api_references: ["jira-provider-api-reference"],
+          provider_api_missing_families: ["audit_events", "groups"],
+        },
+      ],
+      [],
+    );
+
+    const queue = providerAPIProofQueue(cards, { tenantID: "tenant-a" });
+
+    expect(queue.map((item) => item.sourceID)).toEqual(["openai", "jira", "github"]);
+    expect(queue[0]).toMatchObject({ label: "Find API source", tier: "urgent", priority: 111 });
+    expect(queue[0].href).toBe("/connectors/openai?tenant_id=tenant-a");
+    expect(providerAPIProofMetrics(cards)).toMatchObject({
+      total: 4,
+      needsAction: 3,
+      needsDiscovery: 1,
+      needsMapping: 1,
+      needsProof: 1,
+      verified: 1,
+      averageScore: 87,
     });
   });
 });
