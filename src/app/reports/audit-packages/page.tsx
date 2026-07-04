@@ -6,8 +6,12 @@ import Link from "next/link";
 import DataTable, { type TableColumn } from "@/components/grc/DataTable";
 import { AppliedFilterChips, Badge, ErrorBlock, LoadingBlock, MetricCard, PageHeader, Panel } from "@/components/grc/Primitives";
 import {
+  auditWorkflowStateLabel,
   auditEvidenceDecisionLabel,
   auditPackageStateLabel,
+  type AuditExportManifestRow,
+  type AuditReadinessRow,
+  type AuditorQuestionRow,
   type ControlOwnerRow,
   type EvidenceCurationRow,
   type FrameworkCoverageRow,
@@ -15,18 +19,45 @@ import {
   type SourceTrustRow,
   type TeamQueueRow,
 } from "@/lib/audit-packages";
-import { CONTROL_PROFILE_OPTIONS, DEFAULT_CONTROL_PROFILE_ID, useAuditPackageView } from "@/lib/audit-package-view";
-import { countLabel } from "@/lib/format";
+import { CONTROL_PROFILE_OPTIONS, DEFAULT_CONTROL_PROFILE_ID, useAuditPackageParams, useAuditPackageView } from "@/lib/audit-package-view";
 import { displayDate, humanize, shortEntity } from "@/lib/grc";
 import { grcPath } from "@/lib/grc-client";
-import { useQueryParamState } from "@/lib/query-params";
 
 const inputClass = "mt-1 w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)]";
 const labelClass = "text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)]";
 const buttonClass = "inline-flex items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]";
 
+const decisionRank = (decision: EvidenceCurationRow["decision"]) => ({
+  needs_replacement: 0,
+  rejected: 1,
+  needs_review: 2,
+  candidate: 3,
+  included: 4,
+  accepted: 5,
+  internal_only: 6,
+  excluded: 7,
+}[decision]);
+
+const readinessRank = (state: AuditReadinessRow["state"]) => ({
+  blocked: 0,
+  needs_review: 1,
+  waiting: 2,
+  ready: 3,
+}[state]);
+
+const statusNeedsAttention = (status: string) => /blocked|failed|missing|needs|overdue|rejected|stale/i.test(status);
+const generatedPrefix = "Generated ";
+const readinessDetail = (row: AuditReadinessRow) =>
+  row.id === "snapshot" && row.detail.startsWith(generatedPrefix)
+    ? `${generatedPrefix}${displayDate(row.detail.slice(generatedPrefix.length))}`
+    : row.detail;
+const manifestValue = (row: AuditExportManifestRow) =>
+  row.id === "generated" && typeof row.value === "string" && row.value !== "Not generated"
+    ? displayDate(row.value)
+    : row.value;
+
 const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
-  { key: "decision", label: "Decision", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} /> },
+  { key: "decision", label: "Decision", render: (_value, row) => <Badge value={auditEvidenceDecisionLabel(row.decision)} />, sortValue: (row) => decisionRank(row.decision) },
   {
     key: "title",
     label: "Evidence request",
@@ -43,6 +74,44 @@ const evidenceColumns: TableColumn<EvidenceCurationRow>[] = [
   { key: "review", label: "Review", render: (_value, row) => <Badge value={row.review} /> },
   { key: "packets", label: "Packets" },
   { key: "source", label: "Accepted from" },
+];
+
+const readinessColumns: TableColumn<AuditReadinessRow>[] = [
+  {
+    key: "title",
+    label: "Gate",
+    render: (_value, row) => (
+      <div className="min-w-[14rem]">
+        <div className="font-medium text-[var(--text-primary)]">{row.title}</div>
+        <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">{readinessDetail(row)}</div>
+      </div>
+    ),
+  },
+  { key: "state", label: "State", render: (_value, row) => <Badge value={auditWorkflowStateLabel(row.state)} />, sortValue: (row) => readinessRank(row.state) },
+  { key: "owner", label: "Owner" },
+  { key: "action", label: "Action" },
+];
+
+const auditorQuestionColumns: TableColumn<AuditorQuestionRow>[] = [
+  { key: "area", label: "Area", render: (_value, row) => <Badge value={row.area} /> },
+  {
+    key: "question",
+    label: "Question",
+    render: (_value, row) => (
+      <div className="min-w-[18rem]">
+        <div className="line-clamp-2 font-medium text-[var(--text-primary)]">{row.question}</div>
+        <div className="mt-0.5 line-clamp-1 text-[12px] text-[var(--text-muted)]">{row.source}</div>
+      </div>
+    ),
+  },
+  { key: "owner", label: "Owner" },
+  { key: "status", label: "State", render: (_value, row) => <Badge value={row.status} />, sortValue: (row) => statusNeedsAttention(row.status) ? 0 : 1 },
+];
+
+const manifestColumns: TableColumn<AuditExportManifestRow>[] = [
+  { key: "label", label: "Record" },
+  { key: "value", label: "Value", render: (_value, row) => manifestValue(row) },
+  { key: "state", label: "State", render: (_value, row) => <Badge value={row.state} />, sortValue: (row) => statusNeedsAttention(row.state) ? 0 : 1 },
 ];
 
 const controlColumns: TableColumn<ControlOwnerRow>[] = [
@@ -108,16 +177,25 @@ const exceptionColumns: TableColumn<ScopeExceptionRow>[] = [
 ];
 
 export default function AuditPackagesPage() {
-  const [tenantID, setTenantID] = useQueryParamState("tenant_id");
-  const [profileID, setProfileID] = useQueryParamState("profile");
-  const [framework, setFramework] = useQueryParamState("framework");
-  const [controlID, setControlID] = useQueryParamState("control");
+  const {
+    clear: clearFilters,
+    controlID,
+    framework,
+    profileID,
+    setControlID,
+    setFramework,
+    setProfileID,
+    setTenantID,
+    tenantID,
+  } = useAuditPackageParams();
   const view = useAuditPackageView({ controlID, framework, profileID, tenantID });
   const {
+    auditorQuestionRows,
     debouncedTenantID,
     errors,
     evidenceRows,
     exceptionRows,
+    exportManifestRows,
     frameworkOptions,
     frameworkRows,
     generatedAt,
@@ -125,6 +203,7 @@ export default function AuditPackagesPage() {
     loading,
     metadata,
     ownerRows,
+    readinessRows,
     reload,
     selectedProfileID,
     snapshotID,
@@ -138,12 +217,6 @@ export default function AuditPackagesPage() {
     { label: "Framework", value: framework, onClear: () => setFramework("") },
     { label: "Control", value: controlID, onClear: () => setControlID("") },
   ];
-  const clearFilters = () => {
-    setTenantID("");
-    setProfileID("");
-    setFramework("");
-    setControlID("");
-  };
 
   return (
     <div className="space-y-6">
@@ -217,11 +290,17 @@ export default function AuditPackagesPage() {
             </div>
           }
         >
-          <div className="grid gap-4 lg:grid-cols-3">
-            <PackageStep title="Curate evidence" state={summary.missingEvidence > 0 || summary.staleEvidence > 0 ? "Needs work" : "Ready"} detail={`${countLabel(evidenceRows.length, "candidate")} loaded for review.`} />
-            <PackageStep title="Approve package" state={summary.openReviews > 0 ? "Needs review" : summary.failingControls > 0 ? "Blocked" : "Ready"} detail={`${summary.openReviews} open review records.`} />
-            <PackageStep title="Publish snapshot" state={summary.state === "approved" || summary.state === "published" ? "Ready" : "Waiting"} detail={`Snapshot ${shortEntity(snapshotID)} is prepared for share-safe review.`} />
-          </div>
+          <DataTable
+            rows={readinessRows}
+            columns={readinessColumns}
+            defaultSort={{ key: "state" }}
+            emptyMessage="No audit readiness checks are available."
+            filterKeys={["title", "state", "owner", "action"]}
+            getRowKey={(row) => row.id}
+            pageSize={5}
+            resultNoun="readiness checks"
+            showSearch={false}
+          />
         </Panel>
 
         <Panel
@@ -245,9 +324,33 @@ export default function AuditPackagesPage() {
               <SmallStat label="Sources" value={metadata?.provenance?.source_ids?.length ?? summary.sourceCount} />
               <SmallStat label="Exclusions" value={summary.exclusions} />
             </div>
+            <DataTable
+              rows={exportManifestRows}
+              columns={manifestColumns}
+              defaultSort={{ key: "state" }}
+              emptyMessage="No export manifest records are available."
+              filterKeys={["label", "state", "value"]}
+              getRowKey={(row) => row.id}
+              pageSize={6}
+              resultNoun="manifest records"
+              showSearch={false}
+            />
           </div>
         </Panel>
       </div>
+
+      <Panel title="Auditor questions">
+        <DataTable
+          rows={auditorQuestionRows}
+          columns={auditorQuestionColumns}
+          defaultSort={{ key: "status" }}
+          emptyMessage="No auditor questions are queued for this package."
+          filterKeys={["area", "question", "owner", "source", "status"]}
+          getRowKey={(row) => row.id}
+          pageSize={10}
+          resultNoun="questions"
+        />
+      </Panel>
 
       <Panel title="Evidence curation">
         <DataTable
@@ -259,6 +362,7 @@ export default function AuditPackagesPage() {
           pageSize={10}
           resultLimit={25}
           resultNoun="evidence requests"
+          defaultSort={{ key: "decision" }}
         />
       </Panel>
 
@@ -274,6 +378,7 @@ export default function AuditPackagesPage() {
             pageSize={8}
             resultLimit={25}
             resultNoun="controls"
+            defaultSort={{ key: "missing", desc: true }}
           />
         </Panel>
 
@@ -287,6 +392,7 @@ export default function AuditPackagesPage() {
             pageSize={8}
             resultLimit={25}
             resultNoun="owner items"
+            defaultSort={{ key: "missing", desc: true }}
           />
         </Panel>
       </div>
@@ -302,6 +408,7 @@ export default function AuditPackagesPage() {
             pageSize={8}
             resultLimit={25}
             resultNoun="team items"
+            defaultSort={{ key: "status" }}
           />
         </Panel>
 
@@ -343,6 +450,7 @@ export default function AuditPackagesPage() {
             pageSize={8}
             resultLimit={25}
             resultNoun="frameworks"
+            defaultSort={{ key: "needsAction", desc: true }}
           />
         </Panel>
 
@@ -357,6 +465,7 @@ export default function AuditPackagesPage() {
             pageSize={8}
             resultLimit={25}
             resultNoun="sources"
+            defaultSort={{ key: "status" }}
           />
         </Panel>
       </div>
@@ -372,6 +481,7 @@ export default function AuditPackagesPage() {
             pageSize={8}
             resultLimit={25}
             resultNoun="exceptions"
+            defaultSort={{ key: "kind" }}
           />
         ) : (
           <div className="rounded-lg border border-dashed border-[color:var(--border-strong)] px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">
@@ -379,18 +489,6 @@ export default function AuditPackagesPage() {
           </div>
         )}
       </Panel>
-    </div>
-  );
-}
-
-function PackageStep({ detail, state, title }: { detail: string; state: string; title: string }) {
-  return (
-    <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface)] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</div>
-        <Badge value={state} />
-      </div>
-      <div className="mt-2 text-[12px] leading-5 text-[var(--text-muted)]">{detail}</div>
     </div>
   );
 }

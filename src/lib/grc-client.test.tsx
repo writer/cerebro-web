@@ -1,6 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+/**
+ * @vitest-environment jsdom
+ */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { downloadGRCExport, grcEntityImpactPath, grcExportFilename, grcPath, grcQueryKey, GRC_QUERY_TIMEOUT_MS, grcResponseErrorMessage, grcTimeoutMessage } from "./grc-client";
+import { ApiKeyProvider } from "@/components/providers";
+
+import { downloadGRCExport, grcEntityImpactPath, grcExportFilename, grcPath, grcQueryKey, GRC_QUERY_TIMEOUT_MS, grcResponseErrorMessage, grcTimeoutMessage, useGRCMutation } from "./grc-client";
 
 describe("grc client error copy", () => {
   it("includes status, endpoint, elapsed time, and upstream text", () => {
@@ -111,5 +119,101 @@ describe("grc export helpers", () => {
       expect(result.error).toContain("(500)");
       expect(result.error).toContain("/grc/controls/export");
     }
+  });
+});
+
+const reactActEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
+const flushReactUpdates = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function GRCMutationHarness() {
+  const mutation = useGRCMutation<{ saved: boolean }>();
+  const [result, setResult] = useState("");
+
+  return (
+    <div>
+      <span id="mutation-result">{result}</span>
+      <span id="mutation-error">{mutation.error ?? ""}</span>
+      <button
+        id="run-mutation"
+        type="button"
+        onClick={() => {
+          void mutation.mutate("/grc/actions", { name: "ready" }, "PATCH")
+            .then((response) => setResult(response.saved ? "saved" : "done"))
+            .catch(() => undefined);
+        }}
+      >
+        Run
+      </button>
+    </div>
+  );
+}
+
+describe("useGRCMutation", () => {
+  let container: HTMLDivElement;
+  let queryClient: QueryClient;
+  let root: Root;
+
+  beforeEach(() => {
+    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    window.localStorage.setItem("cerebro.apiKey", "key-a");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    });
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    window.localStorage.clear();
+    queryClient.clear();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("runs JSON mutations through TanStack Query and invalidates GRC reads", async () => {
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ saved: true }), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      })));
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <ApiKeyProvider>
+            <GRCMutationHarness />
+          </ApiKeyProvider>
+        </QueryClientProvider>,
+      );
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#run-mutation")?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await flushReactUpdates();
+    });
+
+    expect(container.querySelector("#mutation-result")?.textContent).toBe("saved");
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/cerebro/grc/actions",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "ready" }),
+        method: "PATCH",
+      }),
+    );
+    const headers = (vi.mocked(fetch).mock.calls[0][1] as RequestInit).headers as Headers;
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("X-API-Key")).toBe("key-a");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["grc", "key-a"] });
   });
 });

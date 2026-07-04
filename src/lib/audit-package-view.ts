@@ -1,9 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { parseAsString, useQueryStates, type UrlKeys } from "nuqs";
+import { useCallback, useMemo } from "react";
 
 import {
+  buildAuditExportManifestRows,
+  buildAuditReadinessRows,
   buildAuditPackageSummary,
+  buildAuditorQuestionRows,
   buildControlOwnerRows,
   buildEvidenceCurationRows,
   buildFrameworkCoverageRows,
@@ -29,6 +33,64 @@ export const CONTROL_PROFILE_OPTIONS = [
   "nist-csf-20-core",
   "privacy-ai-governance",
 ];
+
+const auditPackageSearchParams = {
+  controlID: parseAsString.withDefault(""),
+  framework: parseAsString.withDefault(""),
+  profileID: parseAsString.withDefault(""),
+  tenantID: parseAsString.withDefault(""),
+};
+
+const auditPackageUrlKeys: UrlKeys<typeof auditPackageSearchParams> = {
+  controlID: "control",
+  profileID: "profile",
+  tenantID: "tenant_id",
+};
+
+const normalizeSearchParamValue = (value: string) => {
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+};
+
+export function useAuditPackageParams() {
+  const [params, setParams] = useQueryStates(auditPackageSearchParams, {
+    clearOnDefault: true,
+    history: "replace",
+    scroll: false,
+    shallow: true,
+    urlKeys: auditPackageUrlKeys,
+  });
+
+  const setTenantID = useCallback((value: string) => {
+    void setParams({ tenantID: normalizeSearchParamValue(value) });
+  }, [setParams]);
+  const setProfileID = useCallback((value: string) => {
+    void setParams({ profileID: normalizeSearchParamValue(value) });
+  }, [setParams]);
+  const setFramework = useCallback((value: string) => {
+    void setParams({ framework: normalizeSearchParamValue(value) });
+  }, [setParams]);
+  const setControlID = useCallback((value: string) => {
+    void setParams({ controlID: normalizeSearchParamValue(value) });
+  }, [setParams]);
+  const clear = useCallback(() => {
+    void setParams({
+      controlID: null,
+      framework: null,
+      profileID: null,
+      tenantID: null,
+    });
+  }, [setParams]);
+
+  return {
+    ...params,
+    clear,
+    setControlID,
+    setFramework,
+    setProfileID,
+    setTenantID,
+  };
+}
 
 export function useAuditPackageView({
   controlID,
@@ -95,6 +157,18 @@ export function useAuditPackageView({
   ].filter((error): error is string => Boolean(error));
   const snapshotID = evidencePacketsQuery.data?.snapshot?.id || controlPacketQuery.data?.packet.selection_id || `${selectedProfileID}-current`;
   const generatedAt = evidencePacketsQuery.data?.generated_at || controlPacketQuery.data?.generated_at || dashboardQuery.data?.generated_at || "";
+  const readinessRows = useMemo(
+    () => buildAuditReadinessRows(summary, snapshotID, generatedAt),
+    [generatedAt, snapshotID, summary],
+  );
+  const auditorQuestionRows = useMemo(
+    () => buildAuditorQuestionRows({ evidenceRows, ownerRows, sourceRows, limit: 10 }),
+    [evidenceRows, ownerRows, sourceRows],
+  );
+  const exportManifestRows = useMemo(
+    () => buildAuditExportManifestRows({ generatedAt, snapshotID, summary }),
+    [generatedAt, snapshotID, summary],
+  );
   const frameworkOptions = useMemo(
     () => Array.from(new Set([
       ...supportedGRCFrameworkNames,
@@ -112,10 +186,12 @@ export function useAuditPackageView({
   };
 
   return {
+    auditorQuestionRows,
     debouncedTenantID,
     errors,
     evidenceRows,
     exceptionRows,
+    exportManifestRows,
     frameworkOptions,
     frameworkRows,
     generatedAt,
@@ -123,6 +199,7 @@ export function useAuditPackageView({
     loading,
     metadata,
     ownerRows,
+    readinessRows,
     reload,
     selectedProfileID,
     snapshotID,

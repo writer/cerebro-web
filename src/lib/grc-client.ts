@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
@@ -250,34 +250,40 @@ export function useDebouncedValue<T>(value: T, delayMs = 300) {
   return debouncedValue;
 }
 
+type GRCMutationRequest = {
+  body: unknown;
+  method: string;
+  path: string;
+};
+
 export function useGRCMutation<T = unknown>() {
   const { apiKey } = useApiKey();
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const mutate = useCallback(async (path: string, body: unknown, method = "POST") => {
-    setSaving(true);
-    setError(null);
-    try {
+  const queryClient = useQueryClient();
+  const [clientError, setError] = useState<string | null>(null);
+  const mutation = useMutation<T, Error, GRCMutationRequest>({
+    mutationFn: async ({ body, method, path }) => {
       const response = await fetchCerebro<T>(path, apiKey, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
       if (!response.ok) {
         throw new Error(grcResponseErrorMessage(path, response.status, response.data));
       }
       return response.data;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : grcResponseErrorMessage(path, 0, null);
-      setError(message);
-      throw err;
-    } finally {
-      setSaving(false);
-    }
-  }, [apiKey]);
+    },
+    onMutate: () => {
+      setError(null);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["grc", apiKey ?? ""] });
+    },
+  });
+  const { error, isPending, mutateAsync } = mutation;
+  const mutate = useCallback((path: string, body: unknown, method = "POST") =>
+    mutateAsync({ body, method, path }), [mutateAsync]);
 
-  return { mutate, saving, error, setError };
+  return { mutate, saving: isPending, error: clientError ?? error?.message ?? null, setError };
 }
 
 export function useGRCFormMutation<T = unknown>({ timeoutMs = GRC_FORM_MUTATION_TIMEOUT_MS } = {}) {

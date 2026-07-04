@@ -22,6 +22,11 @@ import { grcLoadedRowsCopy } from "@/lib/grc-list";
 
 type SortValue = boolean | Date | number | string | null | undefined;
 
+export type DataTableSort = {
+  desc?: boolean;
+  key: string;
+};
+
 export type TableColumn<Row extends object = Record<string, unknown>> = {
   key: string;
   label?: string;
@@ -92,8 +97,10 @@ export type DataTableProps<Row extends object = Record<string, unknown>> = {
   columns?: TableColumn<Row>[];
   emptyMessage?: string;
   searchPlaceholder?: string;
+  showSearch?: boolean;
   filterKeys?: string[];
   pageSize?: number;
+  defaultSort?: DataTableSort;
   virtualizationThreshold?: number;
   getRowHref?: (row: Row) => string | undefined;
   getRowKey?: (row: Row, index: number) => string;
@@ -134,8 +141,10 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   columns,
   emptyMessage = "No rows available.",
   searchPlaceholder = "Filter loaded rows",
+  showSearch = true,
   filterKeys,
   pageSize = 10,
+  defaultSort,
   virtualizationThreshold = DEFAULT_VIRTUALIZATION_THRESHOLD,
   getRowHref,
   getRowKey,
@@ -149,7 +158,9 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
 }: DataTableProps<Row>) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>(() =>
+    defaultSort ? [{ desc: Boolean(defaultSort.desc), id: defaultSort.key }] : [],
+  );
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const sourceRows = useMemo(() => rows ?? [], [rows]);
   const safePageSize = Math.max(1, pageSize);
@@ -280,15 +291,17 @@ export default function DataTable<Row extends object = Record<string, unknown>>(
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <input
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setPage(1);
-          }}
-          placeholder={searchPlaceholder}
-          className="w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)] sm:max-w-xs"
-        />
+        {showSearch && (
+          <input
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(1);
+            }}
+            placeholder={searchPlaceholder}
+            className="w-full rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--ring)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ring)] sm:max-w-xs"
+          />
+        )}
         <div className="text-xs text-[var(--text-muted)]">
           {queryActive ? filteredCopy : resultCopy}
           {totalPages > 1 && (
