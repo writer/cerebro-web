@@ -59,7 +59,7 @@ jobs:
         id: image
         shell: bash
         env:
-          INPUT_TAG: ${{ github.event.inputs.image_tag || '' }}
+          INPUT_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event['inputs']['image_tag'] || '' }}
         run: |
           set -euo pipefail
           short_sha="${GITHUB_SHA::12}"
@@ -288,20 +288,34 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     if: github.ref_type == 'branch' && github.ref_name == 'main'
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     steps:
+      - name: Fetch secrets from Infisical
+        uses: WriterInternal/devops-github-actions/infisical-secrets@2b7c38445cb1b9c43f88d7ec990ccb1534078ae8 # v2.4.0
+        with:
+          org-identity-id: ${{ secrets.INFISICAL_ORG_IDENTITY_UUID }}
+          org-project-slug: ${{ secrets.INFISICAL_ORG_PROJECT_SLUG }}
+          repo-identity-id: ${{ secrets.INFISICAL_REPO_IDENTITY_UUID }}
+          repo-project-slug: ${{ secrets.INFISICAL_REPO_PROJECT_SLUG }}
+          env-slug: prod
+          required-keys: CEREBRO_INFRA_PROMOTION_TOKEN CEREBRO_INFRA_REPOSITORY CEREBRO_INFRA_TARGET_ENVIRONMENT
+
       - name: Dispatch web image promotion
         id: dispatch
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.CEREBRO_INFRA_PROMOTION_TOKEN }}
-          INFRA_REPOSITORY: ${{ secrets.CEREBRO_INFRA_REPOSITORY }}
+          GH_TOKEN: ${{ env.CEREBRO_INFRA_PROMOTION_TOKEN }}
+          INFRA_REPOSITORY: ${{ env.CEREBRO_INFRA_REPOSITORY }}
           WEB_IMAGE: ${{ needs.publish.outputs.image }}
           WEB_IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
           WEB_IMAGE_DIGEST: ${{ needs.publish.outputs.image_digest }}
           SOURCE_REPOSITORY: ${{ github.repository }}
           SOURCE_REF: ${{ github.sha }}
-          TARGET_ENVIRONMENT: ${{ secrets.CEREBRO_INFRA_TARGET_ENVIRONMENT }}
-          WAIT_FOR_PROMOTION: ${{ github.event.inputs.wait_for_promotion || 'false' }}
+          TARGET_ENVIRONMENT: ${{ env.CEREBRO_INFRA_TARGET_ENVIRONMENT }}
+          WAIT_FOR_PROMOTION: ${{ github.event_name == 'workflow_dispatch' && github.event['inputs']['wait_for_promotion'] || 'false' }}
         run: |
           set -euo pipefail
           write_promotion_summary() {
