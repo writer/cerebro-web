@@ -35,19 +35,19 @@
     "e2e:grc:local": "node scripts/local-grc-e2e.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch-logs": "^3.1075.0",
-    "@openai/agents": "^0.12.0",
-    "@tanstack/react-form": "^1.33.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1085.0",
+    "@openai/agents": "^0.13.2",
+    "@tanstack/react-form": "^1.33.2",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-table": "^8.21.3",
-    "@tanstack/react-virtual": "^3.14.5",
+    "@tanstack/react-virtual": "^3.14.6",
     "cytoscape": "^3.34.0",
-    "lucide-react": "^1.22.0",
-    "next": "16.2.9",
+    "lucide-react": "^1.24.0",
+    "next": "16.2.10",
     "nuqs": "^2.9.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "recharts": "^3.9.0",
+    "recharts": "^3.9.2",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
@@ -59,11 +59,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^10",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.2.10",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^6",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "postcss": "8.5.15"
