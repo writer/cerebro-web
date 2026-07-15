@@ -18,7 +18,7 @@ import {
   buildTeamQueueRows,
 } from "@/lib/audit-packages";
 import type { GRCDashboard, GRCControlEvidencePacketResponse, GRCEvidencePacketsResponse, GRCFrameworksResponse } from "@/lib/grc";
-import { grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
+import { grcDashboardPath, grcPath, useDebouncedValue, useGRCQuery } from "@/lib/grc-client";
 import { supportedGRCFrameworkNames } from "@/lib/grc-frameworks";
 import { GRC_WORKLIST_LIMIT } from "@/lib/grc-list";
 
@@ -121,7 +121,7 @@ export function useAuditPackageView({
     grcPath("/grc/evidence-packets", { tenant_id: debouncedTenantID, limit: GRC_WORKLIST_LIMIT }),
   );
   const dashboardQuery = useGRCQuery<GRCDashboard>(
-    grcPath("/grc/dashboard", { tenant_id: debouncedTenantID, limit: 100 }),
+    grcDashboardPath({ tenant_id: debouncedTenantID, limit: 100 }),
   );
   const frameworksQuery = useGRCQuery<GRCFrameworksResponse>(grcPath("/grc/frameworks", { tenant_id: debouncedTenantID }));
 

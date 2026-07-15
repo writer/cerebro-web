@@ -208,6 +208,12 @@ export const grcPath = (path: string, params: Record<string, string | number | u
   return queryString ? `${path}?${queryString}` : path;
 };
 
+export const grcDashboardPath = (params: Record<string, string | number | undefined> = {}) =>
+  grcPath("/grc/dashboard", { ...params, view: "summary" });
+
+export const grcProgramReadinessPath = (params: Record<string, string | number | undefined> = {}) =>
+  grcPath("/grc/program-readiness", { ...params, view: "summary" });
+
 export const grcEntityImpactPath = (rootURN: string, params: Record<string, string | number | undefined> = {}) =>
   grcPath(`/grc/entities/${encodeURIComponent(rootURN)}/impact`, params);
 

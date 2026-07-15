@@ -21,7 +21,7 @@ import {
   riskSort,
   shortEntity,
 } from "@/lib/grc";
-import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
+import { DASHBOARD_FINDING_LIMIT, grcDashboardPath, grcPath, grcProgramReadinessPath, useGRCQuery } from "@/lib/grc-client";
 import { prefetchTopFindings } from "@/lib/grc-prefetch";
 
 const HOME_DASHBOARD_FINDING_LIMIT = DASHBOARD_FINDING_LIMIT;
@@ -437,9 +437,12 @@ export default function Home() {
   const { preferences } = useUserPreferences();
   const visibleSections = preferences.homepage.sections;
   const compactHome = preferences.display.density === "compact";
-  const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: HOME_DASHBOARD_FINDING_LIMIT }));
+  const dashboard = useGRCQuery<GRCDashboard>(grcDashboardPath({ limit: HOME_DASHBOARD_FINDING_LIMIT }));
   const data = dashboard.data;
-  const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcPath("/grc/program-readiness") : null);
+  const readinessQuery = useGRCQuery<GRCProgramReadiness>(data ? grcProgramReadinessPath() : null);
+  const coverageQuery = useGRCQuery<{ blind_spots?: GRCSourceCoverageRecord[]; records?: GRCSourceCoverageRecord[] }>(
+    data ? grcPath("/connectors/coverage", { coverage_scope: "configured", coverage_view: "page", blind_spots_only: "true", page_size: 3 }) : null,
+  );
   const readiness = readinessQuery.data?.summary;
   const priorityFindings = useMemo(() => (data?.findings ?? []).slice().sort(riskSort), [data?.findings]);
   const { apiKey } = useApiKey();
@@ -453,14 +456,14 @@ export default function Home() {
   const summary = data?.summary;
   const dashboardBackedReadiness = Boolean(readinessQuery.error && data);
   const coverageBlindSpots = useMemo(
-    () => readinessQuery.data?.coverage_blind_spots ?? data?.coverage_blind_spots ?? [],
-    [data?.coverage_blind_spots, readinessQuery.data?.coverage_blind_spots],
+    () => coverageQuery.data?.blind_spots ?? coverageQuery.data?.records ?? readinessQuery.data?.coverage_blind_spots ?? data?.coverage_blind_spots ?? [],
+    [coverageQuery.data?.blind_spots, coverageQuery.data?.records, data?.coverage_blind_spots, readinessQuery.data?.coverage_blind_spots],
   );
   const coverageSummaries = useMemo(
     () => readinessQuery.data?.coverage_summaries ?? data?.coverage_summaries ?? [],
     [data?.coverage_summaries, readinessQuery.data?.coverage_summaries],
   );
-  const coverageBlindSpotCount = readiness?.coverage_blind_spots ?? coverageBlindSpots.length;
+  const coverageBlindSpotCount = readiness?.coverage_blind_spots ?? coverageSummaries.reduce((total, source) => total + source.blind_spots, 0);
   const coverageSourceCount = coverageSummaries.filter((source) => source.blind_spots > 0).length;
   const missingEvidenceItems = (data?.controls ?? []).reduce((total, control) => total + (control.missing_evidence_items ?? 0), 0);
   const staleEvidenceItems = (data?.controls ?? []).reduce((total, control) => total + (control.stale_evidence_items ?? 0), 0);
