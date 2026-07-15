@@ -16,7 +16,7 @@ import {
   GRCProgramWorkItem,
   humanize,
 } from "@/lib/grc";
-import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
+import { DASHBOARD_FINDING_LIMIT, grcDashboardPath, grcProgramReadinessPath, useGRCQuery } from "@/lib/grc-client";
 import { frameworkRouteSegment } from "@/lib/grc-frameworks";
 import type { RuntimeState } from "@/lib/runtime-state";
 
@@ -433,8 +433,8 @@ function FrameworkPosturePanel({ frameworks }: { frameworks: GRCProgramFramework
 }
 
 export default function GRCPage() {
-  const dashboard = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: DASHBOARD_FINDING_LIMIT }));
-  const readinessQuery = useGRCQuery<GRCProgramReadiness>(dashboard.data ? grcPath("/grc/program-readiness") : null);
+  const dashboard = useGRCQuery<GRCDashboard>(grcDashboardPath({ limit: DASHBOARD_FINDING_LIMIT }));
+  const readinessQuery = useGRCQuery<GRCProgramReadiness>(dashboard.data ? grcProgramReadinessPath() : null);
   const dashboardControls = useMemo(() => dashboard.data?.controls ?? [], [dashboard.data?.controls]);
   const fallbackSummary = useMemo(() => controlSummaryFromDashboard(dashboardControls), [dashboardControls]);
   const summary = readinessQuery.data?.summary ?? fallbackSummary;

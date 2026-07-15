@@ -39,14 +39,14 @@ const routeSpecs = [
   {
     route: "/vendors",
     label: "Vendors",
-    readySelector: 'input[placeholder="Filter loaded vendors"]',
-    filterSelector: 'input[placeholder="Filter loaded vendors"]',
+    readySelector: 'input[placeholder="Search loaded vendors"]',
+    filterSelector: 'input[placeholder="Search loaded vendors"]',
     filterText: "vendor 12",
   },
   {
     route: "/connectors?tab=attention",
     label: "Connectors",
-    readySelector: 'a[href*="/connectors/source-"]',
+    readySelector: 'a[href*="/connectors/source-"]:visible',
     filterSelector: 'input[placeholder="Provider, source, capability"]:visible',
     filterText: "source 12",
   },
@@ -519,7 +519,7 @@ function createMockApi({ bounded, recordCount: count, stats }) {
           generated_at: generatedAt,
         });
       }
-      if (normalizedPath === "grc/entities/_/impact") {
+      if (/^grc\/entities\/[^/]+\/impact$/.test(normalizedPath)) {
         return sendJSON(response, stats, normalizedPath, entityImpactFixture(data, url.searchParams, bounded));
       }
       if (normalizedPath === "grc/frameworks") {

@@ -1,4 +1,4 @@
-import { grcPath } from "@/lib/grc-client";
+import { grcDashboardPath, grcPath } from "@/lib/grc-client";
 
 export type CustomDashboardVisibility = "private" | "workspace" | "organization";
 
@@ -110,7 +110,7 @@ const mergedWidgetParams = (dashboard: CustomDashboard, widget: CustomDashboardW
 
 export const customDashboardSummaryPath = (dashboard: CustomDashboard, widget: CustomDashboardWidget) => {
   const params = mergedWidgetParams(dashboard, widget);
-  return grcPath("/grc/dashboard", {
+  return grcDashboardPath({
     tenant_id: stringParam(params.tenant_id),
     limit: numberParam(params.limit, 100),
   });

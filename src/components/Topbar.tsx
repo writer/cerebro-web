@@ -8,7 +8,7 @@ import { API_BASE } from "@/lib/api";
 import { useApiKey, useCommandPalette, useCurrentUser, useTheme, useUserPreferences } from "@/components/providers";
 import { countLabel } from "@/lib/format";
 import type { GRCDashboard } from "@/lib/grc";
-import { DASHBOARD_FINDING_LIMIT, grcPath, useGRCQuery } from "@/lib/grc-client";
+import { DASHBOARD_FINDING_LIMIT, grcDashboardPath, grcPath, useGRCQuery } from "@/lib/grc-client";
 import { currentUserConfidenceLabel, identityPosture } from "@/lib/identity";
 import { currentUserWriteFieldForPath } from "@/lib/identity-write-stamp";
 import { buildNotifications, notificationSignatures, reportRunNotifications, unreadNotifications, type NotificationIntent } from "@/lib/notifications";
@@ -171,7 +171,7 @@ export default function Topbar() {
     return () => window.clearTimeout(timeout);
   }, [shareStatus, shareURL]);
 
-  const notificationsQuery = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: DASHBOARD_FINDING_LIMIT }));
+  const notificationsQuery = useGRCQuery<GRCDashboard>(grcDashboardPath({ limit: DASHBOARD_FINDING_LIMIT }));
   const reportRunsQuery = useGRCQuery<ReportRunListResponse>(grcPath("/report-runs", { limit: 5 }));
   const notifications = useMemo(
     () => [...buildNotifications(notificationsQuery.data), ...reportRunNotifications(reportRunsQuery.data?.runs)],

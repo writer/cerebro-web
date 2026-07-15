@@ -18,7 +18,7 @@ import {
 } from "@/lib/audit-packages";
 import type { GRCDashboard, GRCControlEvidencePacketResponse, GRCEvidencePacketsResponse } from "@/lib/grc";
 import { displayDate, shortEntity } from "@/lib/grc";
-import { grcPath, useGRCQuery } from "@/lib/grc-client";
+import { grcDashboardPath, grcPath, useGRCQuery } from "@/lib/grc-client";
 
 const buttonClass = "inline-flex items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] transition hover:border-[color:var(--border-strong)] hover:text-[var(--text-primary)]";
 
@@ -66,7 +66,7 @@ export default function SharedAuditPackagePage() {
   const evidencePacketsQuery = useGRCQuery<GRCEvidencePacketsResponse>(
     grcPath("/grc/evidence-packets", { limit: 200 }),
   );
-  const dashboardQuery = useGRCQuery<GRCDashboard>(grcPath("/grc/dashboard", { limit: 100 }));
+  const dashboardQuery = useGRCQuery<GRCDashboard>(grcDashboardPath({ limit: 100 }));
 
   const summary = useMemo(
     () => buildAuditPackageSummary({

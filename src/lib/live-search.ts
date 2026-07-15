@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useApiKey } from "@/components/providers";
-import { fetchCachedGRC, grcPath, grcTimeoutMessage } from "@/lib/grc-client";
+import { fetchCachedGRC, grcDashboardPath, grcTimeoutMessage } from "@/lib/grc-client";
 import {
   displayDate,
   GRCDashboard,
@@ -342,7 +342,7 @@ export function useLiveSearchCommands(query: string, isOpen: boolean) {
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), LIVE_SEARCH_TIMEOUT_MS);
         const request = fetchCachedGRC<GRCDashboard>(
-          grcPath("/grc/dashboard", { limit: 100 }),
+          grcDashboardPath({ limit: 100 }),
           requestOwner,
           false,
           { signal: controller.signal },

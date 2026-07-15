@@ -65,7 +65,9 @@ describe("custom dashboard helpers", () => {
 
   it("builds broadened widget paths from dashboard filters", () => {
     const dash = dashboard("dash", "2026-06-23T00:00:00Z");
-    expect(customDashboardSummaryPath(dash, { id: "s", type: "summary_metrics" })).toContain("/grc/dashboard?");
+    const summary = customDashboardSummaryPath(dash, { id: "s", type: "summary_metrics" });
+    expect(summary).toContain("/grc/dashboard?");
+    expect(summary).toContain("view=summary");
     const findings = customDashboardFindingsPath(dash, { id: "f", type: "findings_table", query: { params: { limit: 5 } } });
     expect(findings).toContain("/grc/findings?");
     expect(findings).toContain("severity=HIGH");
