@@ -463,7 +463,9 @@ export function connectorResourceTypes(
     .slice(0, limit);
 }
 
-export function connectorResourceTypeStats(card: Pick<ConnectorCatalogEntry, "resource_families" | "integration_depth">): ConnectorResourceTypeStats {
+export function connectorResourceTypeStats(
+  card: Pick<ConnectorCatalogEntry, "resource_families" | "integration_depth" | "resource_family_count" | "emitted_kind_count">,
+): ConnectorResourceTypeStats {
   const families = card.resource_families ?? [];
   const templates = new Set<string>();
   let mappedResourceTypes = 0;
@@ -480,8 +482,16 @@ export function connectorResourceTypeStats(card: Pick<ConnectorCatalogEntry, "re
   });
 
   return {
-    catalogResourceTypes: Math.max(families.length, positiveNumber(card.integration_depth?.resource_families)),
-    resourceTypes: Math.max(mappedResourceTypes, positiveNumber(card.integration_depth?.projection_templates)),
+    catalogResourceTypes: Math.max(
+      families.length,
+      positiveNumber(card.integration_depth?.resource_families),
+      positiveNumber(card.resource_family_count),
+    ),
+    resourceTypes: Math.max(
+      mappedResourceTypes,
+      positiveNumber(card.integration_depth?.projection_templates),
+      positiveNumber(card.emitted_kind_count),
+    ),
     distinctResourceTypes: Math.max(templates.size, positiveNumber(card.integration_depth?.projection_templates)),
     highValueResourceTypes: Math.max(highValueResourceTypes, positiveNumber(card.integration_depth?.high_value_families)),
     coverageItems: Math.max(coverageItems, positiveNumber(card.integration_depth?.coverage_dimensions)),

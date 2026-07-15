@@ -723,7 +723,7 @@ export default function ConnectorsPage() {
   const debouncedTenantID = useDebouncedValue(tenantID.trim());
   const debouncedSourceID = useDebouncedValue(sourceID.trim());
 
-  const libraryQuery = useConnectorLibraryQuery({ tenantID: debouncedTenantID, view: "full" });
+  const libraryQuery = useConnectorLibraryQuery({ tenantID: debouncedTenantID, view: "summary" });
   const definitionsQuery = useGRCQuery<ConnectorDefinitionListResponse>(withQuery("/connector-definitions", { tenant_id: debouncedTenantID }));
 
   const boundedSourceRuntimeRows = useMemo(

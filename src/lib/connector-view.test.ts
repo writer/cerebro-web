@@ -173,6 +173,16 @@ describe("connector view model", () => {
     });
   });
 
+  it("uses compact connector counts when expanded resource families are omitted", () => {
+    expect(connectorResourceTypeStats({ resource_family_count: 14, emitted_kind_count: 9 })).toEqual({
+      catalogResourceTypes: 14,
+      resourceTypes: 9,
+      distinctResourceTypes: 0,
+      highValueResourceTypes: 0,
+      coverageItems: 0,
+    });
+  });
+
   it("classifies provider API proof work without treating docs as supported proof", () => {
     expect(providerAPIProofState({
       source_id: "docs-needed",

@@ -402,16 +402,8 @@ function createMockApi({ bounded, recordCount: count, stats }) {
         });
       }
       if (normalizedPath === "connectors") {
-        return sendJSON(response, stats, normalizedPath, {
-          connectors: data.connectors,
-          runtimes: data.connectorRuntimes,
-          source_runtimes: data.connectorRuntimes,
-          tenant_id: tenantID,
-          runtime_store: "scale",
-          credential_transport: { available: true, algorithm: "sealed_box" },
-          credential_vault: { available: true, detail: "benchmark vault" },
-          generated_at: generatedAt,
-        });
+        const view = url.searchParams.get("view") === "summary" ? "summary" : "full";
+        return sendJSON(response, stats, `${normalizedPath}?view=${view}`, connectorLibraryFixture(data, url.searchParams, bounded));
       }
       const connectorDetailMatch = /^connectors\/([^/]+)$/.exec(normalizedPath);
       if (connectorDetailMatch) {
@@ -1143,6 +1135,71 @@ function connectorDetailFixture(data, sourceID, searchParams, bounded) {
     connections: bounded ? allConnections.slice(0, limit) : allConnections,
     activity: bounded ? allActivity.slice(0, limit) : allActivity,
     diagnostic_timeline: bounded ? allDiagnostics.slice(0, limit) : allDiagnostics,
+  };
+}
+
+function connectorLibraryFixture(data, searchParams, bounded) {
+  if (!bounded) {
+    return {
+      connectors: data.connectors,
+      runtimes: data.connectorRuntimes,
+      source_runtimes: data.connectorRuntimes,
+      tenant_id: tenantID,
+      runtime_store: "scale",
+      credential_transport: { available: true, algorithm: "sealed_box" },
+      credential_vault: { available: true, detail: "benchmark vault" },
+      generated_at: generatedAt,
+      view: "full",
+    };
+  }
+
+  const limit = Math.min(200, positiveInteger(searchParams.get("limit"), 200));
+  const cursor = Math.max(0, Number.parseInt(searchParams.get("cursor") ?? "0", 10) || 0);
+  const end = Math.min(cursor + limit, data.connectors.length);
+  const pageConnectors = data.connectors.slice(cursor, end);
+  const view = searchParams.get("view") === "summary" ? "summary" : "full";
+  const connectors = view === "summary" ? pageConnectors.map((connector) => ({
+    source_id: connector.source_id,
+    display_name: connector.display_name ?? connector.name,
+    status: connector.status,
+    configured_runtimes: connector.configured_runtimes,
+    healthy_runtimes: connector.healthy_runtimes,
+    needs_attention_runtimes: connector.needs_attention_runtimes,
+    catalog_status: connector.catalog_status,
+    classifier_output: connector.classifier_output,
+    auth_model: connector.auth_model,
+    runtime_executable: connector.runtime_executable,
+    catalog_categories: connector.catalog_categories,
+    definition_origin: connector.definition_origin,
+    readiness_stage: connector.readiness_stage,
+    access_status: connector.access_status,
+    setup_allowed: connector.setup_allowed,
+    requestable: connector.requestable,
+    integration_level: connector.integration_depth?.level,
+    integration_score: connector.integration_depth?.score,
+    resource_family_count: connector.integration_depth?.resource_families,
+    emitted_kind_count: connector.integration_depth?.emitted_kinds,
+    scope_option_count: connector.integration_depth?.scope_options,
+  })) : pageConnectors;
+  return {
+    connectors,
+    tenant_id: tenantID,
+    runtime_store: "scale",
+    generated_at: generatedAt,
+    view,
+    ...(view === "full"
+      ? {
+          credential_transport: { available: true, algorithm: "sealed_box" },
+          credential_vault: { available: true, detail: "benchmark vault" },
+        }
+      : {}),
+    page: {
+      total: data.connectors.length,
+      returned: connectors.length,
+      limit,
+      has_more: end < data.connectors.length,
+      ...(end < data.connectors.length ? { next_cursor: String(end) } : {}),
+    },
   };
 }
 

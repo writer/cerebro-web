@@ -1,6 +1,6 @@
 export type ConnectorCatalogEntry = {
   source_id: string;
-  name: string;
+  name?: string;
   display_name?: string;
   description?: string;
   emitted_kinds?: string[];
@@ -24,6 +24,11 @@ export type ConnectorCatalogEntry = {
   definition_origin?: string;
   readiness_stage?: ConnectorReadinessStage | string;
   integration_depth?: ConnectorIntegrationDepth;
+  integration_level?: string;
+  integration_score?: number;
+  resource_family_count?: number;
+  emitted_kind_count?: number;
+  scope_option_count?: number;
   access_status?: ConnectorAccessStatus | string;
   access_reason?: string;
   setup_allowed?: boolean;
