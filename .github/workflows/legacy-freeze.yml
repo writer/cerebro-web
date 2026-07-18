@@ -1,0 +1,111 @@
+name: Legacy freeze
+
+on:
+  # This trusted-base workflow never checks out or executes pull-request code.
+  # zizmor: ignore[dangerous-triggers]
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read # Read repository metadata; the workflow performs no checkout.
+  pull-requests: read # Read the exact changed-path list from the GitHub API.
+
+concurrency:
+  group: legacy-freeze-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate migration closure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate the migration closure
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          if [[ "${PR_BASE_REF}" != "main" ]]; then
+            fail "legacy-freeze/wrong-base: migration closure pull requests must target main"
+          fi
+          if [[ "${PR_DRAFT}" == "true" ]]; then
+            fail "legacy-freeze/draft: mark the migration closure ready before it can merge"
+          fi
+          case ",${PR_LABELS}," in
+            *,legacy-migration-closure,*) ;;
+            *) fail "legacy-freeze/missing-label: add the legacy-migration-closure label" ;;
+          esac
+
+          if ! [[ "${PR_CHANGED_FILES}" =~ ^[0-9]+$ ]]; then
+            fail "legacy-freeze/invalid-file-count: GitHub did not provide a valid changed-file count"
+          fi
+          if (( PR_CHANGED_FILES == 0 )); then
+            fail "legacy-freeze/empty-diff: migration closure pull requests must change at least one file"
+          fi
+          if (( PR_CHANGED_FILES > 200 )); then
+            fail "legacy-freeze/oversized-diff: split the migration closure into at most 200 changed files"
+          fi
+
+          files_file="$(mktemp)"
+          trap 'rm -f "${files_file}"' EXIT
+          page=1
+          fetched=0
+          while (( fetched < PR_CHANGED_FILES )); do
+            response="$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100&page=${page}")"
+            page_count="$(jq 'length' <<<"${response}")"
+            if (( page_count == 0 )); then
+              break
+            fi
+            jq -r '.[].filename' <<<"${response}" >>"${files_file}"
+            fetched=$((fetched + page_count))
+            page=$((page + 1))
+          done
+
+          actual="$(wc -l <"${files_file}" | tr -d ' ')"
+          if (( actual != PR_CHANGED_FILES )); then
+            fail "legacy-freeze/truncated-file-list: expected ${PR_CHANGED_FILES} paths but received ${actual}"
+          fi
+          duplicate_count="$(sort "${files_file}" | uniq -d | wc -l | tr -d ' ')"
+          if (( duplicate_count != 0 )); then
+            fail "legacy-freeze/duplicate-path: GitHub returned duplicate changed paths"
+          fi
+
+          forbidden=()
+          while IFS= read -r path; do
+            case "${path}" in
+              README.md|docs/migration/*) ;;
+              *) forbidden+=("${path}") ;;
+            esac
+          done <"${files_file}"
+
+          if (( ${#forbidden[@]} != 0 )); then
+            printf '::error::legacy-freeze/forbidden-path: %s\n' "${forbidden[*]}"
+            exit 1
+          fi
+
+          echo "Validated ${actual} migration-closure paths."
