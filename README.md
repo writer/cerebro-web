@@ -1,20 +1,19 @@
 # Cerebro Web
 
+> [!IMPORTANT]
+> Active development has moved to [`apps/web`](https://github.com/writer/cerebro/tree/main/apps/web) in the Cerebro monorepo. Open application changes and issues in [`writer/cerebro`](https://github.com/writer/cerebro). This repository accepts only migration-closure changes and emergency fixes until cutover is complete.
+
 Cerebro Web is a Next.js operator console for a Cerebro API. It provides UI surfaces for sources, runtimes, findings, reports, workflow metadata, graph projections, and Ask/LLM-backed graph queries.
 
 ## Status
 
-Maintained by WRITER on a best-effort basis. There are no support SLAs.
+Development is frozen for the monorepo migration. The current source remains available until cutover, reconciliation, and rollback evidence are complete.
 
-## Cross-Repo Contract
+## Source and Deployment Contract
 
-Cerebro Web mirrors the app-vs-deploy split used by Cerebro runtime:
-
-- `writer/cerebro-web` is authoritative for the public console app, shared UI behavior, generic source-readiness views, API proxy semantics, OpenAPI rendering, tests, and the source-linked web image.
-- `WriterInternal/cerebro-web` is the private deployment and operations mirror for Writer's web console. It should regularly promote the public app surface, then layer Writer-only dependency policy, deployment environment wiring, secret references, image promotion, rollout, rollback, and operational verification.
-- Private producer registries, private labels, source/runtime mappings, hostnames, identity wiring, and credentials are deployment concerns. Keep them in the internal mirror's deployment configuration or secret store and pass them through documented environment variables.
-
-Application changes should land here first and then be promoted to `WriterInternal/cerebro-web`. Public examples must remain placeholder-only; real Writer deployment material belongs only in `WriterInternal/cerebro-web`.
+- `writer/cerebro/apps/web` owns the public console application, shared UI behavior, API proxy semantics, OpenAPI rendering, tests, and portable release inputs.
+- Environment values, private mappings, credentials, deployment adapters, rollout policy, and operational verification remain outside the public repository.
+- Public examples must stay placeholder-only. Do not add environment-specific configuration or deployment material to the public application.
 
 ## Requirements
 
@@ -153,7 +152,7 @@ npm run eval:ask:adversarial
 2. Before opening a PR, run `npm run verify:fast` and `npm run verify:build`.
 3. For proxy, routing, Docker, or runtime-sensitive changes, add `npm run verify:e2e` and `npm run verify:docker`.
 4. After deployment, run `npm run smoke:deploy -- <base-url>` from a context that can reach the target environment.
-5. Promote app changes from `writer/cerebro-web` to the private mirror, then run `npm run sync:check` where the `internal` remote is available.
+5. Submit application changes through `writer/cerebro/apps/web`. Run deployment verification only from the environment-specific operations repository.
 
 ## Security
 
