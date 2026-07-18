@@ -1,13 +1,13 @@
 # Cerebro Web
 
 > [!IMPORTANT]
-> Active development has moved to [`apps/web`](https://github.com/writer/cerebro/tree/main/apps/web) in the Cerebro monorepo. This repository is retained as read-only history. Open application changes and issues in [`writer/cerebro`](https://github.com/writer/cerebro).
+> Active development has moved to [`apps/web`](https://github.com/writer/cerebro/tree/main/apps/web) in the Cerebro monorepo. Open application changes and issues in [`writer/cerebro`](https://github.com/writer/cerebro). This repository accepts only migration-closure changes and emergency fixes until cutover is complete.
 
 Cerebro Web is a Next.js operator console for a Cerebro API. It provides UI surfaces for sources, runtimes, findings, reports, workflow metadata, graph projections, and Ask/LLM-backed graph queries.
 
 ## Status
 
-Historical source snapshot. The maintained application lives under `apps/web` in `writer/cerebro`.
+Development is frozen for the monorepo migration. The current source remains available until cutover, reconciliation, and rollback evidence are complete.
 
 ## Source and Deployment Contract
 
